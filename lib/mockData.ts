@@ -300,3 +300,149 @@ export const stocksDetails: Record<string, StockDetail> = {
     ],
   },
 };
+
+// === MARCHE MONETAIRE UEMOA ===
+
+export const moneyMarketIndicators = [
+  {
+    label: "Taux directeur BCEAO",
+    value: "3,50%",
+    subtitle: "Inchange depuis dec. 2024",
+    trend: "stable" as const,
+  },
+  {
+    label: "Interbancaire 1 semaine",
+    value: "4,12%",
+    subtitle: "-5 pb / semaine",
+    trend: "down" as const,
+  },
+  {
+    label: "TPCI 10 ans (YTM)",
+    value: "6,85%",
+    subtitle: "+12 pb / semaine",
+    trend: "up" as const,
+  },
+  {
+    label: "Inflation UEMOA (g.a.)",
+    value: "2,40%",
+    subtitle: "Sept. 2026, BCEAO",
+    trend: "stable" as const,
+  },
+];
+
+export const yieldCurveUEMOA = [
+  { maturity: "3M", rate: 4.15 },
+  { maturity: "6M", rate: 4.45 },
+  { maturity: "1A", rate: 5.10 },
+  { maturity: "2A", rate: 5.60 },
+  { maturity: "3A", rate: 6.05 },
+  { maturity: "5A", rate: 6.45 },
+  { maturity: "7A", rate: 6.68 },
+  { maturity: "10A", rate: 6.85 },
+];
+
+export const upcomingAuctions = [
+  {
+    issuer: "TPCI 2026-2033",
+    country: "Cote d'Ivoire",
+    date: "22 avril 2026",
+    amount: "50 Mds",
+    maturity: "7 ans",
+    type: "OAT",
+  },
+  {
+    issuer: "BAT Senegal",
+    country: "Senegal",
+    date: "25 avril 2026",
+    amount: "30 Mds",
+    maturity: "12 mois",
+    type: "BAT",
+  },
+  {
+    issuer: "TPBF 2026-2031",
+    country: "Burkina Faso",
+    date: "29 avril 2026",
+    amount: "40 Mds",
+    maturity: "5 ans",
+    type: "OAT",
+  },
+  {
+    issuer: "TPCI 2026-2029",
+    country: "Cote d'Ivoire",
+    date: "6 mai 2026",
+    amount: "60 Mds",
+    maturity: "3 ans",
+    type: "OAT",
+  },
+  {
+    issuer: "BAT Togo",
+    country: "Togo",
+    date: "13 mai 2026",
+    amount: "25 Mds",
+    maturity: "6 mois",
+    type: "BAT",
+  },
+];
+
+export const recentIssuances = [
+  {
+    date: "15 avril 2026",
+    issuer: "TPCI 2026-2033",
+    country: "CI",
+    amount: "120 Mds",
+    requested: "185 Mds",
+    coverage: "154%",
+    rate: "6,25%",
+    maturity: "7 ans",
+  },
+  {
+    date: "8 avril 2026",
+    issuer: "BAT Senegal",
+    country: "SN",
+    amount: "40 Mds",
+    requested: "62 Mds",
+    coverage: "155%",
+    rate: "4,85%",
+    maturity: "12 mois",
+  },
+  {
+    date: "2 avril 2026",
+    issuer: "TPBF 2026-2036",
+    country: "BF",
+    amount: "35 Mds",
+    requested: "48 Mds",
+    coverage: "137%",
+    rate: "7,20%",
+    maturity: "10 ans",
+  },
+  {
+    date: "25 mars 2026",
+    issuer: "TPCI 2026-2028",
+    country: "CI",
+    amount: "80 Mds",
+    requested: "142 Mds",
+    coverage: "178%",
+    rate: "5,45%",
+    maturity: "2 ans",
+  },
+  {
+    date: "18 mars 2026",
+    issuer: "BAT Mali",
+    country: "ML",
+    amount: "20 Mds",
+    requested: "28 Mds",
+    coverage: "140%",
+    rate: "5,15%",
+    maturity: "6 mois",
+  },
+  {
+    date: "11 mars 2026",
+    issuer: "TPTG 2026-2031",
+    country: "TG",
+    amount: "30 Mds",
+    requested: "45 Mds",
+    coverage: "150%",
+    rate: "6,75%",
+    maturity: "5 ans",
+  },
+];

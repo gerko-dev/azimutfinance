@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 
 export default function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -18,7 +19,7 @@ export default function Header() {
           {/* Menu visible uniquement sur desktop */}
           <nav className="hidden lg:flex gap-6 text-sm">
             <a href="#" className="text-slate-900 font-medium">Marchés</a>
-            <a href="#" className="text-blue-700 font-medium">Marché monétaire</a>
+            <Link href="/marche-monetaire" className="text-blue-700 font-medium">Marché monétaire</Link>
             <a href="#" className="text-slate-600 hover:text-slate-900">Actualités</a>
             <a href="#" className="text-slate-600 hover:text-slate-900">Analyses</a>
             <a href="#" className="text-slate-600 hover:text-slate-900">Outils Pro</a>
@@ -58,7 +59,7 @@ export default function Header() {
         <nav className="lg:hidden border-t border-slate-200 bg-white">
           <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col gap-3 text-sm">
             <a href="#" className="text-slate-900 font-medium py-1">Marchés</a>
-            <a href="#" className="text-blue-700 font-medium py-1">Marché monétaire</a>
+            <Link href="/marche-monetaire" className="text-blue-700 font-medium py-1">Marché monétaire</Link>
             <a href="#" className="text-slate-600 py-1">Actualités</a>
             <a href="#" className="text-slate-600 py-1">Analyses</a>
             <a href="#" className="text-slate-600 py-1">Outils Pro</a>
