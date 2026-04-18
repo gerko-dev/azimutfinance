@@ -12,18 +12,18 @@ export default function Home() {
       <Header />
       <Ticker />
 
-      <main className="max-w-7xl mx-auto px-6 py-6 space-y-6">
+      <main className="max-w-7xl mx-auto px-4 md:px-6 py-4 md:py-6 space-y-4 md:space-y-6">
         {/* Ligne 1 : Graphique + Top Mouvements */}
-        <div className="grid grid-cols-3 gap-6">
-          <div className="col-span-2">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
+          <div className="lg:col-span-2">
             <MarketChart />
           </div>
           <TopMovers />
         </div>
 
         {/* Ligne 2 : Actualités + Premium */}
-        <div className="grid grid-cols-3 gap-6">
-          <div className="col-span-2">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
+          <div className="lg:col-span-2">
             <NewsSection />
           </div>
           <PremiumCard />

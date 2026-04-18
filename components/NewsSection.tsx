@@ -8,7 +8,7 @@ const colorMap: Record<string, { bg: string; text: string }> = {
 
 export default function NewsSection() {
   return (
-    <div className="bg-white rounded-lg border border-slate-200 p-6">
+    <div className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
       <div className="flex justify-between items-baseline mb-4">
         <h3 className="text-base font-medium">À la une</h3>
         <a href="#" className="text-xs text-blue-700 hover:underline">Voir tout →</a>

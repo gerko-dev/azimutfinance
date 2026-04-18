@@ -11,7 +11,8 @@ export default function StocksTable() {
           <button className="px-3 py-1 border border-slate-200 rounded hover:bg-slate-50">OPCVM</button>
         </div>
       </div>
-      <table className="w-full text-sm">
+    <div className="overflow-x-auto -mx-6 md:mx-0 px-6 md:px-0">
+    <table className="w-full text-sm min-w-[700px]">
         <thead>
           <tr className="text-xs text-slate-500 border-b border-slate-200">
             <th className="text-left py-2 font-medium">Titre</th>
@@ -43,7 +44,8 @@ export default function StocksTable() {
             </tr>
           ))}
         </tbody>
-      </table>
+</table>
+      </div>
     </div>
   );
 }

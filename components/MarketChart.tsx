@@ -13,7 +13,7 @@ import { intradayData } from "@/lib/mockData";
 
 export default function MarketChart() {
   return (
-    <div className="bg-white rounded-lg border border-slate-200 p-6">
+    <div className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">        
       <div className="flex justify-between items-baseline mb-3">
         <h3 className="text-base font-medium">BRVM Composite — séance du jour</h3>
         <span className="text-xs text-slate-400">Mis à jour 14:32 GMT</span>

@@ -1,6 +1,6 @@
 export default function PremiumCard() {
   return (
-    <div className="bg-blue-50 rounded-lg border border-blue-200 p-6">
+    <div className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
       <div className="text-xs font-medium text-blue-700 mb-2">PREMIUM</div>
       <h3 className="text-base font-medium text-blue-900 mb-2">Outils pro UEMOA</h3>
       <p className="text-sm text-blue-800 mb-4 leading-relaxed">
