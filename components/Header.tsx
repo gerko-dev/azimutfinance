@@ -22,7 +22,7 @@ export default function Header() {
             <Link href="/marche-monetaire" className="text-blue-700 font-medium">Marché monétaire</Link>
             <a href="#" className="text-slate-600 hover:text-slate-900">Actualités</a>
             <a href="#" className="text-slate-600 hover:text-slate-900">Analyses</a>
-            <a href="#" className="text-slate-600 hover:text-slate-900">Outils Pro</a>
+            <Link href="/outils/ytm" className="text-slate-600 hover:text-slate-900">Outils Pro</Link>
             <a href="#" className="text-slate-600 hover:text-slate-900">Immobilier</a>
             <a href="#" className="text-slate-600 hover:text-slate-900">API</a>
           </nav>
@@ -62,7 +62,7 @@ export default function Header() {
             <Link href="/marche-monetaire" className="text-blue-700 font-medium py-1">Marché monétaire</Link>
             <a href="#" className="text-slate-600 py-1">Actualités</a>
             <a href="#" className="text-slate-600 py-1">Analyses</a>
-            <a href="#" className="text-slate-600 py-1">Outils Pro</a>
+            <Link href="/outils/ytm" className="text-slate-600 py-1">Outils Pro</Link>  
             <a href="#" className="text-slate-600 py-1">Immobilier</a>
             <a href="#" className="text-slate-600 py-1">API</a>
             <div className="flex gap-2 pt-2 border-t border-slate-100">
