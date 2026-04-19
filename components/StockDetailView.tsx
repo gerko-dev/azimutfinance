@@ -261,7 +261,10 @@ export default function StockDetailView({ stock, priceHistory }: Props) {
                             borderRadius: "6px",
                             fontSize: "12px",
                           }}
-                          formatter={(value: number) => [formatFCFA(value) + " FCFA", "Cours"]}
+                          formatter={(value) => [
+                            formatFCFA(Number(value ?? 0)) + " FCFA",
+                            "Cours",
+                          ]}
                           labelFormatter={(date) =>
                             new Date(date as string).toLocaleDateString("fr-FR", {
                               day: "2-digit",

@@ -104,8 +104,8 @@ export default function MarcheMonetairePage() {
                       borderRadius: "6px",
                       fontSize: "12px",
                     }}
-                    formatter={(value: number | string) => [
-                            `${Number(value).toFixed(2)}%`,
+                    formatter={(value) => [
+                            `${Number(value ?? 0).toFixed(2)}%`,
                             "YTM",
                           ]}
                   />
