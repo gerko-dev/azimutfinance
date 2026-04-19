@@ -1,7 +1,9 @@
 import Link from "next/link";
-import { stocks } from "@/lib/mockData";
+import { loadStocks, formatStockForUI } from "@/lib/dataLoader";
 
 export default function StocksTable() {
+  const stocks = loadStocks().map(formatStockForUI);
+
   return (
     <div className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
       <div className="flex justify-between items-baseline mb-4">
