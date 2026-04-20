@@ -1,5 +1,7 @@
-// Types et fonctions pures pour les obligations cotees
-// Ce fichier ne contient AUCUN import Node.js (fs, path, etc.)
+// Types et fonctions pures pour les obligations cotees UEMOA
+// Codes d'amortissement : IF (In Fine), AC (Amortissement Constant), ACD (AC avec Différé)
+
+export type AmortizationType = "IF" | "AC" | "ACD";
 
 export type ListedBond = {
   isin: string;
@@ -17,7 +19,8 @@ export type ListedBond = {
   couponFrequency: 1 | 2 | 4;
   issueDate: string;
   maturityDate: string;
-  firstCouponDate: string;
+  firstAmortizationDate: string;
+  amortizationType: AmortizationType;
   rating: string;
   ratingAgency: string;
   callable: boolean;
@@ -54,28 +57,40 @@ export type MarketStats = {
 };
 
 // ==========================================
-// CALCUL ACTUARIEL DU YTM — CONVENTION ACT/365
+// HELPERS DATE
 // ==========================================
 
 /**
- * Parse une date ISO YYYY-MM-DD en objet Date UTC (evite les problemes de timezone).
+ * Parse une date en acceptant les formats :
+ * - YYYY-MM-DD (ISO, format standard)
+ * - DD/MM/YYYY (format francais Excel)
+ * - DD-MM-YYYY (format alternatif)
  */
 function parseISODate(s: string): Date {
-  if (!s) return new Date(NaN);
-  const [y, m, d] = s.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d));
+  if (!s || s.trim() === "") return new Date(NaN);
+  const clean = s.trim();
+
+  if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(clean)) {
+    const [y, m, d] = clean.split("-").map(Number);
+    return new Date(Date.UTC(y, m - 1, d));
+  }
+
+  if (/^\d{1,2}[/-]\d{1,2}[/-]\d{4}$/.test(clean)) {
+    const [d, m, y] = clean.split(/[/-]/).map(Number);
+    return new Date(Date.UTC(y, m - 1, d));
+  }
+
+  const fallback = new Date(clean);
+  return isNaN(fallback.getTime()) ? new Date(NaN) : fallback;
 }
 
-/**
- * Calcule le nombre exact de jours entre deux dates (convention Act).
- */
 function daysBetween(d1: Date, d2: Date): number {
   return (d2.getTime() - d1.getTime()) / (24 * 60 * 60 * 1000);
 }
 
 /**
- * Genere la liste des dates de coupon d'une obligation en remontant
- * depuis la date d'echeance (methode rigoureuse evitant les stub periods).
+ * Genere toutes les dates de coupon d'une obligation, depuis l'issueDate
+ * jusqu'a la maturityDate, selon la frequence.
  */
 function generateCouponDates(
   issueDate: Date,
@@ -84,8 +99,6 @@ function generateCouponDates(
 ): Date[] {
   const dates: Date[] = [];
   const monthsPerPeriod = 12 / frequency;
-
-  // On part de l'echeance et on recule
   const current = new Date(maturityDate);
   while (current.getTime() > issueDate.getTime()) {
     dates.unshift(new Date(current));
@@ -94,10 +107,10 @@ function generateCouponDates(
   return dates;
 }
 
-/**
- * Calcule le prix propre theorique d'une obligation pour un YTM donne.
- * Convention Act/365. Tous les flux sont actualises depuis la date d'operation.
- */
+// ==========================================
+// CALCUL ACTUARIEL DU YTM — CONVENTION ACT/365
+// ==========================================
+
 function priceFromYTM(
   bond: {
     nominalValue: number;
@@ -113,43 +126,31 @@ function priceFromYTM(
   const maturityDate = parseISODate(bond.maturityDate);
   const couponDates = generateCouponDates(issueDate, maturityDate, bond.couponFrequency);
 
-  const couponAmount = bond.nominalValue * bond.couponRate / bond.couponFrequency;
-
-  // Coupon annuel (pour les interets courus)
+  const couponAmount = (bond.nominalValue * bond.couponRate) / bond.couponFrequency;
   const annualCoupon = bond.nominalValue * bond.couponRate;
 
-  // Trouve le dernier coupon paye et le prochain
   const futureDates = couponDates.filter((d) => d.getTime() > operationDate.getTime());
   const pastDates = couponDates.filter((d) => d.getTime() <= operationDate.getTime());
   const previousCouponDate = pastDates.length > 0 ? pastDates[pastDates.length - 1] : issueDate;
 
-  // Interets courus (convention Act/365)
   const daysSinceLastCoupon = daysBetween(previousCouponDate, operationDate);
   const accruedInterest = (annualCoupon * daysSinceLastCoupon) / 365;
 
-  // Calcul du prix sale par actualisation des flux futurs
   let dirtyPrice = 0;
   for (let i = 0; i < futureDates.length; i++) {
     const date = futureDates[i];
     const daysFromNow = daysBetween(operationDate, date);
     const yearsFromNow = daysFromNow / 365;
     const discountFactor = Math.pow(1 + ytm, -yearsFromNow);
-
-    // Coupon + remboursement si c'est la derniere date
     const cashflow =
       i === futureDates.length - 1 ? couponAmount + bond.nominalValue : couponAmount;
     dirtyPrice += cashflow * discountFactor;
   }
 
-  // Prix propre = prix sale - interets courus
   const cleanPrice = dirtyPrice - accruedInterest;
   return { cleanPrice, accruedInterest };
 }
 
-/**
- * Calcule le vrai YTM actuariel a partir du prix propre.
- * Utilise la methode de bissection pour une precision de 0.0001%.
- */
 export function calculateActuarialYTM(
   bond: {
     nominalValue: number;
@@ -166,11 +167,9 @@ export function calculateActuarialYTM(
   const maturityDate = parseISODate(bond.maturityDate);
   if (operationDate.getTime() >= maturityDate.getTime()) return 0;
 
-  // Bornes de recherche : 0.01% a 50%
   let low = 0.0001;
   let high = 0.5;
 
-  // Bissection : max 50 iterations pour une precision de 0.0001%
   for (let i = 0; i < 50; i++) {
     const mid = (low + high) / 2;
     const { cleanPrice } = priceFromYTM(bond, operationDate, mid);
@@ -179,7 +178,6 @@ export function calculateActuarialYTM(
       return mid;
     }
 
-    // Prix calcule trop haut => ytm trop bas => augmenter low
     if (cleanPrice > targetCleanPrice) {
       low = mid;
     } else {
@@ -190,10 +188,6 @@ export function calculateActuarialYTM(
   return (low + high) / 2;
 }
 
-/**
- * YTM simplifie (formule de Bond Equivalent Yield approximative).
- * Gardee comme fallback si pas de prix disponible.
- */
 export function calculateSimpleYTM(bond: ListedBond, cleanPrice: number): number {
   if (bond.yearsToMaturity <= 0 || cleanPrice <= 0) return 0;
   const coupon = bond.couponRate * bond.nominalValue;
@@ -202,9 +196,6 @@ export function calculateSimpleYTM(bond: ListedBond, cleanPrice: number): number
   return (coupon + priceDeviation) / avgCapital;
 }
 
-/**
- * Retourne le dernier prix d'une obligation.
- */
 export function getLatestPrice(
   isin: string,
   prices: ListedBondPrice[]
@@ -216,14 +207,10 @@ export function getLatestPrice(
   );
 }
 
-/**
- * Calcule le YTM actuariel d'une obligation cotee en utilisant
- * son dernier prix. Fallback vers YTM simplifie ou taux de coupon.
- */
 export function getBondYTM(bond: ListedBond, prices: ListedBondPrice[]): number {
   const latestPrice = getLatestPrice(bond.isin, prices);
   if (!latestPrice || latestPrice.cleanPrice <= 0) {
-    return bond.couponRate; // Fallback : taux facial
+    return bond.couponRate;
   }
 
   try {
@@ -233,7 +220,226 @@ export function getBondYTM(bond: ListedBond, prices: ListedBondPrice[]): number 
       latestPrice.cleanPrice
     );
   } catch {
-    // Fallback YTM simplifie en cas d'erreur
     return calculateSimpleYTM(bond, latestPrice.cleanPrice);
   }
+}
+
+// ==========================================
+// METRIQUES AVANCEES (Duration, Convexite, BPV)
+// ==========================================
+
+export function calculateDuration(
+  bond: {
+    nominalValue: number;
+    couponRate: number;
+    couponFrequency: 1 | 2 | 4;
+    issueDate: string;
+    maturityDate: string;
+  },
+  operationDate: Date,
+  ytm: number
+): { macaulay: number; modified: number; convexity: number } {
+  const issueDate = parseISODate(bond.issueDate);
+  const maturityDate = parseISODate(bond.maturityDate);
+  const couponDates = generateCouponDates(issueDate, maturityDate, bond.couponFrequency);
+
+  const futureDates = couponDates.filter((d) => d.getTime() > operationDate.getTime());
+  if (futureDates.length === 0) {
+    return { macaulay: 0, modified: 0, convexity: 0 };
+  }
+
+  const couponAmount = (bond.nominalValue * bond.couponRate) / bond.couponFrequency;
+
+  let sumPV = 0;
+  let sumTimesPV = 0;
+  let sumTimesSquaredPV = 0;
+
+  for (let i = 0; i < futureDates.length; i++) {
+    const daysFromNow = daysBetween(operationDate, futureDates[i]);
+    const years = daysFromNow / 365;
+    const df = Math.pow(1 + ytm, -years);
+
+    const cashflow =
+      i === futureDates.length - 1 ? couponAmount + bond.nominalValue : couponAmount;
+    const pv = cashflow * df;
+
+    sumPV += pv;
+    sumTimesPV += years * pv;
+    sumTimesSquaredPV += years * (years + 1) * pv;
+  }
+
+  if (sumPV === 0) return { macaulay: 0, modified: 0, convexity: 0 };
+
+  const macaulay = sumTimesPV / sumPV;
+  const modified = macaulay / (1 + ytm);
+  const convexity = sumTimesSquaredPV / sumPV / Math.pow(1 + ytm, 2);
+
+  return { macaulay, modified, convexity };
+}
+
+export function calculateBPV(
+  bond: {
+    nominalValue: number;
+    couponRate: number;
+    couponFrequency: 1 | 2 | 4;
+    issueDate: string;
+    maturityDate: string;
+  },
+  operationDate: Date,
+  ytm: number,
+  cleanPrice: number
+): number {
+  const { modified } = calculateDuration(bond, operationDate, ytm);
+  return Math.abs(modified * cleanPrice * 0.0001);
+}
+
+// ==========================================
+// ECHEANCIER DES FLUX — CONVENTION UEMOA
+// ==========================================
+
+/**
+ * Genere l'echeancier complet des flux futurs d'une obligation UEMOA cotee.
+ *
+ * Logique UEMOA :
+ * - nominalValue dans le CSV = nominal ACTUEL (apres amorts deja passes)
+ * - On ne genere que les flux FUTURS (apres aujourd'hui)
+ * - Les amortissements passes sont deja pris en compte dans nominalValue
+ * - Le coupon est calcule sur le capital restant du
+ * - Codes d'amortissement :
+ *   - IF : In Fine (remboursement total a l'echeance)
+ *   - AC : Amortissement Constant (tranches egales chaque periode)
+ *   - ACD : Amortissement Constant Differé (AC avec periode de differé)
+ */
+export function getBondCashflows(bond: ListedBond): {
+  date: string;
+  type: "coupon" | "amortissement" | "remboursement";
+  amount: number;
+  outstandingAfter: number;
+}[] {
+  const issueDate = parseISODate(bond.issueDate);
+  const maturityDate = parseISODate(bond.maturityDate);
+  const today = new Date();
+
+  // 1. Genere toutes les dates de coupon depuis l'emission jusqu'a l'echeance
+  const allCouponDates = generateCouponDates(issueDate, maturityDate, bond.couponFrequency);
+
+  // 2. Determine la premiere date d'amortissement
+  let firstAmortDate: Date;
+  if (bond.amortizationType === "IF") {
+    firstAmortDate = maturityDate;
+  } else if (bond.firstAmortizationDate && bond.firstAmortizationDate !== "") {
+    firstAmortDate = parseISODate(bond.firstAmortizationDate);
+  } else {
+    firstAmortDate = allCouponDates[0];
+  }
+
+  // 3. Dates d'amortissement TOTALES (passees + futures) a partir de firstAmortDate
+  const oneDay = 24 * 60 * 60 * 1000;
+  const allAmortDates = allCouponDates.filter(
+    (d) => d.getTime() >= firstAmortDate.getTime() - oneDay
+  );
+  const totalNbAmortPeriods = allAmortDates.length;
+
+  // 4. Nombre d'amortissements PASSES (avant aujourd'hui)
+  const pastAmortDates = allAmortDates.filter((d) => d.getTime() <= today.getTime());
+  const nbPastAmorts = pastAmortDates.length;
+
+  // 5. Calcul de l'amortissement par periode
+  // Reconstruction : nominal_initial = nominalValue_actuel + (nbPastAmorts * tranche)
+  // Or tranche = nominal_initial / totalNbAmortPeriods
+  // Donc : nominal_initial = nominalValue * totalNbAmortPeriods / (totalNbAmortPeriods - nbPastAmorts)
+  let amortPerPeriod = 0;
+  if (bond.amortizationType !== "IF" && totalNbAmortPeriods > nbPastAmorts) {
+    const remainingAmorts = totalNbAmortPeriods - nbPastAmorts;
+    const initialNominal =
+      bond.nominalValue + (nbPastAmorts / remainingAmorts) * bond.nominalValue;
+    amortPerPeriod = initialNominal / totalNbAmortPeriods;
+  }
+
+  // 6. On ne garde que les dates futures
+  const futureDates = allCouponDates.filter((d) => d.getTime() > today.getTime());
+  if (futureDates.length === 0) return [];
+
+  const cashflows: {
+    date: string;
+    type: "coupon" | "amortissement" | "remboursement";
+    amount: number;
+    outstandingAfter: number;
+  }[] = [];
+
+  // 7. Capital restant du par titre (commence au nominal actuel)
+  let outstanding = bond.nominalValue;
+
+  // 8. Boucle sur les dates futures
+  for (let i = 0; i < futureDates.length; i++) {
+    const d = futureDates[i];
+    const dateStr = d.toISOString().substring(0, 10);
+
+    // Coupon calcule sur le capital restant AVANT amortissement
+    const couponAmount = (outstanding * bond.couponRate) / bond.couponFrequency;
+
+    // Cette date est-elle une date d'amortissement ?
+    const allAmortIndex = allAmortDates.findIndex((ad) => ad.getTime() === d.getTime());
+    const isAmortPeriod = allAmortIndex >= 0;
+    const isLastAmort = allAmortIndex === totalNbAmortPeriods - 1;
+
+    let amortAmount = 0;
+    let isLastPayment = false;
+
+    if (isAmortPeriod) {
+      switch (bond.amortizationType) {
+        case "IF":
+          if (i === futureDates.length - 1) {
+            amortAmount = outstanding;
+            isLastPayment = true;
+          }
+          break;
+
+        case "AC":
+        case "ACD":
+          if (isLastAmort) {
+            amortAmount = outstanding;
+            isLastPayment = true;
+          } else {
+            amortAmount = amortPerPeriod;
+          }
+          break;
+      }
+    }
+
+    // Publication des flux
+    if (couponAmount > 0.01) {
+      cashflows.push({
+        date: dateStr,
+        type: "coupon",
+        amount: couponAmount,
+        outstandingAfter: outstanding,
+      });
+    }
+
+    if (amortAmount > 0.01) {
+      cashflows.push({
+        date: dateStr,
+        type: isLastPayment ? "remboursement" : "amortissement",
+        amount: amortAmount,
+        outstandingAfter: Math.max(0, outstanding - amortAmount),
+      });
+    }
+
+    // Mise a jour du capital restant APRES cette periode
+    outstanding = Math.max(0, outstanding - amortAmount);
+  }
+
+  return cashflows;
+}
+
+/**
+ * Utilitaire : calcule le nombre d'annees de differé a partir des dates.
+ */
+export function getDifferedYears(bond: ListedBond): number {
+  if (!bond.firstAmortizationDate || bond.firstAmortizationDate === "") return 0;
+  const issueDate = parseISODate(bond.issueDate);
+  const firstAmortDate = parseISODate(bond.firstAmortizationDate);
+  const years = (firstAmortDate.getTime() - issueDate.getTime()) / (365 * 24 * 60 * 60 * 1000);
+  return Math.max(0, Math.round(years - 1 / bond.couponFrequency));
 }

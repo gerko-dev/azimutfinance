@@ -77,11 +77,29 @@ type PriceHistoryRow = {
   value: string;
 };
 
+/**
+ * Parse un nombre en acceptant les formats :
+ * - 12345.67 (standard)
+ * - 12 345,67 (francais avec espace milliers + virgule decimale)
+ * - 1,23E+11 (notation scientifique francaise d'Excel)
+ * - 1.23E+11 (notation scientifique standard)
+ * - NC, "", "-" => defaultValue
+ */
 function parseNum(value: unknown, defaultValue: number = 0): number {
   if (value === null || value === undefined) return defaultValue;
   const str = String(value).trim();
   if (str === "" || str === "NC" || str === "-") return defaultValue;
-  const cleaned = str.replace(/,/g, ".").replace(/\s/g, "");
+
+  // Detection notation scientifique avec virgule francaise : 2,06E+11
+  const scientificFrench = /^-?\d+,\d+[eE][+-]?\d+$/;
+  if (scientificFrench.test(str)) {
+    const cleaned = str.replace(",", ".");
+    const n = Number(cleaned);
+    return isNaN(n) ? defaultValue : n;
+  }
+
+  // Nombre francais classique : "12 345,67" -> "12345.67"
+  const cleaned = str.replace(/\s/g, "").replace(/,/g, ".");
   const n = Number(cleaned);
   return isNaN(n) ? defaultValue : n;
 }
@@ -160,13 +178,11 @@ export function formatStockForUI(s: StockRow) {
   };
 }
 
-/** Charge un titre specifique par son code */
 export function loadStockByCode(code: string): StockRow | undefined {
   const stocks = loadStocks();
   return stocks.find((s) => s.code?.trim().toUpperCase() === code.toUpperCase());
 }
 
-/** Transforme un StockRow en donnees detaillees pour la page fiche */
 export function getStockDetails(code: string) {
   const s = loadStockByCode(code);
   if (!s) return null;
@@ -211,7 +227,10 @@ export function getStockDetails(code: string) {
     hasVolume: isPresent(s.volume),
   };
 }
-// === OBLIGATIONS COTEES BRVM ===
+
+// ==========================================
+// OBLIGATIONS COTEES BRVM
+// ==========================================
 
 import type {
   ListedBond,
@@ -236,7 +255,8 @@ type ListedBondCSVRow = {
   couponFrequency: string;
   issueDate: string;
   maturityDate: string;
-  firstCouponDate: string;
+  firstAmortizationDate: string;
+  amortizationType: string;
   rating: string;
   ratingAgency: string;
   callable: string;
@@ -262,47 +282,98 @@ type ListedBondEventRow = {
   description: string;
 };
 
+/**
+ * Parse une date en acceptant les formats YYYY-MM-DD ou DD/MM/YYYY.
+ */
+function parseDate(s: string): Date {
+  if (!s || s.trim() === "") return new Date(NaN);
+  const clean = s.trim();
+
+  if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(clean)) {
+    const [y, m, d] = clean.split("-").map(Number);
+    return new Date(Date.UTC(y, m - 1, d));
+  }
+
+  if (/^\d{1,2}[/-]\d{1,2}[/-]\d{4}$/.test(clean)) {
+    const [d, m, y] = clean.split(/[/-]/).map(Number);
+    return new Date(Date.UTC(y, m - 1, d));
+  }
+
+  const fallback = new Date(clean);
+  return isNaN(fallback.getTime()) ? new Date(NaN) : fallback;
+}
+
 function calculateYearsToMaturity(maturityDate: string): number {
-  const maturity = new Date(maturityDate);
+  const maturity = parseDate(maturityDate);
+  if (isNaN(maturity.getTime())) return 0;
   const now = new Date();
   const diffMs = maturity.getTime() - now.getTime();
   return diffMs / (365.25 * 24 * 60 * 60 * 1000);
 }
 
-export function loadListedBonds(): ListedBond[] {
-  const rows = parseCSV<ListedBondCSVRow>("obligations-cotees.csv");
-  return rows.map((r) => ({
-    isin: r.isin?.trim() || "",
-    code: r.code?.trim() || "",
-    name: r.name?.trim() || "",
-    issuer: r.issuer?.trim() || "",
-    issuerType: r.issuerType?.trim() || "Autre",
-    country: r.country?.trim() || "",
-    sector: r.sector?.trim() || "",
-    currency: r.currency?.trim() || "XOF",
-    nominalValue: parseNum(r.nominalValue, 10000),
-    totalIssued: parseNum(r.totalIssued),
-    outstanding: parseNum(r.outstanding),
-    couponRate: parseNum(r.couponRate) / 100,
-    couponFrequency: parseNum(r.couponFrequency, 1) as 1 | 2 | 4,
-    issueDate: r.issueDate?.trim() || "",
-    maturityDate: r.maturityDate?.trim() || "",
-    firstCouponDate: r.firstCouponDate?.trim() || "",
-    rating: r.rating?.trim() || "",
-    ratingAgency: r.ratingAgency?.trim() || "",
-    callable: r.callable?.trim().toLowerCase() === "true",
-    callDate: r.callDate?.trim() || "",
-    greenBond: r.greenBond?.trim().toLowerCase() === "true",
-    description: r.description?.trim() || "",
-    yearsToMaturity: calculateYearsToMaturity(r.maturityDate?.trim() || ""),
-  }));
+/**
+ * Normalise une date en ISO YYYY-MM-DD depuis n'importe quel format accepte.
+ */
+function normalizeDateISO(s: string): string {
+  if (!s || s.trim() === "") return "";
+  const d = parseDate(s);
+  if (isNaN(d.getTime())) return "";
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
+/**
+ * Normalise la valeur d'amortizationType pour n'accepter que IF/AC/ACD
+ */
+function normalizeAmortizationType(value: string): "IF" | "AC" | "ACD" {
+  const v = (value || "").trim().toUpperCase();
+  if (v === "IF") return "IF";
+  if (v === "ACD") return "ACD";
+  return "AC";
+}
+
+/** Charge toutes les obligations cotees depuis obligations-cotees.csv */
+export function loadListedBonds(): ListedBond[] {
+  const rows = parseCSV<ListedBondCSVRow>("obligations-cotees.csv");
+  return rows.map((r) => {
+    const maturityISO = normalizeDateISO(r.maturityDate);
+    return {
+      isin: r.isin?.trim() || "",
+      code: r.code?.trim() || "",
+      name: r.name?.trim() || "",
+      issuer: r.issuer?.trim() || "",
+      issuerType: r.issuerType?.trim() || "Autre",
+      country: r.country?.trim() || "",
+      sector: r.sector?.trim() || "",
+      currency: r.currency?.trim() || "XOF",
+      nominalValue: parseNum(r.nominalValue, 10000),
+      totalIssued: parseNum(r.totalIssued),
+      outstanding: parseNum(r.outstanding),
+      couponRate: parseNum(r.couponRate) / 100,
+      couponFrequency: parseNum(r.couponFrequency, 1) as 1 | 2 | 4,
+      issueDate: normalizeDateISO(r.issueDate),
+      maturityDate: maturityISO,
+      firstAmortizationDate: normalizeDateISO(r.firstAmortizationDate),
+      amortizationType: normalizeAmortizationType(r.amortizationType),
+      rating: r.rating?.trim() || "",
+      ratingAgency: r.ratingAgency?.trim() || "",
+      callable: r.callable?.trim().toLowerCase() === "true",
+      callDate: normalizeDateISO(r.callDate),
+      greenBond: r.greenBond?.trim().toLowerCase() === "true",
+      description: r.description?.trim() || "",
+      yearsToMaturity: calculateYearsToMaturity(maturityISO),
+    };
+  });
+}
+
+/** Charge l'historique des prix des obligations cotees */
 export function loadListedBondPrices(): ListedBondPrice[] {
   const rows = parseCSV<ListedBondPriceRow>("obligations-cotees-prix.csv");
   return rows.map((r) => ({
     isin: r.isin?.trim() || "",
-    date: r.date?.trim() || "",
+    date: normalizeDateISO(r.date),
     cleanPrice: parseNum(r.cleanPrice),
     dirtyPrice: parseNum(r.dirtyPrice),
     volume: parseNum(r.volume),
@@ -310,26 +381,32 @@ export function loadListedBondPrices(): ListedBondPrice[] {
   }));
 }
 
+/** Charge les evenements (coupons, remboursements, etc.) */
 export function loadListedBondEvents(): ListedBondEvent[] {
   const rows = parseCSV<ListedBondEventRow>("obligations-cotees-evenements.csv");
   return rows.map((r) => ({
     isin: r.isin?.trim() || "",
-    date: r.date?.trim() || "",
+    date: normalizeDateISO(r.date),
     eventType: (r.eventType?.trim() || "coupon") as ListedBondEvent["eventType"],
     amount: parseNum(r.amount),
     description: r.description?.trim() || "",
   }));
 }
 
+/** Calcule les statistiques globales du marche obligataire cote */
 export function getMarketStats(bonds: ListedBond[]): MarketStats {
   const totalBonds = bonds.length;
   const totalOutstanding = bonds.reduce((sum, b) => sum + b.outstanding, 0);
-  const weightedYield = totalOutstanding > 0
-    ? bonds.reduce((sum, b) => sum + b.couponRate * b.outstanding, 0) / totalOutstanding
-    : 0;
-  const averageDuration = totalOutstanding > 0
-    ? bonds.reduce((sum, b) => sum + b.yearsToMaturity * b.outstanding, 0) / totalOutstanding
-    : 0;
+  const weightedYield =
+    totalOutstanding > 0
+      ? bonds.reduce((sum, b) => sum + b.couponRate * b.outstanding, 0) /
+        totalOutstanding
+      : 0;
+  const averageDuration =
+    totalOutstanding > 0
+      ? bonds.reduce((sum, b) => sum + b.yearsToMaturity * b.outstanding, 0) /
+        totalOutstanding
+      : 0;
 
   const byCountry = bonds.reduce((acc, b) => {
     acc[b.country] = (acc[b.country] || 0) + 1;

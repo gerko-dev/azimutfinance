@@ -21,6 +21,7 @@ import type {
   MarketStats,
 } from "@/lib/listedBondsTypes";
 import { getBondYTM } from "@/lib/listedBondsTypes";
+import CountryFlag from "./CountryFlag";
 
 // === HELPERS DE FORMATAGE ===
 function formatFCFA(value: number): string {
@@ -41,22 +42,6 @@ function formatDate(date: string): string {
     month: "2-digit",
     year: "2-digit",
   });
-}
-
-function countryBadge(country: string): { label: string; bg: string; text: string } {
-  const styles: Record<string, { label: string; bg: string; text: string }> = {
-    CI: { label: "CI", bg: "bg-orange-50", text: "text-orange-700" },
-    SN: { label: "SN", bg: "bg-green-50", text: "text-green-700" },
-    BF: { label: "BF", bg: "bg-red-50", text: "text-red-700" },
-    ML: { label: "ML", bg: "bg-yellow-50", text: "text-yellow-700" },
-    BJ: { label: "BJ", bg: "bg-emerald-50", text: "text-emerald-700" },
-    TG: { label: "TG", bg: "bg-amber-50", text: "text-amber-700" },
-    NE: { label: "NE", bg: "bg-lime-50", text: "text-lime-700" },
-    GW: { label: "GW", bg: "bg-teal-50", text: "text-teal-700" },
-    UEMOA: { label: "UEMOA", bg: "bg-blue-50", text: "text-blue-700" },
-    CEDEAO: { label: "CEDEAO", bg: "bg-indigo-50", text: "text-indigo-700" },
-  };
-  return styles[country] || { label: country, bg: "bg-slate-100", text: "text-slate-700" };
 }
 
 type Props = {
@@ -83,11 +68,18 @@ export default function ListedBondsView({ bonds, prices, events, stats }: Props)
   const [curveFilterType, setCurveFilterType] = useState<string>("all");
   const [curveAverageBasis, setCurveAverageBasis] = useState<string>("all-etat");
 
-  // === OBLIGATIONS ENRICHIES (avec YTM actuariel) ===
+  // === OBLIGATIONS ENRICHIES (avec YTM actuariel + dernier prix) ===
   const enrichedBonds = useMemo(() => {
     return bonds.map((bond) => {
       const ytm = getBondYTM(bond, prices);
-      return { ...bond, ytm };
+      const bondPrices = prices.filter((p) => p.isin === bond.isin);
+      const latestPrice =
+        bondPrices.length > 0
+          ? bondPrices.reduce((latest, p) =>
+              new Date(p.date) > new Date(latest.date) ? p : latest
+            )
+          : null;
+      return { ...bond, ytm, latestPrice };
     });
   }, [bonds, prices]);
 
@@ -480,6 +472,7 @@ export default function ListedBondsView({ bonds, prices, events, stats }: Props)
                   stroke="#94a3b8"
                   fontSize={11}
                   domain={["dataMin", "dataMax"]}
+                  tickFormatter={(value) => Number(value).toFixed(1)}
                   label={{
                     value: "Durée résiduelle (années)",
                     position: "bottom",
@@ -575,12 +568,13 @@ export default function ListedBondsView({ bonds, prices, events, stats }: Props)
             </p>
             <div className="space-y-2">
               {anomalies.map((a, i) => (
-                <div
+                <Link
                   key={i}
-                  className={`block p-3 rounded-md border text-sm ${
+                  href={`/obligation/${a.bond.isin}`}
+                  className={`block p-3 rounded-md border text-sm hover:shadow-sm transition ${
                     a.severity === "watch_high"
-                      ? "bg-blue-50 border-blue-200"
-                      : "bg-slate-50 border-slate-200"
+                      ? "bg-blue-50 border-blue-200 hover:border-blue-300"
+                      : "bg-slate-50 border-slate-200 hover:border-slate-300"
                   }`}
                 >
                   <div className="flex justify-between items-start gap-3">
@@ -599,7 +593,7 @@ export default function ListedBondsView({ bonds, prices, events, stats }: Props)
                       {a.bond.isin}
                     </span>
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
             <div className="mt-3 pt-3 border-t border-slate-100 text-xs text-slate-500">
@@ -731,6 +725,7 @@ export default function ListedBondsView({ bonds, prices, events, stats }: Props)
                       Coupon {sortIcon("couponRate")}
                     </button>
                   </th>
+                  <th className="text-right px-3 md:px-4 py-3 font-medium">Cours</th>
                   <th className="text-right px-3 md:px-4 py-3 font-medium">
                     <button
                       onClick={() => toggleSort("ytm")}
@@ -761,83 +756,112 @@ export default function ListedBondsView({ bonds, prices, events, stats }: Props)
                 </tr>
               </thead>
               <tbody>
-                {sortedBonds.map((b) => {
-                  const badge = countryBadge(b.country);
-                  return (
-                    <tr
-                      key={b.isin}
-                      className="border-b border-slate-100 hover:bg-blue-50/30 transition"
-                    >
-                      <td className="px-3 md:px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          {b.greenBond && (
-                            <span title="Obligation verte" className="text-green-600">
-                              🌱
-                            </span>
-                          )}
-                          <div>
-                            <div className="font-medium">
-                              {b.name}
-                              {b.code && (
-                                <span className="ml-2 text-xs text-slate-500 font-normal">
-                                  ({b.code})
+                {sortedBonds.map((b) => (
+                  <tr
+                    key={b.isin}
+                    className="border-b border-slate-100 hover:bg-blue-50/30 transition"
+                  >
+                    <td className="px-3 md:px-4 py-3">
+                      <Link
+                        href={`/obligation/${b.isin}`}
+                        className="flex items-center gap-2 hover:text-blue-700"
+                      >
+                        {b.greenBond && (
+                          <span title="Obligation verte" className="text-green-600">
+                            🌱
+                          </span>
+                        )}
+                        <div>
+                          <div className="font-medium">
+                            {b.name}
+                            {b.code && (
+                              <span className="ml-2 text-xs text-slate-500 font-normal">
+                                ({b.code})
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-slate-500 font-mono">{b.isin}</div>
+                        </div>
+                      </Link>
+                    </td>
+                    <td className="px-3 md:px-4 py-3 hidden md:table-cell">
+                      <div className="text-sm">{b.issuer}</div>
+                      <div className="text-xs text-slate-500">
+                        {b.issuerType} · {b.sector}
+                      </div>
+                    </td>
+                    <td className="px-2 py-3 text-center">
+                      <div className="flex flex-col items-center gap-0.5">
+                        <CountryFlag country={b.country} size={16} />
+                        <span className="text-[10px] text-slate-500 leading-none">
+                          {b.country}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-3 md:px-4 py-3 text-right">
+                      {(b.couponRate * 100).toFixed(2)}%
+                    </td>
+                    <td className="px-3 md:px-4 py-3 text-right">
+                      {b.latestPrice ? (
+                        <div>
+                          <div className="font-medium">
+                            {formatFCFA(b.latestPrice.cleanPrice)}
+                          </div>
+                          <div className="text-xs text-slate-500">
+                            {(() => {
+                              const delta =
+                                ((b.latestPrice.cleanPrice - b.nominalValue) /
+                                  b.nominalValue) *
+                                100;
+                              if (Math.abs(delta) < 0.05) return "au pair";
+                              return (
+                                <span
+                                  className={delta > 0 ? "text-red-600" : "text-green-600"}
+                                >
+                                  {delta > 0 ? "+" : ""}
+                                  {delta.toFixed(2)}%
                                 </span>
-                              )}
-                            </div>
-                            <div className="text-xs text-slate-500 font-mono">{b.isin}</div>
+                              );
+                            })()}
                           </div>
                         </div>
-                      </td>
-                      <td className="px-3 md:px-4 py-3 hidden md:table-cell">
-                        <div className="text-sm">{b.issuer}</div>
-                        <div className="text-xs text-slate-500">
-                          {b.issuerType} · {b.sector}
-                        </div>
-                      </td>
-                      <td className="px-2 py-3 text-center">
-                        <span
-                          className={`inline-block text-xs font-medium px-2 py-0.5 rounded ${badge.bg} ${badge.text}`}
-                        >
-                          {badge.label}
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 md:px-4 py-3 text-right font-medium">
+                      <span
+                        className={
+                          b.ytm > b.couponRate
+                            ? "text-green-700"
+                            : b.ytm < b.couponRate
+                            ? "text-red-700"
+                            : ""
+                        }
+                      >
+                        {(b.ytm * 100).toFixed(2)}%
+                      </span>
+                    </td>
+                    <td className="px-3 md:px-4 py-3 text-right">
+                      <div className="text-sm">{formatDate(b.maturityDate)}</div>
+                      <div className="text-xs text-slate-500">
+                        {b.yearsToMaturity.toFixed(1)} ans
+                      </div>
+                    </td>
+                    <td className="px-3 md:px-4 py-3 text-right hidden md:table-cell">
+                      {b.rating ? (
+                        <span className="text-xs px-2 py-0.5 bg-slate-100 rounded">
+                          {b.rating}
                         </span>
-                      </td>
-                      <td className="px-3 md:px-4 py-3 text-right">
-                        {(b.couponRate * 100).toFixed(2)}%
-                      </td>
-                      <td className="px-3 md:px-4 py-3 text-right font-medium">
-                        <span
-                          className={
-                            b.ytm > b.couponRate
-                              ? "text-green-700"
-                              : b.ytm < b.couponRate
-                              ? "text-red-700"
-                              : ""
-                          }
-                        >
-                          {(b.ytm * 100).toFixed(2)}%
-                        </span>
-                      </td>
-                      <td className="px-3 md:px-4 py-3 text-right">
-                        <div className="text-sm">{formatDate(b.maturityDate)}</div>
-                        <div className="text-xs text-slate-500">
-                          {b.yearsToMaturity.toFixed(1)} ans
-                        </div>
-                      </td>
-                      <td className="px-3 md:px-4 py-3 text-right hidden md:table-cell">
-                        {b.rating ? (
-                          <span className="text-xs px-2 py-0.5 bg-slate-100 rounded">
-                            {b.rating}
-                          </span>
-                        ) : (
-                          <span className="text-slate-300">—</span>
-                        )}
-                      </td>
-                      <td className="px-3 md:px-4 py-3 text-right hidden lg:table-cell text-xs text-slate-600">
-                        {formatBigFCFA(b.outstanding)}
-                      </td>
-                    </tr>
-                  );
-                })}
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 md:px-4 py-3 text-right hidden lg:table-cell text-xs text-slate-600">
+                      {formatBigFCFA(b.outstanding)}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
 
