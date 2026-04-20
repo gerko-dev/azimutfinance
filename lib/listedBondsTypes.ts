@@ -723,3 +723,182 @@ export function calculateSignatureSpread(
 
   return bond.couponRate - calib.ytm;
 }
+// ==========================================
+// SOUVERAINS NON COTES (UMOA-Titres : OAT + BAT)
+// ==========================================
+
+/**
+ * Represente une "obligation souveraine" consolidee : toutes les adjudications
+ * du meme ISIN agregees. Pour les BAT sans ISIN, chaque ligne est une emission
+ * independante.
+ */
+export type SovereignBond = {
+  // Identification
+  id: string;                    // ISIN pour OAT, ou "BAT-{country}-{date}-{maturity}" pour BAT
+  isin: string;                  // peut etre vide pour BAT
+  country: string;
+  type: "OAT" | "BAT";
+
+  // Caracteristiques
+  maturity: number;              // en annees
+  firstIssueDate: string;        // date de la 1ere adjudication
+  lastIssueDate: string;         // date de la derniere adjudication
+  nbRounds: number;              // nb d'adjudications (1 pour BAT, 1-10 pour OAT)
+
+  // Montants
+  totalAmount: number;           // somme des montants de toutes les adjudications
+  avgYield: number;              // YTM moyen pondere par montants (pour info)
+  lastYield: number;             // YTM de la derniere adjudication (ce qu'on affiche sur la courbe)
+
+  // Details pour drilldown
+  adjudications: Array<{
+    date: string;
+    amount: number;
+    yield: number;
+  }>;
+};
+/**
+ * Version legere du SovereignBond pour l'affichage liste (sans le detail
+ * des adjudications qui alourdit le payload).
+ */
+export type SovereignBondLite = {
+  id: string;
+  isin: string;
+  country: string;
+  type: "OAT" | "BAT";
+  maturity: number;
+  lastIssueDate: string;
+  nbRounds: number;
+  totalAmount: number;
+  lastYield: number;
+};
+
+export function toLite(b: SovereignBond): SovereignBondLite {
+  return {
+    id: b.id,
+    isin: b.isin,
+    country: b.country,
+    type: b.type,
+    maturity: b.maturity,
+    lastIssueDate: b.lastIssueDate,
+    nbRounds: b.nbRounds,
+    totalAmount: b.totalAmount,
+    lastYield: b.lastYield,
+  };
+}
+/**
+ * Agrege les emissions UMOA-Titres par ISIN (pour les OAT) et par adjudication
+ * individuelle (pour les BAT). Filtre les lignes aberrantes.
+ */
+export function aggregateSovereignBonds(emissions: EmissionUMOA[]): SovereignBond[] {
+  // Filtre des aberrations
+  const valid = emissions.filter((e) => {
+    if (!e.date || !e.country) return false;
+    if (e.maturity <= 0 || e.maturity > 50) return false;
+    if (e.amount <= 0) return false;
+    if (e.weightedAvgYield <= 0 || e.weightedAvgYield > 0.3) return false;
+    // Pour OAT : ISIN obligatoire et non "--"
+    if (e.type === "OAT") {
+      if (!e.isin || e.isin === "--" || e.isin.trim() === "") return false;
+    }
+    return true;
+  });
+
+  // Groupage
+  // OAT : cle = ISIN
+  // BAT : cle = unique par adjudication (pas de consolidation car pas d'ISIN)
+  const groups = new Map<string, EmissionUMOA[]>();
+  for (const e of valid) {
+    let key: string;
+    if (e.type === "OAT") {
+      key = e.isin;
+    } else {
+      // BAT : chaque ligne est une adjudication independante
+      key = `BAT-${e.country}-${e.date}-${e.maturity}-${Math.round(e.amount)}`;
+    }
+    const existing = groups.get(key) || [];
+    existing.push(e);
+    groups.set(key, existing);
+  }
+
+  // Construction des objets SovereignBond
+  const bonds: SovereignBond[] = [];
+  for (const [key, rounds] of groups.entries()) {
+    // Trier par date croissante
+    rounds.sort((a, b) => a.date.localeCompare(b.date));
+
+    const first = rounds[0];
+    const last = rounds[rounds.length - 1];
+    const totalAmount = rounds.reduce((sum, r) => sum + r.amount, 0);
+    const avgYield =
+      totalAmount > 0
+        ? rounds.reduce((sum, r) => sum + r.weightedAvgYield * r.amount, 0) / totalAmount
+        : 0;
+
+    bonds.push({
+      id: first.type === "OAT" ? first.isin : key,
+      isin: first.isin,
+      country: first.country,
+      type: first.type,
+      maturity: first.maturity,
+      firstIssueDate: first.date,
+      lastIssueDate: last.date,
+      nbRounds: rounds.length,
+      totalAmount,
+      avgYield,
+      lastYield: last.weightedAvgYield,
+      adjudications: rounds.map((r) => ({
+        date: r.date,
+        amount: r.amount,
+        yield: r.weightedAvgYield,
+      })),
+    });
+  }
+
+  return bonds;
+}
+
+/**
+ * Statistiques globales du marche souverain non cote.
+ */
+export function getSovereignMarketStats(bonds: SovereignBond[]): {
+  totalBonds: number;
+  totalBAT: number;
+  totalOAT: number;
+  totalVolume: number;
+  avgYield: number;
+  avgMaturity: number;
+  byCountry: Record<string, number>;
+  volumeByCountry: Record<string, number>;
+} {
+  const totalVolume = bonds.reduce((sum, b) => sum + b.totalAmount, 0);
+  const avgYield =
+    totalVolume > 0
+      ? bonds.reduce((sum, b) => sum + b.lastYield * b.totalAmount, 0) / totalVolume
+      : 0;
+  const avgMaturity =
+    totalVolume > 0
+      ? bonds.reduce((sum, b) => sum + b.maturity * b.totalAmount, 0) / totalVolume
+      : 0;
+
+  const byCountry = bonds.reduce((acc, b) => {
+    acc[b.country] = (acc[b.country] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const volumeByCountry = bonds.reduce((acc, b) => {
+    acc[b.country] = (acc[b.country] || 0) + b.totalAmount;
+    return acc;
+  }, {} as Record<string, number>);
+
+  return {
+    totalBonds: bonds.length,
+    totalBAT: bonds.filter((b) => b.type === "BAT").length,
+    totalOAT: bonds.filter((b) => b.type === "OAT").length,
+    totalVolume,
+    avgYield,
+    avgMaturity,
+    byCountry,
+    volumeByCountry,
+  };
+}

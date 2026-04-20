@@ -90,7 +90,6 @@ function parseNum(value: unknown, defaultValue: number = 0): number {
   const str = String(value).trim();
   if (str === "" || str === "NC" || str === "-") return defaultValue;
 
-  // Detection notation scientifique avec virgule francaise : 2,06E+11
   const scientificFrench = /^-?\d+,\d+[eE][+-]?\d+$/;
   if (scientificFrench.test(str)) {
     const cleaned = str.replace(",", ".");
@@ -98,7 +97,6 @@ function parseNum(value: unknown, defaultValue: number = 0): number {
     return isNaN(n) ? defaultValue : n;
   }
 
-  // Nombre francais classique : "12 345,67" -> "12345.67"
   const cleaned = str.replace(/\s/g, "").replace(/,/g, ".");
   const n = Number(cleaned);
   return isNaN(n) ? defaultValue : n;
@@ -282,9 +280,6 @@ type ListedBondEventRow = {
   description: string;
 };
 
-/**
- * Parse une date en acceptant les formats YYYY-MM-DD ou DD/MM/YYYY.
- */
 function parseDate(s: string): Date {
   if (!s || s.trim() === "") return new Date(NaN);
   const clean = s.trim();
@@ -311,9 +306,6 @@ function calculateYearsToMaturity(maturityDate: string): number {
   return diffMs / (365.25 * 24 * 60 * 60 * 1000);
 }
 
-/**
- * Normalise une date en ISO YYYY-MM-DD depuis n'importe quel format accepte.
- */
 function normalizeDateISO(s: string): string {
   if (!s || s.trim() === "") return "";
   const d = parseDate(s);
@@ -324,9 +316,6 @@ function normalizeDateISO(s: string): string {
   return `${y}-${m}-${day}`;
 }
 
-/**
- * Normalise la valeur d'amortizationType pour n'accepter que IF/AC/ACD
- */
 function normalizeAmortizationType(value: string): "IF" | "AC" | "ACD" {
   const v = (value || "").trim().toUpperCase();
   if (v === "IF") return "IF";
@@ -334,7 +323,6 @@ function normalizeAmortizationType(value: string): "IF" | "AC" | "ACD" {
   return "AC";
 }
 
-/** Charge toutes les obligations cotees depuis obligations-cotees.csv */
 export function loadListedBonds(): ListedBond[] {
   const rows = parseCSV<ListedBondCSVRow>("obligations-cotees.csv");
   return rows.map((r) => {
@@ -368,7 +356,6 @@ export function loadListedBonds(): ListedBond[] {
   });
 }
 
-/** Charge l'historique des prix des obligations cotees */
 export function loadListedBondPrices(): ListedBondPrice[] {
   const rows = parseCSV<ListedBondPriceRow>("obligations-cotees-prix.csv");
   return rows.map((r) => ({
@@ -381,7 +368,6 @@ export function loadListedBondPrices(): ListedBondPrice[] {
   }));
 }
 
-/** Charge les evenements (coupons, remboursements, etc.) */
 export function loadListedBondEvents(): ListedBondEvent[] {
   const rows = parseCSV<ListedBondEventRow>("obligations-cotees-evenements.csv");
   return rows.map((r) => ({
@@ -393,7 +379,6 @@ export function loadListedBondEvents(): ListedBondEvent[] {
   }));
 }
 
-/** Calcule les statistiques globales du marche obligataire cote */
 export function getMarketStats(bonds: ListedBond[]): MarketStats {
   const totalBonds = bonds.length;
   const totalOutstanding = bonds.reduce((sum, b) => sum + b.outstanding, 0);
@@ -427,8 +412,17 @@ export function getMarketStats(bonds: ListedBond[]): MarketStats {
     byType,
   };
 }
+
+// ==========================================
+// UMOA-TITRES (emissions souveraines, avec cache)
+// ==========================================
+
+let _emissionsCache: import("./listedBondsTypes").EmissionUMOA[] | null = null;
+
 /** Charge les emissions UMOA-Titres pour la calibration des prix theoriques */
 export function loadUmoaEmissions(): import("./listedBondsTypes").EmissionUMOA[] {
+  if (_emissionsCache !== null) return _emissionsCache;
+
   const rows = parseCSV<{
     date: string;
     country: string;
@@ -439,7 +433,7 @@ export function loadUmoaEmissions(): import("./listedBondsTypes").EmissionUMOA[]
     weightedAvgYield: string;
   }>("emissions.csv");
 
-  return rows
+  _emissionsCache = rows
     .map((r) => ({
       date: normalizeDateISO(r.date),
       country: r.country?.trim() || "",
@@ -456,4 +450,6 @@ export function loadUmoaEmissions(): import("./listedBondsTypes").EmissionUMOA[]
       if (e.weightedAvgYield <= 0 || e.weightedAvgYield > 0.3) return false;
       return true;
     });
+
+  return _emissionsCache;
 }
