@@ -1,0 +1,23 @@
+isin;date;type;amount;description
+BF0000003061;06/05/2026;COUPON;315;Coupon 6,30% par titre
+BF0000003061;06/05/2026;PRINCIPAL;10000;Amortissement sur nominal (4/10)
+BF0000003079;06/05/2026;COUPON;327.5;Coupon 6,55% par titre
+BF0000003079;06/05/2026;PRINCIPAL;10000;Amortissement sur nominal (4/14)
+BF0000004127;24/04/2026;COUPON;330;Coupon 6,60% par titre
+BF0000004127;25/04/2026;PRINCIPAL;10000;Amortissement sur nominal (1/10)
+BF0000004143;24/04/2026;COUPON;340;Coupon 6,80% par titre
+BF0000004143;25/04/2026;PRINCIPAL;10000;Amortissement sur nominal (1/14)
+BF0000004150;24/04/2026;COUPON;350;Coupon 7,00% par titre
+BF0000004150;25/04/2026;PRINCIPAL;10000;Amortissement sur nominal (1/20)
+BF0000001362;06/05/2026;COUPON;325;Coupon 6,50% par titre
+CI0000003588;23/04/2026;COUPON;590;Coupon 5,90% par titre
+CI0000003588;23/04/2026;PRINCIPAL;10000;Amortissement sur titre (4/8) - 1/8 des titres rembourses au nominal
+CI0000003596;23/04/2026;COUPON;580;Coupon 5,80% par titre
+CI0000003596;23/04/2026;PRINCIPAL;10000;Amortissement sur titre (4/5) - 1/5 des titres rembourses au nominal
+CI0000004313;13/05/2026;COUPON;580;Coupon 5,80% par titre
+CI0000004313;13/05/2026;PRINCIPAL;10000;Amortissement sur titre (3/5) - 1/5 des titres rembourses au nominal
+CI0000005674;11/05/2026;COUPON;698;Coupon 6,98% par titre
+CI0000006383;17/05/2026;COUPON;600;Coupon 6,00% par titre
+CI0000006383;17/05/2026;PRINCIPAL;10000;Amortissement sur titre (1/5) - 1/5 des titres rembourses au nominal
+TG0000001585;18/05/2026;COUPON;162.5;Coupon 6,50% par titre
+TG0000001585;18/05/2026;PRINCIPAL;5000;Amortissement sur nominal (10/14)

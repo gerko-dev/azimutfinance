@@ -1,4 +1,29 @@
-import PagePlaceholder from "@/components/PagePlaceholder";
+import Header from "@/components/Header";
+import Ticker from "@/components/Ticker";
+import ListedBondsView from "@/components/ListedBondsView";
+import {
+  loadListedBonds,
+  loadListedBondPrices,
+  loadListedBondEvents,
+  getMarketStats,
+} from "@/lib/dataLoader";
+
 export default function Page() {
-  return <PagePlaceholder title="Obligations cotées" description="Base complète des obligations cotées sur la BRVM avec fiches détaillées par ISIN." />;
+  const bonds = loadListedBonds();
+  const prices = loadListedBondPrices();
+  const events = loadListedBondEvents();
+  const stats = getMarketStats(bonds);
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <Header />
+      <Ticker />
+      <ListedBondsView
+        bonds={bonds}
+        prices={prices}
+        events={events}
+        stats={stats}
+      />
+    </div>
+  );
 }

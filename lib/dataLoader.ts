@@ -211,3 +211,142 @@ export function getStockDetails(code: string) {
     hasVolume: isPresent(s.volume),
   };
 }
+// === OBLIGATIONS COTEES BRVM ===
+
+import type {
+  ListedBond,
+  ListedBondPrice,
+  ListedBondEvent,
+  MarketStats,
+} from "./listedBondsTypes";
+
+type ListedBondCSVRow = {
+  isin: string;
+  code: string;
+  name: string;
+  issuer: string;
+  issuerType: string;
+  country: string;
+  sector: string;
+  currency: string;
+  nominalValue: string;
+  totalIssued: string;
+  outstanding: string;
+  couponRate: string;
+  couponFrequency: string;
+  issueDate: string;
+  maturityDate: string;
+  firstCouponDate: string;
+  rating: string;
+  ratingAgency: string;
+  callable: string;
+  callDate: string;
+  greenBond: string;
+  description: string;
+};
+
+type ListedBondPriceRow = {
+  isin: string;
+  date: string;
+  cleanPrice: string;
+  dirtyPrice: string;
+  volume: string;
+  transactions: string;
+};
+
+type ListedBondEventRow = {
+  isin: string;
+  date: string;
+  eventType: string;
+  amount: string;
+  description: string;
+};
+
+function calculateYearsToMaturity(maturityDate: string): number {
+  const maturity = new Date(maturityDate);
+  const now = new Date();
+  const diffMs = maturity.getTime() - now.getTime();
+  return diffMs / (365.25 * 24 * 60 * 60 * 1000);
+}
+
+export function loadListedBonds(): ListedBond[] {
+  const rows = parseCSV<ListedBondCSVRow>("obligations-cotees.csv");
+  return rows.map((r) => ({
+    isin: r.isin?.trim() || "",
+    code: r.code?.trim() || "",
+    name: r.name?.trim() || "",
+    issuer: r.issuer?.trim() || "",
+    issuerType: r.issuerType?.trim() || "Autre",
+    country: r.country?.trim() || "",
+    sector: r.sector?.trim() || "",
+    currency: r.currency?.trim() || "XOF",
+    nominalValue: parseNum(r.nominalValue, 10000),
+    totalIssued: parseNum(r.totalIssued),
+    outstanding: parseNum(r.outstanding),
+    couponRate: parseNum(r.couponRate) / 100,
+    couponFrequency: parseNum(r.couponFrequency, 1) as 1 | 2 | 4,
+    issueDate: r.issueDate?.trim() || "",
+    maturityDate: r.maturityDate?.trim() || "",
+    firstCouponDate: r.firstCouponDate?.trim() || "",
+    rating: r.rating?.trim() || "",
+    ratingAgency: r.ratingAgency?.trim() || "",
+    callable: r.callable?.trim().toLowerCase() === "true",
+    callDate: r.callDate?.trim() || "",
+    greenBond: r.greenBond?.trim().toLowerCase() === "true",
+    description: r.description?.trim() || "",
+    yearsToMaturity: calculateYearsToMaturity(r.maturityDate?.trim() || ""),
+  }));
+}
+
+export function loadListedBondPrices(): ListedBondPrice[] {
+  const rows = parseCSV<ListedBondPriceRow>("obligations-cotees-prix.csv");
+  return rows.map((r) => ({
+    isin: r.isin?.trim() || "",
+    date: r.date?.trim() || "",
+    cleanPrice: parseNum(r.cleanPrice),
+    dirtyPrice: parseNum(r.dirtyPrice),
+    volume: parseNum(r.volume),
+    transactions: parseNum(r.transactions),
+  }));
+}
+
+export function loadListedBondEvents(): ListedBondEvent[] {
+  const rows = parseCSV<ListedBondEventRow>("obligations-cotees-evenements.csv");
+  return rows.map((r) => ({
+    isin: r.isin?.trim() || "",
+    date: r.date?.trim() || "",
+    eventType: (r.eventType?.trim() || "coupon") as ListedBondEvent["eventType"],
+    amount: parseNum(r.amount),
+    description: r.description?.trim() || "",
+  }));
+}
+
+export function getMarketStats(bonds: ListedBond[]): MarketStats {
+  const totalBonds = bonds.length;
+  const totalOutstanding = bonds.reduce((sum, b) => sum + b.outstanding, 0);
+  const weightedYield = totalOutstanding > 0
+    ? bonds.reduce((sum, b) => sum + b.couponRate * b.outstanding, 0) / totalOutstanding
+    : 0;
+  const averageDuration = totalOutstanding > 0
+    ? bonds.reduce((sum, b) => sum + b.yearsToMaturity * b.outstanding, 0) / totalOutstanding
+    : 0;
+
+  const byCountry = bonds.reduce((acc, b) => {
+    acc[b.country] = (acc[b.country] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const byType = bonds.reduce((acc, b) => {
+    acc[b.issuerType] = (acc[b.issuerType] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  return {
+    totalBonds,
+    totalOutstanding,
+    weightedYield,
+    averageDuration,
+    byCountry,
+    byType,
+  };
+}
