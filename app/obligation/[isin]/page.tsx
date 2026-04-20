@@ -6,9 +6,14 @@ import {
   loadListedBonds,
   loadListedBondPrices,
   loadListedBondEvents,
+  loadUmoaEmissions,
 } from "@/lib/dataLoader";
+import {
+  buildTheoreticalPriceHistory,
+  calculateSignatureSpread,
+} from "@/lib/listedBondsTypes";
 
-export default async function BondPage({
+export default async function Page({
   params,
 }: {
   params: Promise<{ isin: string }>;
@@ -17,26 +22,26 @@ export default async function BondPage({
   const isinUpper = isin.toUpperCase();
 
   const bonds = loadListedBonds();
-  const bond = bonds.find((b) => b.isin.toUpperCase() === isinUpper);
-
-  if (!bond) {
-    notFound();
-  }
+  const bond = bonds.find((b) => b.isin === isinUpper);
+  if (!bond) notFound();
 
   const allPrices = loadListedBondPrices();
-  const priceHistory = allPrices.filter((p) => p.isin.toUpperCase() === isinUpper);
+  const priceHistory = allPrices.filter((p) => p.isin === isinUpper);
 
-  const allEvents = loadListedBondEvents();
-  const events = allEvents.filter((e) => e.isin.toUpperCase() === isinUpper);
+  const events = loadListedBondEvents().filter((e) => e.isin === isinUpper);
 
-  // Obligations similaires : meme pays + meme rating + duree ±2 ans
+  // Chargement des emissions UMOA-Titres pour le prix theorique
+  const emissions = loadUmoaEmissions();
+  const theoreticalHistory = buildTheoreticalPriceHistory(bond, emissions, 24);
+  const signatureSpread = calculateSignatureSpread(bond, emissions);
+
+  // Obligations similaires : meme pays, duree similaire
   const similarBonds = bonds
     .filter(
       (b) =>
         b.isin !== bond.isin &&
         b.country === bond.country &&
-        b.rating === bond.rating &&
-        Math.abs(b.yearsToMaturity - bond.yearsToMaturity) < 2
+        Math.abs(b.yearsToMaturity - bond.yearsToMaturity) < 3
     )
     .slice(0, 5);
 
@@ -49,6 +54,8 @@ export default async function BondPage({
         priceHistory={priceHistory}
         events={events}
         similarBonds={similarBonds}
+        theoreticalHistory={theoreticalHistory}
+        signatureSpread={signatureSpread}
       />
     </div>
   );

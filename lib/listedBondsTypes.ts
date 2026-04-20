@@ -443,3 +443,283 @@ export function getDifferedYears(bond: ListedBond): number {
   const years = (firstAmortDate.getTime() - issueDate.getTime()) / (365 * 24 * 60 * 60 * 1000);
   return Math.max(0, Math.round(years - 1 / bond.couponFrequency));
 }
+// ==========================================
+// PRIX THEORIQUE UMOA-TITRES (methodologie institutionnelle)
+// ==========================================
+
+export type EmissionUMOA = {
+  date: string;
+  country: string;
+  isin: string;
+  type: "OAT" | "BAT";
+  maturity: number; // en annees
+  amount: number;
+  weightedAvgYield: number; // en decimal (0.065 pour 6,5%)
+};
+
+/**
+ * Calibre le YTM theorique d'une obligation a une date donnee, base sur
+ * les emissions UMOA-Titres des 3 derniers mois du meme pays (OAT uniquement).
+ *
+ * Methodologie :
+ * 1. Filtrer : meme country, type OAT, date dans [T-90j, T]
+ * 2. Moyenne ponderee par amount pour chaque maturite trouvee
+ * 3. Interpolation lineaire pour la maturite residuelle de l'obligation cible
+ */
+// Liste des pays UEMOA (souverains emetteurs d'OAT)
+const UEMOA_COUNTRIES = ["CI", "SN", "BF", "ML", "BJ", "TG", "NE", "GW"];
+
+/**
+ * Calibre le YTM theorique d'une obligation a une date donnee, base sur
+ * les emissions UMOA-Titres des 3 derniers mois.
+ *
+ * Logique :
+ * - Pour un emetteur souverain UEMOA (CI, SN, ...) : courbe du pays uniquement
+ * - Pour un emetteur supranational (UEMOA, CEDEAO, ...) : courbe UEMOA agregee
+ *   (moyenne ponderee par montant de TOUS les pays UEMOA)
+ */
+export function calibrateTheoreticalYTM(
+  country: string,
+  targetDate: Date,
+  residualMaturity: number,
+  emissions: EmissionUMOA[]
+): {
+  ytm: number;
+  basePoints: Array<{ maturity: number; ytm: number; amount: number }>;
+  issuancesUsed: number;
+  curveType: "pays" | "UEMOA-agregee";
+} | null {
+  if (residualMaturity <= 0) return null;
+
+  const THREE_MONTHS_MS = 90 * 24 * 60 * 60 * 1000;
+  const startDate = new Date(targetDate.getTime() - THREE_MONTHS_MS);
+
+  // Determiner si c'est un pays UEMOA ou un supranational
+  const isUemoaCountry = UEMOA_COUNTRIES.includes(country);
+  const curveType = isUemoaCountry ? "pays" : "UEMOA-agregee";
+
+  // Filtrer emissions eligibles
+  const eligible = emissions.filter((e) => {
+    // Filtre pays : soit meme pays (pour souverains), soit tous pays UEMOA (pour supra)
+    if (isUemoaCountry) {
+      if (e.country !== country) return false;
+    } else {
+      if (!UEMOA_COUNTRIES.includes(e.country)) return false;
+    }
+    if (e.type !== "OAT") return false;
+    if (e.maturity <= 0 || e.maturity > 50) return false;
+    if (e.amount <= 0) return false;
+    if (e.weightedAvgYield <= 0 || e.weightedAvgYield > 0.3) return false;
+    const d = new Date(e.date);
+    if (isNaN(d.getTime())) return false;
+    return d >= startDate && d <= targetDate;
+  });
+
+  if (eligible.length === 0) return null;
+
+  // Grouper par maturite et calculer moyenne ponderee
+  const byMaturity = new Map<number, { sumYieldAmount: number; sumAmount: number }>();
+  for (const e of eligible) {
+    const entry = byMaturity.get(e.maturity) || { sumYieldAmount: 0, sumAmount: 0 };
+    entry.sumYieldAmount += e.weightedAvgYield * e.amount;
+    entry.sumAmount += e.amount;
+    byMaturity.set(e.maturity, entry);
+  }
+
+  const basePoints = Array.from(byMaturity.entries())
+    .map(([maturity, v]) => ({
+      maturity,
+      ytm: v.sumYieldAmount / v.sumAmount,
+      amount: v.sumAmount,
+    }))
+    .sort((a, b) => a.maturity - b.maturity);
+
+  if (basePoints.length === 0) return null;
+
+  // Interpolation lineaire
+  let ytm: number;
+  if (residualMaturity <= basePoints[0].maturity) {
+    ytm = basePoints[0].ytm;
+  } else if (residualMaturity >= basePoints[basePoints.length - 1].maturity) {
+    ytm = basePoints[basePoints.length - 1].ytm;
+  } else {
+    let lowPoint = basePoints[0];
+    let highPoint = basePoints[basePoints.length - 1];
+    for (let i = 0; i < basePoints.length - 1; i++) {
+      if (
+        basePoints[i].maturity <= residualMaturity &&
+        basePoints[i + 1].maturity >= residualMaturity
+      ) {
+        lowPoint = basePoints[i];
+        highPoint = basePoints[i + 1];
+        break;
+      }
+    }
+    const ratio =
+      (residualMaturity - lowPoint.maturity) /
+      (highPoint.maturity - lowPoint.maturity);
+    ytm = lowPoint.ytm + ratio * (highPoint.ytm - lowPoint.ytm);
+  }
+
+  return {
+    ytm,
+    basePoints,
+    issuancesUsed: eligible.length,
+    curveType,
+  };
+}
+
+/**
+ * Calcule le prix pied de coupon theorique d'une obligation a un YTM donne.
+ * Actualise tous les flux futurs (coupons + amortissements) au YTM.
+ * Prend en compte l'amortissement.
+ */
+export function theoreticalCleanPrice(
+  bond: ListedBond,
+  operationDate: Date,
+  ytm: number
+): number {
+  const issueDate = parseISODate(bond.issueDate);
+  const maturityDate = parseISODate(bond.maturityDate);
+
+  if (isNaN(issueDate.getTime()) || isNaN(maturityDate.getTime())) return 0;
+  if (operationDate.getTime() >= maturityDate.getTime()) return 0;
+
+  // Toutes les dates de coupon
+  const allCouponDates = generateCouponDates(issueDate, maturityDate, bond.couponFrequency);
+
+  // Dates d'amortissement
+  let firstAmortDate: Date;
+  if (bond.amortizationType === "IF") {
+    firstAmortDate = maturityDate;
+  } else if (bond.firstAmortizationDate && bond.firstAmortizationDate !== "") {
+    firstAmortDate = parseISODate(bond.firstAmortizationDate);
+  } else {
+    firstAmortDate = allCouponDates[0];
+  }
+
+  const oneDay = 24 * 60 * 60 * 1000;
+  const allAmortDates = allCouponDates.filter(
+    (d) => d.getTime() >= firstAmortDate.getTime() - oneDay
+  );
+  const totalNbAmortPeriods = allAmortDates.length;
+
+  // Nombre d'amortissements passes (pour reconstruire le nominal initial)
+  const pastAmortDates = allAmortDates.filter((d) => d.getTime() <= operationDate.getTime());
+  const nbPastAmorts = pastAmortDates.length;
+
+  let amortPerPeriod = 0;
+  if (bond.amortizationType !== "IF" && totalNbAmortPeriods > nbPastAmorts) {
+    const remainingAmorts = totalNbAmortPeriods - nbPastAmorts;
+    const initialNominal =
+      bond.nominalValue + (nbPastAmorts / remainingAmorts) * bond.nominalValue;
+    amortPerPeriod = initialNominal / totalNbAmortPeriods;
+  }
+
+  // Simulation des flux futurs
+  const futureDates = allCouponDates.filter((d) => d.getTime() > operationDate.getTime());
+  if (futureDates.length === 0) return 0;
+
+  let outstanding = bond.nominalValue;
+  let dirtyPrice = 0;
+
+  for (let i = 0; i < futureDates.length; i++) {
+    const d = futureDates[i];
+    const daysFromNow = (d.getTime() - operationDate.getTime()) / (24 * 60 * 60 * 1000);
+    const years = daysFromNow / 365;
+    const df = Math.pow(1 + ytm, -years);
+
+    const couponAmount = (outstanding * bond.couponRate) / bond.couponFrequency;
+
+    const allAmortIndex = allAmortDates.findIndex((ad) => ad.getTime() === d.getTime());
+    const isAmortPeriod = allAmortIndex >= 0;
+    const isLastAmort = allAmortIndex === totalNbAmortPeriods - 1;
+
+    let amortAmount = 0;
+    if (isAmortPeriod) {
+      if (bond.amortizationType === "IF") {
+        if (i === futureDates.length - 1) amortAmount = outstanding;
+      } else {
+        amortAmount = isLastAmort ? outstanding : amortPerPeriod;
+      }
+    }
+
+    const cashflow = couponAmount + amortAmount;
+    dirtyPrice += cashflow * df;
+
+    outstanding = Math.max(0, outstanding - amortAmount);
+  }
+
+  // Retirer le coupon couru pour obtenir le prix pied de coupon
+  const pastDates = allCouponDates.filter((d) => d.getTime() <= operationDate.getTime());
+  const previousCouponDate =
+    pastDates.length > 0 ? pastDates[pastDates.length - 1] : issueDate;
+  const daysSinceLastCoupon =
+    (operationDate.getTime() - previousCouponDate.getTime()) / (24 * 60 * 60 * 1000);
+  const annualCoupon = bond.nominalValue * bond.couponRate;
+  const accruedInterest = (annualCoupon * daysSinceLastCoupon) / 365;
+
+  return dirtyPrice - accruedInterest;
+}
+
+/**
+ * Genere la serie temporelle des prix theoriques d'une obligation,
+ * hebdomadaire, sur les N derniers mois.
+ */
+export function buildTheoreticalPriceHistory(
+  bond: ListedBond,
+  emissions: EmissionUMOA[],
+  monthsBack: number = 12
+): Array<{ date: string; theoreticalPrice: number; ytm: number }> {
+  const today = new Date();
+  const issueDate = parseISODate(bond.issueDate);
+  if (isNaN(issueDate.getTime())) return [];
+
+  const startDate = new Date(today.getTime() - monthsBack * 30 * 24 * 60 * 60 * 1000);
+  const effectiveStart = startDate.getTime() > issueDate.getTime() ? startDate : issueDate;
+
+  const points: Array<{ date: string; theoreticalPrice: number; ytm: number }> = [];
+  const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+  for (let t = effectiveStart.getTime(); t <= today.getTime(); t += WEEK_MS) {
+    const date = new Date(t);
+    const maturityDate = parseISODate(bond.maturityDate);
+    const residual = (maturityDate.getTime() - t) / (365.25 * 24 * 60 * 60 * 1000);
+    if (residual <= 0) continue;
+
+    const calib = calibrateTheoreticalYTM(bond.country, date, residual, emissions);
+    if (!calib) continue;
+
+    const price = theoreticalCleanPrice(bond, date, calib.ytm);
+    if (price > 0) {
+      points.push({
+        date: date.toISOString().substring(0, 10),
+        theoreticalPrice: price,
+        ytm: calib.ytm,
+      });
+    }
+  }
+
+  return points;
+}
+
+/**
+ * Calcule le spread de signature : ecart entre le YTM a l'emission et le YTM UMOA-Titres
+ * theorique a la meme date et meme maturite. Mesure la qualite de signature.
+ */
+export function calculateSignatureSpread(
+  bond: ListedBond,
+  emissions: EmissionUMOA[]
+): number | null {
+  const issueDate = parseISODate(bond.issueDate);
+  if (isNaN(issueDate.getTime())) return null;
+
+  const maturityDate = parseISODate(bond.maturityDate);
+  const initialMaturity =
+    (maturityDate.getTime() - issueDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+
+  const calib = calibrateTheoreticalYTM(bond.country, issueDate, initialMaturity, emissions);
+  if (!calib) return null;
+
+  return bond.couponRate - calib.ytm;
+}

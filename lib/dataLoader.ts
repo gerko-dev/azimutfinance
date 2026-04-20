@@ -427,3 +427,33 @@ export function getMarketStats(bonds: ListedBond[]): MarketStats {
     byType,
   };
 }
+/** Charge les emissions UMOA-Titres pour la calibration des prix theoriques */
+export function loadUmoaEmissions(): import("./listedBondsTypes").EmissionUMOA[] {
+  const rows = parseCSV<{
+    date: string;
+    country: string;
+    isin: string;
+    type: string;
+    maturity: string;
+    amount: string;
+    weightedAvgYield: string;
+  }>("emissions.csv");
+
+  return rows
+    .map((r) => ({
+      date: normalizeDateISO(r.date),
+      country: r.country?.trim() || "",
+      isin: r.isin?.trim() || "",
+      type: (r.type?.trim() || "OAT") as "OAT" | "BAT",
+      maturity: parseNum(r.maturity),
+      amount: parseNum(r.amount),
+      weightedAvgYield: parseNum(r.weightedAvgYield) / 100,
+    }))
+    .filter((e) => {
+      if (!e.date || !e.country) return false;
+      if (e.maturity <= 0 || e.maturity > 50) return false;
+      if (e.amount <= 0) return false;
+      if (e.weightedAvgYield <= 0 || e.weightedAvgYield > 0.3) return false;
+      return true;
+    });
+}

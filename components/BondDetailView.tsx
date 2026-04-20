@@ -154,9 +154,17 @@ type Props = {
   priceHistory: ListedBondPrice[];
   events: ListedBondEvent[];
   similarBonds: ListedBond[];
+  theoreticalHistory: Array<{ date: string; theoreticalPrice: number; ytm: number }>;
+  signatureSpread: number | null;
 };
 
-export default function BondDetailView({ bond, priceHistory, similarBonds }: Props) {
+export default function BondDetailView({
+  bond,
+  priceHistory,
+  similarBonds,
+  theoreticalHistory,
+  signatureSpread,
+}: Props) {
   // === PRIX DE MARCHE (fixe) ===
   const latestHistoricalPrice =
     priceHistory.length > 0
@@ -165,12 +173,21 @@ export default function BondDetailView({ bond, priceHistory, similarBonds }: Pro
         )
       : null;
 
-  const marketPrice = latestHistoricalPrice?.cleanPrice || bond.nominalValue;
+  // Si pas de cotation marche, on utilise le dernier prix theorique
+  const latestTheoretical =
+    theoreticalHistory.length > 0
+      ? theoreticalHistory[theoreticalHistory.length - 1]
+      : null;
+
+  const marketPrice =
+    latestHistoricalPrice?.cleanPrice ||
+    latestTheoretical?.theoreticalPrice ||
+    bond.nominalValue;
 
   // === DATE OPERATION ===
   const operationDate = useMemo(() => new Date(), []);
 
-  // === METRIQUES MARCHE (fixes, basees sur le dernier prix de marche) ===
+  // === METRIQUES MARCHE (fixes, basees sur le dernier prix) ===
   const marketMetrics = useMemo(
     () => computeMetrics(bond, operationDate, marketPrice),
     [bond, operationDate, marketPrice]
@@ -193,16 +210,6 @@ export default function BondDetailView({ bond, priceHistory, similarBonds }: Pro
 
   // === ECHEANCIER DES FLUX ===
   const cashflows = useMemo(() => getBondCashflows(bond), [bond]);
-
-  // === HISTORIQUE PRIX POUR LE GRAPHIQUE ===
-  const priceChartData = useMemo(() => {
-    return priceHistory
-      .map((p) => ({
-        date: p.date,
-        price: p.cleanPrice,
-      }))
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  }, [priceHistory]);
 
   // === VARIATION DU PRIX MARCHE ===
   const marketDelta = marketPrice - bond.nominalValue;
@@ -270,7 +277,9 @@ export default function BondDetailView({ bond, priceHistory, similarBonds }: Pro
               <span className="text-3xl md:text-4xl font-semibold">
                 {formatFCFA2(marketPrice)}
               </span>
-              <span className="text-sm text-slate-500 ml-2">FCFA (prix pied de coupon)</span>
+              <span className="text-sm text-slate-500 ml-2">
+                FCFA (prix pied de coupon)
+              </span>
             </div>
             <div className={`font-medium ${marketUp ? "text-red-600" : "text-green-600"}`}>
               <span className="text-base md:text-lg">
@@ -287,6 +296,10 @@ export default function BondDetailView({ bond, priceHistory, similarBonds }: Pro
               <div className="text-xs text-slate-400">
                 Dernière cotation : {formatDateShort(latestHistoricalPrice.date)}
               </div>
+            ) : latestTheoretical ? (
+              <div className="text-xs text-slate-400">
+                Prix théorique au {formatDateShort(latestTheoretical.date)} · calibré UMOA-Titres
+              </div>
             ) : (
               <div className="text-xs text-slate-400">Pas de cotation récente</div>
             )}
@@ -295,7 +308,7 @@ export default function BondDetailView({ bond, priceHistory, similarBonds }: Pro
       </div>
 
       <main className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8 space-y-6">
-        {/* ====== KPIS MARCHE (fixes, basees sur prix marche) ====== */}
+        {/* ====== KPIS MARCHE ====== */}
         {marketMetrics && (
           <section>
             <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
@@ -344,17 +357,30 @@ export default function BondDetailView({ bond, priceHistory, similarBonds }: Pro
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* ====== COLONNE PRINCIPALE ====== */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Graphique historique */}
-            {priceChartData.length > 0 && (
+            {/* Graphique du prix theorique */}
+            {theoreticalHistory.length > 0 && (
               <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
-                <h3 className="text-base font-medium mb-4">📈 Historique des prix</h3>
+                <div className="flex justify-between items-start mb-4 flex-wrap gap-2">
+                  <div>
+                    <h3 className="text-base font-medium">
+                      📈 Évolution du prix théorique
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Calibré sur la courbe UMOA-Titres (
+                      {theoreticalHistory.length} points hebdomadaires)
+                    </p>
+                  </div>
+                  <span className="text-[10px] md:text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
+                    EXCLUSIVITÉ AZIMUT
+                  </span>
+                </div>
                 <div className="h-64 md:h-72">
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={priceChartData}>
+                    <AreaChart data={theoreticalHistory}>
                       <defs>
                         <linearGradient id="bondPrice" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#2563eb" stopOpacity={0.25} />
-                          <stop offset="100%" stopColor="#2563eb" stopOpacity={0} />
+                          <stop offset="0%" stopColor="#9333ea" stopOpacity={0.25} />
+                          <stop offset="100%" stopColor="#9333ea" stopOpacity={0} />
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -364,7 +390,12 @@ export default function BondDetailView({ bond, priceHistory, similarBonds }: Pro
                         fontSize={11}
                         tickFormatter={(d) => formatDateShort(d)}
                       />
-                      <YAxis stroke="#94a3b8" fontSize={11} domain={["auto", "auto"]} />
+                      <YAxis
+                        stroke="#94a3b8"
+                        fontSize={11}
+                        domain={["auto", "auto"]}
+                        tickFormatter={(v) => formatFCFA(v)}
+                      />
                       <Tooltip
                         contentStyle={{
                           backgroundColor: "white",
@@ -372,26 +403,37 @@ export default function BondDetailView({ bond, priceHistory, similarBonds }: Pro
                           borderRadius: "6px",
                           fontSize: "12px",
                         }}
-                        formatter={(value) => [
-                          formatFCFA2(Number(value ?? 0)) + " FCFA",
-                          "Prix pied de coupon",
-                        ]}
+                        formatter={(value, name) => {
+                          if (name === "theoreticalPrice") {
+                            return [
+                              formatFCFA2(Number(value ?? 0)) + " FCFA",
+                              "Prix théorique",
+                            ];
+                          }
+                          return [value, name];
+                        }}
                         labelFormatter={(d) => formatDate(d as string)}
                       />
                       <Area
                         type="monotone"
-                        dataKey="price"
-                        stroke="#2563eb"
+                        dataKey="theoreticalPrice"
+                        stroke="#9333ea"
                         strokeWidth={2}
                         fill="url(#bondPrice)"
                       />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
+                <div className="mt-3 pt-3 border-t border-slate-100 text-xs text-slate-500 leading-relaxed">
+                  <strong>Méthodologie :</strong> à chaque date hebdomadaire, le prix
+                  théorique est calculé en actualisant les flux futurs au YTM moyen pondéré
+                  des émissions UMOA-Titres du même pays (OAT, 3 derniers mois), interpolé
+                  sur la maturité résiduelle.
+                </div>
               </section>
             )}
 
-            {/* Simulateur bi-directionnel (INDEPENDANT du marche) */}
+            {/* Simulateur bi-directionnel */}
             <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
               <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
                 <h3 className="text-base font-medium">🧮 Simulateur obligataire</h3>
@@ -457,7 +499,8 @@ export default function BondDetailView({ bond, priceHistory, similarBonds }: Pro
                         className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:border-blue-500"
                       />
                       <p className="text-xs text-slate-400 mt-1">
-                        Taux coupon : {(bond.couponRate * 100).toFixed(2).replace(".", ",")}%
+                        Taux coupon :{" "}
+                        {(bond.couponRate * 100).toFixed(2).replace(".", ",")}%
                       </p>
                     </>
                   )}
@@ -486,7 +529,6 @@ export default function BondDetailView({ bond, priceHistory, similarBonds }: Pro
                 )}
               </div>
 
-              {/* Métriques du simulateur */}
               {simMetrics && (
                 <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-2">
                   <div className="p-2 bg-slate-50 rounded">
@@ -534,7 +576,9 @@ export default function BondDetailView({ bond, priceHistory, similarBonds }: Pro
                       <div className="text-xs text-slate-400">prix marché théorique</div>
                     </div>
                     <div>
-                      <div className="text-xs text-slate-500 mb-0.5">Prix coupon couru</div>
+                      <div className="text-xs text-slate-500 mb-0.5">
+                        Prix coupon couru
+                      </div>
                       <div className="font-semibold text-blue-900">
                         {formatFCFA2(simMetrics.dirtyPrice)} FCFA
                       </div>
@@ -699,6 +743,24 @@ export default function BondDetailView({ bond, priceHistory, similarBonds }: Pro
                   <dt className="text-slate-500">Encours</dt>
                   <dd className="font-medium text-xs">{formatBigFCFA(bond.outstanding)}</dd>
                 </div>
+                {signatureSpread !== null && (
+                  <div className="flex justify-between">
+                    <dt className="text-slate-500">Spread de signature</dt>
+                    <dd className="font-medium">
+                      <span
+                        className={
+                          signatureSpread > 0 ? "text-amber-700" : "text-green-700"
+                        }
+                      >
+                        {signatureSpread >= 0 ? "+" : ""}
+                        {(signatureSpread * 100).toFixed(2).replace(".", ",")}%
+                      </span>
+                      <span className="text-xs text-slate-400 ml-1">
+                        vs UMOA-Titres
+                      </span>
+                    </dd>
+                  </div>
+                )}
                 {bond.rating && (
                   <div className="flex justify-between">
                     <dt className="text-slate-500">Rating</dt>
@@ -721,7 +783,7 @@ export default function BondDetailView({ bond, priceHistory, similarBonds }: Pro
               <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
                 <h3 className="text-base font-medium mb-3">🔀 Obligations similaires</h3>
                 <p className="text-xs text-slate-500 mb-3">
-                  Même pays, même notation, durée similaire
+                  Même pays, durée similaire
                 </p>
                 <div className="space-y-2">
                   {similarBonds.map((b) => (
@@ -747,7 +809,9 @@ export default function BondDetailView({ bond, priceHistory, similarBonds }: Pro
             {bond.description && (
               <section className="bg-gradient-to-br from-blue-50 to-slate-50 rounded-lg border border-blue-100 p-4 md:p-6">
                 <h3 className="text-base font-medium mb-2">ℹ️ Description</h3>
-                <p className="text-sm text-slate-700 leading-relaxed">{bond.description}</p>
+                <p className="text-sm text-slate-700 leading-relaxed">
+                  {bond.description}
+                </p>
               </section>
             )}
 
