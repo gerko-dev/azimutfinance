@@ -49,6 +49,7 @@ function formatDate(date: string): string {
     day: "2-digit",
     month: "long",
     year: "numeric",
+    timeZone: "UTC",
   });
 }
 
@@ -58,10 +59,12 @@ function formatDateShort(date: string): string {
     day: "2-digit",
     month: "2-digit",
     year: "2-digit",
+    timeZone: "UTC",
   });
 }
 
 // === HELPER : prix pied de coupon a partir d'un YTM cible ===
+// Convention UEMOA : Act/Act ICMA (coupon couru sur periode reelle)
 function priceFromYtmActuarial(
   bond: ListedBond,
   operationDate: Date,
@@ -79,7 +82,7 @@ function priceFromYtmActuarial(
   }
 
   const futureDates = couponDates.filter((d) => d.getTime() > operationDate.getTime());
-  const couponAmount = (bond.nominalValue * bond.couponRate) / bond.couponFrequency;
+  const periodicCoupon = (bond.nominalValue * bond.couponRate) / bond.couponFrequency;
 
   let dirtyPrice = 0;
   for (let i = 0; i < futureDates.length; i++) {
@@ -88,15 +91,27 @@ function priceFromYtmActuarial(
     const years = daysFromNow / 365;
     const df = Math.pow(1 + ytm, -years);
     const cashflow =
-      i === futureDates.length - 1 ? couponAmount + bond.nominalValue : couponAmount;
+      i === futureDates.length - 1 ? periodicCoupon + bond.nominalValue : periodicCoupon;
     dirtyPrice += cashflow * df;
   }
 
   const pastDates = couponDates.filter((d) => d.getTime() <= operationDate.getTime());
-  const previousCouponDate = pastDates.length > 0 ? pastDates[pastDates.length - 1] : issueDate;
-  const daysSinceLastCoupon =
-    (operationDate.getTime() - previousCouponDate.getTime()) / (24 * 60 * 60 * 1000);
-  const accruedInterest = (bond.nominalValue * bond.couponRate * daysSinceLastCoupon) / 365;
+  const previousCouponDate =
+    pastDates.length > 0 ? pastDates[pastDates.length - 1] : issueDate;
+
+  // Convention UEMOA / Act/Act ICMA : base = duree reelle de la periode de coupon
+  const daysSinceLastCoupon = Math.floor(
+    (operationDate.getTime() - previousCouponDate.getTime()) / (24 * 60 * 60 * 1000)
+  );
+  const nextCouponDateForAccrual =
+    futureDates.length > 0 ? futureDates[0] : maturityDate;
+  const daysInPeriod = Math.round(
+    (nextCouponDateForAccrual.getTime() - previousCouponDate.getTime()) /
+      (24 * 60 * 60 * 1000)
+  );
+
+  const accruedInterest =
+    daysInPeriod > 0 ? (periodicCoupon * daysSinceLastCoupon) / daysInPeriod : 0;
 
   return dirtyPrice - accruedInterest;
 }
@@ -118,22 +133,34 @@ function computeMetrics(
   const { macaulay, modified, convexity } = calculateDuration(bond, operationDate, ytm);
   const bpv = calculateBPV(bond, operationDate, ytm, cleanPrice);
 
+  // Reconstruction des dates de coupon
   const issueDate = new Date(bond.issueDate);
+  const maturityDate = new Date(bond.maturityDate);
   const monthsPerPeriod = 12 / bond.couponFrequency;
   const couponDates: Date[] = [];
-  const maturityDate = new Date(bond.maturityDate);
   const cur = new Date(maturityDate);
   while (cur.getTime() > issueDate.getTime()) {
     couponDates.unshift(new Date(cur));
     cur.setUTCMonth(cur.getUTCMonth() - monthsPerPeriod);
   }
+
   const pastDates = couponDates.filter((d) => d.getTime() <= operationDate.getTime());
   const previousCouponDate =
     pastDates.length > 0 ? pastDates[pastDates.length - 1] : issueDate;
-  const daysSinceLastCoupon =
-    (operationDate.getTime() - previousCouponDate.getTime()) / (24 * 60 * 60 * 1000);
-  const annualCoupon = bond.nominalValue * bond.couponRate;
-  const accruedInterest = (annualCoupon * daysSinceLastCoupon) / 365;
+
+  // Convention UEMOA / Act/Act ICMA
+  const daysSinceLastCoupon = Math.floor(
+    (operationDate.getTime() - previousCouponDate.getTime()) / (24 * 60 * 60 * 1000)
+  );
+  const nextCouponDate =
+    couponDates.find((d) => d.getTime() > operationDate.getTime()) || maturityDate;
+  const daysInPeriod = Math.round(
+    (nextCouponDate.getTime() - previousCouponDate.getTime()) / (24 * 60 * 60 * 1000)
+  );
+
+  const periodicCoupon = (bond.nominalValue * bond.couponRate) / bond.couponFrequency;
+  const accruedInterest =
+    daysInPeriod > 0 ? (periodicCoupon * daysSinceLastCoupon) / daysInPeriod : 0;
   const dirtyPrice = cleanPrice + accruedInterest;
 
   return {
@@ -145,7 +172,10 @@ function computeMetrics(
     bpv,
     accruedInterest,
     dirtyPrice,
-    daysSinceLastCoupon: Math.round(daysSinceLastCoupon),
+    daysSinceLastCoupon,
+    daysInPeriod,
+    periodicCoupon,
+    nextCouponDate,
   };
 }
 
@@ -165,7 +195,7 @@ export default function BondDetailView({
   theoreticalHistory,
   signatureSpread,
 }: Props) {
-  // === PRIX DE MARCHE (fixe) ===
+  // === PRIX DE MARCHE ===
   const latestHistoricalPrice =
     priceHistory.length > 0
       ? priceHistory.reduce((latest, p) =>
@@ -173,7 +203,6 @@ export default function BondDetailView({
         )
       : null;
 
-  // Si pas de cotation marche, on utilise le dernier prix theorique
   const latestTheoretical =
     theoreticalHistory.length > 0
       ? theoreticalHistory[theoreticalHistory.length - 1]
@@ -184,21 +213,37 @@ export default function BondDetailView({
     latestTheoretical?.theoreticalPrice ||
     bond.nominalValue;
 
-  // === DATE OPERATION ===
-  const operationDate = useMemo(() => new Date(), []);
+  // === DATE DE COTATION (dernier jour de cotation disponible, a minuit UTC) ===
+  const operationDate = useMemo(() => {
+    // Priorite 1 : date du dernier prix historique
+    if (latestHistoricalPrice) {
+      const [y, m, d] = latestHistoricalPrice.date.split("-").map(Number);
+      return new Date(Date.UTC(y, m - 1, d));
+    }
+    // Priorite 2 : date du dernier prix theorique
+    if (latestTheoretical) {
+      const [y, m, d] = latestTheoretical.date.split("-").map(Number);
+      return new Date(Date.UTC(y, m - 1, d));
+    }
+    // Fallback : aujourd'hui, normalise a minuit UTC
+    const now = new Date();
+    return new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+    );
+  }, [latestHistoricalPrice, latestTheoretical]);
 
-  // === METRIQUES MARCHE (fixes, basees sur le dernier prix) ===
+  // === METRIQUES MARCHE ===
   const marketMetrics = useMemo(
     () => computeMetrics(bond, operationDate, marketPrice),
     [bond, operationDate, marketPrice]
   );
 
-  // === ETATS DU SIMULATEUR (INDEPENDANTS du marche) ===
+  // === ETATS DU SIMULATEUR ===
   const [simPrice, setSimPrice] = useState<number>(marketPrice);
   const [simYtm, setSimYtm] = useState<number>(bond.couponRate);
   const [simMode, setSimMode] = useState<"price" | "ytm">("price");
 
-  // === METRIQUES SIMULATEUR (dependantes du mode) ===
+  // === METRIQUES SIMULATEUR ===
   const simMetrics = useMemo(() => {
     if (simMode === "price") {
       return computeMetrics(bond, operationDate, simPrice);
@@ -271,7 +316,7 @@ export default function BondDetailView({
             </div>
           </div>
 
-          {/* Prix de marche FIXE */}
+          {/* Prix de marche */}
           <div className="flex flex-wrap items-baseline gap-4 md:gap-7">
             <div>
               <span className="text-3xl md:text-4xl font-semibold">
@@ -294,7 +339,7 @@ export default function BondDetailView({
             </div>
             {latestHistoricalPrice ? (
               <div className="text-xs text-slate-400">
-                Dernière cotation : {formatDateShort(latestHistoricalPrice.date)}
+                Date de cotation : {formatDateShort(latestHistoricalPrice.date)}
               </div>
             ) : latestTheoretical ? (
               <div className="text-xs text-slate-400">
@@ -565,7 +610,7 @@ export default function BondDetailView({
                         {formatFCFA2(simMetrics.accruedInterest)} FCFA
                       </div>
                       <div className="text-xs text-slate-400">
-                        {simMetrics.daysSinceLastCoupon} jours · Act/365
+                        {simMetrics.daysSinceLastCoupon}/{simMetrics.daysInPeriod} jours · Act/Act
                       </div>
                     </div>
                     <div>
@@ -641,12 +686,11 @@ export default function BondDetailView({
                   </table>
                 </div>
                 <div className="mt-3 pt-3 border-t border-slate-100 text-xs text-slate-500">
-                  <strong>Convention UEMOA :</strong> le coupon est calculé sur le{" "}
-                  <em>capital restant dû</em>. L&apos;amortissement est{" "}
+                  <strong>Convention UEMOA :</strong> coupon sur capital restant dû · Act/Act ICMA pour le coupon couru · amortissement{" "}
                   {bond.amortizationType === "IF"
-                    ? "in fine (remboursement total à l'échéance)"
+                    ? "in fine"
                     : bond.amortizationType === "ACD"
-                    ? "constant avec différé"
+                    ? "constant différé"
                     : "constant"}
                   .
                 </div>
@@ -817,9 +861,8 @@ export default function BondDetailView({
 
             <div className="text-xs text-slate-400 leading-relaxed">
               Les informations affichées sont indicatives et ne constituent pas un conseil en
-              investissement. Les calculs (YTM, duration, convexité) utilisent la convention
-              Act/365. Vérifiez les caractéristiques auprès de sources officielles avant toute
-              décision.
+              investissement. Les calculs utilisent Act/365 pour le YTM et Act/Act ICMA pour
+              le coupon couru (convention UEMOA).
             </div>
           </div>
         </div>
