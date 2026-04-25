@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useDeferredValue } from "react";
+import { useState, useMemo, useEffect, useDeferredValue } from "react";
 import Link from "next/link";
 import {
   LineChart,
@@ -180,6 +180,23 @@ export default function ActionsBRVMView({
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
   const [currentPage, setCurrentPage] = useState(1);
   const [activeQuadrant, setActiveQuadrant] = useState<Quadrant | null>(null);
+
+  // Pre-activation du quadrant via le hash de l'URL (ex: /marches/actions#cashcow)
+  // pour un lien direct depuis la fiche d'un titre.
+  // setState dans l'effet est volontaire : lecture one-shot au mount.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const hash = window.location.hash.replace("#", "");
+    if (
+      hash === "cashcow" ||
+      hash === "hiddengem" ||
+      hash === "defensive" ||
+      hash === "speculative"
+    ) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setActiveQuadrant(hash);
+    }
+  }, []);
 
   // === DEFERRED VALUES ===
   const deferredSearch = useDeferredValue(search);

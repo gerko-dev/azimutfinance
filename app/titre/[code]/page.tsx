@@ -10,6 +10,7 @@ import {
   getSectorIndexCode,
   BRVM_INDEX_NAMES,
   loadAllActions,
+  loadMultipleIndicesHistory,
 } from "@/lib/dataLoader";
 import {
   computeReturnsMatrix,
@@ -63,6 +64,13 @@ export default async function TitrePage({
     .sort((a, b) => b.capitalization - a.capitalization)
     .slice(0, 6);
 
+  // Sparklines : 30 derniers points de prix par pair
+  const peerHistoriesAll = loadMultipleIndicesHistory(peers.map((p) => p.code));
+  const peerSparklines: Record<string, { date: string; value: number }[]> = {};
+  for (const p of peers) {
+    peerSparklines[p.code] = (peerHistoriesAll[p.code] ?? []).slice(-30);
+  }
+
   return (
     <div className="min-h-screen bg-slate-50">
       <Header />
@@ -76,6 +84,7 @@ export default async function TitrePage({
         brvmcHistory={brvmcHistory}
         sectorIndex={sectorIndex}
         peers={peers}
+        peerSparklines={peerSparklines}
       />
     </div>
   );

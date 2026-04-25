@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import {
   ComposedChart,
+  LineChart,
   Area,
   Line,
   XAxis,
@@ -130,6 +131,7 @@ type Props = {
   brvmcHistory: PricePoint[];
   sectorIndex: { code: string; name: string; history: PricePoint[] } | null;
   peers: ActionRow[];
+  peerSparklines: Record<string, PricePoint[]>;
 };
 
 function formatFCFA(value: number): string {
@@ -171,11 +173,43 @@ export default function StockDetailView({
   brvmcHistory,
   sectorIndex,
   peers,
+  peerSparklines,
 }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [period, setPeriod] = useState<Period>("1A");
   const [showBrvmc, setShowBrvmc] = useState(false);
   const [showSector, setShowSector] = useState(false);
+  const [inWatchlist, setInWatchlist] = useState(false);
+
+  // Sync watchlist depuis localStorage au montage (SSR-safe).
+  // Le setState dans l'effet est volontaire : on initialise à false côté
+  // serveur (pas de localStorage) puis on hydrate au mount côté client.
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("azimut.watchlist");
+      if (stored) {
+        const list: string[] = JSON.parse(stored);
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setInWatchlist(list.includes(stock.code));
+      }
+    } catch {
+      // localStorage indisponible (mode privé strict)
+    }
+  }, [stock.code]);
+
+  function toggleWatchlist() {
+    try {
+      const stored = localStorage.getItem("azimut.watchlist");
+      const list: string[] = stored ? JSON.parse(stored) : [];
+      const next = list.includes(stock.code)
+        ? list.filter((c) => c !== stock.code)
+        : [...list, stock.code];
+      localStorage.setItem("azimut.watchlist", JSON.stringify(next));
+      setInWatchlist(next.includes(stock.code));
+    } catch {
+      // ignore
+    }
+  }
 
   const filteredHistory = useMemo(
     () => filterByPeriod(priceHistory, period),
@@ -282,7 +316,7 @@ export default function StockDetailView({
                   </span>
                   {quadrant && (
                     <Link
-                      href="/marches/actions"
+                      href={`/marches/actions#${quadrant}`}
                       title="Classification Azimut · cliquer pour voir le scatter"
                       className={`text-xs px-2 py-0.5 rounded border ${QUADRANT_INFO[quadrant].cls}`}
                     >
@@ -297,12 +331,24 @@ export default function StockDetailView({
               </div>
             </div>
             <div className="flex gap-2 flex-wrap">
-              <button className="px-3 py-1.5 text-xs md:text-sm border border-slate-300 rounded-md hover:bg-slate-50">
-                + Watchlist
+              <button
+                type="button"
+                onClick={toggleWatchlist}
+                aria-pressed={inWatchlist}
+                className={`px-3 py-1.5 text-xs md:text-sm border rounded-md transition ${
+                  inWatchlist
+                    ? "border-blue-300 bg-blue-50 text-blue-800 hover:bg-blue-100"
+                    : "border-slate-300 hover:bg-slate-50"
+                }`}
+              >
+                {inWatchlist ? "✓ Dans la watchlist" : "+ Watchlist"}
               </button>
-              <button className="px-3 py-1.5 text-xs md:text-sm border border-slate-300 rounded-md hover:bg-slate-50">
+              <Link
+                href="/outils/alertes"
+                className="px-3 py-1.5 text-xs md:text-sm border border-slate-300 rounded-md hover:bg-slate-50 inline-flex items-center"
+              >
                 🔔 Alerte
-              </button>
+              </Link>
             </div>
           </div>
 
@@ -640,6 +686,12 @@ export default function StockDetailView({
                   {peers.map((p) => {
                     const isUpPeer = p.changePercent > 0;
                     const isDownPeer = p.changePercent < 0;
+                    const sparkline = peerSparklines[p.code] ?? [];
+                    const sparkColor = isUpPeer
+                      ? "#16a34a"
+                      : isDownPeer
+                      ? "#dc2626"
+                      : "#94a3b8";
                     return (
                       <Link
                         key={p.code}
@@ -652,6 +704,22 @@ export default function StockDetailView({
                         <div className="text-xs text-slate-500 truncate">
                           {p.name}
                         </div>
+                        {sparkline.length >= 2 && (
+                          <div className="h-6 mt-1 -mx-1">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <LineChart data={sparkline}>
+                                <Line
+                                  type="monotone"
+                                  dataKey="value"
+                                  stroke={sparkColor}
+                                  strokeWidth={1.2}
+                                  dot={false}
+                                  isAnimationActive={false}
+                                />
+                              </LineChart>
+                            </ResponsiveContainer>
+                          </div>
+                        )}
                         <div className="text-sm mt-1">
                           {formatFCFA(p.price)}
                         </div>
@@ -700,7 +768,7 @@ export default function StockDetailView({
                     </p>
                   </div>
                   <Link
-                    href="/marches/actions"
+                    href={`/marches/actions#${quadrant}`}
                     className={`text-xs underline ${QUADRANT_INFO[quadrant].link}`}
                   >
                     Voir le scatter →
