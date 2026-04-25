@@ -453,3 +453,376 @@ export function loadUmoaEmissions(): import("./listedBondsTypes").EmissionUMOA[]
 
   return _emissionsCache;
 }
+// ==========================================
+// INDICES BRVM
+// ==========================================
+
+/** Mapping code → nom officiel pour les indices BRVM */
+export const BRVM_INDEX_NAMES: Record<string, string> = {
+  BRVMC: "BRVM Composite",
+  BRVM30: "BRVM 30",
+  BRVMPA: "BRVM Principal",
+  BRVMPR: "BRVM Prestige",
+  "BRVM-CB": "BRVM Consommation de Base",
+  "BRVM-CD": "BRVM Consommation Discrétionnaire",
+  "BRVM-EN": "BRVM Énergie",
+  "BRVM-IN": "BRVM Industriels",
+  "BRVM-SF": "BRVM Services Financiers",
+  "BRVM-SP": "BRVM Services Publics",
+  "BRVM-TEL": "BRVM Télécommunications",
+};
+
+export const BRVM_INDEX_CODES = Object.keys(BRVM_INDEX_NAMES);
+
+/** Categorisation des indices */
+export const BRVM_MAIN_INDICES = ["BRVMC", "BRVM30", "BRVMPA", "BRVMPR"];
+export const BRVM_SECTORIAL_INDICES = [
+  "BRVM-CB",
+  "BRVM-CD",
+  "BRVM-EN",
+  "BRVM-IN",
+  "BRVM-SF",
+  "BRVM-SP",
+  "BRVM-TEL",
+];
+
+/** Cache pour eviter de re-parser le CSV a chaque appel */
+let _allHistoryCache: { code: string; date: string; value: number }[] | null = null;
+
+function loadAllPriceHistory(): { code: string; date: string; value: number }[] {
+  if (_allHistoryCache !== null) return _allHistoryCache;
+
+  const rows = parseCSV<PriceHistoryRow>("historique-prix.csv");
+  _allHistoryCache = rows
+    .map((r) => ({
+      code: r.code?.trim() || "",
+      date: normalizeDateISO(r.date),
+      value: parseNum(r.value),
+    }))
+    .filter((r) => r.code && r.date && r.value > 0);
+
+  return _allHistoryCache;
+}
+
+/** Charge l'historique d'un indice BRVM (code = BRVMC, BRVM30, BRVM-SF, etc.) */
+export function loadIndexHistory(
+  code: string
+): { date: string; value: number }[] {
+  const all = loadAllPriceHistory();
+  return all
+    .filter((r) => r.code.toUpperCase() === code.toUpperCase())
+    .map((r) => ({ date: r.date, value: r.value }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/** Charge l'historique de plusieurs indices a la fois */
+export function loadMultipleIndicesHistory(
+  codes: string[]
+): Record<string, { date: string; value: number }[]> {
+  const all = loadAllPriceHistory();
+  const result: Record<string, { date: string; value: number }[]> = {};
+  const codesUpper = codes.map((c) => c.toUpperCase());
+
+  for (const code of codesUpper) {
+    result[code] = [];
+  }
+
+  for (const r of all) {
+    const codeUpper = r.code.toUpperCase();
+    if (codesUpper.includes(codeUpper)) {
+      result[codeUpper].push({ date: r.date, value: r.value });
+    }
+  }
+
+  // Trier chaque serie par date
+  for (const code of codesUpper) {
+    result[code].sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  return result;
+}
+
+/** Statistiques d'un indice : derniere valeur + variation %  */
+export function getIndexStats(
+  code: string
+): {
+  code: string;
+  name: string;
+  latestValue: number;
+  latestDate: string;
+  variationPct: number;
+  variationValue: number;
+} | null {
+  const history = loadIndexHistory(code);
+  if (history.length === 0) return null;
+
+  const latest = history[history.length - 1];
+  const previous = history.length > 1 ? history[history.length - 2] : latest;
+  const variationValue = latest.value - previous.value;
+  const variationPct = previous.value > 0 ? (variationValue / previous.value) * 100 : 0;
+
+  return {
+    code,
+    name: BRVM_INDEX_NAMES[code] || code,
+    latestValue: latest.value,
+    latestDate: latest.date,
+    variationPct,
+    variationValue,
+  };
+}
+
+// ==========================================
+// ACTIONS BRVM : KPIs et top movers
+// ==========================================
+
+export type ActionRow = {
+  code: string;
+  name: string;
+  sector: string;
+  country: string;
+  isin: string;
+  price: number;
+  changePercent: number;
+  volume: number;
+  capitalization: number;
+  per: number;
+  yieldPct: number;
+  hasPer: boolean;
+  hasYield: boolean;
+};
+
+/** Charge toutes les actions enrichies pour la page Actions BRVM */
+export function loadAllActions(): ActionRow[] {
+  const stocks = loadStocks();
+  return stocks.map((s) => {
+    const rawYield = parseNum(s.yield);
+    // Detection intelligente : si la valeur > 1 c'est deja en %, sinon en decimal
+    // (un yield > 100% n'a pas de sens, donc on cap aussi)
+    let yieldPct: number;
+    if (rawYield > 1) {
+      // Deja en pourcentage (ex: 7.5)
+      yieldPct = rawYield;
+    } else {
+      // En decimal (ex: 0.075)
+      yieldPct = rawYield * 100;
+    }
+    if (!isFinite(yieldPct) || yieldPct > 50) yieldPct = 0;
+
+    const rawChange = parseNum(s.changePercent);
+    let changePct: number;
+    if (Math.abs(rawChange) > 1) {
+      changePct = rawChange;
+    } else {
+      changePct = rawChange * 100;
+    }
+    if (!isFinite(changePct)) changePct = 0;
+
+    return {
+      code: s.code?.trim() || "",
+      name: s.name?.trim() || "",
+      sector: s.sector?.trim() || "",
+      country: s.country?.trim() || "",
+      isin: s.isin?.trim() || "",
+      price: parseNum(s.price),
+      changePercent: changePct,
+      volume: parseNum(s.volume),
+      capitalization: parseNum(s.capitalization),
+      per: parseNum(s.per),
+      yieldPct,
+      hasPer: isPresent(s.per) && parseNum(s.per) > 0,
+      hasYield: isPresent(s.yield) && yieldPct > 0 && yieldPct < 50,
+    };
+  });
+}
+/** KPIs globaux du marche actions */
+export function getActionsMarketStats(actions: ActionRow[]): {
+  totalActions: number;
+  totalCapitalization: number;
+  totalVolume: number;
+  averagePer: number;
+  averageYield: number;
+  bySector: Record<string, number>;
+  byCountry: Record<string, number>;
+} {
+  const totalCapitalization = actions.reduce((s, a) => s + a.capitalization, 0);
+  const totalVolume = actions.reduce((s, a) => s + a.volume, 0);
+
+  const validPer = actions.filter((a) => a.hasPer && a.per > 0);
+  const averagePer =
+    validPer.length > 0 ? validPer.reduce((s, a) => s + a.per, 0) / validPer.length : 0;
+
+  const validYield = actions.filter((a) => a.hasYield && a.yieldPct > 0);
+  const averageYield =
+    validYield.length > 0
+      ? validYield.reduce((s, a) => s + a.yieldPct, 0) / validYield.length
+      : 0;
+
+  const bySector = actions.reduce((acc, a) => {
+    if (a.sector) acc[a.sector] = (acc[a.sector] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const byCountry = actions.reduce((acc, a) => {
+    if (a.country) acc[a.country] = (acc[a.country] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  return {
+    totalActions: actions.length,
+    totalCapitalization,
+    totalVolume,
+    averagePer,
+    averageYield,
+    bySector,
+    byCountry,
+  };
+}
+
+/** Top 5 hausses du jour (variations positives) */
+export function getTopGainers(actions: ActionRow[], limit: number = 5): ActionRow[] {
+  return [...actions]
+    .filter((a) => a.changePercent > 0 && a.price > 0)
+    .sort((a, b) => b.changePercent - a.changePercent)
+    .slice(0, limit);
+}
+
+/** Top 5 baisses du jour (variations negatives) */
+export function getTopLosers(actions: ActionRow[], limit: number = 5): ActionRow[] {
+  return [...actions]
+    .filter((a) => a.changePercent < 0 && a.price > 0)
+    .sort((a, b) => a.changePercent - b.changePercent)
+    .slice(0, limit);
+}
+// ==========================================
+// CALCUL DE VOLATILITE 12 MOIS (Act/252)
+// ==========================================
+
+/**
+ * Calcule la volatilite annualisee d'une action sur les 12 derniers mois.
+ *
+ * Methodologie :
+ * 1. Recupere les prix journaliers sur 365 jours glissants
+ * 2. Calcule les rendements quotidiens log : r_t = ln(P_t / P_{t-1})
+ * 3. Calcule l'ecart-type des rendements
+ * 4. Annualise par sqrt(252) (nb de jours de bourse par an)
+ *
+ * Retourne null si pas assez de points (< 60 = ~3 mois de bourse)
+ */
+function computeVolatility12M(
+  history: { date: string; value: number }[]
+): number | null {
+  if (history.length < 2) return null;
+
+  const sorted = [...history].sort((a, b) => a.date.localeCompare(b.date));
+
+  const latest = sorted[sorted.length - 1];
+  const cutoffDate = new Date(latest.date);
+  cutoffDate.setUTCFullYear(cutoffDate.getUTCFullYear() - 1);
+  const cutoffStr = cutoffDate.toISOString().substring(0, 10);
+
+  const recent = sorted.filter((h) => h.date >= cutoffStr);
+  if (recent.length < 60) return null;
+
+  // Calcul des rendements log + filtrage des outliers (jumps > 30% en 1 jour)
+  const returns: number[] = [];
+  for (let i = 1; i < recent.length; i++) {
+    const prev = recent[i - 1].value;
+    const curr = recent[i].value;
+    if (prev <= 0 || curr <= 0) continue;
+
+    const r = Math.log(curr / prev);
+
+    // Filtre des aberrations : on ignore les rendements |r| > 30%
+    // (probablement des splits, IPO, erreurs de saisie)
+    if (Math.abs(r) > 0.3) continue;
+
+    returns.push(r);
+  }
+
+  if (returns.length < 30) return null;
+
+  const mean = returns.reduce((s, r) => s + r, 0) / returns.length;
+  const variance =
+    returns.reduce((s, r) => s + Math.pow(r - mean, 2), 0) / returns.length;
+  const stdDev = Math.sqrt(variance);
+
+  const annualizedVolatility = stdDev * Math.sqrt(252);
+
+  // Cap a 100% pour eviter les valeurs absurdes
+  const result = annualizedVolatility * 100;
+  if (!isFinite(result) || result > 100) return null;
+
+  return result;
+}
+
+/**
+ * Type pour un point du scatter Rendement vs Volatilite
+ */
+export type RiskReturnPoint = {
+  code: string;
+  name: string;
+  sector: string;
+  country: string;
+  volatility: number; // en %
+  yieldPct: number; // en %
+  capitalization: number;
+  price: number;
+  changePercent: number;
+};
+
+/**
+ * Construit la base de donnees Rendement/Volatilite pour le scatter.
+ * Filtre les actions sans donnees suffisantes.
+ */
+export function buildRiskReturnDataset(): {
+  points: RiskReturnPoint[];
+  excludedCount: number;
+  excludedReasons: { noYield: number; insufficientHistory: number };
+} {
+  const actions = loadAllActions();
+  const allHistory = loadAllPriceHistory();
+
+  // Pre-grouper l'historique par code (plus rapide)
+  const historyByCode = new Map<string, { date: string; value: number }[]>();
+  for (const row of allHistory) {
+    const list = historyByCode.get(row.code) || [];
+    list.push({ date: row.date, value: row.value });
+    historyByCode.set(row.code, list);
+  }
+
+  const points: RiskReturnPoint[] = [];
+  let noYield = 0;
+  let insufficientHistory = 0;
+
+  for (const a of actions) {
+    if (!a.hasYield || a.yieldPct <= 0) {
+      noYield++;
+      continue;
+    }
+
+    const history = historyByCode.get(a.code) || [];
+    const volatility = computeVolatility12M(history);
+
+    if (volatility === null) {
+      insufficientHistory++;
+      continue;
+    }
+
+    points.push({
+      code: a.code,
+      name: a.name,
+      sector: a.sector,
+      country: a.country,
+      volatility,
+      yieldPct: a.yieldPct,
+      capitalization: a.capitalization,
+      price: a.price,
+      changePercent: a.changePercent,
+    });
+  }
+  return {
+    points,
+    excludedCount: noYield + insufficientHistory,
+    excludedReasons: { noYield, insufficientHistory },
+  };
+}
