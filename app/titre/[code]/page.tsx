@@ -2,7 +2,20 @@ import { notFound } from "next/navigation";
 import Header from "@/components/Header";
 import Ticker from "@/components/Ticker";
 import StockDetailView from "@/components/StockDetailView";
-import { getStockDetails, loadPriceHistory } from "@/lib/dataLoader";
+import {
+  getStockDetails,
+  loadPriceHistory,
+  loadIndexHistory,
+  buildRiskReturnDataset,
+  getSectorIndexCode,
+  BRVM_INDEX_NAMES,
+  loadAllActions,
+} from "@/lib/dataLoader";
+import {
+  computeReturnsMatrix,
+  computeRiskMetrics,
+  computeQuadrant,
+} from "@/lib/stockStats";
 
 export default async function TitrePage({
   params,
@@ -18,14 +31,52 @@ export default async function TitrePage({
     notFound();
   }
 
-  // Charge l'historique (peut etre vide si pas de donnees pour ce titre)
   const priceHistory = loadPriceHistory(codeUpper);
+  const brvmcHistory = loadIndexHistory("BRVMC");
+
+  const returnsMatrix = computeReturnsMatrix(priceHistory);
+  const riskMetrics = computeRiskMetrics(priceHistory, brvmcHistory);
+
+  const riskReturn = buildRiskReturnDataset();
+  const quadrant = computeQuadrant(codeUpper, riskReturn.points);
+
+  // Indice sectoriel pour overlay benchmark
+  const sectorIndexCode = getSectorIndexCode(stock.sector);
+  const sectorIndexHistory = sectorIndexCode
+    ? loadIndexHistory(sectorIndexCode)
+    : [];
+  const sectorIndex =
+    sectorIndexCode && sectorIndexHistory.length > 0
+      ? {
+          code: sectorIndexCode,
+          name: BRVM_INDEX_NAMES[sectorIndexCode] || sectorIndexCode,
+          history: sectorIndexHistory,
+        }
+      : null;
+
+  // Pairs du même secteur, top 6 par capitalisation (hors le titre courant)
+  const peers = loadAllActions()
+    .filter(
+      (a) =>
+        a.sector === stock.sector && a.code !== codeUpper && a.price > 0
+    )
+    .sort((a, b) => b.capitalization - a.capitalization)
+    .slice(0, 6);
 
   return (
     <div className="min-h-screen bg-slate-50">
       <Header />
       <Ticker />
-      <StockDetailView stock={stock} priceHistory={priceHistory} />
+      <StockDetailView
+        stock={stock}
+        priceHistory={priceHistory}
+        returnsMatrix={returnsMatrix}
+        riskMetrics={riskMetrics}
+        quadrant={quadrant}
+        brvmcHistory={brvmcHistory}
+        sectorIndex={sectorIndex}
+        peers={peers}
+      />
     </div>
   );
 }

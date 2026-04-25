@@ -486,6 +486,34 @@ export const BRVM_SECTORIAL_INDICES = [
   "BRVM-TEL",
 ];
 
+/** Mapping secteur (titres.csv) vers code d'indice sectoriel BRVM */
+const SECTOR_TO_INDEX: Record<string, string> = {
+  "CONSOMMATION DE BASE": "BRVM-CB",
+  "CONSOMMATION DISCRETIONNAIRE": "BRVM-CD",
+  ENERGIE: "BRVM-EN",
+  INDUSTRIELS: "BRVM-IN",
+  "SERVICES FINANCIERS": "BRVM-SF",
+  "SERVICES PUBLICS": "BRVM-SP",
+  TELECOMMUNICATIONS: "BRVM-TEL",
+};
+
+function normalizeSectorKey(sector: string): string {
+  return sector
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/�/g, "")
+    .replace(/[^A-Z0-9 ]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Retourne le code d'indice sectoriel BRVM correspondant a un secteur, ou null */
+export function getSectorIndexCode(sector: string): string | null {
+  if (!sector) return null;
+  return SECTOR_TO_INDEX[normalizeSectorKey(sector)] ?? null;
+}
+
 /** Cache pour eviter de re-parser le CSV a chaque appel */
 let _allHistoryCache: { code: string; date: string; value: number }[] | null = null;
 
