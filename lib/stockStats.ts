@@ -280,3 +280,32 @@ export function computeQuadrant(
   if (!highYield && !highVol) return "defensive";
   return "speculative";
 }
+
+/**
+ * Calcule en une passe le quadrant de chaque action du dataset.
+ * Plus efficace que d'appeler computeQuadrant N fois (medianes calculees une seule fois).
+ */
+export function computeAllQuadrants(
+  allPoints: RiskReturnPointLike[]
+): Map<string, Quadrant> {
+  const out = new Map<string, Quadrant>();
+  if (allPoints.length === 0) return out;
+
+  const yields = allPoints.map((p) => p.yieldPct).sort((a, b) => a - b);
+  const vols = allPoints.map((p) => p.volatility).sort((a, b) => a - b);
+  const median = (arr: number[]) => arr[Math.floor(arr.length / 2)];
+  const my = median(yields);
+  const mv = median(vols);
+
+  for (const p of allPoints) {
+    const highYield = p.yieldPct >= my;
+    const highVol = p.volatility >= mv;
+    let q: Quadrant;
+    if (highYield && !highVol) q = "cashcow";
+    else if (highYield && highVol) q = "hiddengem";
+    else if (!highYield && !highVol) q = "defensive";
+    else q = "speculative";
+    out.set(p.code, q);
+  }
+  return out;
+}
