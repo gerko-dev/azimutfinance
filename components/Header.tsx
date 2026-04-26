@@ -7,6 +7,7 @@ type MenuItem = {
   label: string;
   href: string;
   badge?: "Premium" | "Pro" | "Bientôt";
+  children?: MenuItem[];
 };
 
 type MenuSection = {
@@ -21,7 +22,14 @@ const menuSections: MenuSection[] = [
       { label: "Actions BRVM", href: "/marches/actions" },
       { label: "Obligations cotées", href: "/marches/obligations" },
       { label: "Souverains non cotés", href: "/marches/souverains-non-cotes" },
-      { label: "FCP / OPCVM", href: "/marches/fcp" },
+      {
+        label: "FCP / OPCVM",
+        href: "/marches/fcp",
+        children: [
+          { label: "OPC", href: "/fcp/categories" },
+          { label: "Sociétés de gestion", href: "/sgp" },
+        ],
+      },
     ],
   },
   {
@@ -38,6 +46,7 @@ const menuSections: MenuSection[] = [
     items: [
       { label: "Simulateur YTM", href: "/outils/ytm", badge: "Premium" },
       { label: "Screener d'actions", href: "/outils/screener", badge: "Premium" },
+      { label: "Screener FCP", href: "/outils/screener-fcp", badge: "Premium" },
       { label: "Comparateur sociétés", href: "/outils/comparateur", badge: "Premium" },
       { label: "Alertes personnalisées", href: "/outils/alertes", badge: "Premium" },
       { label: "Portefeuille personnel", href: "/outils/portefeuille", badge: "Bientôt" },
@@ -97,6 +106,8 @@ export default function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeDesktopMenu, setActiveDesktopMenu] = useState<string | null>(null);
   const [activeMobileMenu, setActiveMobileMenu] = useState<string | null>(null);
+  const [activeFlyout, setActiveFlyout] = useState<string | null>(null);
+  const [activeMobileFlyout, setActiveMobileFlyout] = useState<string | null>(null);
   const headerRef = useRef<HTMLElement>(null);
 
   // Fermer les menus au clic exterieur
@@ -146,19 +157,68 @@ export default function Header() {
                 {/* Sous-menu */}
                 {activeDesktopMenu === section.label && (
                   <div
-                    onMouseLeave={() => setActiveDesktopMenu(null)}
-                    className="absolute left-0 top-full mt-1 bg-white border border-slate-200 rounded-md shadow-lg py-2 min-w-[240px]"
+                    onMouseLeave={() => {
+                      setActiveDesktopMenu(null);
+                      setActiveFlyout(null);
+                    }}
+                    className="absolute left-0 top-full mt-1 bg-white border border-slate-200 rounded-md shadow-lg py-2 min-w-[260px]"
                   >
                     {section.items.map((item) => (
-                      <Link
+                      <div
                         key={item.href}
-                        href={item.href}
-                        onClick={() => setActiveDesktopMenu(null)}
-                        className="flex items-center justify-between px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                        className="relative"
+                        onMouseEnter={() =>
+                          setActiveFlyout(item.children ? item.href : null)
+                        }
                       >
-                        <span>{item.label}</span>
-                        {item.badge && <BadgeLabel badge={item.badge} />}
-                      </Link>
+                        <Link
+                          href={item.href}
+                          onClick={() => {
+                            setActiveDesktopMenu(null);
+                            setActiveFlyout(null);
+                          }}
+                          className={`flex items-center justify-between px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-slate-900 ${
+                            activeFlyout === item.href ? "bg-slate-50" : ""
+                          }`}
+                        >
+                          <span className={item.children ? "font-medium" : ""}>{item.label}</span>
+                          <span className="flex items-center gap-1.5">
+                            {item.badge && <BadgeLabel badge={item.badge} />}
+                            {item.children && (
+                              <svg
+                                width="10"
+                                height="10"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2.5"
+                                className="text-slate-400"
+                              >
+                                <path d="M9 6l6 6-6 6" />
+                              </svg>
+                            )}
+                          </span>
+                        </Link>
+                        {/* Flyout enfants : visible seulement au hover sur l'item */}
+                        {item.children && activeFlyout === item.href && (
+                          <div className="absolute left-full top-0 ml-1 bg-white border border-slate-200 rounded-md shadow-lg py-2 min-w-[220px]">
+                            {item.children.map((child) => (
+                              <Link
+                                key={child.href}
+                                href={child.href}
+                                onClick={() => {
+                                  setActiveDesktopMenu(null);
+                                  setActiveFlyout(null);
+                                }}
+                                className="flex items-center justify-between px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                              >
+                                <span>{child.label}</span>
+                                {child.badge && <BadgeLabel badge={child.badge} />}
+                              </Link>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     ))}
                   </div>
                 )}
@@ -225,18 +285,69 @@ export default function Header() {
                 {activeMobileMenu === section.label && (
                   <div className="pl-4 py-1 flex flex-col gap-1 border-l-2 border-slate-100">
                     {section.items.map((item) => (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        onClick={() => {
-                          setMenuOpen(false);
-                          setActiveMobileMenu(null);
-                        }}
-                        className="flex items-center justify-between py-1.5 text-sm text-slate-600"
-                      >
-                        <span>{item.label}</span>
-                        {item.badge && <BadgeLabel badge={item.badge} />}
-                      </Link>
+                      <div key={item.href}>
+                        <div className="flex items-center justify-between">
+                          <Link
+                            href={item.href}
+                            onClick={() => {
+                              setMenuOpen(false);
+                              setActiveMobileMenu(null);
+                              setActiveMobileFlyout(null);
+                            }}
+                            className="flex-1 py-1.5 text-sm text-slate-600"
+                          >
+                            <span className={item.children ? "font-medium text-slate-800" : ""}>
+                              {item.label}
+                            </span>
+                          </Link>
+                          {item.badge && <BadgeLabel badge={item.badge} />}
+                          {item.children && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveMobileFlyout(
+                                  activeMobileFlyout === item.href ? null : item.href
+                                );
+                              }}
+                              aria-label="Sous-menu"
+                              className="p-1.5 -mr-1.5"
+                            >
+                              <svg
+                                width="14"
+                                height="14"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2.5"
+                                className={`text-slate-500 transition-transform ${
+                                  activeMobileFlyout === item.href ? "rotate-180" : ""
+                                }`}
+                              >
+                                <path d="M6 9l6 6 6-6" />
+                              </svg>
+                            </button>
+                          )}
+                        </div>
+                        {item.children && activeMobileFlyout === item.href && (
+                          <div className="pl-4 flex flex-col gap-0.5 border-l-2 border-slate-100 ml-1 mb-1">
+                            {item.children.map((child) => (
+                              <Link
+                                key={child.href}
+                                href={child.href}
+                                onClick={() => {
+                                  setMenuOpen(false);
+                                  setActiveMobileMenu(null);
+                                  setActiveMobileFlyout(null);
+                                }}
+                                className="flex items-center justify-between py-1 text-xs text-slate-500"
+                              >
+                                <span>{child.label}</span>
+                                {child.badge && <BadgeLabel badge={child.badge} />}
+                              </Link>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     ))}
                   </div>
                 )}

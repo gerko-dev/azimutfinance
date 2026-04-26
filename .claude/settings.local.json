@@ -20,7 +20,13 @@
       "Bash(npx tsx *)",
       "Bash(echo \"started, pid=$!\")",
       "Bash(grep -n \"^export function\\\\|^}$\" \"C:\\\\Users\\\\hp\\\\GerKo\\\\azimutfinance\\\\lib\\\\listedBondsTypes.ts\")",
-      "Bash(git rm *)"
+      "Bash(git rm *)",
+      "PowerShell(Import-Csv *)",
+      "PowerShell(Get-Content *)",
+      "Bash(grep -oE \"Fonds publiant.{0,400}\" /tmp/fcp.html)",
+      "Bash(grep -oE \"Encours total.{0,250}\" /tmp/fcp.html)",
+      "Bash(grep *)",
+      "Bash(netstat -ano)"
     ]
   }
 }

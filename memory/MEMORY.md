@@ -1,0 +1,1 @@
+- [FCP / OPCVM data semantics](project_fcp_data_semantics.md) — quarterly VL + last published VL only; no vol/Sharpe/drawdown

@@ -827,6 +827,7 @@ export type SovereignBond = {
   type: "OAT" | "BAT";
 
   // Caracteristiques (issues du 1er round)
+  nominalValue: number;          // 1 000 000 pour BAT, 10 000 pour OAT
   maturity: number;              // en annees
   maturityDate: string;          // ISO date d'echeance
   firstIssueDate: string;        // date du 1er round
@@ -1003,6 +1004,7 @@ export function aggregateSovereignBonds(emissions: EmissionUMOA[]): SovereignBon
       country: first.country,
       countryName: first.countryName,
       type: first.type,
+      nominalValue: nominalFor(first.type),
       maturity: first.maturity,
       maturityDate: first.maturityDate,
       firstIssueDate: first.date,
@@ -1141,10 +1143,19 @@ export function getRelatedSovereignBonds(
 // MOTEUR ACTUARIEL POUR LES SOUVERAINS NON COTES
 // ==========================================
 
-// Nominal de reference par titre UMOA-Titres (pour generer les cashflows en
-// FCFA "par titre"). Tous les chiffres actuariels (prix, BPV, etc.) sont
-// donnes a cette echelle.
-export const SOVEREIGN_NOMINAL = 10_000;
+// Nominaux par convention UMOA-Titres :
+// - OAT : 10 000 FCFA par titre
+// - BAT : 1 000 000 FCFA par titre (titres pre´comptes du marche monetaire)
+export const OAT_NOMINAL = 10_000;
+export const BAT_NOMINAL = 1_000_000;
+// Alias retro-compatible — utilise par les vues. Pointe sur OAT_NOMINAL pour
+// preserver le comportement par defaut (les rares appelants externes parlaient
+// d'OAT).
+export const SOVEREIGN_NOMINAL = OAT_NOMINAL;
+
+export function nominalFor(type: "OAT" | "BAT"): number {
+  return type === "BAT" ? BAT_NOMINAL : OAT_NOMINAL;
+}
 
 export type SovereignCashflow = {
   date: string;            // ISO YYYY-MM-DD
@@ -1166,13 +1177,15 @@ export type SovereignCashflow = {
  * - In Fine : remboursement bullet a l'echeance.
  */
 export function getSovereignCashflows(bond: SovereignBond): SovereignCashflow[] {
+  const nominal = bond.nominalValue;
+
   // BAT ou OAT sans coupon connu : on traite en zero-coupon.
   if (bond.type === "BAT" || bond.couponRate == null || bond.couponRate <= 0) {
     return [
       {
         date: bond.maturityDate,
         type: "remboursement_final",
-        amount: SOVEREIGN_NOMINAL,
+        amount: nominal,
         outstandingAfter: 0,
       },
     ];
@@ -1188,10 +1201,10 @@ export function getSovereignCashflows(bond: SovereignBond): SovereignCashflow[] 
   const grace = Math.max(0, Math.min(bond.graceYears, totalYears - 1));
   const amortYears = Math.max(1, totalYears - grace);
   const amortPerPeriod =
-    bond.amortizationType === "Linéaire" ? SOVEREIGN_NOMINAL / amortYears : 0;
+    bond.amortizationType === "Linéaire" ? nominal / amortYears : 0;
 
   const cashflows: SovereignCashflow[] = [];
-  let outstanding = SOVEREIGN_NOMINAL;
+  let outstanding = nominal;
   const coupon = bond.couponRate;
 
   for (let y = 1; y <= totalYears; y++) {
@@ -1314,7 +1327,7 @@ export function calculateSovereignActuarialMetrics(
       const outstandingNow =
         cfsBefore.length > 0
           ? cfsBefore[cfsBefore.length - 1].outstandingAfter
-          : SOVEREIGN_NOMINAL;
+          : bond.nominalValue;
 
       const periodicCoupon = outstandingNow * bond.couponRate;
       accruedInterest =
@@ -1329,8 +1342,116 @@ export function calculateSovereignActuarialMetrics(
 }
 
 /**
+ * Calibre le taux precompte moyen pondere sur les BAT du pays sur 3 mois.
+ *
+ * Specifique aux BAT (Bons Assimilables du Tresor) qui se negocient en
+ * "intere^t precompte" : l'investisseur paye `N × (1 − r × T)` au depart et
+ * recoit le nominal N a l'echeance. Le taux pertinent est le "Taux moyen
+ * pondere (%)" du CSV (champ `weightedAvgRate`), pas le rendement actuariel.
+ */
+export function calibrateBATPrecompte(
+  country: string,
+  targetDate: Date,
+  residualMaturity: number,
+  emissions: EmissionUMOA[]
+): { rate: number; basePoints: Array<{ maturity: number; rate: number; amount: number }>; issuancesUsed: number } | null {
+  if (residualMaturity <= 0 || residualMaturity > 2.5) return null;
+  const isUemoa = UEMOA_COUNTRIES.includes(country);
+  if (!isUemoa) return null;
+
+  const THREE_MONTHS_MS = 90 * 24 * 60 * 60 * 1000;
+  const startDate = new Date(targetDate.getTime() - THREE_MONTHS_MS);
+
+  const eligible = emissions.filter((e) => {
+    if (e.country !== country) return false;
+    if (e.type !== "BAT") return false;
+    if (e.maturity <= 0 || e.maturity > 2) return false;
+    if (e.amount <= 0) return false;
+    if (classifyOperation(e.precisions) !== "cash_auction") return false;
+    // Pour les BAT le taux precompte est dans weightedAvgRate. Si absent,
+    // on retombe sur weightedAvgYield (rendement actuariel) — proche pour
+    // les courtes maturites.
+    const r = e.weightedAvgRate ?? e.weightedAvgYield;
+    if (r <= 0 || r > 0.3) return false;
+    const d = new Date(e.date);
+    if (isNaN(d.getTime())) return false;
+    return d >= startDate && d <= targetDate;
+  });
+
+  if (eligible.length === 0) return null;
+
+  // Bucket de maturite (en mois) pour stabiliser l'interpolation
+  const byMaturity = new Map<number, { sumRateAmount: number; sumAmount: number }>();
+  for (const e of eligible) {
+    const months = Math.round(e.maturity * 12);
+    const r = e.weightedAvgRate ?? e.weightedAvgYield;
+    const entry = byMaturity.get(months) || { sumRateAmount: 0, sumAmount: 0 };
+    entry.sumRateAmount += r * e.amount;
+    entry.sumAmount += e.amount;
+    byMaturity.set(months, entry);
+  }
+
+  const basePoints = Array.from(byMaturity.entries())
+    .map(([months, v]) => ({
+      maturity: months / 12,
+      rate: v.sumRateAmount / v.sumAmount,
+      amount: v.sumAmount,
+    }))
+    .sort((a, b) => a.maturity - b.maturity);
+
+  if (basePoints.length === 0) return null;
+
+  // Interpolation lineaire
+  let rate: number;
+  if (residualMaturity <= basePoints[0].maturity) {
+    rate = basePoints[0].rate;
+  } else if (residualMaturity >= basePoints[basePoints.length - 1].maturity) {
+    rate = basePoints[basePoints.length - 1].rate;
+  } else {
+    let low = basePoints[0];
+    let high = basePoints[basePoints.length - 1];
+    for (let i = 0; i < basePoints.length - 1; i++) {
+      if (
+        basePoints[i].maturity <= residualMaturity &&
+        basePoints[i + 1].maturity >= residualMaturity
+      ) {
+        low = basePoints[i];
+        high = basePoints[i + 1];
+        break;
+      }
+    }
+    const ratio =
+      (residualMaturity - low.maturity) / (high.maturity - low.maturity);
+    rate = low.rate + ratio * (high.rate - low.rate);
+  }
+
+  return { rate, basePoints, issuancesUsed: eligible.length };
+}
+
+/**
+ * Prix d'un BAT en convention precompte : `N × (1 − r × T)` ou T est en annees
+ * (Act/365). C'est le prix que paye l'investisseur a l'emission ; il reste
+ * theoriquement constant si le taux de marche ne bouge pas.
+ *
+ * Floor a 0 pour eviter les valeurs negatives quand T × r dépasse 1 (cas
+ * pathologique sur des donnees aberrantes).
+ */
+export function priceBATPrecompte(
+  nominal: number,
+  precomptedRate: number,
+  residualYears: number
+): number {
+  return Math.max(0, nominal * (1 - precomptedRate * residualYears));
+}
+
+/**
  * Construit un historique hebdomadaire du prix theorique sur les `weeks` dernieres
- * semaines, en recalibrant la courbe pays a chaque date.
+ * semaines.
+ *
+ * - OAT : recalibre la courbe pays sur les adjudications cash OAT puis applique
+ *   l'actualisation actuarielle.
+ * - BAT : recalibre une courbe pre´comptee sur les adjudications cash BAT du
+ *   pays puis applique la formule precomptee `N × (1 − r × T)`.
  */
 export function buildSovereignTheoreticalHistory(
   bond: SovereignBond,
@@ -1347,17 +1468,25 @@ export function buildSovereignTheoreticalHistory(
       (matDate.getTime() - asOf.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
     if (residual <= 0) continue;
 
-    const calib = calibrateTheoreticalYTM(bond.country, asOf, residual, emissions);
-    if (!calib) continue;
-
-    const metrics = calculateSovereignActuarialMetrics(bond, asOf, calib.ytm);
-    if (!metrics) continue;
-
-    history.push({
-      date: asOf.toISOString().slice(0, 10),
-      theoreticalPrice: metrics.cleanPrice,
-      ytm: calib.ytm,
-    });
+    if (bond.type === "BAT") {
+      const calib = calibrateBATPrecompte(bond.country, asOf, residual, emissions);
+      if (!calib) continue;
+      history.push({
+        date: asOf.toISOString().slice(0, 10),
+        theoreticalPrice: priceBATPrecompte(bond.nominalValue, calib.rate, residual),
+        ytm: calib.rate,
+      });
+    } else {
+      const calib = calibrateTheoreticalYTM(bond.country, asOf, residual, emissions);
+      if (!calib) continue;
+      const metrics = calculateSovereignActuarialMetrics(bond, asOf, calib.ytm);
+      if (!metrics) continue;
+      history.push({
+        date: asOf.toISOString().slice(0, 10),
+        theoreticalPrice: metrics.cleanPrice,
+        ytm: calib.ytm,
+      });
+    }
   }
 
   return history;

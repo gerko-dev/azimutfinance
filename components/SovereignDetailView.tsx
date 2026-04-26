@@ -19,7 +19,6 @@ import type { SovereignBond } from "@/lib/listedBondsTypes";
 import {
   getSovereignCashflows,
   calculateSovereignActuarialMetrics,
-  SOVEREIGN_NOMINAL,
 } from "@/lib/listedBondsTypes";
 import CountryFlag from "./CountryFlag";
 
@@ -604,7 +603,7 @@ export default function SovereignDetailView({
                         labelFormatter={(d) => formatDate(d as string)}
                       />
                       <ReferenceLine
-                        y={SOVEREIGN_NOMINAL}
+                        y={bond.nominalValue}
                         stroke="#94a3b8"
                         strokeDasharray="3 3"
                         label={{
@@ -1042,7 +1041,7 @@ export default function SovereignDetailView({
                       }`
                     : ""}
                   . Échéancier généré sur la base du nominal de référence{" "}
-                  {formatFCFA(SOVEREIGN_NOMINAL)} FCFA.
+                  {formatFCFA(bond.nominalValue)} FCFA.
                 </div>
               </section>
             ) : (
