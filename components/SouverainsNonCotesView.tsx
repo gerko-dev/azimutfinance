@@ -1,7 +1,14 @@
 "use client";
 
-import { useState, useMemo, useEffect, useDeferredValue } from "react";
+import {
+  useState,
+  useMemo,
+  useDeferredValue,
+  useCallback,
+  memo,
+} from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ScatterChart,
   Scatter,
@@ -57,7 +64,7 @@ type SortKey =
   | "country"
   | "maturity"
   | "lastYield"
-  | "totalAmount"
+  | "outstandingEstimate"
   | "lastIssueDate"
   | "nbRounds";
 type SortOrder = "asc" | "desc";
@@ -137,8 +144,8 @@ export default function SouverainsNonCotesView({ bonds, stats }: Props) {
         case "lastYield":
           cmp = a.lastYield - b.lastYield;
           break;
-        case "totalAmount":
-          cmp = a.totalAmount - b.totalAmount;
+        case "outstandingEstimate":
+          cmp = a.outstandingEstimate - b.outstandingEstimate;
           break;
         case "lastIssueDate":
           cmp = a.lastIssueDate.localeCompare(b.lastIssueDate);
@@ -175,10 +182,15 @@ export default function SouverainsNonCotesView({ bonds, stats }: Props) {
     return processedBonds.slice(start, start + PAGE_SIZE);
   }, [processedBonds, currentPage]);
 
-  // Reset page quand filtre change (sur valeurs deferees pour rester coherent)
-  useEffect(() => {
+  // Reset de la pagination quand les filtres déférés changent.
+  // Pattern "ajuster un state pendant le render" recommandé par React,
+  // qui évite le useEffect+setState cascadant.
+  const filtersKey = `${deferredSearch}|${deferredCountry}|${deferredType}|${deferredDuration}`;
+  const [prevFiltersKey, setPrevFiltersKey] = useState(filtersKey);
+  if (prevFiltersKey !== filtersKey) {
+    setPrevFiltersKey(filtersKey);
     setCurrentPage(1);
-  }, [deferredSearch, deferredCountry, deferredType, deferredDuration]);
+  }
 
   // Donnees pour les courbes (calculees une seule fois, independantes des filtres)
   const oatCurveData = useMemo(() => {
@@ -197,7 +209,7 @@ export default function SouverainsNonCotesView({ bonds, stats }: Props) {
 
   const batCurveData = useMemo(() => {
     return bonds
-      .filter((b) => b.type === "BAT")
+      .filter((b) => b.type === "BAT" && b.maturity > 0 && b.lastYield > 0)
       .map((b) => ({
         x: b.maturity,
         y: b.lastYield * 100,
@@ -213,21 +225,26 @@ export default function SouverainsNonCotesView({ bonds, stats }: Props) {
       .slice(0, 10);
   }, [bonds]);
 
-  function toggleSort(key: SortKey) {
-    if (sortKey === key) {
-      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
-    } else {
-      setSortKey(key);
-      setSortOrder("desc");
-    }
-  }
+  // useCallback : référence stable tant que sortKey ne change pas — permet
+  // au tableau memo de sauter le re-render sur chaque frappe de recherche.
+  const toggleSort = useCallback(
+    (key: SortKey) => {
+      if (sortKey === key) {
+        setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
+      } else {
+        setSortKey(key);
+        setSortOrder("desc");
+      }
+    },
+    [sortKey]
+  );
 
-  function sortIcon(key: SortKey) {
-    if (sortKey !== key) return <span className="text-slate-300">↕</span>;
-    return sortOrder === "asc" ? <span>↑</span> : <span>↓</span>;
-  }
-
-  const availableCountries = Object.keys(stats.byCountry).sort();
+  // Mémoisé : sinon Object.keys().sort() retourne une nouvelle référence
+  // à chaque render et casse le memo du chart en aval.
+  const availableCountries = useMemo(
+    () => Object.keys(stats.byCountry).sort(),
+    [stats.byCountry]
+  );
 
   return (
     <>
@@ -286,21 +303,90 @@ export default function SouverainsNonCotesView({ bonds, stats }: Props) {
       </div>
 
       <main className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8 space-y-6 md:space-y-8">
-        {/* COURBES DES TAUX */}
-        <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
-          <div className="flex justify-between items-start flex-wrap gap-2 mb-1">
-            <h2 className="text-lg md:text-xl font-semibold">
-              📊 Courbe des taux souveraine UEMOA
-            </h2>
-            <span className="text-[10px] md:text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
-              EXCLUSIVITÉ AZIMUT
-            </span>
-          </div>
-          <p className="text-xs md:text-sm text-slate-600 mb-4">
-            Chaque point = une émission à sa dernière adjudication.
-          </p>
+        {/* COURBES DES TAUX — memo : ne re-render plus quand on tape dans la recherche */}
+        <SovereignYieldCurvesSection
+          batCurveData={batCurveData}
+          oatCurveData={oatCurveData}
+          availableCountries={availableCountries}
+        />
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+        {/* DERNIERES ADJUDICATIONS — memo : 10 lignes mais avec CountryFlag SVG, on évite les redraws */}
+        <RecentAdjudicationsSection bonds={recentAdjudications} />
+
+        {/* TABLEAU PAGINE — memo + useDeferredValue : la frappe ne déclenche pas le re-render synchrone */}
+        <SovereignBondsTableSection
+          pagedBonds={pagedBonds}
+          processedBondsLength={processedBonds.length}
+          totalBondsLength={bonds.length}
+          isFiltering={isFiltering}
+          search={search}
+          onSearchChange={setSearch}
+          filterCountry={filterCountry}
+          onFilterCountryChange={setFilterCountry}
+          filterType={filterType}
+          onFilterTypeChange={setFilterType}
+          filterDuration={filterDuration}
+          onFilterDurationChange={setFilterDuration}
+          sortKey={sortKey}
+          sortOrder={sortOrder}
+          onToggleSort={toggleSort}
+          availableCountries={availableCountries}
+          countryCounts={stats.byCountry}
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage}
+        />
+      </main>
+    </>
+  );
+}
+
+// ============================================================
+// COMPOSANTS MEMOISES — découplent les blocs lourds (charts Recharts,
+// tableaux ~50 lignes) des re-renders synchrones provoqués par chaque
+// frappe dans la barre de recherche.
+// ============================================================
+
+type SovereignYieldCurvesProps = {
+  batCurveData: Array<{
+    x: number;
+    y: number;
+    country: string;
+    amount: number;
+    date: string;
+  }>;
+  oatCurveData: Array<{
+    x: number;
+    y: number;
+    country: string;
+    isin: string;
+    amount: number;
+    nbRounds: number;
+    date: string;
+  }>;
+  availableCountries: string[];
+};
+
+const SovereignYieldCurvesSection = memo(function SovereignYieldCurvesSection({
+  batCurveData,
+  oatCurveData,
+  availableCountries,
+}: SovereignYieldCurvesProps) {
+  return (
+    <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
+      <div className="flex justify-between items-start flex-wrap gap-2 mb-1">
+        <h2 className="text-lg md:text-xl font-semibold">
+          📊 Courbe des taux souveraine UEMOA
+        </h2>
+        <span className="text-[10px] md:text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
+          EXCLUSIVITÉ AZIMUT
+        </span>
+      </div>
+      <p className="text-xs md:text-sm text-slate-600 mb-4">
+        Chaque point = une émission à sa dernière adjudication.
+      </p>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
             <div>
               <h3 className="text-sm font-medium mb-2">
                 BAT — Court terme ({batCurveData.length} émissions)
@@ -312,11 +398,17 @@ export default function SouverainsNonCotesView({ bonds, stats }: Props) {
                     <XAxis
                       type="number"
                       dataKey="x"
-                      unit=" ans"
                       stroke="#94a3b8"
                       fontSize={11}
+                      // Maturites BAT toujours <= 2 ans : domain fige + ticks "ronds"
+                      // (3m, 6m, 1a, 1.5a, 2a) — sinon Recharts disperse mal les points.
+                      domain={[0, 2]}
+                      ticks={[0, 0.25, 0.5, 1, 1.5, 2]}
+                      tickFormatter={(v: number) =>
+                        v < 1 ? `${Math.round(v * 12)}m` : `${v}a`
+                      }
                       label={{
-                        value: "Maturité (années)",
+                        value: "Maturité",
                         position: "bottom",
                         offset: 15,
                         style: { fontSize: 11, fill: "#64748b" },
@@ -328,6 +420,13 @@ export default function SouverainsNonCotesView({ bonds, stats }: Props) {
                       unit="%"
                       stroke="#94a3b8"
                       fontSize={11}
+                      // Taux BAT entre 0,5% et 11% — on calque le domain sur les
+                      // donnees avec un peu de padding pour eviter le baseline 0
+                      // qui ecraserait la dispersion.
+                      domain={[
+                        (dataMin: number) => Math.max(0, Math.floor(dataMin - 0.5)),
+                        (dataMax: number) => Math.ceil(dataMax + 0.5),
+                      ]}
                       label={{
                         value: "Taux (%)",
                         angle: -90,
@@ -340,11 +439,17 @@ export default function SouverainsNonCotesView({ bonds, stats }: Props) {
                       content={({ active, payload }) => {
                         if (!active || !payload || !payload.length) return null;
                         const d = payload[0].payload;
+                        const mois = Math.round(d.x * 12);
                         return (
                           <div className="bg-white border border-slate-200 rounded-md shadow-md p-3 text-xs">
                             <div className="font-medium mb-1">BAT {d.country}</div>
                             <div>
-                              Maturité : <b>{d.x.toFixed(2).replace(".", ",")} ans</b>
+                              Maturité :{" "}
+                              <b>
+                                {mois < 12
+                                  ? `${mois} mois`
+                                  : `${d.x.toFixed(2).replace(".", ",")} ans`}
+                              </b>
                             </div>
                             <div>
                               Taux : <b>{d.y.toFixed(2).replace(".", ",")}%</b>
@@ -474,275 +579,338 @@ export default function SouverainsNonCotesView({ bonds, stats }: Props) {
             </div>
           </div>
         </section>
+      );
+    });
 
-        {/* DERNIERES ADJUDICATIONS */}
-        <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
-          <h2 className="text-lg md:text-xl font-semibold mb-4">
-            🔔 Dernières adjudications
-          </h2>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-xs text-slate-500 border-b border-slate-200 bg-slate-50">
-                  <th className="text-left px-3 py-2 font-medium">Date</th>
-                  <th className="text-left px-3 py-2 font-medium">Pays</th>
-                  <th className="text-left px-3 py-2 font-medium">Type</th>
-                  <th className="text-left px-3 py-2 font-medium hidden md:table-cell">
-                    ISIN
-                  </th>
-                  <th className="text-right px-3 py-2 font-medium">Maturité</th>
-                  <th className="text-right px-3 py-2 font-medium">Montant</th>
-                  <th className="text-right px-3 py-2 font-medium">Taux</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentAdjudications.map((b) => (
-                  <tr
-                    key={b.id}
-                    className="border-b border-slate-100 hover:bg-blue-50/30 transition"
+// === DERNIERES ADJUDICATIONS ===
+type RecentAdjudicationsProps = {
+  bonds: SovereignBondLite[];
+};
+
+const RecentAdjudicationsSection = memo(function RecentAdjudicationsSection({
+  bonds,
+}: RecentAdjudicationsProps) {
+  return (
+    <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
+      <h2 className="text-lg md:text-xl font-semibold mb-4">
+        🔔 Dernières adjudications
+      </h2>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-xs text-slate-500 border-b border-slate-200 bg-slate-50">
+              <th className="text-left px-3 py-2 font-medium">Date</th>
+              <th className="text-left px-3 py-2 font-medium">Pays</th>
+              <th className="text-left px-3 py-2 font-medium">Type</th>
+              <th className="text-left px-3 py-2 font-medium hidden md:table-cell">
+                ISIN
+              </th>
+              <th className="text-right px-3 py-2 font-medium">Maturité</th>
+              <th className="text-right px-3 py-2 font-medium">Montant</th>
+              <th className="text-right px-3 py-2 font-medium">Taux</th>
+            </tr>
+          </thead>
+          <tbody>
+            {bonds.map((b) => (
+              <tr
+                key={b.id}
+                className="border-b border-slate-100 hover:bg-blue-50/30 transition"
+              >
+                <td className="px-3 py-2">{formatDate(b.lastIssueDate)}</td>
+                <td className="px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <CountryFlag country={b.country} size={18} />
+                    <span>{b.country}</span>
+                  </div>
+                </td>
+                <td className="px-3 py-2">
+                  <span
+                    className={`text-xs px-2 py-0.5 rounded font-medium ${
+                      b.type === "OAT"
+                        ? "bg-blue-50 text-blue-700"
+                        : "bg-amber-50 text-amber-700"
+                    }`}
                   >
-                    <td className="px-3 py-2">{formatDate(b.lastIssueDate)}</td>
-                    <td className="px-3 py-2">
-                      <div className="flex items-center gap-2">
-                        <CountryFlag country={b.country} size={18} />
-                        <span>{b.country}</span>
-                      </div>
-                    </td>
-                    <td className="px-3 py-2">
-                      <span
-                        className={`text-xs px-2 py-0.5 rounded font-medium ${
-                          b.type === "OAT"
-                            ? "bg-blue-50 text-blue-700"
-                            : "bg-amber-50 text-amber-700"
-                        }`}
-                      >
-                        {b.type}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 font-mono text-xs hidden md:table-cell">
-                      {b.isin || "—"}
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      {b.maturity.toFixed(1).replace(".", ",")} ans
-                    </td>
-                    <td className="px-3 py-2 text-right text-xs">
-                      {formatBigFCFA(b.totalAmount)}
-                    </td>
-                    <td className="px-3 py-2 text-right font-medium">
-                      {(b.lastYield * 100).toFixed(2).replace(".", ",")}%
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        {/* TABLEAU PAGINE */}
-        <section className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-          <div className="p-4 md:p-6 border-b border-slate-100">
-            <div className="flex justify-between items-start flex-wrap gap-3 mb-4">
-              <h2 className="text-lg md:text-xl font-semibold">
-                Tous les titres souverains
-              </h2>
-              <span className="text-xs text-slate-500 flex items-center gap-2">
-                {isFiltering && (
-                  <span className="inline-block w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                )}
-                {processedBonds.length} résultat
-                {processedBonds.length > 1 ? "s" : ""} sur {bonds.length}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-              <input
-                type="text"
-                placeholder="Rechercher (ISIN, pays...)"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:border-blue-500"
-              />
-              <select
-                value={filterCountry}
-                onChange={(e) => setFilterCountry(e.target.value)}
-                className="px-3 py-2 text-sm border border-slate-300 rounded-md bg-white focus:outline-none focus:border-blue-500"
-              >
-                <option value="all">Tous les pays</option>
-                {availableCountries.map((c) => (
-                  <option key={c} value={c}>
-                    {c} ({stats.byCountry[c]})
-                  </option>
-                ))}
-              </select>
-              <select
-                value={filterType}
-                onChange={(e) => setFilterType(e.target.value)}
-                className="px-3 py-2 text-sm border border-slate-300 rounded-md bg-white focus:outline-none focus:border-blue-500"
-              >
-                <option value="all">OAT + BAT</option>
-                <option value="OAT">OAT uniquement</option>
-                <option value="BAT">BAT uniquement</option>
-              </select>
-              <select
-                value={filterDuration}
-                onChange={(e) => setFilterDuration(e.target.value)}
-                className="px-3 py-2 text-sm border border-slate-300 rounded-md bg-white focus:outline-none focus:border-blue-500"
-              >
-                <option value="all">Toutes durées</option>
-                <option value="0-2">0-2 ans (BAT)</option>
-                <option value="2-5">2-5 ans</option>
-                <option value="5-10">5-10 ans</option>
-                <option value="10+">Plus de 10 ans</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-xs text-slate-500 border-b border-slate-200 bg-slate-50">
-                  <th className="text-left px-3 py-3 font-medium">
-                    <button
-                      onClick={() => toggleSort("country")}
-                      className="flex items-center gap-1 hover:text-slate-900"
-                    >
-                      Pays {sortIcon("country")}
-                    </button>
-                  </th>
-                  <th className="text-left px-3 py-3 font-medium">Type</th>
-                  <th className="text-left px-3 py-3 font-medium hidden md:table-cell">
-                    ISIN
-                  </th>
-                  <th className="text-right px-3 py-3 font-medium">
-                    <button
-                      onClick={() => toggleSort("maturity")}
-                      className="flex items-center gap-1 hover:text-slate-900 ml-auto"
-                    >
-                      Maturité {sortIcon("maturity")}
-                    </button>
-                  </th>
-                  <th className="text-right px-3 py-3 font-medium">
-                    <button
-                      onClick={() => toggleSort("lastYield")}
-                      className="flex items-center gap-1 hover:text-slate-900 ml-auto"
-                    >
-                      Dernier taux {sortIcon("lastYield")}
-                    </button>
-                  </th>
-                  <th className="text-right px-3 py-3 font-medium hidden md:table-cell">
-                    <button
-                      onClick={() => toggleSort("totalAmount")}
-                      className="flex items-center gap-1 hover:text-slate-900 ml-auto"
-                    >
-                      Volume {sortIcon("totalAmount")}
-                    </button>
-                  </th>
-                  <th className="text-right px-3 py-3 font-medium hidden lg:table-cell">
-                    <button
-                      onClick={() => toggleSort("nbRounds")}
-                      className="flex items-center gap-1 hover:text-slate-900 ml-auto"
-                    >
-                      Rounds {sortIcon("nbRounds")}
-                    </button>
-                  </th>
-                  <th className="text-right px-3 py-3 font-medium">
-                    <button
-                      onClick={() => toggleSort("lastIssueDate")}
-                      className="flex items-center gap-1 hover:text-slate-900 ml-auto"
-                    >
-                      Dernière adj {sortIcon("lastIssueDate")}
-                    </button>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {pagedBonds.map((b) => (
-                  <tr
-                    key={b.id}
-                    className="border-b border-slate-100 hover:bg-blue-50/30 transition"
-                  >
-                    <td className="px-3 py-3">
-                      <div className="flex items-center gap-2">
-                        <CountryFlag country={b.country} size={18} />
-                        <span>{b.country}</span>
-                      </div>
-                    </td>
-                    <td className="px-3 py-3">
-                      <span
-                        className={`text-xs px-2 py-0.5 rounded font-medium ${
-                          b.type === "OAT"
-                            ? "bg-blue-50 text-blue-700"
-                            : "bg-amber-50 text-amber-700"
-                        }`}
-                      >
-                        {b.type}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3 font-mono text-xs hidden md:table-cell">
-                      {b.isin || "—"}
-                    </td>
-                    <td className="px-3 py-3 text-right">
-                      {b.maturity.toFixed(1).replace(".", ",")} ans
-                    </td>
-                    <td className="px-3 py-3 text-right font-medium">
-                      {(b.lastYield * 100).toFixed(2).replace(".", ",")}%
-                    </td>
-                    <td className="px-3 py-3 text-right text-xs hidden md:table-cell">
-                      {formatBigFCFA(b.totalAmount)}
-                    </td>
-                    <td className="px-3 py-3 text-right hidden lg:table-cell">
-                      {b.nbRounds > 1 ? (
-                        <span className="text-xs px-2 py-0.5 bg-purple-50 text-purple-700 rounded">
-                          ×{b.nbRounds}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-slate-400">1</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-3 text-right text-xs">
-                      {formatDate(b.lastIssueDate)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            {pagedBonds.length === 0 && (
-              <div className="p-10 text-center text-slate-500">
-                Aucun titre ne correspond à vos critères
-              </div>
-            )}
-          </div>
-
-          {/* PAGINATION */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between p-4 border-t border-slate-100 text-sm">
-              <button
-                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                disabled={currentPage === 1}
-                className="px-3 py-1.5 border border-slate-300 rounded-md hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                ← Précédent
-              </button>
-              <span className="text-slate-600">
-                Page <b>{currentPage}</b> sur <b>{totalPages}</b> ·{" "}
-                <span className="text-slate-400">
-                  ({(currentPage - 1) * PAGE_SIZE + 1}–
-                  {Math.min(currentPage * PAGE_SIZE, processedBonds.length)} sur{" "}
-                  {processedBonds.length})
-                </span>
-              </span>
-              <button
-                onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                disabled={currentPage === totalPages}
-                className="px-3 py-1.5 border border-slate-300 rounded-md hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Suivant →
-              </button>
-            </div>
-          )}
-        </section>
-      </main>
-    </>
+                    {b.type}
+                  </span>
+                </td>
+                <td className="px-3 py-2 font-mono text-xs hidden md:table-cell">
+                  {b.isin || "—"}
+                </td>
+                <td className="px-3 py-2 text-right">
+                  {b.maturity.toFixed(1).replace(".", ",")} ans
+                </td>
+                <td className="px-3 py-2 text-right text-xs">
+                  {formatBigFCFA(b.totalAmount)}
+                </td>
+                <td className="px-3 py-2 text-right font-medium">
+                  {(b.lastYield * 100).toFixed(2).replace(".", ",")}%
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
-}
+});
+
+// === TABLEAU PAGINÉ ===
+type SovereignBondsTableProps = {
+  pagedBonds: SovereignBondLite[];
+  processedBondsLength: number;
+  totalBondsLength: number;
+  isFiltering: boolean;
+  search: string;
+  onSearchChange: (v: string) => void;
+  filterCountry: string;
+  onFilterCountryChange: (v: string) => void;
+  filterType: string;
+  onFilterTypeChange: (v: string) => void;
+  filterDuration: string;
+  onFilterDurationChange: (v: string) => void;
+  sortKey: SortKey;
+  sortOrder: SortOrder;
+  onToggleSort: (key: SortKey) => void;
+  availableCountries: string[];
+  countryCounts: Record<string, number>;
+  currentPage: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+};
+
+const SovereignBondsTableSection = memo(function SovereignBondsTableSection({
+  pagedBonds,
+  processedBondsLength,
+  totalBondsLength,
+  isFiltering,
+  search,
+  onSearchChange,
+  filterCountry,
+  onFilterCountryChange,
+  filterType,
+  onFilterTypeChange,
+  filterDuration,
+  onFilterDurationChange,
+  sortKey,
+  sortOrder,
+  onToggleSort,
+  availableCountries,
+  countryCounts,
+  currentPage,
+  totalPages,
+  onPageChange,
+}: SovereignBondsTableProps) {
+  const router = useRouter();
+  const sortIcon = (key: SortKey) => {
+    if (sortKey !== key) return <span className="text-slate-300">↕</span>;
+    return sortOrder === "asc" ? <span>↑</span> : <span>↓</span>;
+  };
+
+  return (
+    <section className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+      <div className="p-4 md:p-6 border-b border-slate-100">
+        <div className="flex justify-between items-start flex-wrap gap-3 mb-4">
+          <h2 className="text-lg md:text-xl font-semibold">
+            Tous les titres souverains
+          </h2>
+          <span className="text-xs text-slate-500 flex items-center gap-2">
+            {isFiltering && (
+              <span className="inline-block w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            )}
+            {processedBondsLength} résultat
+            {processedBondsLength > 1 ? "s" : ""} sur {totalBondsLength}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <input
+            type="text"
+            placeholder="Rechercher (ISIN, pays...)"
+            value={search}
+            onChange={(e) => onSearchChange(e.target.value)}
+            className="px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:border-blue-500"
+          />
+          <select
+            value={filterCountry}
+            onChange={(e) => onFilterCountryChange(e.target.value)}
+            className="px-3 py-2 text-sm border border-slate-300 rounded-md bg-white focus:outline-none focus:border-blue-500"
+          >
+            <option value="all">Tous les pays</option>
+            {availableCountries.map((c) => (
+              <option key={c} value={c}>
+                {c} ({countryCounts[c]})
+              </option>
+            ))}
+          </select>
+          <select
+            value={filterType}
+            onChange={(e) => onFilterTypeChange(e.target.value)}
+            className="px-3 py-2 text-sm border border-slate-300 rounded-md bg-white focus:outline-none focus:border-blue-500"
+          >
+            <option value="all">OAT + BAT</option>
+            <option value="OAT">OAT uniquement</option>
+            <option value="BAT">BAT uniquement</option>
+          </select>
+          <select
+            value={filterDuration}
+            onChange={(e) => onFilterDurationChange(e.target.value)}
+            className="px-3 py-2 text-sm border border-slate-300 rounded-md bg-white focus:outline-none focus:border-blue-500"
+          >
+            <option value="all">Toutes durées</option>
+            <option value="0-2">0-2 ans (BAT)</option>
+            <option value="2-5">2-5 ans</option>
+            <option value="5-10">5-10 ans</option>
+            <option value="10+">Plus de 10 ans</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-xs text-slate-500 border-b border-slate-200 bg-slate-50">
+              <th className="text-left px-3 py-3 font-medium">
+                <button
+                  onClick={() => onToggleSort("country")}
+                  className="flex items-center gap-1 hover:text-slate-900"
+                >
+                  Pays {sortIcon("country")}
+                </button>
+              </th>
+              <th className="text-left px-3 py-3 font-medium">Type</th>
+              <th className="text-left px-3 py-3 font-medium hidden md:table-cell">
+                ISIN
+              </th>
+              <th className="text-right px-3 py-3 font-medium">
+                <button
+                  onClick={() => onToggleSort("maturity")}
+                  className="flex items-center gap-1 hover:text-slate-900 ml-auto"
+                >
+                  Maturité {sortIcon("maturity")}
+                </button>
+              </th>
+              <th className="text-right px-3 py-3 font-medium">
+                <button
+                  onClick={() => onToggleSort("lastYield")}
+                  className="flex items-center gap-1 hover:text-slate-900 ml-auto"
+                >
+                  Dernier taux {sortIcon("lastYield")}
+                </button>
+              </th>
+              <th className="text-right px-3 py-3 font-medium hidden md:table-cell">
+                <button
+                  onClick={() => onToggleSort("outstandingEstimate")}
+                  className="flex items-center gap-1 hover:text-slate-900 ml-auto"
+                  title="Cash levé + swaps − rachats"
+                >
+                  Encours estimé {sortIcon("outstandingEstimate")}
+                </button>
+              </th>
+              <th className="text-right px-3 py-3 font-medium hidden lg:table-cell">
+                <button
+                  onClick={() => onToggleSort("nbRounds")}
+                  className="flex items-center gap-1 hover:text-slate-900 ml-auto"
+                >
+                  Rounds {sortIcon("nbRounds")}
+                </button>
+              </th>
+              <th className="text-right px-3 py-3 font-medium">
+                <button
+                  onClick={() => onToggleSort("lastIssueDate")}
+                  className="flex items-center gap-1 hover:text-slate-900 ml-auto"
+                >
+                  Dernière adj {sortIcon("lastIssueDate")}
+                </button>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {pagedBonds.map((b) => (
+              <tr
+                key={b.id}
+                onClick={() => router.push(`/souverain/${encodeURIComponent(b.id)}`)}
+                className="border-b border-slate-100 hover:bg-blue-50/40 cursor-pointer transition"
+              >
+                <td className="px-3 py-3">
+                  <div className="flex items-center gap-2">
+                    <CountryFlag country={b.country} size={18} />
+                    <span>{b.country}</span>
+                  </div>
+                </td>
+                <td className="px-3 py-3">
+                  <span
+                    className={`text-xs px-2 py-0.5 rounded font-medium ${
+                      b.type === "OAT"
+                        ? "bg-blue-50 text-blue-700"
+                        : "bg-amber-50 text-amber-700"
+                    }`}
+                  >
+                    {b.type}
+                  </span>
+                </td>
+                <td className="px-3 py-3 font-mono text-xs hidden md:table-cell">
+                  {b.isin || "—"}
+                </td>
+                <td className="px-3 py-3 text-right">
+                  {b.maturity.toFixed(1).replace(".", ",")} ans
+                </td>
+                <td className="px-3 py-3 text-right font-medium">
+                  {(b.lastYield * 100).toFixed(2).replace(".", ",")}%
+                </td>
+                <td className="px-3 py-3 text-right text-xs hidden md:table-cell">
+                  {formatBigFCFA(b.outstandingEstimate)}
+                </td>
+                <td className="px-3 py-3 text-right hidden lg:table-cell">
+                  {b.nbRounds > 1 ? (
+                    <span className="text-xs px-2 py-0.5 bg-purple-50 text-purple-700 rounded">
+                      ×{b.nbRounds}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-slate-400">1</span>
+                  )}
+                </td>
+                <td className="px-3 py-3 text-right text-xs">
+                  {formatDate(b.lastIssueDate)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        {pagedBonds.length === 0 && (
+          <div className="p-10 text-center text-slate-500">
+            Aucun titre ne correspond à vos critères
+          </div>
+        )}
+      </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between p-4 border-t border-slate-100 text-sm">
+          <button
+            onClick={() => onPageChange(Math.max(1, currentPage - 1))}
+            disabled={currentPage === 1}
+            className="px-3 py-1.5 border border-slate-300 rounded-md hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            ← Précédent
+          </button>
+          <span className="text-slate-600">
+            Page <b>{currentPage}</b> sur <b>{totalPages}</b> ·{" "}
+            <span className="text-slate-400">
+              ({(currentPage - 1) * PAGE_SIZE + 1}–
+              {Math.min(currentPage * PAGE_SIZE, processedBondsLength)} sur{" "}
+              {processedBondsLength})
+            </span>
+          </span>
+          <button
+            onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
+            disabled={currentPage === totalPages}
+            className="px-3 py-1.5 border border-slate-300 rounded-md hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Suivant →
+          </button>
+        </div>
+      )}
+    </section>
+  );
+});

@@ -208,11 +208,20 @@ export function getLatestPrice(
 }
 
 export function getBondYTM(bond: ListedBond, prices: ListedBondPrice[]): number {
-  const latestPrice = getLatestPrice(bond.isin, prices);
+  return getBondYTMFromLatest(bond, getLatestPrice(bond.isin, prices));
+}
+
+/**
+ * Variante optimisée : reçoit directement le dernier prix déjà calculé
+ * (évite un prices.filter() supplémentaire quand l'appelant l'a déjà résolu).
+ */
+export function getBondYTMFromLatest(
+  bond: ListedBond,
+  latestPrice: ListedBondPrice | null | undefined
+): number {
   if (!latestPrice || latestPrice.cleanPrice <= 0) {
     return bond.couponRate;
   }
-
   try {
     return calculateActuarialYTM(
       bond,
@@ -448,13 +457,68 @@ export function getDifferedYears(bond: ListedBond): number {
 // ==========================================
 
 export type EmissionUMOA = {
-  date: string;
-  country: string;
+  // === Champs historiques (preserves pour compat avec calibrateTheoreticalYTM, courbes, etc.) ===
+  date: string;              // ISO YYYY-MM-DD, issu de "Date de valeur"
+  country: string;           // code 2 lettres (CI, SN, BF, ML, BJ, TG, NE, GW)
   isin: string;
   type: "OAT" | "BAT";
-  maturity: number; // en annees
-  amount: number;
-  weightedAvgYield: number; // en decimal (0.065 pour 6,5%)
+  maturity: number;          // en annees (converti depuis "Maturite (mois)" / 12)
+  amount: number;            // montant retenu en millions FCFA
+  weightedAvgYield: number;  // en decimal (0.065 pour 6,5%) — "Rendement moyen pondere"
+
+  // === Nouveaux champs UMOA-Titres ===
+  tradeDate: string;                          // "Date de l'operation"
+  maturityDate: string;                       // ISO depuis "Echeance"
+  maturityMonths: number;                     // brut depuis "Maturite (mois)"
+  graceYears: number;                         // "Differe (annee)" — 0 si vide
+  couponRate: number | null;                  // "Taux d'interet" en decimal — null pour BAT (zero-coupon)
+  amortizationType: "Linéaire" | "In Fine" | null;
+  marginalPrice: number | null;               // "Prix marginal"
+  marginalYield: number | null;               // "Taux marginal (%)" en decimal — surtout BAT
+  weightedAvgPrice: number | null;            // "Prix moyen pondere"
+  weightedAvgRate: number | null;             // "Taux moyen pondere (%)" en decimal — surtout BAT
+  precisions: string;                         // "Rachat simultane", "Echange", "BAT et BSR", etc.
+  countryName: string;                        // nom complet francais ("Cote d'Ivoire")
+  amountSubmitted: number;                    // "Montant soumis" — utile pour ratio de couverture
+  amountIssued: number;                       // "Montant" — taille du programme (cumul prevu)
+};
+
+/**
+ * Classification des operations UMOA-Titres selon la nature economique :
+ *
+ * - cash_auction : adjudication compétitive avec entrée de cash neuf pour
+ *   l'État. Inclut les vanilla (precisions vide), les programmes BSR / OdR /
+ *   COVID-19 / BAT, et les "Adjudications ciblées" (placement pré-négocié
+ *   mais qui amène quand même du cash).
+ *
+ * - swap : nouveau titre créé sans entrée de cash (echange contre un titre
+ *   existant ou rachat simultané qui s'auto-compense). Le rendement publié
+ *   est mécanique, pas un clearing de marché.
+ *
+ * - buyback : rachat pur, l'État rappelle de la dette en sortant du cash. Pas
+ *   d'émission nouvelle.
+ */
+export type SovereignOperationKind = "cash_auction" | "swap" | "buyback";
+
+export function classifyOperation(precisions: string): SovereignOperationKind {
+  const p = (precisions || "").trim();
+  if (p === "") return "cash_auction";
+  if (p === "Echange" || p === "Rachat simultané") return "swap";
+  if (/^(Rachat|Programme)/i.test(p)) return "buyback";
+  return "cash_auction";
+}
+
+// Mapping pays nom complet (CSV) → code 2 lettres (utilise dans le reste du code)
+export const UMOA_COUNTRY_CODE: Record<string, string> = {
+  "Côte d'Ivoire": "CI",
+  "Sénégal": "SN",
+  "Burkina Faso": "BF",
+  "Mali": "ML",
+  "Bénin": "BJ",
+  "Togo": "TG",
+  "Niger": "NE",
+  "Guinée Bissau": "GW",
+  "Guinée-Bissau": "GW",
 };
 
 /**
@@ -510,6 +574,10 @@ export function calibrateTheoreticalYTM(
     if (e.maturity <= 0 || e.maturity > 50) return false;
     if (e.amount <= 0) return false;
     if (e.weightedAvgYield <= 0 || e.weightedAvgYield > 0.3) return false;
+    // On exclut les operations sans entree de cash (echange, rachat simultane,
+    // pur rachat) : leurs rendements sont mecaniques, pas un clearing de marche,
+    // et tirent la courbe vers le bas.
+    if (classifyOperation(e.precisions) !== "cash_auction") return false;
     const d = new Date(e.date);
     if (isNaN(d.getTime())) return false;
     return d >= startDate && d <= targetDate;
@@ -704,24 +772,42 @@ export function buildTheoreticalPriceHistory(
 }
 
 /**
- * Calcule le spread de signature : ecart entre le YTM a l'emission et le YTM UMOA-Titres
- * theorique a la meme date et meme maturite. Mesure la qualite de signature.
+ * Spread de signature / Prime de cotation BRVM.
+ *
+ * Compare le YTM coté BRVM observé (déduit du dernier prix pied de coupon) à
+ * la courbe primaire UMOA-Titres du pays calibrée au jour J, interpolée à la
+ * maturité résiduelle.
+ *
+ * - Pour un émetteur corporate / agence : prime de risque crédit vs souverain.
+ * - Pour un émetteur souverain (Etat / Sukuk Etat) : prime de liquidité du
+ *   marché secondaire coté vs primaire (un même État comparé à lui-même).
+ *
+ * Retourne null si :
+ * - pas de cotation BRVM observée (sinon on calculerait le spread à partir du
+ *   prix théorique, qui est lui-même dérivé de la courbe → spread ≈ 0 par
+ *   construction, sans valeur informative),
+ * - obligation arrivée à échéance,
+ * - pas assez d'adjudications primaires comparables sur la fenêtre.
  */
 export function calculateSignatureSpread(
   bond: ListedBond,
-  emissions: EmissionUMOA[]
+  observedYtm: number | null,
+  emissions: EmissionUMOA[],
+  asOfDate: Date = new Date()
 ): number | null {
-  const issueDate = parseISODate(bond.issueDate);
-  if (isNaN(issueDate.getTime())) return null;
+  if (observedYtm == null || !isFinite(observedYtm)) return null;
 
   const maturityDate = parseISODate(bond.maturityDate);
-  const initialMaturity =
-    (maturityDate.getTime() - issueDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+  if (isNaN(maturityDate.getTime())) return null;
 
-  const calib = calibrateTheoreticalYTM(bond.country, issueDate, initialMaturity, emissions);
+  const residualMaturity =
+    (maturityDate.getTime() - asOfDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+  if (residualMaturity <= 0) return null;
+
+  const calib = calibrateTheoreticalYTM(bond.country, asOfDate, residualMaturity, emissions);
   if (!calib) return null;
 
-  return bond.couponRate - calib.ytm;
+  return observedYtm - calib.ytm;
 }
 // ==========================================
 // SOUVERAINS NON COTES (UMOA-Titres : OAT + BAT)
@@ -737,24 +823,63 @@ export type SovereignBond = {
   id: string;                    // ISIN pour OAT, ou "BAT-{country}-{date}-{maturity}" pour BAT
   isin: string;                  // peut etre vide pour BAT
   country: string;
+  countryName: string;           // nom complet ("Cote d'Ivoire")
   type: "OAT" | "BAT";
 
-  // Caracteristiques
+  // Caracteristiques (issues du 1er round)
   maturity: number;              // en annees
-  firstIssueDate: string;        // date de la 1ere adjudication
-  lastIssueDate: string;         // date de la derniere adjudication
-  nbRounds: number;              // nb d'adjudications (1 pour BAT, 1-10 pour OAT)
+  maturityDate: string;          // ISO date d'echeance
+  firstIssueDate: string;        // date du 1er round
+  lastIssueDate: string;         // date du dernier round
+  nbRounds: number;              // nb d'adjudications
 
-  // Montants
-  totalAmount: number;           // somme des montants de toutes les adjudications
-  avgYield: number;              // YTM moyen pondere par montants (pour info)
-  lastYield: number;             // YTM de la derniere adjudication (ce qu'on affiche sur la courbe)
+  // Caracteristiques OAT (null pour BAT)
+  couponRate: number | null;     // taux nominal du coupon (decimal)
+  amortizationType: "Linéaire" | "In Fine" | null;
+  graceYears: number;            // differe (0 pour BAT et la plupart des OAT)
 
-  // Details pour drilldown
+  // Montants — modele en 3 strates :
+  // - cashAmount        : cash leve via adjudications competitives (entree de
+  //                       cash + nouveau notional cree). KPI principal.
+  // - swapAmount        : nouveau notional cree par echange / rachat simultane
+  //                       (pas de cash neuf, mais titre cree).
+  // - buybackAmount     : titres rappeles par l'Etat (sortie de cash, notional
+  //                       reduit). Equivaut a une dette retiree.
+  // - outstandingEstimate = cashAmount + swapAmount - buybackAmount.
+  //                       C'est l'encours circulant estime (notional cree net
+  //                       des rachats). C'est ce que tient en portefeuille
+  //                       l'ensemble des investisseurs aujourd'hui.
+  // - totalAmount       : somme brute des |montants| de tous les rounds, sans
+  //                       distinction de signe. Indicateur d'activite totale.
+  totalAmount: number;
+  totalSubmitted: number;
+  cashAmount: number;
+  cashSubmitted: number;
+  swapAmount: number;
+  buybackAmount: number;
+  outstandingEstimate: number;
+  cashRoundsCount: number;       // nb de cash auctions (sous-ensemble de nbRounds)
+  swapRoundsCount: number;
+  buybackRoundsCount: number;
+  avgYield: number;              // YTM moyen pondere sur cash auctions uniquement
+  avgBuybackYield: number;       // YTM moyen pondere des rachats (yield de sortie)
+                                  // — 0 si aucun rachat
+  lastYield: number;              // dernier round cash (sinon dernier round tout court)
+
+  // Detail des adjudications (un objet par round)
   adjudications: Array<{
-    date: string;
-    amount: number;
-    yield: number;
+    tradeDate: string;                        // "Date de l'operation"
+    valueDate: string;                        // "Date de valeur"
+    amount: number;                           // montant retenu
+    amountSubmitted: number;                  // montant soumis
+    coverage: number;                         // ratio soumis / retenu
+    yield: number;                            // rendement moyen pondere
+    marginalYield: number | null;             // taux marginal
+    weightedAvgRate: number | null;           // taux moyen pondere (BAT)
+    marginalPrice: number | null;
+    weightedAvgPrice: number | null;
+    precisions: string;                       // type de round
+    kind: SovereignOperationKind;             // cash_auction / swap / buyback
   }>;
 };
 /**
@@ -769,7 +894,10 @@ export type SovereignBondLite = {
   maturity: number;
   lastIssueDate: string;
   nbRounds: number;
+  // Volume affiche dans la liste = encours circulant estime (net des rachats),
+  // plus parlant que le brut. totalAmount conserve pour reference.
   totalAmount: number;
+  outstandingEstimate: number;
   lastYield: number;
 };
 
@@ -783,6 +911,7 @@ export function toLite(b: SovereignBond): SovereignBondLite {
     lastIssueDate: b.lastIssueDate,
     nbRounds: b.nbRounds,
     totalAmount: b.totalAmount,
+    outstandingEstimate: b.outstandingEstimate,
     lastYield: b.lastYield,
   };
 }
@@ -829,28 +958,85 @@ export function aggregateSovereignBonds(emissions: EmissionUMOA[]): SovereignBon
 
     const first = rounds[0];
     const last = rounds[rounds.length - 1];
+
+    // Classification par round
+    const enriched = rounds.map((r) => ({ ...r, kind: classifyOperation(r.precisions) }));
+    const cashRounds = enriched.filter((r) => r.kind === "cash_auction");
+    const swapRounds = enriched.filter((r) => r.kind === "swap");
+    const buybackRounds = enriched.filter((r) => r.kind === "buyback");
+
     const totalAmount = rounds.reduce((sum, r) => sum + r.amount, 0);
+    const cashAmount = cashRounds.reduce((sum, r) => sum + r.amount, 0);
+    const swapAmount = swapRounds.reduce((sum, r) => sum + r.amount, 0);
+    const buybackAmount = buybackRounds.reduce((sum, r) => sum + r.amount, 0);
+    // Encours circulant estime : notional cree (cash + swaps) net des rachats.
+    // Floor a 0 pour eviter de dramatiser les buybacks superieurs au cumul
+    // (cas rare ou la donnee est partielle).
+    const outstandingEstimate = Math.max(0, cashAmount + swapAmount - buybackAmount);
+
+    // avgYield calcule uniquement sur les cash auctions (rendements de marche reels)
     const avgYield =
-      totalAmount > 0
-        ? rounds.reduce((sum, r) => sum + r.weightedAvgYield * r.amount, 0) / totalAmount
+      cashAmount > 0
+        ? cashRounds.reduce((sum, r) => sum + r.weightedAvgYield * r.amount, 0) / cashAmount
         : 0;
+    // Yield moyen des rachats (yield de sortie : a quel niveau les detenteurs
+    // ont accepte de ceder leur titre). Diffe´rent du clearing primaire.
+    const avgBuybackYield =
+      buybackAmount > 0
+        ? buybackRounds.reduce((sum, r) => sum + r.weightedAvgYield * r.amount, 0) /
+          buybackAmount
+        : 0;
+    // lastYield : dernier round cash si dispo, sinon dernier round tout court
+    const lastCashRound = cashRounds[cashRounds.length - 1];
+    const lastYield = lastCashRound ? lastCashRound.weightedAvgYield : last.weightedAvgYield;
+    // lastIssueDate : on vise la date de la derniere VRAIE adjudication cash.
+    // Sinon (cas rare ou il n'y a aucun round cash) on retombe sur le dernier
+    // round absolu pour eviter une chaine vide.
+    const lastIssueDate = lastCashRound ? lastCashRound.date : last.date;
+
+    const totalSubmitted = rounds.reduce((sum, r) => sum + (r.amountSubmitted || 0), 0);
+    const cashSubmitted = cashRounds.reduce((sum, r) => sum + (r.amountSubmitted || 0), 0);
 
     bonds.push({
       id: first.type === "OAT" ? first.isin : key,
       isin: first.isin,
       country: first.country,
+      countryName: first.countryName,
       type: first.type,
       maturity: first.maturity,
+      maturityDate: first.maturityDate,
       firstIssueDate: first.date,
-      lastIssueDate: last.date,
+      lastIssueDate,
       nbRounds: rounds.length,
+      couponRate: first.couponRate,
+      amortizationType: first.amortizationType,
+      graceYears: first.graceYears,
       totalAmount,
+      totalSubmitted,
+      cashAmount,
+      cashSubmitted,
+      swapAmount,
+      buybackAmount,
+      outstandingEstimate,
+      cashRoundsCount: cashRounds.length,
+      swapRoundsCount: swapRounds.length,
+      buybackRoundsCount: buybackRounds.length,
       avgYield,
-      lastYield: last.weightedAvgYield,
-      adjudications: rounds.map((r) => ({
-        date: r.date,
+      avgBuybackYield,
+      lastYield,
+      adjudications: enriched.map((r) => ({
+        tradeDate: r.tradeDate,
+        valueDate: r.date,
         amount: r.amount,
+        amountSubmitted: r.amountSubmitted,
+        coverage: r.amount > 0 ? r.amountSubmitted / r.amount : 0,
         yield: r.weightedAvgYield,
+        marginalYield: r.marginalYield,
+        weightedAvgRate: r.weightedAvgRate,
+        marginalPrice: r.marginalPrice,
+        weightedAvgPrice: r.weightedAvgPrice,
+        precisions: r.precisions,
+        kind: r.kind,
       })),
     });
   }
@@ -901,4 +1087,313 @@ export function getSovereignMarketStats(bonds: SovereignBond[]): {
     byCountry,
     volumeByCountry,
   };
+}
+
+/**
+ * Spread du dernier round vs courbe primaire pays au jour J interpolee a la
+ * maturite residuelle. Sememantique investisseur :
+ * - Positif (vert) = ce round s'est negocie au-dessus de la courbe ; investisseurs
+ *   ont capture une prime (round mieux remunere que la moyenne pays-maturite).
+ * - Negatif (rouge) = ce round s'est negocie sous la courbe ; signal de demande
+ *   forte ou pricing serre vs la moyenne.
+ *
+ * Retourne null si l'obligation est expiree ou s'il n'y a pas assez d'adjudications
+ * primaires sur la fenetre de calibration.
+ */
+export function calculateSovereignSpread(
+  bond: SovereignBond,
+  emissions: EmissionUMOA[],
+  asOfDate: Date = new Date()
+): number | null {
+  const matDate = parseISODate(bond.maturityDate);
+  if (isNaN(matDate.getTime())) return null;
+
+  const residualMaturity =
+    (matDate.getTime() - asOfDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+  if (residualMaturity <= 0) return null;
+
+  const calib = calibrateTheoreticalYTM(bond.country, asOfDate, residualMaturity, emissions);
+  if (!calib) return null;
+
+  return bond.lastYield - calib.ytm;
+}
+
+/**
+ * Recupere les autres titres souverains du meme pays, tries par maturite
+ * residuelle proche de celle de la cible. Utilise pour le bloc "Autres titres"
+ * de la fiche detail.
+ */
+export function getRelatedSovereignBonds(
+  target: SovereignBond,
+  all: SovereignBond[],
+  limit: number = 6
+): SovereignBond[] {
+  return all
+    .filter((b) => b.id !== target.id && b.country === target.country)
+    .sort(
+      (a, b) =>
+        Math.abs(a.maturity - target.maturity) - Math.abs(b.maturity - target.maturity)
+    )
+    .slice(0, limit);
+}
+
+// ==========================================
+// MOTEUR ACTUARIEL POUR LES SOUVERAINS NON COTES
+// ==========================================
+
+// Nominal de reference par titre UMOA-Titres (pour generer les cashflows en
+// FCFA "par titre"). Tous les chiffres actuariels (prix, BPV, etc.) sont
+// donnes a cette echelle.
+export const SOVEREIGN_NOMINAL = 10_000;
+
+export type SovereignCashflow = {
+  date: string;            // ISO YYYY-MM-DD
+  type: "coupon" | "amortissement" | "remboursement_final";
+  amount: number;          // par titre, sur nominal SOVEREIGN_NOMINAL
+  outstandingAfter: number;// capital restant du apres ce flux
+};
+
+/**
+ * Genere l'echeancier des flux d'un OAT (frequence annuelle, coupon sur capital
+ * restant du, amortissement Lineaire ou In Fine, gere le differe). Pour les
+ * BAT zero-coupon : un unique remboursement au pair a l'echeance.
+ *
+ * Hypotheses :
+ * - Coupons annuels (convention UMOA-Titres standard pour les OAT en XOF).
+ * - Anniversaires sur la "Date de valeur" du 1er round.
+ * - Linéaire : amortissement constant sur (totalYears − grace) annees, le
+ *   coupon de chaque annee est calcule sur le capital restant du de l'annee.
+ * - In Fine : remboursement bullet a l'echeance.
+ */
+export function getSovereignCashflows(bond: SovereignBond): SovereignCashflow[] {
+  // BAT ou OAT sans coupon connu : on traite en zero-coupon.
+  if (bond.type === "BAT" || bond.couponRate == null || bond.couponRate <= 0) {
+    return [
+      {
+        date: bond.maturityDate,
+        type: "remboursement_final",
+        amount: SOVEREIGN_NOMINAL,
+        outstandingAfter: 0,
+      },
+    ];
+  }
+
+  const issueDate = parseISODate(bond.firstIssueDate);
+  const maturityDate = parseISODate(bond.maturityDate);
+  if (isNaN(issueDate.getTime()) || isNaN(maturityDate.getTime())) return [];
+
+  const yearsBetween =
+    (maturityDate.getTime() - issueDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+  const totalYears = Math.max(1, Math.round(yearsBetween));
+  const grace = Math.max(0, Math.min(bond.graceYears, totalYears - 1));
+  const amortYears = Math.max(1, totalYears - grace);
+  const amortPerPeriod =
+    bond.amortizationType === "Linéaire" ? SOVEREIGN_NOMINAL / amortYears : 0;
+
+  const cashflows: SovereignCashflow[] = [];
+  let outstanding = SOVEREIGN_NOMINAL;
+  const coupon = bond.couponRate;
+
+  for (let y = 1; y <= totalYears; y++) {
+    const dt = new Date(issueDate);
+    dt.setUTCFullYear(dt.getUTCFullYear() + y);
+    const dateISO = dt.toISOString().slice(0, 10);
+
+    // Coupon sur le capital restant du au debut de la periode
+    const interest = outstanding * coupon;
+    cashflows.push({
+      date: dateISO,
+      type: "coupon",
+      amount: interest,
+      outstandingAfter: outstanding,
+    });
+
+    // Amortissement apres la periode de differe
+    if (y > grace) {
+      if (bond.amortizationType === "Linéaire") {
+        const principal = y === totalYears ? outstanding : amortPerPeriod;
+        outstanding = Math.max(0, outstanding - principal);
+        cashflows.push({
+          date: dateISO,
+          type: y === totalYears ? "remboursement_final" : "amortissement",
+          amount: principal,
+          outstandingAfter: outstanding,
+        });
+      } else if (y === totalYears) {
+        cashflows.push({
+          date: dateISO,
+          type: "remboursement_final",
+          amount: outstanding,
+          outstandingAfter: 0,
+        });
+        outstanding = 0;
+      }
+    }
+  }
+
+  return cashflows;
+}
+
+/**
+ * Metriques actuarielles d'un souverain non cote a une date donnee, pour un
+ * YTM cible. Convention Act/365, capitalisation annuelle.
+ *
+ * Retourne null si l'obligation est expiree (aucun cashflow futur).
+ */
+export function calculateSovereignActuarialMetrics(
+  bond: SovereignBond,
+  asOfDate: Date,
+  ytm: number
+): {
+  cleanPrice: number;
+  dirtyPrice: number;
+  accruedInterest: number;
+  macaulay: number;
+  modified: number;
+  convexity: number;
+  bpv: number;
+} | null {
+  const cashflows = getSovereignCashflows(bond);
+  const future = cashflows.filter(
+    (cf) => parseISODate(cf.date).getTime() > asOfDate.getTime()
+  );
+  if (future.length === 0) return null;
+
+  let sumPV = 0;
+  let sumTimesPV = 0;
+  let sumTimesSquaredPV = 0;
+
+  for (const cf of future) {
+    const days =
+      (parseISODate(cf.date).getTime() - asOfDate.getTime()) / (24 * 60 * 60 * 1000);
+    const years = days / 365;
+    const df = Math.pow(1 + ytm, -years);
+    const pv = cf.amount * df;
+    sumPV += pv;
+    sumTimesPV += years * pv;
+    sumTimesSquaredPV += years * (years + 1) * pv;
+  }
+
+  const dirtyPrice = sumPV;
+  const macaulay = sumPV > 0 ? sumTimesPV / sumPV : 0;
+  const modified = ytm > -1 ? macaulay / (1 + ytm) : 0;
+  const convexity =
+    sumPV > 0 && ytm > -1 ? sumTimesSquaredPV / sumPV / Math.pow(1 + ytm, 2) : 0;
+
+  // Coupon couru (OAT seulement) : interpolation lineaire entre les
+  // anniversaires de la "Date de valeur" du 1er round.
+  let accruedInterest = 0;
+  if (bond.type === "OAT" && bond.couponRate != null && bond.couponRate > 0) {
+    const issueDate = parseISODate(bond.firstIssueDate);
+    const maturityDate = parseISODate(bond.maturityDate);
+    if (!isNaN(issueDate.getTime()) && !isNaN(maturityDate.getTime())) {
+      const couponDates: Date[] = [];
+      const cur = new Date(issueDate);
+      while (cur.getTime() < maturityDate.getTime()) {
+        cur.setUTCFullYear(cur.getUTCFullYear() + 1);
+        if (cur.getTime() <= maturityDate.getTime()) couponDates.push(new Date(cur));
+      }
+
+      const past = couponDates.filter((d) => d.getTime() <= asOfDate.getTime());
+      const previousDate = past.length > 0 ? past[past.length - 1] : issueDate;
+      const nextDate =
+        couponDates.find((d) => d.getTime() > asOfDate.getTime()) || maturityDate;
+
+      const daysSince = Math.floor(
+        (asOfDate.getTime() - previousDate.getTime()) / (24 * 60 * 60 * 1000)
+      );
+      const daysInPeriod = Math.round(
+        (nextDate.getTime() - previousDate.getTime()) / (24 * 60 * 60 * 1000)
+      );
+
+      // Capital restant du a la date de valuation = outstandingAfter du dernier
+      // flux passe (sinon nominal initial).
+      const cfsBefore = cashflows.filter(
+        (cf) => parseISODate(cf.date).getTime() <= asOfDate.getTime()
+      );
+      const outstandingNow =
+        cfsBefore.length > 0
+          ? cfsBefore[cfsBefore.length - 1].outstandingAfter
+          : SOVEREIGN_NOMINAL;
+
+      const periodicCoupon = outstandingNow * bond.couponRate;
+      accruedInterest =
+        daysInPeriod > 0 ? (periodicCoupon * daysSince) / daysInPeriod : 0;
+    }
+  }
+
+  const cleanPrice = dirtyPrice - accruedInterest;
+  const bpv = (cleanPrice * modified) / 10000;
+
+  return { cleanPrice, dirtyPrice, accruedInterest, macaulay, modified, convexity, bpv };
+}
+
+/**
+ * Construit un historique hebdomadaire du prix theorique sur les `weeks` dernieres
+ * semaines, en recalibrant la courbe pays a chaque date.
+ */
+export function buildSovereignTheoreticalHistory(
+  bond: SovereignBond,
+  emissions: EmissionUMOA[],
+  weeks: number = 24
+): Array<{ date: string; theoreticalPrice: number; ytm: number }> {
+  const history: Array<{ date: string; theoreticalPrice: number; ytm: number }> = [];
+  const now = new Date();
+  const matDate = parseISODate(bond.maturityDate);
+
+  for (let w = weeks - 1; w >= 0; w--) {
+    const asOf = new Date(now.getTime() - w * 7 * 24 * 60 * 60 * 1000);
+    const residual =
+      (matDate.getTime() - asOf.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+    if (residual <= 0) continue;
+
+    const calib = calibrateTheoreticalYTM(bond.country, asOf, residual, emissions);
+    if (!calib) continue;
+
+    const metrics = calculateSovereignActuarialMetrics(bond, asOf, calib.ytm);
+    if (!metrics) continue;
+
+    history.push({
+      date: asOf.toISOString().slice(0, 10),
+      theoreticalPrice: metrics.cleanPrice,
+      ytm: calib.ytm,
+    });
+  }
+
+  return history;
+}
+
+/**
+ * Compare le rendement de la courbe primaire de chaque pays UEMOA a la maturite
+ * residuelle de la cible. Retourne un tableau trie par YTM croissant pour
+ * visualiser la dispersion souveraine.
+ */
+export function calculateInterCountrySpreads(
+  bond: SovereignBond,
+  emissions: EmissionUMOA[],
+  asOfDate: Date = new Date()
+): Array<{ country: string; ytm: number; spread: number; isTarget: boolean }> {
+  const matDate = parseISODate(bond.maturityDate);
+  const residual =
+    (matDate.getTime() - asOfDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+  if (residual <= 0) return [];
+
+  const targetCalib = calibrateTheoreticalYTM(bond.country, asOfDate, residual, emissions);
+  if (!targetCalib) return [];
+
+  const referenceYtm = targetCalib.ytm;
+
+  const rows: Array<{ country: string; ytm: number; spread: number; isTarget: boolean }> = [];
+  for (const country of UEMOA_COUNTRIES) {
+    const calib = calibrateTheoreticalYTM(country, asOfDate, residual, emissions);
+    if (!calib) continue;
+    rows.push({
+      country,
+      ytm: calib.ytm,
+      spread: calib.ytm - referenceYtm,
+      isTarget: country === bond.country,
+    });
+  }
+
+  return rows.sort((a, b) => a.ytm - b.ytm);
 }

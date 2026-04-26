@@ -11,6 +11,7 @@ import {
 import {
   buildTheoreticalPriceHistory,
   calculateSignatureSpread,
+  getBondYTMFromLatest,
 } from "@/lib/listedBondsTypes";
 
 export default async function Page({
@@ -33,7 +34,18 @@ export default async function Page({
   // Chargement des emissions UMOA-Titres pour le prix theorique
   const emissions = loadUmoaEmissions();
   const theoreticalHistory = buildTheoreticalPriceHistory(bond, emissions, 24);
-  const signatureSpread = calculateSignatureSpread(bond, emissions);
+
+  // Spread de signature : YTM coté BRVM observé vs courbe primaire au jour J,
+  // interpolée à la maturité résiduelle. Sans cotation observée → null
+  // (le prix théorique est dérivé de la même courbe, le spread serait nul
+  // par construction).
+  const latestObservedPrice = priceHistory.length
+    ? priceHistory.reduce((latest, p) => (p.date > latest.date ? p : latest))
+    : null;
+  const observedYtm = latestObservedPrice
+    ? getBondYTMFromLatest(bond, latestObservedPrice)
+    : null;
+  const signatureSpread = calculateSignatureSpread(bond, observedYtm, emissions);
 
   // Obligations similaires : meme pays, duree similaire
   const similarBonds = bonds

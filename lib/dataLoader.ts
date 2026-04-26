@@ -4,10 +4,11 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import Papa from "papaparse";
 import type { Bond, BondCountry, IssuanceResult } from "./bondsUEMOA";
+import { UMOA_COUNTRY_CODE } from "./listedBondsTypes";
 
 const DATA_DIR = join(process.cwd(), "data");
 
-function parseCSV<T>(filename: string): T[] {
+function parseCSV<T>(filename: string, delimiter: "," | ";" = ";"): T[] {
   const filePath = join(DATA_DIR, filename);
   let content = readFileSync(filePath, "utf-8");
 
@@ -17,7 +18,7 @@ function parseCSV<T>(filename: string): T[] {
 
   const result = Papa.parse<T>(content, {
     header: true,
-    delimiter: ";",
+    delimiter,
     skipEmptyLines: true,
     dynamicTyping: false,
     transformHeader: (h) => h.trim().replace(/^\uFEFF/, ""),
@@ -48,33 +49,11 @@ export type StockRow = {
   description: string;
 };
 
-type BondCSVRow = {
-  isin: string;
-  nameShort: string;
-  issuer: string;
-  country: BondCountry;
-  type: "OAT" | "OTAR" | "BAT" | "Corporate";
-  nominalValue: string;
-  couponRate: string;
-  issueDate: string;
-  maturityDate: string;
-  frequency: string;
-};
-
-type IssuanceCSVRow = {
-  date: string;
-  country: BondCountry;
-  isin: string;
-  type: "OAT" | "OTAR" | "BAT";
-  maturity: string;
-  amount: string;
-  weightedAvgYield: string;
-};
-
 type PriceHistoryRow = {
   code: string;
   date: string;
   value: string;
+  volume?: string; // colonne ajoutée au format historique-prix.csv
 };
 
 /**
@@ -112,41 +91,119 @@ export function loadStocks(): StockRow[] {
   return parseCSV<StockRow>("titres.csv");
 }
 
+/**
+ * Le fichier obligations.csv n'existe plus : on derive Bond[] depuis les
+ * emissions UMOA-Titres. Une obligation par ISIN unique (OAT seulement —
+ * les BAT zero-coupon ne sont pas vraiment des "Bond" pour le simulateur YTM).
+ *
+ * Pour chaque ISIN, on prend les caracteristiques du PREMIER round (coupon
+ * fixe a l'emission, date de valeur initiale, etc.) et on garde la maturite
+ * en annees calculee depuis la date d'echeance.
+ */
 export function loadBonds(): Bond[] {
-  const rows = parseCSV<BondCSVRow>("obligations.csv");
-  return rows.map((r) => ({
-    isin: r.isin?.trim() || "",
-    nameShort: r.nameShort?.trim() || "",
-    issuer: r.issuer?.trim() || "",
-    country: r.country as BondCountry,
-    type: r.type,
-    nominalValue: parseNum(r.nominalValue, 10000),
-    couponRate: parseNum(r.couponRate) / 100,
-    issueDate: r.issueDate,
-    maturityDate: r.maturityDate,
-    frequency: parseNum(r.frequency, 1) as 1 | 2 | 4,
-    isin_registered: true,
-  }));
+  const emissions = loadUmoaEmissions();
+  const byIsin = new Map<string, ReturnType<typeof loadUmoaEmissions>[number]>();
+
+  for (const e of emissions) {
+    if (e.type !== "OAT") continue;
+    if (!e.isin || e.isin === "--") continue;
+    if (!(e.country in countryNameMap)) continue;
+    // Conserve le PREMIER round (date la plus ancienne) — porte le coupon nominal initial
+    const existing = byIsin.get(e.isin);
+    if (!existing || e.date < existing.date) {
+      byIsin.set(e.isin, e);
+    }
+  }
+
+  const bonds: Bond[] = [];
+  for (const e of byIsin.values()) {
+    if (e.couponRate == null || e.couponRate <= 0) continue;
+    bonds.push({
+      isin: e.isin,
+      nameShort: `${e.type} ${e.country} ${(e.couponRate * 100).toFixed(2).replace(".", ",")}%`,
+      issuer: `Etat ${e.countryName}`,
+      country: e.country as BondCountry,
+      type: e.type,
+      nominalValue: 10000,
+      couponRate: e.couponRate,
+      issueDate: e.date,
+      maturityDate: e.maturityDate,
+      frequency: 1,
+      isin_registered: true,
+    });
+  }
+
+  return bonds;
 }
 
+// Garde une trace des codes pays valides pour filtrer les emissions exotiques
+const countryNameMap: Record<BondCountry, true> = {
+  CI: true, SN: true, BF: true, ML: true, BJ: true, TG: true, NE: true, GW: true,
+};
+
+/**
+ * Resultats d'adjudication pour le simulateur YTM. Reutilise le loader unifie
+ * et reshape dans la forme historique IssuanceResult.
+ */
 export function loadIssuances(): IssuanceResult[] {
-  const rows = parseCSV<IssuanceCSVRow>("emissions.csv");
-  return rows.map((r) => ({
-    date: r.date,
-    country: r.country as BondCountry,
-    isin: r.isin?.trim() || "",
-    type: r.type,
-    maturity: parseNum(r.maturity),
-    amount: parseNum(r.amount),
-    weightedAvgYield: parseNum(r.weightedAvgYield) / 100,
-  }));
+  const emissions = loadUmoaEmissions();
+  return emissions
+    .filter((e) => e.country in countryNameMap)
+    .map((e) => ({
+      date: e.date,
+      country: e.country as BondCountry,
+      isin: e.isin,
+      type: e.type,
+      maturity: e.maturity,
+      amount: e.amount,
+      weightedAvgYield: e.weightedAvgYield,
+    }));
 }
 
 export function loadPriceHistory(code: string): { date: string; value: number }[] {
-  const allRows = parseCSV<PriceHistoryRow>("historique-prix.csv");
+  // historique-prix.csv utilise désormais la virgule comme délimiteur
+  const allRows = parseCSV<PriceHistoryRow>("historique-prix.csv", ",");
   return allRows
     .filter((r) => r.code?.trim().toUpperCase() === code.toUpperCase())
     .map((r) => ({ date: r.date, value: parseNum(r.value) }));
+}
+
+/** Variante exposant le volume quotidien lorsque disponible. Mémoisé via loadAllPriceHistory. */
+export function loadPriceHistoryWithVolume(
+  code: string
+): { date: string; value: number; volume: number | null }[] {
+  const codeUpper = code.toUpperCase();
+  return loadAllPriceHistory()
+    .filter((r) => r.code.toUpperCase() === codeUpper)
+    .map((r) => ({ date: r.date, value: r.value, volume: r.volume }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/**
+ * Volume moyen sur les `days` dernières séances cotées (séances avec volume non-null
+ * et > 0). Retourne null si aucune séance avec volume disponible.
+ */
+export function loadAverageVolumes(days = 30): Map<string, number | null> {
+  const all = loadAllPriceHistory();
+  const byCode = new Map<string, { date: string; volume: number | null }[]>();
+  for (const r of all) {
+    const list = byCode.get(r.code) ?? [];
+    list.push({ date: r.date, volume: r.volume });
+    byCode.set(r.code, list);
+  }
+  const result = new Map<string, number | null>();
+  for (const [code, rows] of byCode) {
+    rows.sort((a, b) => a.date.localeCompare(b.date));
+    // on prend les `days` dernières séances, on ignore celles sans volume
+    const recent = rows.slice(-days).filter((r) => r.volume !== null && r.volume > 0);
+    if (recent.length === 0) {
+      result.set(code, null);
+      continue;
+    }
+    const sum = recent.reduce((s, r) => s + (r.volume ?? 0), 0);
+    result.set(code, sum / recent.length);
+  }
+  return result;
 }
 
 export function formatStockForUI(s: StockRow) {
@@ -275,7 +332,7 @@ type ListedBondPriceRow = {
 type ListedBondEventRow = {
   isin: string;
   date: string;
-  eventType: string;
+  type: string;
   amount: string;
   description: string;
 };
@@ -370,13 +427,18 @@ export function loadListedBondPrices(): ListedBondPrice[] {
 
 export function loadListedBondEvents(): ListedBondEvent[] {
   const rows = parseCSV<ListedBondEventRow>("obligations-cotees-evenements.csv");
-  return rows.map((r) => ({
-    isin: r.isin?.trim() || "",
-    date: normalizeDateISO(r.date),
-    eventType: (r.eventType?.trim() || "coupon") as ListedBondEvent["eventType"],
-    amount: parseNum(r.amount),
-    description: r.description?.trim() || "",
-  }));
+  return rows.map((r) => {
+    const raw = r.type?.trim().toLowerCase() || "coupon";
+    // CSV utilise PRINCIPAL pour les amortissements / remboursements de capital
+    const eventType = (raw === "principal" ? "remboursement" : raw) as ListedBondEvent["eventType"];
+    return {
+      isin: r.isin?.trim() || "",
+      date: normalizeDateISO(r.date),
+      eventType,
+      amount: parseNum(r.amount),
+      description: r.description?.trim() || "",
+    };
+  });
 }
 
 export function getMarketStats(bonds: ListedBond[]): MarketStats {
@@ -419,33 +481,113 @@ export function getMarketStats(bonds: ListedBond[]): MarketStats {
 
 let _emissionsCache: import("./listedBondsTypes").EmissionUMOA[] | null = null;
 
-/** Charge les emissions UMOA-Titres pour la calibration des prix theoriques */
+/**
+ * Helper : extrait un nombre seulement si la cellule est non vide.
+ * Retourne null pour les valeurs absentes ("", "--", "NC"). Différent de parseNum
+ * qui retourne 0, ce qui ne distingue pas "0%" d'une cellule vide.
+ */
+function parseNumOrNull(value: unknown): number | null {
+  if (!isPresent(value)) return null;
+  const n = parseNum(value, NaN);
+  return isNaN(n) ? null : n;
+}
+
+/**
+ * Charge les emissions UMOA-Titres pour la calibration des prix theoriques.
+ *
+ * Format CSV : 25 colonnes, separateur virgule, headers en francais.
+ * Les colonnes principales sont mappees vers les champs historiques de
+ * EmissionUMOA pour preserver la compat avec calibrateTheoreticalYTM,
+ * et les nouveaux champs (couponRate, amortizationType, etc.) sont aussi
+ * exposes pour les vues detaillees.
+ */
 export function loadUmoaEmissions(): import("./listedBondsTypes").EmissionUMOA[] {
   if (_emissionsCache !== null) return _emissionsCache;
 
-  const rows = parseCSV<{
-    date: string;
-    country: string;
-    isin: string;
-    type: string;
-    maturity: string;
-    amount: string;
-    weightedAvgYield: string;
-  }>("emissions.csv");
+  type Row = {
+    "Instrument": string;
+    "Précisions": string;
+    "Date de l'opération": string;
+    "Date de valeur": string;
+    "Échéance": string;
+    "Maturité (mois)": string;
+    "Différé (année)": string;
+    "Montant(millions de FCFA)": string;
+    "Montant soumis(millions de FCFA)": string;
+    "Montant retenu(millions de FCFA)": string;
+    "ISIN": string;
+    "Taux d'interet": string;
+    "Prix marginal": string;
+    "Taux marginal (%)": string;
+    "Prix moyen pondéré": string;
+    "Taux moyen pondéré (%)": string;
+    "Rendement moyen pondéré": string;
+    "Type d'amortissement": string;
+    "Pondération (%)": string;
+    "Etat": string;
+    "Pays": string;
+  };
+
+  const rows = parseCSV<Row>("emissions.csv", ",");
 
   _emissionsCache = rows
-    .map((r) => ({
-      date: normalizeDateISO(r.date),
-      country: r.country?.trim() || "",
-      isin: r.isin?.trim() || "",
-      type: (r.type?.trim() || "OAT") as "OAT" | "BAT",
-      maturity: parseNum(r.maturity),
-      amount: parseNum(r.amount),
-      weightedAvgYield: parseNum(r.weightedAvgYield) / 100,
-    }))
+    .map((r) => {
+      const countryName = r["Pays"]?.trim() || "";
+      const country = UMOA_COUNTRY_CODE[countryName] || "";
+      const instrument = (r["Instrument"]?.trim() || "OAT").toUpperCase();
+      const type: "OAT" | "BAT" = instrument === "BAT" ? "BAT" : "OAT";
+
+      // La maturite est calculee depuis les dates plutot que via "Maturite (mois)" :
+      // - pour les OAT re-abondes, le champ porte la duree initiale (faux residuel)
+      // - pour certaines lignes BAT le champ est en jours, ou contient des erreurs de saisie
+      // On garde maturityMonths brut pour reference / debug.
+      const issueDateISO = normalizeDateISO(r["Date de valeur"]);
+      const maturityDateISO = normalizeDateISO(r["Échéance"]);
+      let maturity = 0;
+      if (issueDateISO && maturityDateISO) {
+        const ms = new Date(maturityDateISO).getTime() - new Date(issueDateISO).getTime();
+        if (ms > 0) maturity = ms / (365.25 * 24 * 60 * 60 * 1000);
+      }
+      const maturityMonths = parseNum(r["Maturité (mois)"]);
+      const amortRaw = r["Type d'amortissement"]?.trim();
+      const amortizationType: "Linéaire" | "In Fine" | null =
+        amortRaw === "Linéaire" ? "Linéaire" : amortRaw === "In Fine" ? "In Fine" : null;
+
+      // Le rendement moyen pondere est deja en decimal dans le CSV (0.0605 pour 6,05%).
+      // C'est aussi vrai pour Taux d'interet, Rendement moyen pondere.
+      // En revanche "Taux marginal (%)" et "Taux moyen pondere (%)" sont aussi en decimal
+      // (0.0524 pour 5,24%) malgre le "(%)" dans l'entete — cela reflete le format du fichier.
+      return {
+        date: issueDateISO,
+        country,
+        isin: r["ISIN"]?.trim() || "",
+        type,
+        maturity,
+        amount: parseNum(r["Montant retenu(millions de FCFA)"]),
+        weightedAvgYield: parseNum(r["Rendement moyen pondéré"]),
+
+        tradeDate: normalizeDateISO(r["Date de l'opération"]),
+        maturityDate: maturityDateISO,
+        maturityMonths,
+        graceYears: parseNum(r["Différé (année)"]),
+        couponRate: parseNumOrNull(r["Taux d'interet"]),
+        amortizationType,
+        marginalPrice: parseNumOrNull(r["Prix marginal"]),
+        marginalYield: parseNumOrNull(r["Taux marginal (%)"]),
+        weightedAvgPrice: parseNumOrNull(r["Prix moyen pondéré"]),
+        weightedAvgRate: parseNumOrNull(r["Taux moyen pondéré (%)"]),
+        precisions: r["Précisions"]?.trim() || "",
+        countryName,
+        amountSubmitted: parseNum(r["Montant soumis(millions de FCFA)"]),
+        amountIssued: parseNum(r["Montant(millions de FCFA)"]),
+      };
+    })
     .filter((e) => {
       if (!e.date || !e.country) return false;
       if (e.maturity <= 0 || e.maturity > 50) return false;
+      // BAT plafonnes a 2 ans par regle UMOA-Titres : au-dela c'est une
+      // erreur de saisie (mauvaise date d'echeance ou mauvais Instrument).
+      if (e.type === "BAT" && e.maturity > 2) return false;
       if (e.amount <= 0) return false;
       if (e.weightedAvgYield <= 0 || e.weightedAvgYield > 0.3) return false;
       return true;
@@ -515,17 +657,27 @@ export function getSectorIndexCode(sector: string): string | null {
 }
 
 /** Cache pour eviter de re-parser le CSV a chaque appel */
-let _allHistoryCache: { code: string; date: string; value: number }[] | null = null;
+let _allHistoryCache:
+  | { code: string; date: string; value: number; volume: number | null }[]
+  | null = null;
 
-function loadAllPriceHistory(): { code: string; date: string; value: number }[] {
+function loadAllPriceHistory(): {
+  code: string;
+  date: string;
+  value: number;
+  volume: number | null;
+}[] {
   if (_allHistoryCache !== null) return _allHistoryCache;
 
-  const rows = parseCSV<PriceHistoryRow>("historique-prix.csv");
+  // historique-prix.csv utilise désormais la virgule comme délimiteur
+  // et expose une colonne `volume` optionnelle
+  const rows = parseCSV<PriceHistoryRow>("historique-prix.csv", ",");
   _allHistoryCache = rows
     .map((r) => ({
       code: r.code?.trim() || "",
       date: normalizeDateISO(r.date),
       value: parseNum(r.value),
+      volume: isPresent(r.volume) ? parseNum(r.volume) : null,
     }))
     .filter((r) => r.code && r.date && r.value > 0);
 
