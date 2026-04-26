@@ -6,6 +6,7 @@ import {
   ComposedChart,
   LineChart,
   Area,
+  Bar,
   Line,
   XAxis,
   YAxis,
@@ -18,10 +19,24 @@ import type {
   ReturnsMatrix,
   RiskMetrics,
   Quadrant,
+  AdvancedStatsSnapshot,
 } from "@/lib/stockStats";
 import type { ActionRow } from "@/lib/dataLoader";
+import type { FundTitre, FundRatios, StatementLine } from "@/lib/fundamentals";
+import type { NewsItem } from "@/lib/newsTypes";
+import FundamentalsView from "./FundamentalsView";
+import DividendsView from "./DividendsView";
+import NewsView from "./NewsView";
+import AdvancedStatsView from "./AdvancedStatsView";
+import TechnicalAnalysisView from "./TechnicalAnalysisView";
 
-type Tab = "overview" | "stats" | "fundamentals" | "dividends" | "news";
+type Tab =
+  | "overview"
+  | "stats"
+  | "fundamentals"
+  | "dividends"
+  | "technical"
+  | "news";
 type Period = "1M" | "3M" | "6M" | "1A" | "3A" | "5A" | "Max";
 
 const QUADRANT_INFO: Record<
@@ -122,9 +137,12 @@ type PricePoint = {
   value: number;
 };
 
+type PriceVolumePoint = { date: string; value: number; volume: number | null };
+
 type Props = {
   stock: StockDetails;
   priceHistory: PricePoint[];
+  priceHistoryWithVolume: PriceVolumePoint[];
   returnsMatrix: ReturnsMatrix;
   riskMetrics: RiskMetrics;
   quadrant: Quadrant | null;
@@ -132,6 +150,17 @@ type Props = {
   sectorIndex: { code: string; name: string; history: PricePoint[] } | null;
   peers: ActionRow[];
   peerSparklines: Record<string, PricePoint[]>;
+  fundTitre: FundTitre | null;
+  ratios: FundRatios[];
+  statements: {
+    exercices: number[];
+    bilanActif: StatementLine[];
+    bilanPassif: StatementLine[];
+    compteResultat: StatementLine[];
+    flux: StatementLine[];
+  };
+  news: NewsItem[];
+  advancedStats: AdvancedStatsSnapshot;
 };
 
 function formatFCFA(value: number): string {
@@ -143,6 +172,15 @@ function formatBigNumber(value: number): string {
   if (value >= 1e9) return (value / 1e9).toFixed(2) + " Mds";
   if (value >= 1e6) return (value / 1e6).toFixed(0) + " M";
   return formatFCFA(value);
+}
+
+// Tick volume compact : 12k, 1,2 M, ...
+function formatVolumeAxis(v: number): string {
+  if (v === 0) return "0";
+  if (v >= 1e9) return (v / 1e9).toFixed(1).replace(".", ",") + " Mds";
+  if (v >= 1e6) return (v / 1e6).toFixed(1).replace(".", ",") + " M";
+  if (v >= 1e3) return (v / 1e3).toFixed(0) + " k";
+  return String(Math.round(v));
 }
 
 // Filtre l'historique selon la periode choisie
@@ -167,6 +205,7 @@ function filterByPeriod(history: PricePoint[], period: Period): PricePoint[] {
 export default function StockDetailView({
   stock,
   priceHistory,
+  priceHistoryWithVolume,
   returnsMatrix,
   riskMetrics,
   quadrant,
@@ -174,6 +213,11 @@ export default function StockDetailView({
   sectorIndex,
   peers,
   peerSparklines,
+  fundTitre,
+  ratios,
+  statements,
+  news,
+  advancedStats,
 }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [period, setPeriod] = useState<Period>("1A");
@@ -216,8 +260,21 @@ export default function StockDetailView({
     [priceHistory, period]
   );
 
+  // Map pour récupérer le volume par date (depuis l'historique enrichi).
+  const volumeByDate = useMemo(() => {
+    const m = new Map<string, number | null>();
+    for (const p of priceHistoryWithVolume) m.set(p.date, p.volume);
+    return m;
+  }, [priceHistoryWithVolume]);
+
+  const hasAnyVolume = useMemo(
+    () => priceHistoryWithVolume.some((p) => p.volume !== null && p.volume > 0),
+    [priceHistoryWithVolume]
+  );
+
   // Données du chart : si un overlay est actif, on normalise toutes les séries
   // en base 100 au début de la période visible. Sinon on garde la valeur brute.
+  // Le volume est joint quand disponible.
   const chartData = useMemo(() => {
     if (filteredHistory.length === 0) return [];
 
@@ -255,6 +312,7 @@ export default function StockDetailView({
         stock: number;
         brvmc?: number;
         sector?: number;
+        volume?: number;
       } = {
         date: p.date,
         stock:
@@ -270,9 +328,11 @@ export default function StockDetailView({
         const v = sectorMap.get(p.date);
         if (v !== undefined) point.sector = (v / baseSector) * 100;
       }
+      const vol = volumeByDate.get(p.date);
+      if (vol !== undefined && vol !== null && vol > 0) point.volume = vol;
       return point;
     });
-  }, [filteredHistory, brvmcHistory, sectorIndex, showBrvmc, showSector]);
+  }, [filteredHistory, brvmcHistory, sectorIndex, showBrvmc, showSector, volumeByDate]);
 
   const isNormalized = showBrvmc || showSector;
   const BRVMC_COLOR = "#185FA5";
@@ -377,6 +437,7 @@ export default function StockDetailView({
               { id: "overview", label: "Vue d'ensemble" },
               { id: "stats", label: "Statistiques" },
               { id: "fundamentals", label: "Fondamentaux" },
+              { id: "technical", label: "Technique" },
               { id: "dividends", label: "Dividendes" },
               { id: "news", label: "Actualités" },
             ].map((tab) => (
@@ -516,6 +577,7 @@ export default function StockDetailView({
                           }}
                         />
                         <YAxis
+                          yAxisId="price"
                           stroke="#94a3b8"
                           fontSize={11}
                           domain={["auto", "auto"]}
@@ -525,6 +587,19 @@ export default function StockDetailView({
                               : formatFCFA(Number(v))
                           }
                         />
+                        {hasAnyVolume && (
+                          <YAxis
+                            yAxisId="volume"
+                            orientation="right"
+                            stroke="#94a3b8"
+                            fontSize={10}
+                            tickFormatter={(v) => formatVolumeAxis(Number(v))}
+                            // On compresse l'axe pour que les barres restent en bas
+                            // du graphe et n'écrasent pas l'aire de prix.
+                            domain={[0, (dataMax: number) => dataMax * 4]}
+                            allowDecimals={false}
+                          />
+                        )}
                         <Tooltip
                           contentStyle={{
                             backgroundColor: "white",
@@ -534,6 +609,9 @@ export default function StockDetailView({
                           }}
                           formatter={(value, name) => {
                             const v = Number(value ?? 0);
+                            if (name === "volume") {
+                              return [formatFCFA(v) + " titres", "Volume"];
+                            }
                             if (isNormalized) {
                               const label =
                                 name === "stock"
@@ -553,7 +631,17 @@ export default function StockDetailView({
                             })
                           }
                         />
+                        {hasAnyVolume && (
+                          <Bar
+                            yAxisId="volume"
+                            dataKey="volume"
+                            fill="#94a3b8"
+                            fillOpacity={0.55}
+                            isAnimationActive={false}
+                          />
+                        )}
                         <Area
+                          yAxisId="price"
                           type="monotone"
                           dataKey="stock"
                           stroke={chartColor}
@@ -562,6 +650,7 @@ export default function StockDetailView({
                         />
                         {showBrvmc && (
                           <Line
+                            yAxisId="price"
                             type="monotone"
                             dataKey="brvmc"
                             stroke={BRVMC_COLOR}
@@ -572,6 +661,7 @@ export default function StockDetailView({
                         )}
                         {showSector && (
                           <Line
+                            yAxisId="price"
                             type="monotone"
                             dataKey="sector"
                             stroke={SECTOR_COLOR}
@@ -748,144 +838,41 @@ export default function StockDetailView({
         )}
 
         {activeTab === "stats" && (
-          <>
-            {/* Banner classification quadrant */}
-            {quadrant ? (
-              <div
-                className={`rounded-lg border p-4 md:p-6 ${QUADRANT_INFO[quadrant].cls}`}
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <div className="text-xs font-medium uppercase tracking-wide opacity-70">
-                      Classification Azimut
-                    </div>
-                    <div className="text-xl md:text-2xl font-semibold mt-1">
-                      {QUADRANT_INFO[quadrant].emoji}{" "}
-                      {QUADRANT_INFO[quadrant].name}
-                    </div>
-                    <p className="text-sm mt-1 opacity-80 max-w-xl">
-                      {QUADRANT_INFO[quadrant].desc}
-                    </p>
-                  </div>
-                  <Link
-                    href={`/marches/actions#${quadrant}`}
-                    className={`text-xs underline ${QUADRANT_INFO[quadrant].link}`}
-                  >
-                    Voir le scatter →
-                  </Link>
-                </div>
-              </div>
-            ) : (
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 md:p-6 text-sm text-slate-600">
-                Classification quadrant indisponible pour ce titre (rendement
-                ou historique de prix insuffisant).
-              </div>
-            )}
-
-            {/* Grille 2 colonnes : Performances + Risque */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-              {/* Performances */}
-              <div className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
-                <h3 className="text-base font-medium mb-4">Performances</h3>
-                <table className="w-full text-sm">
-                  <tbody>
-                    {(Object.keys(PERIOD_LABELS) as (keyof ReturnsMatrix)[]).map(
-                      (k) => (
-                        <tr
-                          key={k}
-                          className="border-b border-slate-100 last:border-0"
-                        >
-                          <td className="py-2 text-slate-500">
-                            {PERIOD_LABELS[k]}
-                          </td>
-                          <td
-                            className={`py-2 text-right font-medium ${returnColor(
-                              returnsMatrix[k]
-                            )}`}
-                          >
-                            {formatReturn(returnsMatrix[k])}
-                          </td>
-                        </tr>
-                      )
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Risque */}
-              <div className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
-                <h3 className="text-base font-medium mb-4">Risque</h3>
-                <dl className="space-y-3 text-sm">
-                  <div className="flex justify-between">
-                    <dt className="text-slate-500">
-                      Volatilité 12 mois (annualisée)
-                    </dt>
-                    <dd className="font-medium">
-                      {formatPctNeutral(riskMetrics.volatility1A)}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-slate-500">Max drawdown 12 mois</dt>
-                    <dd
-                      className={`font-medium ${
-                        riskMetrics.maxDrawdown1A &&
-                        riskMetrics.maxDrawdown1A < 0
-                          ? "text-red-700"
-                          : ""
-                      }`}
-                    >
-                      {formatPctNeutral(riskMetrics.maxDrawdown1A)}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-slate-500">Max drawdown historique</dt>
-                    <dd
-                      className={`font-medium ${
-                        riskMetrics.maxDrawdownAll &&
-                        riskMetrics.maxDrawdownAll < 0
-                          ? "text-red-700"
-                          : ""
-                      }`}
-                    >
-                      {formatPctNeutral(riskMetrics.maxDrawdownAll)}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between pt-3 border-t border-slate-100">
-                    <dt className="text-slate-500">Ratio de Sharpe (1 an)</dt>
-                    <dd className="font-medium">
-                      {formatNumber(riskMetrics.sharpe1A)}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-slate-500">Beta vs BRVM Composite</dt>
-                    <dd className="font-medium">
-                      {formatNumber(riskMetrics.beta)}
-                    </dd>
-                  </div>
-                </dl>
-              </div>
-            </div>
-
-            {/* Méthodologie */}
-            <div className="text-xs text-slate-500 leading-relaxed bg-slate-50 rounded-lg p-3 md:p-4 border border-slate-100">
-              <strong>Méthodologie :</strong> calculs basés sur
-              l&apos;historique journalier, log-returns annualisés (Act/252).
-              Risk-free rate : 3,5% (~taux directeur BCEAO). Beta vs BRVM
-              Composite, sur tout l&apos;historique aligné. Outliers {">"} 30%
-              en 1 jour filtrés. Quadrant = position relative aux médianes du
-              dataset BRVM (rendement dividende et volatilité 12 mois).
-            </div>
-          </>
+          <AdvancedStatsView
+            ticker={stock.code}
+            quadrant={quadrant}
+            returnsMatrix={returnsMatrix}
+            riskMetrics={riskMetrics}
+            advanced={advancedStats}
+          />
         )}
 
-        {activeTab !== "overview" && activeTab !== "stats" && (
-          <div className="bg-white rounded-lg border border-slate-200 p-10 md:p-16 text-center">
-            <div className="text-4xl mb-3">🚧</div>
-            <h3 className="text-lg font-medium text-slate-900 mb-2">Section en construction</h3>
-            <p className="text-sm text-slate-500">
-              Cette section sera disponible prochainement.
-            </p>
-          </div>
+        {activeTab === "fundamentals" && (
+          <FundamentalsView
+            ticker={stock.code}
+            fundTitre={fundTitre}
+            ratios={ratios}
+            statements={statements}
+          />
+        )}
+
+        {activeTab === "dividends" && (
+          <DividendsView
+            ticker={stock.code}
+            currentPrice={stock.price}
+            ratios={ratios}
+          />
+        )}
+
+        {activeTab === "technical" && (
+          <TechnicalAnalysisView
+            ticker={stock.code}
+            history={priceHistoryWithVolume}
+          />
+        )}
+
+        {activeTab === "news" && (
+          <NewsView ticker={stock.code} news={news} />
         )}
       </main>
     </>

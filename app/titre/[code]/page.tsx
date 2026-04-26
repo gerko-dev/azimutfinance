@@ -4,7 +4,7 @@ import Ticker from "@/components/Ticker";
 import StockDetailView from "@/components/StockDetailView";
 import {
   getStockDetails,
-  loadPriceHistory,
+  loadPriceHistoryWithVolume,
   loadIndexHistory,
   buildRiskReturnDataset,
   getSectorIndexCode,
@@ -16,7 +16,14 @@ import {
   computeReturnsMatrix,
   computeRiskMetrics,
   computeQuadrant,
+  computeAdvancedStats,
 } from "@/lib/stockStats";
+import {
+  getFundTitre,
+  getRatiosByTicker,
+  getStatement,
+} from "@/lib/fundamentals";
+import { loadNewsByTicker } from "@/lib/news";
 
 export default async function TitrePage({
   params,
@@ -32,11 +39,13 @@ export default async function TitrePage({
     notFound();
   }
 
-  const priceHistory = loadPriceHistory(codeUpper);
+  const priceHistoryFull = loadPriceHistoryWithVolume(codeUpper);
+  const priceHistory = priceHistoryFull.map((p) => ({ date: p.date, value: p.value }));
   const brvmcHistory = loadIndexHistory("BRVMC");
 
   const returnsMatrix = computeReturnsMatrix(priceHistory);
   const riskMetrics = computeRiskMetrics(priceHistory, brvmcHistory);
+  const advancedStats = computeAdvancedStats(priceHistory, brvmcHistory);
 
   const riskReturn = buildRiskReturnDataset();
   const quadrant = computeQuadrant(codeUpper, riskReturn.points);
@@ -71,6 +80,23 @@ export default async function TitrePage({
     peerSparklines[p.code] = (peerHistoriesAll[p.code] ?? []).slice(-30);
   }
 
+  // Actualités
+  const news = loadNewsByTicker(codeUpper);
+
+  // Fondamentaux
+  const fundTitre = getFundTitre(codeUpper);
+  const ratios = getRatiosByTicker(codeUpper);
+  const exercices = ratios.map((r) => r.exercice);
+  const statements = {
+    exercices,
+    bilanActif: fundTitre ? getStatement(codeUpper, "Bilan_Actif", exercices) : [],
+    bilanPassif: fundTitre ? getStatement(codeUpper, "Bilan_Passif", exercices) : [],
+    compteResultat: fundTitre
+      ? getStatement(codeUpper, "Compte_Resultat", exercices)
+      : [],
+    flux: fundTitre ? getStatement(codeUpper, "Tableau_Flux", exercices) : [],
+  };
+
   return (
     <div className="min-h-screen bg-slate-50">
       <Header />
@@ -78,6 +104,7 @@ export default async function TitrePage({
       <StockDetailView
         stock={stock}
         priceHistory={priceHistory}
+        priceHistoryWithVolume={priceHistoryFull}
         returnsMatrix={returnsMatrix}
         riskMetrics={riskMetrics}
         quadrant={quadrant}
@@ -85,6 +112,11 @@ export default async function TitrePage({
         sectorIndex={sectorIndex}
         peers={peers}
         peerSparklines={peerSparklines}
+        fundTitre={fundTitre}
+        ratios={ratios}
+        statements={statements}
+        news={news}
+        advancedStats={advancedStats}
       />
     </div>
   );

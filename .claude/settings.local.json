@@ -4,7 +4,23 @@
       "Bash(npx tsc *)",
       "Bash(npx eslint *)",
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(awk -F',' 'NR>1 {print $4}' data/DB_Postes.csv)",
+      "Bash(awk -F',' 'NR>1 {print $5}' data/DB_Postes.csv)",
+      "Bash(awk -F',' 'NR>1 {print $8}' data/DB_Titres.csv)",
+      "Bash(awk -F',' 'NR>1 {print $1}' data/DB_Titres.csv)",
+      "Bash(awk -F',' 'NR>1 {print $2\"|\"$3}' data/DB_Titres.csv)",
+      "Bash(awk -F';' 'NR>1 {print $1}' data/titres.csv)",
+      "Bash(npm run *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/)",
+      "Bash(curl *)",
+      "Bash(awk -F';' 'NR>1 && $5 ~ /Etat/ {print $5\"|\"$4\"|\"$18\"|\"$19}' \"C:\\\\Users\\\\hp\\\\GerKo\\\\azimutfinance\\\\data\\\\obligations-cotees.csv\")",
+      "Bash(awk -F';' 'NR>1 && $2==\"CI\" && $3==\"OAT\" {gsub\\(/^[ \\\\t]+|[ \\\\t]+$/, \"\", $1\\); split\\($1, d, \"/\"\\); iso=d[3]\"-\"d[2]\"-\"d[1]; if \\(iso >= \"2020-07-28\" && iso <= \"2020-10-28\"\\) print $0}' \"C:\\\\Users\\\\hp\\\\GerKo\\\\azimutfinance\\\\data\\\\emissions.csv\")",
+      "Bash(awk *)",
+      "Bash(npx tsx *)",
+      "Bash(echo \"started, pid=$!\")",
+      "Bash(grep -n \"^export function\\\\|^}$\" \"C:\\\\Users\\\\hp\\\\GerKo\\\\azimutfinance\\\\lib\\\\listedBondsTypes.ts\")",
+      "Bash(git rm *)"
     ]
   }
 }

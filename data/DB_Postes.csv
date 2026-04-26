@@ -1,0 +1,187 @@
+﻿code_poste,libelle_long,libelle_court,categorie,format_etats,ordre,type_valeur
+BIL_IMMO_INCORP,IMMOBILISATIONS INCORPORELLES,IMMOBILISATIONS INCORPORELLES,Bilan_Actif,SYSCOHADA,67,Detail
+BIL_A_FRAIS_DE_DVELOPPEMENT_ET_DE_PROSPECTION,Frais de développement et de prospection,Frais de développement et de prospection,Bilan_Actif,SYSCOHADA,68,Detail
+BIL_A_BREVETS_LICENCES_LOGICIELS_ET_DROITS_SIM,"Brevets, licences, logiciels et droits similaires","Brevets, licences, logiciels et droits similaires",Bilan_Actif,SYSCOHADA,69,Detail
+BIL_A_FONDS_COMMERCIAL_ET_DROIT_AU_BAIL,Fonds commercial et droit au bail,Fonds commercial et droit au bail,Bilan_Actif,SYSCOHADA,70,Detail
+BIL_A_AUTRES_IMMOBILISATIONS_INCORPORELLES,Autres immobilisations incorporelles,Autres immobilisations incorporelles,Bilan_Actif,SYSCOHADA,71,Detail
+BIL_IMMO_CORP,IMMOBILISATIONS CORPORELLES,IMMOBILISATIONS CORPORELLES,Bilan_Actif,SYSCOHADA,72,Detail
+BIL_A_TERRAINS_DONT_PLACEMENT_NET,Terrains dont Placement Net :,Terrains dont Placement Net :,Bilan_Actif,SYSCOHADA,73,Detail
+BIL_A_BTIMENTS_DONT_PLACEMENT_NET,Bâtiments dont Placement Net :,Bâtiments dont Placement Net :,Bilan_Actif,SYSCOHADA,74,Detail
+BIL_A_AMNAGEMENTS_AGENCEMENTS_ET_INSTALLATIONS,"Aménagements, agencements et installations","Aménagements, agencements et installations",Bilan_Actif,SYSCOHADA,75,Detail
+BIL_A_MATRIEL_MOBILIER_ET_ACTIFS_BIOLOGIQUES,"Matériel, mobilier et actifs biologiques","Matériel, mobilier et actifs biologiques",Bilan_Actif,SYSCOHADA,76,Detail
+BIL_A_MATRIEL_DE_TRANSPORT,Matériel de transport,Matériel de transport,Bilan_Actif,SYSCOHADA,77,Detail
+BIL_IMMO_AVANCES,AVANCES ET ACOMPTES VERSES SUR IMMOBILISATIONS,AVANCES ET ACOMPTES VERSES SUR IMMOBILISATIONS,Bilan_Actif,SYSCOHADA,78,Detail
+BIL_IMMO_FIN,IMMOBILISATIONS FINANCIERES,IMMOBILISATIONS FINANCIERES,Bilan_Actif,SYSCOHADA,79,Detail
+BIL_A_TITRES_DE_PARTICIPATION,Titres de participation,Titres de participation,Bilan_Actif,SYSCOHADA,80,Detail
+BIL_A_AUTRES_IMMOBILISATIONS_FINANCIRES,Autres immobilisations financières,Autres immobilisations financières,Bilan_Actif,SYSCOHADA,81,Detail
+BIL_TOTAL_IMMOB,TOTAL ACTIF IMMOBILISE,TOTAL ACTIF IMMOBILISE,Bilan_Actif,SYSCOHADA,82,Total
+BIL_A_ACTIF_CIRCULANT_HAO,Actif circulant HAO,Actif circulant HAO,Bilan_Actif,SYSCOHADA,83,Detail
+BIL_STOCKS,Stocks et en cours,Stocks et en cours,Bilan_Actif,SYSCOHADA,84,Detail
+BIL_TOTAL_CREANCES,CREANCES ET EMPLOIS ASSIMILES,CREANCES ET EMPLOIS ASSIMILES,Bilan_Actif,SYSCOHADA,85,Detail
+BIL_FOURN_AVANCES,Fournisseurs avances versées,Fournisseurs avances versées,Bilan_Actif,SYSCOHADA,86,Detail
+BIL_CLIENTS,Clients,Clients,Bilan_Actif,SYSCOHADA,87,Detail
+BIL_A_AUTRES_CRANCES,Autres créances,Autres créances,Bilan_Actif,SYSCOHADA,88,Detail
+BIL_TOTAL_CIRC,TOTAL ACTIF CIRCULANT,TOTAL ACTIF CIRCULANT,Bilan_Actif,SYSCOHADA,89,Total
+BIL_A_TITRES_DE_PLACEMENT,Titres de placement,Titres de placement,Bilan_Actif,SYSCOHADA,90,Detail
+BIL_A_VALEURS_ENCAISSER,Valeurs à encaisser,Valeurs à encaisser,Bilan_Actif,SYSCOHADA,91,Detail
+BIL_A_BANQUES_CHQUES_POSTAUX_CAISSE_ET_ASSIMIL,"Banques, chèques postaux, caisse et assimilés","Banques, chèques postaux, caisse et assimilés",Bilan_Actif,SYSCOHADA,92,Detail
+BIL_TOTAL_TRES_ACTIF,TOTAL TRESORERIEACTIF,TOTAL TRESORERIEACTIF,Bilan_Actif,SYSCOHADA,93,Total
+BIL_A_ECART_DE_CONVERSIONACTIF,Ecart de conversionActif,Ecart de conversionActif,Bilan_Actif,SYSCOHADA,94,Detail
+BIL_TOTAL_ACTIF,TOTAL GENERAL,Total Actif,Bilan_Actif,SYSCOHADA,95,Total
+BIL_CAPITAL,Capital,Capital,Bilan_Passif,SYSCOHADA,98,Detail
+BIL_P_APPORTEURS_CAPITAL_NON_APPEL,Apporteurs capital non appelé,Apporteurs capital non appelé,Bilan_Passif,SYSCOHADA,99,Detail
+BIL_P_PRIMES_LIES_AU_CAPITAL_SOCIAL,Primes liées au capital social,Primes liées au capital social,Bilan_Passif,SYSCOHADA,100,Detail
+BIL_P_ECARTS_DE_RVALUATION,Ecarts de réévaluation,Ecarts de réévaluation,Bilan_Passif,SYSCOHADA,101,Detail
+BIL_P_RSERVES_INDISPONIBLES,Réserves indisponibles,Réserves indisponibles,Bilan_Passif,SYSCOHADA,102,Detail
+BIL_P_RSERVES_LIBRES,Réserves libres,Réserves libres,Bilan_Passif,SYSCOHADA,103,Detail
+BIL_REPORT_NVEAU,Report à nouveau,Report à nouveau,Bilan_Passif,SYSCOHADA,104,Detail
+BIL_RNET,Résultat net de l'exercice,Résultat net de l'exercice,Bilan_Passif,SYSCOHADA,105,Detail
+BIL_P_SUBVENTIONS_D_INVESTISSEMENT,Subventions d'investissement,Subventions d'investissement,Bilan_Passif,SYSCOHADA,106,Detail
+BIL_P_PROVISIONS_RGLEMENTES,Provisions réglementées,Provisions réglementées,Bilan_Passif,SYSCOHADA,107,Detail
+BIL_TOTAL_CP,TOTAL CAPITAUX PROPRES ET RESSOURCES ASSIMILEES,TOTAL CAPITAUX PROPRES ET RESSOURCES ASSIMILEES,Bilan_Passif,SYSCOHADA,108,Total
+BIL_EMPRUNTS,Emprunts et dettes financières diverses,Emprunts et dettes financières diverses,Bilan_Passif,SYSCOHADA,109,Detail
+BIL_P_DETTES_DE_LOCATIONACQUISITION,Dettes de locationacquisition,Dettes de locationacquisition,Bilan_Passif,SYSCOHADA,110,Detail
+BIL_PROV_RC,Provisions pour risques et charges,Provisions pour risques et charges,Bilan_Passif,SYSCOHADA,111,Detail
+BIL_TOTAL_DETTES_FIN,TOTAL DETTES FINANCIERES ET RESSOURCES ASSIMILEES,TOTAL DETTES FINANCIERES ET RESSOURCES ASSIMILEES,Bilan_Passif,SYSCOHADA,112,Total
+BIL_TOTAL_RESS_STABLES,TOTAL RESSOURCES STABLES,TOTAL RESSOURCES STABLES,Bilan_Passif,SYSCOHADA,113,Total
+BIL_P_DETTES_CIRCULANTES_HAO,Dettes circulantes HAO,Dettes circulantes HAO,Bilan_Passif,SYSCOHADA,114,Detail
+BIL_CLIENTS_AV_RECUES,"Clients, avances reçues","Clients, avances reçues",Bilan_Passif,SYSCOHADA,115,Detail
+BIL_FOURN_EXPL,Fournisseurs d'exploitation,Fournisseurs d'exploitation,Bilan_Passif,SYSCOHADA,116,Detail
+BIL_DETTES_FISC,Dettes fiscales et sociales,Dettes fiscales et sociales,Bilan_Passif,SYSCOHADA,117,Detail
+BIL_AUTRES_DETTES,Autres dettes,Autres dettes,Bilan_Passif,SYSCOHADA,118,Detail
+BIL_P_PROVISIONS_POUR_RISQUES_ET_CHARGES_COURT,Provisions pour risques et charges à court terme,Provisions pour risques et charges à court terme,Bilan_Passif,SYSCOHADA,119,Detail
+BIL_TOTAL_PASSIF_CIRC,TOTAL PASSIF CIRCULANT,TOTAL PASSIF CIRCULANT,Bilan_Passif,SYSCOHADA,120,Total
+BIL_P_BANQUES_CRDITS_D_ESCOMPTE,"Banques, crédits d'escompte","Banques, crédits d'escompte",Bilan_Passif,SYSCOHADA,121,Detail
+BIL_P_BANQUES_TABLISSEMENTS_FINANCIERS_ET_CRDI,"Banques, établissements financiers et crédits de trésorerie","Banques, établissements financiers et crédits de trésorerie",Bilan_Passif,SYSCOHADA,122,Detail
+BIL_TOTAL_TRES_PASSIF,TOTAL TRESORERIEPASSIF,TOTAL TRESORERIEPASSIF,Bilan_Passif,SYSCOHADA,123,Total
+BIL_P_ECART_DE_CONVERSIONPASSIF,Ecart de conversionPassif,Ecart de conversionPassif,Bilan_Passif,SYSCOHADA,124,Detail
+BIL_TOTAL_PASSIF,TOTAL GENERAL,Total Passif,Bilan_Passif,SYSCOHADA,125,Total
+CR_VENTES_DE_MARCHANDISES,Ventes de marchandises,Ventes de marchandises,Compte_Resultat,SYSCOHADA,128,Produit
+CR_ACHATS_DE_MARCHANDISES,Achats de marchandises,Achats de marchandises,Compte_Resultat,SYSCOHADA,129,Charge
+CR_VARIATION_DE_STOCKS_DE_MARCHANDISES,Variation de stocks de marchandises,Variation de stocks de marchandises,Compte_Resultat,SYSCOHADA,130,Produit
+CR_MARGE_COMMERCIALE,MARGE COMMERCIALE,MARGE COMMERCIALE,Compte_Resultat,SYSCOHADA,131,Produit
+CR_VENTES_DE_PRODUITS_FABRIQUS,Ventes de produits fabriqués,Ventes de produits fabriqués,Compte_Resultat,SYSCOHADA,132,Produit
+CR_TRAVAUX_SERVICES_VENDUS,"Travaux, services vendus","Travaux, services vendus",Compte_Resultat,SYSCOHADA,133,Produit
+CR_PRODUITS_ACCESSOIRES,Produits accessoires,Produits accessoires,Compte_Resultat,SYSCOHADA,134,Produit
+CR_CA,CHIFFRE D'AFFAIRES,CHIFFRE D'AFFAIRES,Compte_Resultat,SYSCOHADA,135,SIG
+CR_PRODUCTION_STOCKE,Production stockée,Production stockée,Compte_Resultat,SYSCOHADA,136,Produit
+CR_PRODUCTION_IMMOBILISE,Production immobilisée,Production immobilisée,Compte_Resultat,SYSCOHADA,137,Produit
+CR_SUBVENTIONS_DEXPLOITATION,Subventions d’exploitation,Subventions d’exploitation,Compte_Resultat,SYSCOHADA,138,Produit
+CR_AUTRES_PRODUITS,Autres produits,Autres produits,Compte_Resultat,SYSCOHADA,139,Produit
+CR_TRANSFERTS_DE_CHARGES_D_EXPLOITATION,Transferts de charges d'exploitation,Transferts de charges d'exploitation,Compte_Resultat,SYSCOHADA,140,Charge
+CR_ACHATS_DE_MATIRES_PREMIRES_ET_FOURNITURE,Achats de matières premières et fournitures liées,Achats de matières premières et fournitures liées,Compte_Resultat,SYSCOHADA,141,Charge
+CR_VARIATION_DE_STOCKS_DE_MATIRES_PREMIRES_,Variation de stocks de matières premières et fournitures liées,Variation de stocks de matières premières et fournitures liées,Compte_Resultat,SYSCOHADA,142,Produit
+CR_AUTRES_ACHATS,Autres achats,Autres achats,Compte_Resultat,SYSCOHADA,143,Charge
+CR_VARIATION_DE_STOCKS_DAUTRES_APPROVISIONN,Variation de stocks d’autres approvisionnements,Variation de stocks d’autres approvisionnements,Compte_Resultat,SYSCOHADA,144,Produit
+CR_TRANSPORTS,Transports,Transports,Compte_Resultat,SYSCOHADA,145,Charge
+CR_SERVICES_EXTRIEURS,Services extérieurs,Services extérieurs,Compte_Resultat,SYSCOHADA,146,Charge
+CR_IMPTS_ET_TAXES,Impôts et taxes,Impôts et taxes,Compte_Resultat,SYSCOHADA,147,Charge
+CR_AUTRES_CHARGES,Autres charges,Autres charges,Compte_Resultat,SYSCOHADA,148,Charge
+CR_VA,VALEUR AJOUTEE,VALEUR AJOUTEE,Compte_Resultat,SYSCOHADA,149,SIG
+CR_CHARGES_DE_PERSONNEL,Charges de personnel,Charges de personnel,Compte_Resultat,SYSCOHADA,150,Charge
+CR_EBE,EXCEDENT BRUT D'EXPLOITATION,EXCEDENT BRUT D'EXPLOITATION,Compte_Resultat,SYSCOHADA,151,SIG
+CR_REPRISES_DAMORTISSEMENTS_PROVISIONS_ET_D,"Reprises d’amortissements, provisions et dépréciations","Reprises d’amortissements, provisions et dépréciations",Compte_Resultat,SYSCOHADA,152,Produit
+CR_TRANSFERT_DE_CHARGES,Transfert de charges,Transfert de charges,Compte_Resultat,SYSCOHADA,153,Charge
+CR_DOTATIONS_AUX_AMORTISSEMENTS_AUX_PROVISI,"Dotations aux amortissements, aux provisions et dépréciations","Dotations aux amortissements, aux provisions et dépréciations",Compte_Resultat,SYSCOHADA,154,Charge
+CR_REXP,RESULTAT D'EXPLOITATION,RESULTAT D'EXPLOITATION,Compte_Resultat,SYSCOHADA,155,SIG
+CR_REVENUS_FINANCIERS_ET_ASSIMILS,Revenus financiers et assimilés,Revenus financiers et assimilés,Compte_Resultat,SYSCOHADA,156,Produit
+CR_REPRISES_DE_PROVISIONS_ET_DPRCIATIONS_FI,Reprises de provisions et dépréciations financières,Reprises de provisions et dépréciations financières,Compte_Resultat,SYSCOHADA,157,Produit
+CR_TRANSFERTS_DE_CHARGES_FINANCIRES,Transferts de charges financières,Transferts de charges financières,Compte_Resultat,SYSCOHADA,158,Charge
+CR_FRAIS_FINANCIERS_ET_CHARGES_ASSIMILES,Frais financiers et charges assimilées,Frais financiers et charges assimilées,Compte_Resultat,SYSCOHADA,159,Charge
+CR_DOTATIONS_AUX_PROVISIONS_ET_AUX_DPRCIATI,Dotations aux provisions et aux dépréciations financières,Dotations aux provisions et aux dépréciations financières,Compte_Resultat,SYSCOHADA,160,Charge
+CR_RFIN,RESULTAT FINANCIER,RESULTAT FINANCIER,Compte_Resultat,SYSCOHADA,161,Produit
+CR_RESULTAT_DES_ACTIVITES_ORDINAIRES,RESULTAT DES ACTIVITES ORDINAIRES,RESULTAT DES ACTIVITES ORDINAIRES,Compte_Resultat,SYSCOHADA,162,Produit
+CR_PRODUITS_DES_CESSIONS_D_IMMOBILISATIONS,Produits des cessions d'immobilisations,Produits des cessions d'immobilisations,Compte_Resultat,SYSCOHADA,163,Produit
+CR_AUTRES_PRODUITS_HAO,Autres Produits HAO,Autres Produits HAO,Compte_Resultat,SYSCOHADA,164,Produit
+CR_VALEURS_COMPTABLES_DES_CESSIONS_D_IMMOBI,Valeurs comptables des cessions d'immobilisations,Valeurs comptables des cessions d'immobilisations,Compte_Resultat,SYSCOHADA,165,Charge
+CR_AUTRES_CHARGES_HAO,Autres Charges HAO,Autres Charges HAO,Compte_Resultat,SYSCOHADA,166,Charge
+CR_RHAO,RESULTAT HORS ACTIVITES ORDINAIRES,RESULTAT HORS ACTIVITES ORDINAIRES,Compte_Resultat,SYSCOHADA,167,SIG
+CR_PARTICIPATION_DES_TRAVAILLEURS,Participation des travailleurs,Participation des travailleurs,Compte_Resultat,SYSCOHADA,168,Produit
+CR_IMPTS_SUR_LE_RSULTAT,Impôts sur le résultat,Impôts sur le résultat,Compte_Resultat,SYSCOHADA,169,Charge
+CR_RNET,RESULTAT NET,RESULTAT NET,Compte_Resultat,SYSCOHADA,170,SIG
+TFT_SOLDE_OUV,Trésorerie nette au 1er janvier,Solde d'ouverture,Tableau_Flux,SYSCOHADA,173,Detail
+TFT_CAFG,Capacité d'Autofinancement Globale,Capacité d'Autofinancement Globale,Tableau_Flux,SYSCOHADA,174,Detail
+TFT_VARIATION_D_ACTIF_CIRCULANT_HAO,Variation d'actif circulant HAO,Variation d'actif circulant HAO,Tableau_Flux,SYSCOHADA,175,Detail
+TFT_VARIATION_DES_STOCKS,Variation des stocks,Variation des stocks,Tableau_Flux,SYSCOHADA,176,Detail
+TFT_VARIATION_DES_CRANCES,Variation des créances,Variation des créances,Tableau_Flux,SYSCOHADA,177,Detail
+TFT_VARIATION_DU_PASSIF_CIRCULANT,Variation du passif circulant,Variation du passif circulant,Tableau_Flux,SYSCOHADA,178,Detail
+TFT_FTO,Variation du BF lié aux activités opérationnelles,Variation du BF lié aux activités opérationnelles,Tableau_Flux,SYSCOHADA,179,Detail
+TFT_FTO,Flux de trésorerie provenant des activités opérationnelles,Flux de trésorerie provenant des activités opérationnelles,Tableau_Flux,SYSCOHADA,180,Detail
+TFT_DCAISSEMENTS_LIS_AUX_ACQUISITIONS_D_IMMO,Décaissements liés aux acquisitions d'immobilisations incorporelles,Décaissements liés aux acquisitions d'immobilisations incorporelles,Tableau_Flux,SYSCOHADA,181,Detail
+TFT_DCAISSEMENTS_LIS_AUX_ACQUISITIONS_D_IMMO,Décaissements liés aux acquisitions d'immobilisations corporelles,Décaissements liés aux acquisitions d'immobilisations corporelles,Tableau_Flux,SYSCOHADA,182,Detail
+TFT_DCAISSEMENTS_LIS_AUX_ACQUISITIONS_D_IMMO,Décaissements liés aux acquisitions d'immobilisations financières,Décaissements liés aux acquisitions d'immobilisations financières,Tableau_Flux,SYSCOHADA,183,Detail
+TFT_ENCAISSEMENTS_LIS_AUX_CESSIONS_DIMMOBILI,Encaissements liés aux cessions d’immobilisations incorporelles et corporelles,Encaissements liés aux cessions d’immobilisations incorporelles et corporelles,Tableau_Flux,SYSCOHADA,184,Detail
+TFT_ENCAISSEMENTS_LIS_AUX_CESSIONS_DIMMOBILI,Encaissements liés aux cessions d’immobilisations financières,Encaissements liés aux cessions d’immobilisations financières,Tableau_Flux,SYSCOHADA,185,Detail
+TFT_FLUX_DE_TRSORERIE_PROVENANT_DES_ACTIVITS,Flux de trésorerie provenant des activités d’investissement,Flux de trésorerie provenant des activités d’investissement,Tableau_Flux,SYSCOHADA,186,Detail
+TFT_AUGMENTATIONS_DE_CAPITAL_PAR_APPORTS_NOU,Augmentations de capital par apports nouveaux,Augmentations de capital par apports nouveaux,Tableau_Flux,SYSCOHADA,187,Detail
+TFT_SUBVENTIONS_D_INVESTISSEMENT_REUES,Subventions d'investissement reçues,Subventions d'investissement reçues,Tableau_Flux,SYSCOHADA,188,Detail
+TFT_PRLVEMENTS_SUR_LE_CAPITAL,Prélèvements sur le capital,Prélèvements sur le capital,Tableau_Flux,SYSCOHADA,189,Detail
+TFT_FTCP,Flux de trésorerie provenant des capitaux propres,FTCP,Tableau_Flux,SYSCOHADA,191,Detail
+TFT_EMPRUNTS,Emprunts,Emprunts,Tableau_Flux,SYSCOHADA,192,Detail
+TFT_AUTRES_DETTES_FINANCIRES_DIVERSES,Autres dettes financières diverses,Autres dettes financières diverses,Tableau_Flux,SYSCOHADA,193,Detail
+TFT_REMBOURSEMENTS_DES_EMPRUNTS_ET_AUTRES_DE,Remboursements des emprunts et autres dettes financières,Remboursements des emprunts et autres dettes financières,Tableau_Flux,SYSCOHADA,194,Detail
+TFT_FTCE,Flux de trésorerie provenant des capitaux étrangers,Flux de trésorerie provenant des capitaux étrangers,Tableau_Flux,SYSCOHADA,195,Detail
+TFT_FTF,Flux de trésorerie provenant des activités de financement,Flux de trésorerie provenant des activités de financement,Tableau_Flux,SYSCOHADA,196,Detail
+TFT_VAR_TRES,VARIATION DE LA TRÉSORERIE NETTE DE LA PÉRIODE,VARIATION DE LA TRÉSORERIE NETTE DE LA PÉRIODE,Tableau_Flux,SYSCOHADA,197,Detail
+TFT_TRES_NETTE,Trésorerie nette au 31 Décembre,Trésorerie nette au 31 Décembre,Tableau_Flux,SYSCOHADA,198,Detail
+BIL_CAISSE_BC,CAISSE BANQUE CENTRALE CCP,CAISSE BANQUE CENTRALE CCP,Bilan_Actif,Bancaire,67,Detail
+BIL_A_EFFETS_PUBLICS_ET_VALEURS_ASSIMILEES,EFFETS PUBLICS ET VALEURS ASSIMILEES,EFFETS PUBLICS ET VALEURS ASSIMILEES,Bilan_Actif,Bancaire,68,Detail
+BIL_CREANCES_BANC,CREANCES BANCAIRES ET ASSIMILEES,CREANCES BANCAIRES ET ASSIMILEES,Bilan_Actif,Bancaire,69,Detail
+BIL_CREANCES_CLIENT,CREANCES SUR LA CLIENTELE,CREANCES SUR LA CLIENTELE,Bilan_Actif,Bancaire,70,Detail
+BIL_A_OBLIGATIONS_ET_AUTRES_TITRES_A_REVENU_FI,OBLIGATIONS ET AUTRES TITRES A REVENU FIXE,OBLIGATIONS ET AUTRES TITRES A REVENU FIXE,Bilan_Actif,Bancaire,71,Detail
+BIL_A_ACTIONS_ET_AUTRES_TITRES_A_REVENU_VARIAB,ACTIONS ET AUTRES TITRES A REVENU VARIABLE,ACTIONS ET AUTRES TITRES A REVENU VARIABLE,Bilan_Actif,Bancaire,72,Detail
+BIL_A_ACTIONNAIRES_OU_ASSOCIES,ACTIONNAIRES OU ASSOCIES,ACTIONNAIRES OU ASSOCIES,Bilan_Actif,Bancaire,73,Detail
+BIL_A_AUTRES_ACTIFS,AUTRES ACTIFS,AUTRES ACTIFS,Bilan_Actif,Bancaire,74,Detail
+BIL_A_COMPTES_DE_REGULARISATION,COMPTES DE REGULARISATION,COMPTES DE REGULARISATION,Bilan_Actif,Bancaire,75,Detail
+BIL_A_PARTICIPATIONS_ET_AUTRES_TITRES_DETENUS_,PARTICIPATIONS ET AUTRES TITRES DETENUS A LT,PARTICIPATIONS ET AUTRES TITRES DETENUS A LT,Bilan_Actif,Bancaire,76,Detail
+BIL_A_PARTS_DANS_LES_ENTREPRISES_LIEES,PARTS DANS LES ENTREPRISES LIEES,PARTS DANS LES ENTREPRISES LIEES,Bilan_Actif,Bancaire,77,Detail
+BIL_A_PRETS_SUBORDONNES,PRETS SUBORDONNES,PRETS SUBORDONNES,Bilan_Actif,Bancaire,78,Detail
+BIL_IMMO_INCORP,IMMOBILISATIONS INCORPORELLES,IMMOBILISATIONS INCORPORELLES,Bilan_Actif,Bancaire,79,Detail
+BIL_IMMO_CORP,IMMOBILISATIONS CORPORELLES,IMMOBILISATIONS CORPORELLES,Bilan_Actif,Bancaire,80,Detail
+BIL_TOTAL_ACTIF,TOTAL GENERAL,Total Actif,Bilan_Actif,Bancaire,81,Total
+BIL_P_BANQUES_CENTRALES_CCP,"BANQUES CENTRALES, CCP","BANQUES CENTRALES, CCP",Bilan_Passif,Bancaire,84,Detail
+BIL_DETTES_INTERBANC,DETTES INTERBANCAIRES ET ASSIMILEES,DETTES INTERBANCAIRES ET ASSIMILEES,Bilan_Passif,Bancaire,85,Detail
+BIL_DETTES_CLIENTELE,DETTES A L'EGARD DE LA CLIENTELE,DETTES A L'EGARD DE LA CLIENTELE,Bilan_Passif,Bancaire,86,Detail
+BIL_P_DETTES_REPRESENTEES_PAR_UN_TITRE,DETTES REPRESENTEES PAR UN TITRE,DETTES REPRESENTEES PAR UN TITRE,Bilan_Passif,Bancaire,87,Detail
+BIL_P_AUTRES_PASSIFS,AUTRES PASSIFS,AUTRES PASSIFS,Bilan_Passif,Bancaire,88,Detail
+BIL_P_COMPTES_DE_REGULARISATION,COMPTES DE REGULARISATION,COMPTES DE REGULARISATION,Bilan_Passif,Bancaire,89,Detail
+BIL_P_PROVISIONS,PROVISIONS,PROVISIONS,Bilan_Passif,Bancaire,90,Detail
+BIL_P_EMPRUNTS_ET_TITRES_EMIS_SUBORDONNES,EMPRUNTS ET TITRES EMIS SUBORDONNES,EMPRUNTS ET TITRES EMIS SUBORDONNES,Bilan_Passif,Bancaire,91,Detail
+BIL_TOTAL_CP,CAPITAUX PROPRES,CAPITAUX PROPRES,Bilan_Passif,Bancaire,92,Detail
+BIL_CAPITAL,CAPITAL SOUSCRIT,CAPITAL SOUSCRIT,Bilan_Passif,Bancaire,93,Detail
+BIL_PRIMES,PRIMES LIEES AU CAPITAL,PRIMES LIEES AU CAPITAL,Bilan_Passif,Bancaire,94,Detail
+BIL_RESERVES,RESERVES,RESERVES,Bilan_Passif,Bancaire,95,Detail
+BIL_P_ECARTS_DE_REEVALUATION,ECARTS DE REEVALUATION,ECARTS DE REEVALUATION,Bilan_Passif,Bancaire,96,Detail
+BIL_P_PROVISIONS_REGLEMENTEES,PROVISIONS REGLEMENTEES,PROVISIONS REGLEMENTEES,Bilan_Passif,Bancaire,97,Detail
+BIL_REPORT_NVEAU,REPORT A NOUVEAU,REPORT A NOUVEAU,Bilan_Passif,Bancaire,98,Detail
+BIL_RNET,RESULTAT DE L'EXERCICE,RESULTAT DE L'EXERCICE,Bilan_Passif,Bancaire,99,Detail
+BIL_TOTAL_PASSIF,TOTAL GENERAL,Total Passif,Bilan_Passif,Bancaire,100,Total
+HB_ENG_DONNES,ENGAGEMENTS DONNES,ENGAGEMENTS DONNES,Hors_Bilan,Bancaire,103,Detail
+HB_ENGAGEMENTS_DE_FINANCEMENT,ENGAGEMENTS DE FINANCEMENT,ENGAGEMENTS DE FINANCEMENT,Hors_Bilan,Bancaire,104,Detail
+HB_ENGAGEMENTS_DE_GARANTIE,ENGAGEMENTS DE GARANTIE,ENGAGEMENTS DE GARANTIE,Hors_Bilan,Bancaire,105,Detail
+HB_ENGAGEMENTS_SUR_TITRES,ENGAGEMENTS SUR TITRES,ENGAGEMENTS SUR TITRES,Hors_Bilan,Bancaire,106,Detail
+HB_ENG_RECUS,ENGAGEMNETS RECUS,ENGAGEMNETS RECUS,Hors_Bilan,Bancaire,107,Detail
+HB_ENGAGEMENTS_DE_FINANCEMENT,ENGAGEMENTS DE FINANCEMENT,ENGAGEMENTS DE FINANCEMENT,Hors_Bilan,Bancaire,108,Detail
+HB_ENGAGEMENTS_DE_GARANTIE,ENGAGEMENTS DE GARANTIE,ENGAGEMENTS DE GARANTIE,Hors_Bilan,Bancaire,109,Detail
+HB_ENGAGEMENTS_SUR_TITRES,ENGAGEMENTS SUR TITRES,ENGAGEMENTS SUR TITRES,Hors_Bilan,Bancaire,110,Detail
+CR_INTERETS_ET_PRODUITS_ASSIMILES,INTERETS ET PRODUITS ASSIMILES,INTERETS ET PRODUITS ASSIMILES,Compte_Resultat,Bancaire,113,Produit
+CR_INTERETS_ET_CHARGES_ASSIMILEES,INTERETS ET CHARGES ASSIMILEES,INTERETS ET CHARGES ASSIMILEES,Compte_Resultat,Bancaire,114,Charge
+CR_REVENUS_DES_TITRES_A_REVENU_VARIABLE,REVENUS DES TITRES A REVENU VARIABLE,REVENUS DES TITRES A REVENU VARIABLE,Compte_Resultat,Bancaire,115,Produit
+CR_COMMISSIONS,COMMISSIONS,COMMISSIONS,Compte_Resultat,Bancaire,116,Produit
+CR_COMMISSIONS,COMMISSIONS,COMMISSIONS,Compte_Resultat,Bancaire,117,Charge
+CR_GAINS_NETS_SUR_OPERATIONS_DES_PORTEFEUIL,GAINS NETS SUR OPERATIONS DES PORTEFEUILLES DE NEGOCIATION,GAINS NETS SUR OPERATIONS DES PORTEFEUILLES DE NEGOCIATION,Compte_Resultat,Bancaire,118,Produit
+CR_GAINS_NETS_SUR_OPERATIONS_DES_PORTEFEUIL,GAINS NETS SUR OPERATIONS DES PORTEFEUILLES DE PLACEMENT ET ASSIMILES,GAINS NETS SUR OPERATIONS DES PORTEFEUILLES DE PLACEMENT ET ASSIMILES,Compte_Resultat,Bancaire,119,Produit
+CR_AUTRES_PRODUITS_D_EXPL_BANCAIRE,AUTRES PRODUITS D'EXPL. BANCAIRE,AUTRES PRODUITS D'EXPL. BANCAIRE,Compte_Resultat,Bancaire,120,Produit
+CR_AUTRES_CHARGES_D_EXPL_BANCAIRE,AUTRES CHARGES D'EXPL. BANCAIRE,AUTRES CHARGES D'EXPL. BANCAIRE,Compte_Resultat,Bancaire,121,Charge
+CR_CA,PRODUIT NET BANCAIRE,Produit Net Bancaire,Compte_Resultat,Bancaire,122,SIG
+CR_SUBVENTIONS_D_INVESTISSEMENT,SUBVENTIONS D'INVESTISSEMENT,SUBVENTIONS D'INVESTISSEMENT,Compte_Resultat,Bancaire,123,Produit
+CR_CHARGES_GENERALES_D_EXPLOITATION,CHARGES GENERALES D'EXPLOITATION,CHARGES GENERALES D'EXPLOITATION,Compte_Resultat,Bancaire,124,Charge
+CR_DOTATION_AUX_AMORT,DOTATION AUX AMORT.,DOTATION AUX AMORT.,Compte_Resultat,Bancaire,125,Charge
+CR_RBE,RESULTAT BRUT D'EXPLOITATION,RESULTAT BRUT D'EXPLOITATION,Compte_Resultat,Bancaire,126,SIG
+CR_COT_NET_DU_RISQUE,COÛT NET DU RISQUE,COÛT NET DU RISQUE,Compte_Resultat,Bancaire,127,Produit
+CR_REXP,RESULTAT D'EXPLOITATION,RESULTAT D'EXPLOITATION,Compte_Resultat,Bancaire,128,SIG
+CR_GAINS_OU_PERTES_SUR_ACTIFS_IMMOBILISES,GAINS OU PERTES SUR ACTIFS IMMOBILISES,GAINS OU PERTES SUR ACTIFS IMMOBILISES,Compte_Resultat,Bancaire,129,Produit
+CR_RAI,RESULTAT AVANT IMPÔT,RESULTAT AVANT IMPÔT,Compte_Resultat,Bancaire,130,SIG
+CR_IMPTS_SUR_LES_BENEFICES,IMPÔTS SUR LES BENEFICES,IMPÔTS SUR LES BENEFICES,Compte_Resultat,Bancaire,131,Charge
+CR_RNET,RESULTAT NET,RESULTAT NET,Compte_Resultat,Bancaire,132,SIG
+PA_DNPA,Dividende Net Par Action,DNPA,Par_Action,Commun,268,Detail
