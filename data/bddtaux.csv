@@ -1,0 +1,424 @@
+﻿section,indicator,country,period,value,unit,source
+1_Taux_directeurs_BCEAO,Taux pret marginal,UEMOA,déc-19,0.045,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+1_Taux_directeurs_BCEAO,Taux pret marginal,UEMOA,déc-20,0.04,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+1_Taux_directeurs_BCEAO,Taux pret marginal,UEMOA,déc-21,0.04,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+1_Taux_directeurs_BCEAO,Taux pret marginal,UEMOA,déc-22,0.0475,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+1_Taux_directeurs_BCEAO,Taux pret marginal,UEMOA,déc-23,0.055,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+1_Taux_directeurs_BCEAO,Taux pret marginal,UEMOA,déc-24,0.055,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+1_Taux_directeurs_BCEAO,Taux pret marginal,UEMOA,juin-25,0.0525,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+1_Taux_directeurs_BCEAO,Taux pret marginal,UEMOA,déc-25,0.0525,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+1_Taux_directeurs_BCEAO,Taux pret marginal,UEMOA,fév-26,0.0525,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+1_Taux_directeurs_BCEAO,Taux minimum appels offres,UEMOA,déc-19,0.025,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+1_Taux_directeurs_BCEAO,Taux minimum appels offres,UEMOA,déc-20,0.02,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+1_Taux_directeurs_BCEAO,Taux minimum appels offres,UEMOA,déc-21,0.02,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+1_Taux_directeurs_BCEAO,Taux minimum appels offres,UEMOA,déc-22,0.0275,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+1_Taux_directeurs_BCEAO,Taux minimum appels offres,UEMOA,déc-23,0.035,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+1_Taux_directeurs_BCEAO,Taux minimum appels offres,UEMOA,déc-24,0.035,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+1_Taux_directeurs_BCEAO,Taux minimum appels offres,UEMOA,juin-25,0.0325,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+1_Taux_directeurs_BCEAO,Taux minimum appels offres,UEMOA,déc-25,0.0325,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+1_Taux_directeurs_BCEAO,Taux minimum appels offres,UEMOA,fév-26,0.0325,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+2_Marche_monetaire,TMP adjudication hebdomadaire,UEMOA,juin-25,0.0325,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+2_Marche_monetaire,TMP adjudication hebdomadaire,UEMOA,juil-25,0.0352,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+2_Marche_monetaire,TMP adjudication hebdomadaire,UEMOA,août-25,0.037,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+2_Marche_monetaire,TMP adjudication hebdomadaire,UEMOA,25/09/2026,0.0399,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+2_Marche_monetaire,TMP adjudication hebdomadaire,UEMOA,25/10/2026,0.0435,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+2_Marche_monetaire,TMP adjudication hebdomadaire,UEMOA,25/11/2026,0.045,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+2_Marche_monetaire,TMP adjudication hebdomadaire,UEMOA,déc-25,0.0415,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+2_Marche_monetaire,TMP adjudication hebdomadaire,UEMOA,janv-26,0.0331,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+2_Marche_monetaire,TMP adjudication hebdomadaire,UEMOA,fév-26,0.0325,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+2_Marche_monetaire,TMP adjudication mensuelle,UEMOA,25/10/2026,0.04543,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+2_Marche_monetaire,TMP adjudication mensuelle,UEMOA,25/11/2026,0.0476,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+2_Marche_monetaire,TMP adjudication mensuelle,UEMOA,déc-25,0.0468,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+2_Marche_monetaire,TMP adjudication mensuelle,UEMOA,janv-26,0.0443,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+2_Marche_monetaire,TMP adjudication mensuelle,UEMOA,fév-26,0.0392,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+2_Marche_monetaire,Encours refinancement banques,UEMOA,25/10/2026,8046.37,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+2_Marche_monetaire,Encours refinancement banques,UEMOA,25/11/2026,8123.54,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+2_Marche_monetaire,Encours refinancement banques,UEMOA,déc-25,8320.8,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+2_Marche_monetaire,Encours refinancement banques,UEMOA,janv-26,7708.68,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+2_Marche_monetaire,Encours refinancement banques,UEMOA,fév-26,7341.01,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+3_Credits_Depots_UEMOA,Taux moyen credits,UEMOA,2022,0.0648,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+3_Credits_Depots_UEMOA,Taux moyen credits,UEMOA,2023,0.0678,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+3_Credits_Depots_UEMOA,Taux moyen credits,UEMOA,2024,0.0676,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+3_Credits_Depots_UEMOA,Taux moyen credits,UEMOA,25/09/2026,0.0667,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+3_Credits_Depots_UEMOA,Taux moyen credits,UEMOA,25/10/2026,0.0665,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+3_Credits_Depots_UEMOA,Taux moyen credits,UEMOA,25/11/2026,0.067,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+3_Credits_Depots_UEMOA,Taux moyen credits,UEMOA,déc-25,0.068,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+3_Credits_Depots_UEMOA,Taux moyen credits,UEMOA,janv-26,0.0693,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+3_Credits_Depots_UEMOA,Taux moyen credits,UEMOA,fév-26,0.0708,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+3_Credits_Depots_UEMOA,Taux moyen depots,UEMOA,2022,0.0518,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+3_Credits_Depots_UEMOA,Taux moyen depots,UEMOA,2023,0.0522,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+3_Credits_Depots_UEMOA,Taux moyen depots,UEMOA,2024,0.0526,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+3_Credits_Depots_UEMOA,Taux moyen depots,UEMOA,25/09/2026,0.054,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+3_Credits_Depots_UEMOA,Taux moyen depots,UEMOA,25/10/2026,0.0545,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+3_Credits_Depots_UEMOA,Taux moyen depots,UEMOA,25/11/2026,0.055,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+3_Credits_Depots_UEMOA,Taux moyen depots,UEMOA,déc-25,0.0549,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+3_Credits_Depots_UEMOA,Taux moyen depots,UEMOA,janv-26,0.0526,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+3_Credits_Depots_UEMOA,Taux moyen depots,UEMOA,fév-26,0.0539,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+3_Credits_Depots_UEMOA,Marge interet,UEMOA,2022,0.013,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+3_Credits_Depots_UEMOA,Marge interet,UEMOA,2023,0.0156,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+3_Credits_Depots_UEMOA,Marge interet,UEMOA,2024,0.015,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+3_Credits_Depots_UEMOA,Marge interet,UEMOA,25/09/2026,0.0127,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+3_Credits_Depots_UEMOA,Marge interet,UEMOA,25/10/2026,0.012,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+3_Credits_Depots_UEMOA,Marge interet,UEMOA,25/11/2026,0.012,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+3_Credits_Depots_UEMOA,Marge interet,UEMOA,déc-25,0.0131,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+3_Credits_Depots_UEMOA,Marge interet,UEMOA,janv-26,0.0167,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+3_Credits_Depots_UEMOA,Marge interet,UEMOA,fév-26,0.0169,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+3_Credits_Depots_UEMOA,Volume nouveaux credits,UEMOA,2022,1623.6,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+3_Credits_Depots_UEMOA,Volume nouveaux credits,UEMOA,2023,1631.8,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+3_Credits_Depots_UEMOA,Volume nouveaux credits,UEMOA,2024,1885.7,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+3_Credits_Depots_UEMOA,Volume nouveaux credits,UEMOA,25/09/2026,1942.,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+3_Credits_Depots_UEMOA,Volume nouveaux credits,UEMOA,25/10/2026,1877.1,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+3_Credits_Depots_UEMOA,Volume nouveaux credits,UEMOA,25/11/2026,1652.3,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+3_Credits_Depots_UEMOA,Volume nouveaux credits,UEMOA,déc-25,2522.7,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+3_Credits_Depots_UEMOA,Volume nouveaux credits,UEMOA,janv-26,1611.1,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+3_Credits_Depots_UEMOA,Volume nouveaux credits,UEMOA,fév-26,1856.,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Benin,juil-25,0.01,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Benin,août-25,0.013,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Benin,25/09/2026,0.023,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Benin,25/10/2026,0.018,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Benin,25/11/2026,0.011,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Benin,déc-25,0.014,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Benin,janv-26,0.009,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Benin,fév-26,-0.001,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Burkina Faso,juil-25,-0.011,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Burkina Faso,août-25,-0.032,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Burkina Faso,25/09/2026,-0.039,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Burkina Faso,25/10/2026,-0.041,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Burkina Faso,25/11/2026,-0.02,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Burkina Faso,déc-25,-0.022,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Burkina Faso,janv-26,0.002,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Burkina Faso,fév-26,0.008,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Cote d'Ivoire,juil-25,-0.008,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Cote d'Ivoire,août-25,-0.008,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Cote d'Ivoire,25/09/2026,-0.002,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Cote d'Ivoire,25/10/2026,0.003,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Cote d'Ivoire,25/11/2026,0.,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Cote d'Ivoire,déc-25,0.001,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Cote d'Ivoire,janv-26,0.014,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Cote d'Ivoire,fév-26,0.019,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Guinee-Bissau,juil-25,-0.019,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Guinee-Bissau,août-25,-0.016,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Guinee-Bissau,25/09/2026,-0.018,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Guinee-Bissau,25/10/2026,-0.015,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Guinee-Bissau,25/11/2026,-0.018,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Guinee-Bissau,déc-25,-0.028,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Guinee-Bissau,janv-26,-0.03,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Guinee-Bissau,fév-26,-0.035,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Mali,juil-25,0.007,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Mali,août-25,-0.01,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Mali,25/09/2026,-0.01,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Mali,25/10/2026,-0.012,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Mali,25/11/2026,0.006,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Mali,déc-25,0.004,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Mali,janv-26,-0.008,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Mali,fév-26,0.006,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Niger,juil-25,-0.091,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Niger,août-25,-0.09,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Niger,25/09/2026,-0.101,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Niger,25/10/2026,-0.082,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Niger,25/11/2026,-0.073,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Niger,déc-25,-0.094,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Niger,janv-26,-0.102,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Niger,fév-26,-0.101,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Senegal,juil-25,0.018,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Senegal,août-25,0.022,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Senegal,25/09/2026,0.026,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Senegal,25/10/2026,0.019,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Senegal,25/11/2026,0.029,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Senegal,déc-25,0.028,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Senegal,janv-26,0.004,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Senegal,fév-26,0.008,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Togo,juil-25,-0.011,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Togo,août-25,-0.003,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Togo,25/09/2026,-0.006,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Togo,25/10/2026,-0.004,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Togo,25/11/2026,0.002,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Togo,déc-25,0.,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Togo,janv-26,0.,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Togo,fév-26,0.004,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,UEMOA,juil-25,-0.013,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,UEMOA,août-25,-0.016,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,UEMOA,25/09/2026,-0.014,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,UEMOA,25/10/2026,-0.011,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,UEMOA,25/11/2026,-0.005,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,UEMOA,déc-25,-0.008,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,UEMOA,janv-26,-0.005,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,UEMOA,fév-26,-0.001,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Mediane UEMOA,juil-25,-0.0095,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Mediane UEMOA,août-25,-0.009,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Mediane UEMOA,25/09/2026,-0.008,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Mediane UEMOA,25/10/2026,-0.008,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Mediane UEMOA,25/11/2026,0.001,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Mediane UEMOA,déc-25,0.0005,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Mediane UEMOA,janv-26,0.001,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+4_Inflation_pays_UEMOA,IPC glissement annuel,Mediane UEMOA,fév-26,0.005,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Coefficient RO Banques,Benin,fin_dec_2025,0.03,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Coefficient RO Banques,Burkina Faso,fin_dec_2025,0.03,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Coefficient RO Banques,Cote d'Ivoire,fin_dec_2025,0.03,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Coefficient RO Banques,Guinee-Bissau,fin_dec_2025,0.03,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Coefficient RO Banques,Mali,fin_dec_2025,0.03,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Coefficient RO Banques,Niger,fin_dec_2025,0.03,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Coefficient RO Banques,Senegal,fin_dec_2025,0.03,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Coefficient RO Banques,Togo,fin_dec_2025,0.03,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Coefficient RO Etablissements financiers,Benin,fin_dec_2025,0.05,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Coefficient RO Etablissements financiers,Burkina Faso,fin_dec_2025,0.05,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Coefficient RO Etablissements financiers,Cote d'Ivoire,fin_dec_2025,0.05,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Coefficient RO Etablissements financiers,Guinee-Bissau,fin_dec_2025,0.05,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Coefficient RO Etablissements financiers,Mali,fin_dec_2025,0.05,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Coefficient RO Etablissements financiers,Niger,fin_dec_2025,0.05,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Coefficient RO Etablissements financiers,Senegal,fin_dec_2025,0.05,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Coefficient RO Etablissements financiers,Togo,fin_dec_2025,0.05,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Masse monetaire M2,Benin,fin_dec_2025,4225.7,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Masse monetaire M2,Burkina Faso,fin_dec_2025,6963.,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Masse monetaire M2,Cote d'Ivoire,fin_dec_2025,24529.4,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Masse monetaire M2,Guinee-Bissau,fin_dec_2025,547.3,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Masse monetaire M2,Mali,fin_dec_2025,5392.,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Masse monetaire M2,Niger,fin_dec_2025,2181.8,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Masse monetaire M2,Senegal,fin_dec_2025,11568.4,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Masse monetaire M2,Togo,fin_dec_2025,3155.7,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Masse monetaire M2,Union,fin_dec_2025,61051.5,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Circulation fiduciaire,Benin,fin_dec_2025,1042.9,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Circulation fiduciaire,Burkina Faso,fin_dec_2025,1601.8,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Circulation fiduciaire,Cote d'Ivoire,fin_dec_2025,6135.9,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Circulation fiduciaire,Guinee-Bissau,fin_dec_2025,315.7,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Circulation fiduciaire,Mali,fin_dec_2025,1010.7,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Circulation fiduciaire,Niger,fin_dec_2025,1062.3,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Circulation fiduciaire,Senegal,fin_dec_2025,3371.5,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Circulation fiduciaire,Togo,fin_dec_2025,385.9,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Circulation fiduciaire,Union,fin_dec_2025,14926.7,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Actifs exterieurs nets,Benin,fin_dec_2025,1703.,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Actifs exterieurs nets,Burkina Faso,fin_dec_2025,3100.4,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Actifs exterieurs nets,Cote d'Ivoire,fin_dec_2025,6825.7,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Actifs exterieurs nets,Guinee-Bissau,fin_dec_2025,287.6,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Actifs exterieurs nets,Mali,fin_dec_2025,730.5,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Actifs exterieurs nets,Niger,fin_dec_2025,482.3,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Actifs exterieurs nets,Senegal,fin_dec_2025,2597.2,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Actifs exterieurs nets,Togo,fin_dec_2025,1092.9,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Actifs exterieurs nets,Union,fin_dec_2025,13227.5,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Creances interieures,Benin,fin_dec_2025,3405.,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Creances interieures,Burkina Faso,fin_dec_2025,5226.1,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Creances interieures,Cote d'Ivoire,fin_dec_2025,21399.6,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Creances interieures,Guinee-Bissau,fin_dec_2025,323.3,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Creances interieures,Mali,fin_dec_2025,5886.7,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Creances interieures,Niger,fin_dec_2025,2084.4,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Creances interieures,Senegal,fin_dec_2025,11141.,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Creances interieures,Togo,fin_dec_2025,2487.1,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+5_Reserves_Agregats,Creances interieures,Union,fin_dec_2025,65101.8,Mds_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+6_Taux_directeurs_partenaires,Zone euro (BCE),Zone euro (BCE),déc-23,0.045,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+6_Taux_directeurs_partenaires,Zone euro (BCE),Zone euro (BCE),déc-24,0.0315,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+6_Taux_directeurs_partenaires,Zone euro (BCE),Zone euro (BCE),25/11/2026,0.0215,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+6_Taux_directeurs_partenaires,Zone euro (BCE),Zone euro (BCE),déc-25,0.0215,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+6_Taux_directeurs_partenaires,Zone euro (BCE),Zone euro (BCE),janv-26,0.0215,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+6_Taux_directeurs_partenaires,Zone euro (BCE),Zone euro (BCE),fév-26,0.0215,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+6_Taux_directeurs_partenaires,USA (Fed funds),USA (Fed funds),déc-23,0.055,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+6_Taux_directeurs_partenaires,USA (Fed funds),USA (Fed funds),déc-24,0.045,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+6_Taux_directeurs_partenaires,USA (Fed funds),USA (Fed funds),25/11/2026,0.04,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+6_Taux_directeurs_partenaires,USA (Fed funds),USA (Fed funds),déc-25,0.0375,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+6_Taux_directeurs_partenaires,USA (Fed funds),USA (Fed funds),janv-26,0.0375,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+6_Taux_directeurs_partenaires,USA (Fed funds),USA (Fed funds),fév-26,0.0375,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+6_Taux_directeurs_partenaires,Royaume-Uni (Bank Rate),Royaume-Uni (Bank Rate),déc-23,0.0525,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+6_Taux_directeurs_partenaires,Royaume-Uni (Bank Rate),Royaume-Uni (Bank Rate),déc-24,0.0475,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+6_Taux_directeurs_partenaires,Royaume-Uni (Bank Rate),Royaume-Uni (Bank Rate),25/11/2026,0.04,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+6_Taux_directeurs_partenaires,Royaume-Uni (Bank Rate),Royaume-Uni (Bank Rate),déc-25,0.0375,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+6_Taux_directeurs_partenaires,Royaume-Uni (Bank Rate),Royaume-Uni (Bank Rate),janv-26,0.0375,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+6_Taux_directeurs_partenaires,Royaume-Uni (Bank Rate),Royaume-Uni (Bank Rate),fév-26,0.0375,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+6_Taux_directeurs_partenaires,Japon,Japon,déc-23,-0.001,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+6_Taux_directeurs_partenaires,Japon,Japon,déc-24,0.0025,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+6_Taux_directeurs_partenaires,Japon,Japon,25/11/2026,0.005,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+6_Taux_directeurs_partenaires,Japon,Japon,déc-25,0.0075,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+6_Taux_directeurs_partenaires,Japon,Japon,janv-26,0.0075,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+6_Taux_directeurs_partenaires,Japon,Japon,fév-26,0.0075,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+7_Change_EUR,EUR/USD,EUR/USD,Moy. 2023,1.08,rate,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+7_Change_EUR,EUR/USD,EUR/USD,Moy. 2024,1.08,rate,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+7_Change_EUR,EUR/USD,EUR/USD,Moy. 2025,1.08,rate,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+7_Change_EUR,EUR/USD,EUR/USD,fév-25,1.04,rate,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+7_Change_EUR,EUR/USD,EUR/USD,janv-26,1.17,rate,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+7_Change_EUR,EUR/USD,EUR/USD,fév-26,1.18,rate,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+7_Change_EUR,Variation annuelle EUR/USD,EUR/USD,fev_2026_vs_fev_2025,0.134615,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+7_Change_EUR,EUR/GBP,EUR/GBP,Moy. 2023,0.87,rate,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+7_Change_EUR,EUR/GBP,EUR/GBP,Moy. 2024,0.85,rate,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+7_Change_EUR,EUR/GBP,EUR/GBP,Moy. 2025,0.86,rate,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+7_Change_EUR,EUR/GBP,EUR/GBP,fév-25,0.83,rate,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+7_Change_EUR,EUR/GBP,EUR/GBP,janv-26,0.87,rate,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+7_Change_EUR,EUR/GBP,EUR/GBP,fév-26,0.87,rate,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+7_Change_EUR,Variation annuelle EUR/GBP,EUR/GBP,fev_2026_vs_fev_2025,0.048193,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+7_Change_EUR,EUR/JPY,EUR/JPY,Moy. 2023,153.18,rate,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+7_Change_EUR,EUR/JPY,EUR/JPY,Moy. 2024,164.06,rate,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+7_Change_EUR,EUR/JPY,EUR/JPY,Moy. 2025,168.95,rate,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+7_Change_EUR,EUR/JPY,EUR/JPY,fév-25,156.96,rate,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+7_Change_EUR,EUR/JPY,EUR/JPY,janv-26,183.94,rate,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+7_Change_EUR,EUR/JPY,EUR/JPY,fév-26,183.45,rate,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+7_Change_EUR,Variation annuelle EUR/JPY,EUR/JPY,fev_2026_vs_fev_2025,0.168769,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+7_Change_EUR,EUR/CNY,EUR/CNY,Moy. 2023,7.68,rate,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+7_Change_EUR,EUR/CNY,EUR/CNY,Moy. 2024,7.77,rate,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+7_Change_EUR,EUR/CNY,EUR/CNY,Moy. 2025,8.11,rate,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+7_Change_EUR,EUR/CNY,EUR/CNY,fév-25,7.58,rate,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+7_Change_EUR,EUR/CNY,EUR/CNY,janv-26,8.18,rate,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+7_Change_EUR,EUR/CNY,EUR/CNY,fév-26,8.17,rate,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+7_Change_EUR,Variation annuelle EUR/CNY,EUR/CNY,fev_2026_vs_fev_2025,0.077836,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+7_Change_EUR,EUR/FCFA,EUR/FCFA,Moy. 2023,655.957,rate,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+7_Change_EUR,EUR/FCFA,EUR/FCFA,Moy. 2024,655.957,rate,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+7_Change_EUR,EUR/FCFA,EUR/FCFA,Moy. 2025,655.957,rate,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+7_Change_EUR,EUR/FCFA,EUR/FCFA,fév-25,655.957,rate,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+7_Change_EUR,EUR/FCFA,EUR/FCFA,janv-26,655.957,rate,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+7_Change_EUR,EUR/FCFA,EUR/FCFA,fév-26,655.957,rate,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+7_Change_EUR,Variation annuelle EUR/FCFA,EUR/FCFA,fev_2026_vs_fev_2025,0.,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+8_Interbancaire_UMOA,Volume 1j,UMOA,dec_2025,230159.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+8_Interbancaire_UMOA,Volume 1sem,UMOA,dec_2025,539560.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+8_Interbancaire_UMOA,Volume 2sem,UMOA,dec_2025,168092.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+8_Interbancaire_UMOA,Volume 1mois,UMOA,dec_2025,56514.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+8_Interbancaire_UMOA,Volume 3mois,UMOA,dec_2025,3640.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+8_Interbancaire_UMOA,Volume 6mois,UMOA,dec_2025,7400.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+8_Interbancaire_UMOA,Volume Total,UMOA,dec_2025,1005442.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+8_Interbancaire_UMOA,Taux 1j,UMOA,dec_2025,0.0478,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+8_Interbancaire_UMOA,Taux 1sem,UMOA,dec_2025,0.0508,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+8_Interbancaire_UMOA,Taux 2sem,UMOA,dec_2025,0.0571,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+8_Interbancaire_UMOA,Taux 1mois,UMOA,dec_2025,0.0577,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+8_Interbancaire_UMOA,Taux 3mois,UMOA,dec_2025,0.0608,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+8_Interbancaire_UMOA,Taux Global,UMOA,dec_2025,0.0516,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+8_Interbancaire_UMOA,Volume 1j,UMOA,jan_2026,114993.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+8_Interbancaire_UMOA,Volume 1sem,UMOA,jan_2026,442103.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+8_Interbancaire_UMOA,Volume 2sem,UMOA,jan_2026,170547.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+8_Interbancaire_UMOA,Volume 1mois,UMOA,jan_2026,43243.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+8_Interbancaire_UMOA,Volume 3mois,UMOA,jan_2026,4125.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+8_Interbancaire_UMOA,Volume 6mois,UMOA,jan_2026,3756.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+8_Interbancaire_UMOA,Volume Total,UMOA,jan_2026,778765.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+8_Interbancaire_UMOA,Taux 1j,UMOA,jan_2026,0.0425,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+8_Interbancaire_UMOA,Taux 1sem,UMOA,jan_2026,0.0479,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+8_Interbancaire_UMOA,Taux 2sem,UMOA,jan_2026,0.0555,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+8_Interbancaire_UMOA,Taux 1mois,UMOA,jan_2026,0.0598,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+8_Interbancaire_UMOA,Taux 3mois,UMOA,jan_2026,0.0554,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+8_Interbancaire_UMOA,Taux Global,UMOA,jan_2026,0.0495,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+8_Interbancaire_UMOA,Volume 1j,UMOA,fev_2026,149113.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+8_Interbancaire_UMOA,Volume 1sem,UMOA,fev_2026,504197.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+8_Interbancaire_UMOA,Volume 2sem,UMOA,fev_2026,126091.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+8_Interbancaire_UMOA,Volume 1mois,UMOA,fev_2026,63537.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+8_Interbancaire_UMOA,Volume 3mois,UMOA,fev_2026,12573.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+8_Interbancaire_UMOA,Volume 6mois,UMOA,fev_2026,3750.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+8_Interbancaire_UMOA,Volume Total,UMOA,fev_2026,861905.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+8_Interbancaire_UMOA,Taux 1j,UMOA,fev_2026,0.0402,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+8_Interbancaire_UMOA,Taux 1sem,UMOA,fev_2026,0.0419,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+8_Interbancaire_UMOA,Taux 2sem,UMOA,fev_2026,0.0517,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+8_Interbancaire_UMOA,Taux 1mois,UMOA,fev_2026,0.0531,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+8_Interbancaire_UMOA,Taux 3mois,UMOA,fev_2026,0.0576,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+8_Interbancaire_UMOA,Taux Global,UMOA,fev_2026,0.0441,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+9_Reserves_const_vs_req,Reserves requises,Benin,16_01_15_02_2026,101774.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+9_Reserves_const_vs_req,Reserves requises,Burkina Faso,16_01_15_02_2026,138486.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+9_Reserves_const_vs_req,Reserves requises,Cote d'Ivoire,16_01_15_02_2026,637008.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+9_Reserves_const_vs_req,Reserves requises,Guinee-Bissau,16_01_15_02_2026,7892.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+9_Reserves_const_vs_req,Reserves requises,Mali,16_01_15_02_2026,130055.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+9_Reserves_const_vs_req,Reserves requises,Niger,16_01_15_02_2026,47119.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+9_Reserves_const_vs_req,Reserves requises,Senegal,16_01_15_02_2026,270065.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+9_Reserves_const_vs_req,Reserves requises,Togo,16_01_15_02_2026,76305.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+9_Reserves_const_vs_req,Reserves requises,UMOA,16_01_15_02_2026,1408704.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+9_Reserves_const_vs_req,Reserves constituees,Benin,16_01_15_02_2026,214611.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+9_Reserves_const_vs_req,Reserves constituees,Burkina Faso,16_01_15_02_2026,520533.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+9_Reserves_const_vs_req,Reserves constituees,Cote d'Ivoire,16_01_15_02_2026,3111279.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+9_Reserves_const_vs_req,Reserves constituees,Guinee-Bissau,16_01_15_02_2026,18058.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+9_Reserves_const_vs_req,Reserves constituees,Mali,16_01_15_02_2026,703885.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+9_Reserves_const_vs_req,Reserves constituees,Niger,16_01_15_02_2026,53110.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+9_Reserves_const_vs_req,Reserves constituees,Senegal,16_01_15_02_2026,1158849.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+9_Reserves_const_vs_req,Reserves constituees,Togo,16_01_15_02_2026,172948.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+9_Reserves_const_vs_req,Reserves constituees,UMOA,16_01_15_02_2026,5953273.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+9_Reserves_const_vs_req,Solde net,Benin,16_01_15_02_2026,112837.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+9_Reserves_const_vs_req,Solde net,Burkina Faso,16_01_15_02_2026,382047.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+9_Reserves_const_vs_req,Solde net,Cote d'Ivoire,16_01_15_02_2026,2474271.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+9_Reserves_const_vs_req,Solde net,Guinee-Bissau,16_01_15_02_2026,10166.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+9_Reserves_const_vs_req,Solde net,Mali,16_01_15_02_2026,573830.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+9_Reserves_const_vs_req,Solde net,Niger,16_01_15_02_2026,5991.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+9_Reserves_const_vs_req,Solde net,Senegal,16_01_15_02_2026,888784.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+9_Reserves_const_vs_req,Solde net,Togo,16_01_15_02_2026,96643.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+9_Reserves_const_vs_req,Solde net,UMOA,16_01_15_02_2026,4544569.,M_FCFA,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+9_Reserves_const_vs_req,Ratio constituees sur requises,Benin,16_01_15_02_2026,2.108702,x,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+9_Reserves_const_vs_req,Ratio constituees sur requises,Burkina Faso,16_01_15_02_2026,3.758741,x,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+9_Reserves_const_vs_req,Ratio constituees sur requises,Cote d'Ivoire,16_01_15_02_2026,4.884207,x,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+9_Reserves_const_vs_req,Ratio constituees sur requises,Guinee-Bissau,16_01_15_02_2026,2.28814,x,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+9_Reserves_const_vs_req,Ratio constituees sur requises,Mali,16_01_15_02_2026,5.41221,x,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+9_Reserves_const_vs_req,Ratio constituees sur requises,Niger,16_01_15_02_2026,1.127146,x,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+9_Reserves_const_vs_req,Ratio constituees sur requises,Senegal,16_01_15_02_2026,4.291,x,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+9_Reserves_const_vs_req,Ratio constituees sur requises,Togo,16_01_15_02_2026,2.266536,x,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+9_Reserves_const_vs_req,Ratio constituees sur requises,UMOA,16_01_15_02_2026,4.226064,x,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10a_Conditions_banque_categorie,Autres institutions de depots,Benin,fev_2026,0.0964,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10a_Conditions_banque_categorie,Autres institutions de depots,Cote d'Ivoire,fev_2026,0.0792,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10a_Conditions_banque_categorie,Autres institutions de depots,Niger,fev_2026,0.11,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10a_Conditions_banque_categorie,Autres institutions de depots,Senegal,fev_2026,0.1172,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10a_Conditions_banque_categorie,Societes financieres,Benin,fev_2026,0.095,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10a_Conditions_banque_categorie,Societes financieres,Burkina Faso,fev_2026,0.1345,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10a_Conditions_banque_categorie,Societes financieres,Cote d'Ivoire,fev_2026,0.0964,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10a_Conditions_banque_categorie,Societes financieres,Niger,fev_2026,0.0957,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10a_Conditions_banque_categorie,Societes financieres,Senegal,fev_2026,0.1171,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10a_Conditions_banque_categorie,Societes financieres,Togo,fev_2026,0.07,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10a_Conditions_banque_categorie,Societes non financieres,Benin,fev_2026,0.0733,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10a_Conditions_banque_categorie,Societes non financieres,Burkina Faso,fev_2026,0.08,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10a_Conditions_banque_categorie,Societes non financieres,Cote d'Ivoire,fev_2026,0.0637,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10a_Conditions_banque_categorie,Societes non financieres,Guinee-Bissau,fev_2026,0.1105,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10a_Conditions_banque_categorie,Societes non financieres,Mali,fev_2026,0.0673,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10a_Conditions_banque_categorie,Societes non financieres,Niger,fev_2026,0.0851,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10a_Conditions_banque_categorie,Societes non financieres,Senegal,fev_2026,0.0706,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10a_Conditions_banque_categorie,Societes non financieres,Togo,fev_2026,0.0728,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10a_Conditions_banque_categorie,Menages,Benin,fev_2026,0.0804,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10a_Conditions_banque_categorie,Menages,Burkina Faso,fev_2026,0.0793,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10a_Conditions_banque_categorie,Menages,Cote d'Ivoire,fev_2026,0.0725,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10a_Conditions_banque_categorie,Menages,Guinee-Bissau,fev_2026,0.0806,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10a_Conditions_banque_categorie,Menages,Mali,fev_2026,0.0835,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10a_Conditions_banque_categorie,Menages,Niger,fev_2026,0.0948,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10a_Conditions_banque_categorie,Menages,Senegal,fev_2026,0.071,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10a_Conditions_banque_categorie,Menages,Togo,fev_2026,0.0763,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10a_Conditions_banque_categorie,Administrations Publiques,Benin,fev_2026,0.0736,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10a_Conditions_banque_categorie,Administrations Publiques,Cote d'Ivoire,fev_2026,0.0051,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10a_Conditions_banque_categorie,Administrations Publiques,Niger,fev_2026,0.0726,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10a_Conditions_banque_categorie,Administrations Publiques,Senegal,fev_2026,0.0733,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10a_Conditions_banque_categorie,Administrations Publiques,Togo,fev_2026,0.065,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10a_Conditions_banque_categorie,Ensemble,Benin,fev_2026,0.0746,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10a_Conditions_banque_categorie,Ensemble,Burkina Faso,fev_2026,0.08,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10a_Conditions_banque_categorie,Ensemble,Cote d'Ivoire,fev_2026,0.065,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10a_Conditions_banque_categorie,Ensemble,Guinee-Bissau,fev_2026,0.0925,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10a_Conditions_banque_categorie,Ensemble,Mali,fev_2026,0.0733,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10a_Conditions_banque_categorie,Ensemble,Niger,fev_2026,0.0813,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10a_Conditions_banque_categorie,Ensemble,Senegal,fev_2026,0.071,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10a_Conditions_banque_categorie,Ensemble,Togo,fev_2026,0.073,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Consommation,Benin,fev_2026,0.0732,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Consommation,Burkina Faso,fev_2026,0.0783,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Consommation,Cote d'Ivoire,fev_2026,0.0602,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Consommation,Guinee-Bissau,fev_2026,0.1246,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Consommation,Mali,fev_2026,0.0852,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Consommation,Niger,fev_2026,0.0754,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Consommation,Senegal,fev_2026,0.0692,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Tresorerie,Benin,fev_2026,0.0733,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Tresorerie,Burkina Faso,fev_2026,0.0841,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Tresorerie,Cote d'Ivoire,fev_2026,0.0601,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Tresorerie,Guinee-Bissau,fev_2026,0.1093,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Tresorerie,Mali,fev_2026,0.0793,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Tresorerie,Niger,fev_2026,0.0896,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Tresorerie,Senegal,fev_2026,0.0755,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Equipement,Benin,fev_2026,0.071,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Equipement,Burkina Faso,fev_2026,0.077,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Equipement,Cote d'Ivoire,fev_2026,0.0516,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Equipement,Guinee-Bissau,fev_2026,0.1122,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Equipement,Mali,fev_2026,0.0867,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Equipement,Niger,fev_2026,0.0964,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Equipement,Senegal,fev_2026,0.0638,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Immobilier,Benin,fev_2026,0.0732,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Immobilier,Burkina Faso,fev_2026,0.0792,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Immobilier,Cote d'Ivoire,fev_2026,0.0708,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Immobilier,Guinee-Bissau,fev_2026,0.0659,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Immobilier,Mali,fev_2026,0.0957,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Immobilier,Niger,fev_2026,0.0653,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Immobilier,Senegal,fev_2026,0.1075,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Exportation,Benin,fev_2026,0.06,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Exportation,Cote d'Ivoire,fev_2026,0.0929,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Autres,Benin,fev_2026,0.0905,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Autres,Burkina Faso,fev_2026,0.0747,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Autres,Cote d'Ivoire,fev_2026,0.0906,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Autres,Guinee-Bissau,fev_2026,0.0605,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Autres,Mali,fev_2026,0.0558,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Autres,Niger,fev_2026,0.0759,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Autres,Senegal,fev_2026,0.0644,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Ensemble,Benin,fev_2026,0.0746,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Ensemble,Burkina Faso,fev_2026,0.08,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Ensemble,Cote d'Ivoire,fev_2026,0.065,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Ensemble,Guinee-Bissau,fev_2026,0.0925,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Ensemble,Mali,fev_2026,0.0733,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Ensemble,Niger,fev_2026,0.0813,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Ensemble,Senegal,fev_2026,0.071,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026
+10b_Conditions_banque_objet,Ensemble,Togo,fev_2026,0.073,pct,BCEAO - Bulletin mensuel des statistiques - Fevrier 2026

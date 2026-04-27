@@ -1,227 +1,354 @@
-"use client";
-
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
 import Header from "@/components/Header";
 import Ticker from "@/components/Ticker";
+import TauxView from "@/components/taux/TauxView";
 import {
-  moneyMarketIndicators,
-  yieldCurveUEMOA,
-  upcomingAuctions,
-  recentIssuances,
-} from "@/lib/mockData";
+  loadTauxRaw,
+  getSeries,
+  getLatest,
+  getDelta,
+  getSnapshot,
+  listAllSeriesDescriptors,
+  detectBceaoRateChanges,
+  getSourceLabel,
+} from "@/lib/tauxLoader";
+import { fmtPct, fmtBp, fmtMdsFCFA, fmtRate } from "@/lib/tauxFormat";
+
+export const dynamic = "force-static";
+
+export const metadata = {
+  title: "Taux BCEAO & UEMOA — AzimutFinance",
+  description:
+    "Tableau de bord des taux directeurs BCEAO, marché monétaire UEMOA, marché interbancaire UMOA, inflation, conditions de banque et change. Studio d'analyse interactif.",
+};
+
+const MATURITES_ORDER = ["1j", "1sem", "2sem", "1mois", "3mois"];
+const MATURITES_VOL_ORDER = ["1j", "1sem", "2sem", "1mois", "3mois", "6mois"];
+
+const COND_CAT_ORDER = [
+  "Ensemble",
+  "Societes non financieres",
+  "Menages",
+  "Societes financieres",
+  "Autres institutions de depots",
+  "Administrations Publiques",
+];
+const COND_OBJ_ORDER = [
+  "Ensemble",
+  "Tresorerie",
+  "Equipement",
+  "Immobilier",
+  "Consommation",
+  "Exportation",
+  "Autres",
+];
+const COND_COUNTRIES = [
+  "Benin",
+  "Burkina Faso",
+  "Cote d'Ivoire",
+  "Guinee-Bissau",
+  "Mali",
+  "Niger",
+  "Senegal",
+  "Togo",
+];
+
+const RESERVES_COUNTRIES = [
+  "Benin",
+  "Burkina Faso",
+  "Cote d'Ivoire",
+  "Guinee-Bissau",
+  "Mali",
+  "Niger",
+  "Senegal",
+  "Togo",
+  "UMOA",
+];
+
+const AGREGATS_COUNTRIES = [
+  "Benin",
+  "Burkina Faso",
+  "Cote d'Ivoire",
+  "Guinee-Bissau",
+  "Mali",
+  "Niger",
+  "Senegal",
+  "Togo",
+  "Union",
+];
+
+const INFLATION_COUNTRIES = [
+  "Benin",
+  "Burkina Faso",
+  "Cote d'Ivoire",
+  "Guinee-Bissau",
+  "Mali",
+  "Niger",
+  "Senegal",
+  "Togo",
+  "UEMOA",
+  "Mediane UEMOA",
+];
+
+const PARTENAIRES = [
+  "Zone euro (BCE)",
+  "USA (Fed funds)",
+  "Royaume-Uni (Bank Rate)",
+  "Japon",
+];
 
 export default function MarcheMonetairePage() {
+  // Charge tout
+  loadTauxRaw();
+
+  // ---- KPIs ----
+  const pension = getSeries("1_Taux_directeurs_BCEAO", "Taux minimum appels offres", "UEMOA")!;
+  const pretMarginal = getSeries("1_Taux_directeurs_BCEAO", "Taux pret marginal", "UEMOA")!;
+  const tmpHebdo = getSeries("2_Marche_monetaire", "TMP adjudication hebdomadaire", "UEMOA")!;
+  const tmpMensuel = getSeries("2_Marche_monetaire", "TMP adjudication mensuelle", "UEMOA")!;
+  const encoursRefi = getSeries("2_Marche_monetaire", "Encours refinancement banques", "UEMOA")!;
+  const inflationUemoa = getSeries("4_Inflation_pays_UEMOA", "IPC glissement annuel", "UEMOA")!;
+  const eurFcfaSpot = getLatest("7_Change_EUR", "EUR/FCFA", "EUR/FCFA");
+  const eurUsdSpot = getLatest("7_Change_EUR", "EUR/USD", "EUR/USD");
+
+  const pensionDelta = getDelta("1_Taux_directeurs_BCEAO", "Taux minimum appels offres", "UEMOA");
+  const tmpHebdoDelta = getDelta("2_Marche_monetaire", "TMP adjudication hebdomadaire", "UEMOA");
+  const tmpMensuelDelta = getDelta("2_Marche_monetaire", "TMP adjudication mensuelle", "UEMOA");
+  const inflDelta = getDelta("4_Inflation_pays_UEMOA", "IPC glissement annuel", "UEMOA");
+  const refiDelta = getDelta("2_Marche_monetaire", "Encours refinancement banques", "UEMOA");
+
+  const kpis = [
+    {
+      label: "Taux pension BCEAO",
+      value: fmtPct(pension.points.at(-1)!.value),
+      delta: pensionDelta
+        ? {
+            text: `${fmtBp(pensionDelta.delta)} vs préc. (${pension.points.at(-2)?.label})`,
+            positive: pensionDelta.delta > 0 ? true : pensionDelta.delta < 0 ? false : null,
+          }
+        : undefined,
+      hint: pension.points.at(-1)?.label,
+    },
+    {
+      label: "TMP adjudication hebdo",
+      value: fmtPct(tmpHebdo.points.at(-1)!.value),
+      delta: tmpHebdoDelta
+        ? {
+            text: `${fmtBp(tmpHebdoDelta.delta)} vs ${tmpHebdo.points.at(-2)?.label}`,
+            positive: tmpHebdoDelta.delta > 0 ? true : tmpHebdoDelta.delta < 0 ? false : null,
+          }
+        : undefined,
+      hint: tmpHebdo.points.at(-1)?.label,
+    },
+    {
+      label: "TMP adjudication mensuelle",
+      value: fmtPct(tmpMensuel.points.at(-1)!.value),
+      delta: tmpMensuelDelta
+        ? {
+            text: `${fmtBp(tmpMensuelDelta.delta)} vs ${tmpMensuel.points.at(-2)?.label}`,
+            positive: tmpMensuelDelta.delta > 0 ? true : tmpMensuelDelta.delta < 0 ? false : null,
+          }
+        : undefined,
+      hint: tmpMensuel.points.at(-1)?.label,
+    },
+    {
+      label: "Inflation UEMOA (YoY)",
+      value: fmtPct(inflationUemoa.points.at(-1)!.value),
+      delta: inflDelta
+        ? {
+            text: `${fmtBp(inflDelta.delta)} vs ${inflationUemoa.points.at(-2)?.label}`,
+            positive: inflDelta.delta > 0 ? true : inflDelta.delta < 0 ? false : null,
+          }
+        : undefined,
+      hint: inflationUemoa.points.at(-1)?.label,
+    },
+    {
+      label: "Encours refi banques",
+      value: encoursRefi.points.at(-1) ? fmtMdsFCFA(encoursRefi.points.at(-1)!.value) : "—",
+      delta: refiDelta
+        ? {
+            text: `${refiDelta.delta >= 0 ? "+" : ""}${fmtMdsFCFA(refiDelta.delta)}`,
+            positive: refiDelta.delta > 0 ? true : refiDelta.delta < 0 ? false : null,
+          }
+        : undefined,
+      hint: encoursRefi.points.at(-1)?.label,
+    },
+    {
+      label: "EUR / FCFA",
+      value: eurFcfaSpot ? fmtRate(eurFcfaSpot.value, 4) : "—",
+      hint: "Parité fixe",
+    },
+    {
+      label: "EUR / USD",
+      value: eurUsdSpot ? fmtRate(eurUsdSpot.value, 4) : "—",
+      hint: eurUsdSpot?.label,
+    },
+    {
+      label: "Source",
+      value: "BCEAO",
+      hint: "Bulletin mensuel · fév. 2026",
+    },
+  ];
+
+  // ---- Politique BCEAO : changements de taux ----
+  const bceaoChanges = detectBceaoRateChanges();
+
+  // ---- Interbancaire : taux & volumes par maturité ----
+  const interbancaireTaux = MATURITES_ORDER.map((m) => ({
+    maturity: m,
+    series: getSeries("8_Interbancaire_UMOA", `Taux ${m}`, "UMOA")!,
+  })).filter((x) => x.series);
+  const interbancaireVolumes = MATURITES_VOL_ORDER.map((m) => ({
+    maturity: m,
+    series: getSeries("8_Interbancaire_UMOA", `Volume ${m}`, "UMOA")!,
+  })).filter((x) => x.series);
+
+  // ---- Inflation : 8 pays + UEMOA + Mediane ----
+  const inflationSeries = INFLATION_COUNTRIES.map((c) =>
+    getSeries("4_Inflation_pays_UEMOA", "IPC glissement annuel", c)
+  ).filter((s): s is NonNullable<typeof s> => s !== null);
+
+  // ---- Conditions de banque : heatmaps ----
+  function buildConditionsHeatmap(
+    section: "10a_Conditions_banque_categorie" | "10b_Conditions_banque_objet",
+    rows: string[]
+  ) {
+    const values: [string, number][] = [];
+    for (const r of rows) {
+      for (const c of COND_COUNTRIES) {
+        const snap = getSnapshot(section, r);
+        const v = snap.find((s) => s.country === c)?.value;
+        if (v !== undefined) values.push([`${r}|${c}`, v]);
+      }
+    }
+    return { rows, cols: COND_COUNTRIES, values };
+  }
+  const conditionsCat = buildConditionsHeatmap("10a_Conditions_banque_categorie", COND_CAT_ORDER);
+  const conditionsObj = buildConditionsHeatmap("10b_Conditions_banque_objet", COND_OBJ_ORDER);
+  const conditionsPeriod = "Février 2026";
+
+  // ---- Crédits & dépôts ----
+  const credits = getSeries("3_Credits_Depots_UEMOA", "Taux moyen credits", "UEMOA")!;
+  const depots = getSeries("3_Credits_Depots_UEMOA", "Taux moyen depots", "UEMOA")!;
+  const marge = getSeries("3_Credits_Depots_UEMOA", "Marge interet", "UEMOA")!;
+  const volumes = getSeries("3_Credits_Depots_UEMOA", "Volume nouveaux credits", "UEMOA")!;
+
+  // ---- Réserves obligatoires ----
+  const reserves = RESERVES_COUNTRIES.map((c) => {
+    const req = getSnapshot("9_Reserves_const_vs_req", "Reserves requises").find((x) => x.country === c)?.value ?? 0;
+    const cons = getSnapshot("9_Reserves_const_vs_req", "Reserves constituees").find((x) => x.country === c)?.value ?? 0;
+    const net = getSnapshot("9_Reserves_const_vs_req", "Solde net").find((x) => x.country === c)?.value ?? 0;
+    const ratio = getSnapshot("9_Reserves_const_vs_req", "Ratio constituees sur requises").find((x) => x.country === c)?.value ?? 0;
+    return { country: c, req, cons, net, ratio };
+  });
+  const reservesPeriod = "16 janv → 15 fév 2026";
+
+  // ---- Agrégats monétaires ----
+  const agregats = AGREGATS_COUNTRIES.map((c) => ({
+    country: c,
+    m2: getSnapshot("5_Reserves_Agregats", "Masse monetaire M2").find((x) => x.country === c)?.value ?? 0,
+    fid: getSnapshot("5_Reserves_Agregats", "Circulation fiduciaire").find((x) => x.country === c)?.value ?? 0,
+    aen: getSnapshot("5_Reserves_Agregats", "Actifs exterieurs nets").find((x) => x.country === c)?.value ?? 0,
+    cri: getSnapshot("5_Reserves_Agregats", "Creances interieures").find((x) => x.country === c)?.value ?? 0,
+  }));
+
+  // ---- Partenaires ----
+  const partenaires = PARTENAIRES.map((p) =>
+    getSeries("6_Taux_directeurs_partenaires", p, p)
+  ).filter((s): s is NonNullable<typeof s> => s !== null);
+
+  // ---- Change ----
+  const PAIRS = ["EUR/USD", "EUR/GBP", "EUR/JPY", "EUR/CNY", "EUR/FCFA"];
+  const changeSpots = PAIRS.map((p) => {
+    const series = getSeries("7_Change_EUR", p, p)!;
+    const latest = series.points.at(-1)!;
+    const moy2025 = series.points.find((pt) => pt.iso === "2025")?.value ?? NaN;
+    const fev2025 = series.points.find((pt) => pt.iso === "2025-02")?.value ?? NaN;
+    return {
+      pair: p,
+      latest: latest.value,
+      latestLabel: latest.label,
+      moy2025,
+      fev2025,
+    };
+  });
+  const changeYoy = PAIRS.map((p) => {
+    const v = getLatest("7_Change_EUR", `Variation annuelle ${p}`, p);
+    return { pair: p, value: v?.value ?? NaN };
+  });
+
+  // ---- Studio : passe l'intégralité du dataset au client ----
+  const studioDescriptors = listAllSeriesDescriptors();
+  const studioRows = loadTauxRaw();
+
   return (
     <div className="min-h-screen bg-slate-50">
       <Header />
       <Ticker />
 
-      {/* En-tete de page */}
       <div className="bg-white border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8">
-          <div className="text-xs md:text-sm text-slate-500 mb-2">
-            Accueil › Marche monetaire
-          </div>
-          <h1 className="text-2xl md:text-3xl font-semibold mb-2">
-            Marche monetaire UEMOA
-          </h1>
+          <div className="text-xs md:text-sm text-slate-500 mb-2">Accueil › Taux BCEAO &amp; UEMOA</div>
+          <h1 className="text-2xl md:text-3xl font-semibold mb-2">Taux BCEAO &amp; UEMOA</h1>
           <p className="text-sm md:text-base text-slate-600">
-            Taux, adjudications, emissions souveraines et indicateurs cles de la zone UEMOA
+            Suivi exhaustif des taux directeurs, marché monétaire et interbancaire, inflation, conditions de banque et change.
+            Studio d&apos;analyse interactif pour explorer toutes les séries.
           </p>
+          <div className="mt-3 flex flex-wrap gap-2 text-xs">
+            {[
+              ["#politique", "Politique BCEAO"],
+              ["#marche-monetaire", "Marché monétaire"],
+              ["#interbancaire", "Interbancaire"],
+              ["#inflation", "Inflation"],
+              ["#conditions", "Conditions banque"],
+              ["#credits-depots", "Crédits / dépôts"],
+              ["#reserves", "Réserves"],
+              ["#agregats", "Agrégats"],
+              ["#partenaires", "Partenaires"],
+              ["#change", "Change"],
+              ["#comparateur", "Comparateur pays"],
+              ["#studio", "Studio d'analyse"],
+            ].map(([href, label]) => (
+              <a
+                key={href}
+                href={href}
+                className="px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700"
+              >
+                {label}
+              </a>
+            ))}
+          </div>
         </div>
       </div>
 
-      <main className="max-w-7xl mx-auto px-4 md:px-6 py-4 md:py-6 space-y-4 md:space-y-6">
-
-        {/* Indicateurs cles */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-          {moneyMarketIndicators.map((indicator) => {
-            const trendColor =
-              indicator.trend === "up"
-                ? "text-red-600"
-                : indicator.trend === "down"
-                ? "text-green-600"
-                : "text-slate-500";
-            return (
-              <div
-                key={indicator.label}
-                className="bg-white rounded-lg border border-slate-200 p-4 md:p-5"
-              >
-                <div className="text-xs md:text-sm text-slate-500 mb-2">
-                  {indicator.label}
-                </div>
-                <div className="text-xl md:text-2xl font-semibold mb-1">
-                  {indicator.value}
-                </div>
-                <div className={`text-xs ${trendColor}`}>
-                  {indicator.subtitle}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Courbe des taux + Adjudications */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
-          {/* Courbe des taux */}
-          <div className="lg:col-span-2 bg-white rounded-lg border border-slate-200 p-4 md:p-6">
-            <div className="flex justify-between items-baseline mb-4 flex-wrap gap-2">
-              <div>
-                <h3 className="text-base font-medium">Courbe des taux souverains UEMOA</h3>
-                <p className="text-xs text-slate-500 mt-1">
-                  Rendement (YTM) par maturite - Moyenne pondere BRVM
-                </p>
-              </div>
-              <span className="text-xs text-slate-400">18 avril 2026</span>
-            </div>
-            <div className="h-64 md:h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={yieldCurveUEMOA}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis
-                    dataKey="maturity"
-                    stroke="#94a3b8"
-                    fontSize={11}
-                  />
-                  <YAxis
-                    stroke="#94a3b8"
-                    fontSize={11}
-                    domain={[3.5, 7.5]}
-                    tickFormatter={(value) => `${value}%`}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "white",
-                      border: "1px solid #e2e8f0",
-                      borderRadius: "6px",
-                      fontSize: "12px",
-                    }}
-                    formatter={(value) => [
-                            `${Number(value ?? 0).toFixed(2)}%`,
-                            "YTM",
-                          ]}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="rate"
-                    stroke="#1d4ed8"
-                    strokeWidth={2.5}
-                    dot={{ fill: "#1d4ed8", r: 5 }}
-                    activeDot={{ r: 7 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          {/* Prochaines adjudications */}
-          <div className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
-            <h3 className="text-base font-medium mb-4">Prochaines adjudications</h3>
-            <div className="space-y-3">
-              {upcomingAuctions.map((auction) => (
-                <div
-                  key={auction.issuer}
-                  className="p-3 bg-slate-50 rounded-md"
-                >
-                  <div className="flex justify-between items-start mb-1">
-                    <div className="text-sm font-medium">{auction.issuer}</div>
-                    <div className="text-xs text-blue-700 font-medium">
-                      {auction.date.split(" ").slice(0, 2).join(" ")}
-                    </div>
-                  </div>
-                  <div className="text-xs text-slate-600">
-                    {auction.amount} · {auction.maturity} ·{" "}
-                    <span className="text-slate-500">{auction.country}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Tableau emissions recentes */}
-        <div className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
-          <div className="flex justify-between items-baseline mb-4 flex-wrap gap-2">
-            <div>
-              <h3 className="text-base font-medium">Dernieres emissions</h3>
-              <p className="text-xs text-slate-500 mt-1">
-                Resultats des adjudications recentes sur le marche UEMOA
-              </p>
-            </div>
-            <button className="px-3 py-1 text-xs border border-slate-200 rounded hover:bg-slate-50">
-              Exporter CSV
-            </button>
-          </div>
-          <div className="overflow-x-auto -mx-4 md:mx-0 px-4 md:px-0">
-            <table className="w-full text-sm min-w-[750px]">
-              <thead>
-                <tr className="text-xs text-slate-500 border-b border-slate-200">
-                  <th className="text-left py-2 font-medium">Date</th>
-                  <th className="text-left py-2 font-medium">Emetteur</th>
-                  <th className="text-left py-2 font-medium">Pays</th>
-                  <th className="text-right py-2 font-medium">Montant</th>
-                  <th className="text-right py-2 font-medium">Demande</th>
-                  <th className="text-right py-2 font-medium">Couverture</th>
-                  <th className="text-right py-2 font-medium">Taux</th>
-                  <th className="text-right py-2 font-medium">Maturite</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentIssuances.map((issuance, i) => (
-                  <tr
-                    key={i}
-                    className={`hover:bg-slate-50 transition ${
-                      i < recentIssuances.length - 1 ? "border-b border-slate-100" : ""
-                    }`}
-                  >
-                    <td className="py-3 text-slate-600">{issuance.date}</td>
-                    <td className="py-3 font-medium">{issuance.issuer}</td>
-                    <td className="py-3">
-                      <span className="text-xs px-2 py-0.5 bg-slate-100 rounded text-slate-700">
-                        {issuance.country}
-                      </span>
-                    </td>
-                    <td className="py-3 text-right">{issuance.amount}</td>
-                    <td className="py-3 text-right text-slate-500">{issuance.requested}</td>
-                    <td className="py-3 text-right">
-                      <span className="text-green-700">{issuance.coverage}</span>
-                    </td>
-                    <td className="py-3 text-right font-medium">{issuance.rate}</td>
-                    <td className="py-3 text-right text-slate-600">{issuance.maturity}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Bloc info explicatif */}
-        <div className="bg-blue-50 rounded-lg border border-blue-200 p-4 md:p-6">
-          <h3 className="text-base font-medium text-blue-900 mb-2">
-            Comprendre le marche monetaire UEMOA
-          </h3>
-          <div className="text-sm text-blue-900 space-y-2 leading-relaxed">
-            <p>
-              Le marche monetaire de l&apos;UEMOA est anime par la BCEAO et les huit Tresors
-              nationaux. Les emissions se font principalement via des Obligations du Tresor (OAT,
-              OTAR) et des Bons du Tresor (BAT) sur des maturites allant de 3 mois a 15 ans.
-            </p>
-            <p>
-              Les taux suivent le taux directeur BCEAO (actuellement 3,50%), mais integrent
-              egalement le risque pays, la liquidite et les attentes d&apos;inflation. Une
-              courbe des taux normale (positive) refletre une prime de terme saine.
-            </p>
-          </div>
-        </div>
-
+      <main className="max-w-7xl mx-auto px-4 md:px-6 py-4 md:py-6">
+        <TauxView
+          kpis={kpis}
+          pretMarginal={pretMarginal}
+          pension={pension}
+          bceaoChanges={bceaoChanges}
+          tmpHebdo={tmpHebdo}
+          tmpMensuel={tmpMensuel}
+          encoursRefi={encoursRefi}
+          interbancaireTaux={interbancaireTaux}
+          interbancaireVolumes={interbancaireVolumes}
+          inflationSeries={inflationSeries}
+          conditionsCat={conditionsCat}
+          conditionsObj={conditionsObj}
+          conditionsPeriod={conditionsPeriod}
+          credits={credits}
+          depots={depots}
+          marge={marge}
+          volumes={volumes}
+          reserves={reserves}
+          reservesPeriod={reservesPeriod}
+          agregats={agregats}
+          partenaires={partenaires}
+          changeSpots={changeSpots}
+          changeYoy={changeYoy}
+          studioDescriptors={studioDescriptors}
+          studioRows={studioRows}
+          source={getSourceLabel()}
+        />
       </main>
     </div>
   );
