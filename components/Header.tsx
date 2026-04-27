@@ -1,7 +1,10 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import Link from "next/link";
+import type { User } from "@supabase/supabase-js";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { signOutAction } from "@/lib/auth/actions";
 
 type MenuItem = {
   label: string;
@@ -102,19 +105,53 @@ function BadgeLabel({ badge }: { badge: string }) {
   );
 }
 
+function userInitials(user: User | null): string {
+  if (!user) return "";
+  const meta = user.user_metadata as { full_name?: string; name?: string } | null;
+  const name = meta?.full_name || meta?.name || user.email || "";
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return (parts[0]?.[0] ?? "?").toUpperCase();
+}
+
 export default function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeDesktopMenu, setActiveDesktopMenu] = useState<string | null>(null);
   const [activeMobileMenu, setActiveMobileMenu] = useState<string | null>(null);
   const [activeFlyout, setActiveFlyout] = useState<string | null>(null);
   const [activeMobileFlyout, setActiveMobileFlyout] = useState<string | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoaded, setAuthLoaded] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const headerRef = useRef<HTMLElement>(null);
+
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+
+  // Charger la session au montage + ecouter les changements (login / logout / refresh)
+  useEffect(() => {
+    let cancelled = false;
+    supabase.auth.getUser().then(({ data }) => {
+      if (!cancelled) {
+        setUser(data.user);
+        setAuthLoaded(true);
+      }
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      setAuthLoaded(true);
+    });
+    return () => {
+      cancelled = true;
+      sub.subscription.unsubscribe();
+    };
+  }, [supabase]);
 
   // Fermer les menus au clic exterieur
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (headerRef.current && !headerRef.current.contains(e.target as Node)) {
         setActiveDesktopMenu(null);
+        setUserMenuOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -227,14 +264,66 @@ export default function Header() {
           </nav>
         </div>
 
-        {/* Boutons desktop */}
-        <div className="hidden md:flex gap-2">
-          <button className="px-4 py-2 text-sm border border-slate-300 rounded-md hover:bg-slate-50">
-            Connexion
-          </button>
-          <button className="px-3 lg:px-4 py-2 text-sm bg-blue-700 text-white rounded-md hover:bg-blue-800">
-            S&apos;abonner
-          </button>
+        {/* Boutons desktop : auth-aware */}
+        <div className="hidden md:flex items-center gap-2">
+          {!authLoaded ? (
+            <div className="h-9 w-24 bg-slate-100 rounded-md animate-pulse" />
+          ) : user ? (
+            <div className="relative">
+              <button
+                onClick={() => setUserMenuOpen((v) => !v)}
+                className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-slate-50"
+                aria-label="Menu utilisateur"
+              >
+                <span className="w-8 h-8 rounded-full bg-blue-700 text-white text-xs font-semibold flex items-center justify-center">
+                  {userInitials(user)}
+                </span>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </button>
+              {userMenuOpen && (
+                <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-md shadow-lg py-2 min-w-[220px] z-40">
+                  <div className="px-4 py-2 border-b border-slate-100">
+                    <div className="text-xs text-slate-500">Connecté en tant que</div>
+                    <div className="text-sm font-medium text-slate-900 truncate">
+                      {user.email}
+                    </div>
+                  </div>
+                  <Link
+                    href="/compte"
+                    onClick={() => setUserMenuOpen(false)}
+                    className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                  >
+                    Mon compte
+                  </Link>
+                  <form action={signOutAction}>
+                    <button
+                      type="submit"
+                      className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                    >
+                      Se déconnecter
+                    </button>
+                  </form>
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              <Link
+                href="/connexion"
+                className="px-4 py-2 text-sm border border-slate-300 rounded-md hover:bg-slate-50"
+              >
+                Connexion
+              </Link>
+              <Link
+                href="/inscription"
+                className="px-3 lg:px-4 py-2 text-sm bg-blue-700 text-white rounded-md hover:bg-blue-800"
+              >
+                S&apos;inscrire
+              </Link>
+            </>
+          )}
         </div>
 
         {/* Bouton hamburger mobile */}
@@ -353,13 +442,48 @@ export default function Header() {
                 )}
               </div>
             ))}
-            <div className="flex gap-2 pt-3 mt-2 border-t border-slate-100">
-              <button className="flex-1 px-4 py-2 text-sm border border-slate-300 rounded-md">
-                Connexion
-              </button>
-              <button className="flex-1 px-4 py-2 text-sm bg-blue-700 text-white rounded-md">
-                S&apos;abonner
-              </button>
+            <div className="pt-3 mt-2 border-t border-slate-100">
+              {!authLoaded ? (
+                <div className="h-9 bg-slate-100 rounded-md animate-pulse" />
+              ) : user ? (
+                <div className="flex flex-col gap-2">
+                  <div className="text-xs text-slate-500 px-1">
+                    Connecté : <span className="text-slate-700 font-medium">{user.email}</span>
+                  </div>
+                  <Link
+                    href="/compte"
+                    onClick={() => setMenuOpen(false)}
+                    className="px-4 py-2 text-sm text-center bg-blue-700 text-white rounded-md"
+                  >
+                    Mon compte
+                  </Link>
+                  <form action={signOutAction}>
+                    <button
+                      type="submit"
+                      className="w-full px-4 py-2 text-sm border border-slate-300 rounded-md"
+                    >
+                      Se déconnecter
+                    </button>
+                  </form>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <Link
+                    href="/connexion"
+                    onClick={() => setMenuOpen(false)}
+                    className="flex-1 px-4 py-2 text-sm text-center border border-slate-300 rounded-md"
+                  >
+                    Connexion
+                  </Link>
+                  <Link
+                    href="/inscription"
+                    onClick={() => setMenuOpen(false)}
+                    className="flex-1 px-4 py-2 text-sm text-center bg-blue-700 text-white rounded-md"
+                  >
+                    S&apos;inscrire
+                  </Link>
+                </div>
+              )}
             </div>
           </div>
         </nav>
