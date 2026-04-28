@@ -19,7 +19,7 @@ async function getOrigin(): Promise<string> {
   return (
     h.get("origin") ||
     h.get("referer")?.replace(/\/[^/]*$/, "") ||
-    "https://azimutfinance.vercel.app"
+    "https://azimutfinance.com"
   );
 }
 
