@@ -918,34 +918,7 @@ export default function ScreenerView({ stocks }: Props) {
   const fundCount = stocks.filter((s) => s.fundByWindow !== null).length;
 
   return (
-    <>
-      {/* === HERO === */}
-      <div className="bg-gradient-to-br from-blue-50 via-white to-blue-50 border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10">
-          <div className="text-xs md:text-sm text-slate-500 mb-2">
-            <Link href="/" className="hover:text-slate-900">Outils</Link>
-            <span className="mx-2">›</span>
-            <span>Screener d&apos;actions</span>
-          </div>
-          <div className="flex items-center gap-3 flex-wrap mb-2">
-            <h1 className="text-2xl md:text-3xl font-semibold">
-              Screener d&apos;actions BRVM
-            </h1>
-            <span className="text-xs px-2 py-1 rounded font-medium bg-blue-100 text-blue-700">
-              Premium
-            </span>
-          </div>
-          <p className="text-sm md:text-base text-slate-600 max-w-3xl">
-            Filtre les {stocks.length} sociétés cotées par PER, rendement,
-            capitalisation, volatilité, secteur, pays, profil quadrant
-            <strong> et fondamentaux</strong> (ROE, marge nette, croissance,
-            endettement). {fundCount} sociétés disposent de données
-            fondamentales.
-          </p>
-        </div>
-      </div>
-
-      <main className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8 space-y-4 md:space-y-6">
+    <main className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8 space-y-4 md:space-y-6">
         {/* === PRÉSETS === */}
         <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-5">
           <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">
@@ -1531,7 +1504,6 @@ export default function ScreenerView({ stocks }: Props) {
           )}
         </section>
       </main>
-    </>
   );
 }
 

@@ -1,4 +1,8 @@
-import PagePlaceholder from "@/components/PagePlaceholder";
+import { redirect } from "next/navigation";
+
+// Le "Terminal Pro" est desormais la home /pros (qui hebergait la zone Pro
+// dans son ensemble). On garde cette route en redirection pour ne pas casser
+// les liens externes ou bookmarks.
 export default function Page() {
-  return <PagePlaceholder title="Terminal Pro" badge="Pro" description="Dashboard complet pour SGI, banques et gérants d'actifs avec données en temps réel." />;
+  redirect("/pros");
 }

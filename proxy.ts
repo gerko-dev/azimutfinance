@@ -49,7 +49,10 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Routes protegees : redirige vers /connexion si pas de session
-  if (!user && pathname.startsWith("/compte")) {
+  if (
+    !user &&
+    (pathname.startsWith("/compte") || pathname.startsWith("/bienvenue"))
+  ) {
     const url = request.nextUrl.clone();
     url.pathname = "/connexion";
     url.searchParams.set("redirect", pathname);

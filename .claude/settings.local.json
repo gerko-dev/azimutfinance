@@ -26,7 +26,14 @@
       "Bash(grep -oE \"Fonds publiant.{0,400}\" /tmp/fcp.html)",
       "Bash(grep -oE \"Encours total.{0,250}\" /tmp/fcp.html)",
       "Bash(grep *)",
-      "Bash(netstat -ano)"
+      "Bash(netstat -ano)",
+      "Bash(npm install *)",
+      "Bash(git check-ignore *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "WebFetch(domain:www.brvm.org)",
+      "Read(//tmp/**)",
+      "Bash(node *)"
     ]
   }
 }

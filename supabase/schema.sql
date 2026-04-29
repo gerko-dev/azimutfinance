@@ -5,15 +5,21 @@
 -- ============================================================
 
 -- 1) Enum des roles applicatifs
---    'member' : utilisateur authentifie standard
---    'pro'    : acces complet aux outils Pro
---    (visiteur = non authentifie, pas de ligne dans profiles)
+--    'member'  : utilisateur authentifie standard (compte gratuit)
+--    'premium' : abonnement payant individuel
+--    'pro'     : acces complet aux outils Pro (clientele B2B)
+--    (Invite = visiteur non authentifie, pas de ligne dans profiles)
 do $$
 begin
   if not exists (select 1 from pg_type where typname = 'app_role') then
-    create type public.app_role as enum ('member', 'pro');
+    create type public.app_role as enum ('member', 'premium', 'pro');
   end if;
 end$$;
+
+-- Si l'enum existait deja avec seulement member/pro (avant l'ajout de premium),
+-- on l'enrichit. Idempotent grace a "if not exists".
+-- Note: "alter type ... add value" ne peut pas s'executer dans un bloc DO.
+alter type public.app_role add value if not exists 'premium';
 
 -- 2) Table profile 1:1 avec auth.users
 create table if not exists public.profiles (
@@ -101,3 +107,45 @@ grant update (email, username, full_name, avatar_url) on public.profiles to auth
 -- 7) Pas de policy INSERT/DELETE :
 --    - INSERT gere par le trigger handle_new_user (security definer)
 --    - DELETE cascade automatiquement depuis auth.users
+
+-- ============================================================
+-- Onboarding : enrichissement du profil au-dela du nom/email.
+-- Collecte progressive (wizard /bienvenue + nudges JIT in-app).
+-- ============================================================
+
+-- 8) Enums onboarding (idempotents)
+do $$
+begin
+  if not exists (select 1 from pg_type where typname = 'uemoa_country') then
+    create type public.uemoa_country as enum
+      ('ci','sn','bj','tg','bf','ml','ne','gw');
+  end if;
+  if not exists (select 1 from pg_type where typname = 'experience_level') then
+    create type public.experience_level as enum
+      ('debutant','initie','expert');
+  end if;
+  if not exists (select 1 from pg_type where typname = 'investment_horizon') then
+    create type public.investment_horizon as enum
+      ('court','moyen','long');
+  end if;
+end$$;
+
+-- 9) Colonnes ajoutees a profiles (idempotent via "if not exists")
+alter table public.profiles
+  add column if not exists country             public.uemoa_country,
+  add column if not exists experience_level    public.experience_level,
+  add column if not exists professional_sector text,
+  add column if not exists interests           text[] not null default '{}',
+  add column if not exists investment_horizon  public.investment_horizon,
+  add column if not exists onboarded_at        timestamptz,
+  add column if not exists dismissed_nudges    text[] not null default '{}';
+
+-- 10) Re-grant des colonnes update-ables pour 'authenticated'.
+--     Le revoke/grant initial (cf. point 6) n'incluait pas les nouvelles
+--     colonnes ; on regrante l'ensemble du set autorise.
+revoke update on public.profiles from authenticated;
+grant update (
+  email, username, full_name, avatar_url,
+  country, experience_level, professional_sector,
+  interests, investment_horizon, onboarded_at, dismissed_nudges
+) on public.profiles to authenticated;

@@ -1,6 +1,7 @@
 import Header from "@/components/Header";
 import Ticker from "@/components/Ticker";
 import FCPMarketView from "@/components/FCPMarketView";
+import ProfileNudge from "@/components/profile/ProfileNudge";
 import {
   loadFunds,
   listQuarterEnds,
@@ -19,7 +20,8 @@ import {
   quarterlyPerfHeatmap,
 } from "@/lib/fcpMath";
 
-export const dynamic = "force-static";
+// Le nudge JIT lit la session Supabase -> page necessairement dynamique.
+// Les CSV sont memoizes au niveau module, donc le cout supplementaire est minime.
 
 export type PeriodKey = "lastPeriod" | "ytd" | "m3" | "m6" | "m9" | "y1";
 
@@ -51,7 +53,7 @@ function median(values: number[]): number | null {
   return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
 }
 
-export default function Page() {
+export default async function Page() {
   const funds = loadFunds();
   const quarterEnds = listQuarterEnds();
 
@@ -140,6 +142,9 @@ export default function Page() {
     <div className="min-h-screen bg-slate-50">
       <Header />
       <Ticker />
+      <div className="max-w-7xl mx-auto px-4 md:px-6 pt-4">
+        <ProfileNudge field="investment_horizon" revalidate="/marches/fcp" />
+      </div>
       <FCPMarketView
         refQuarter={refQuarter}
         latestVLGlobal={latestVLGlobal}

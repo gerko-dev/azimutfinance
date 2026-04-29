@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import type { ScreenerRow, ScreenerPeriodKey, ScreenerCadence } from "@/app/outils/screener-fcp/page";
+import type { ScreenerRow, ScreenerPeriodKey, ScreenerCadence } from "@/lib/screenerFCPTypes";
 
 // ==========================================
 // HELPERS
@@ -314,16 +314,12 @@ export default function FCPScreenerView(props: Props) {
   };
 
   return (
-    <main className="mx-auto max-w-7xl px-4 py-8 space-y-6">
-      <header className="space-y-2">
-        <p className="text-xs uppercase tracking-wider text-slate-500">Outils</p>
-        <h1 className="text-3xl font-bold text-slate-900">Screener FCP / OPCVM</h1>
-        <p className="text-sm text-slate-600 max-w-3xl">
-          Recherche libre dans les {rows.length} fonds publiés au {fmtDateFR(refQuarter)}.
-          Combine catégorie, gestionnaire, AUM, performance sur fenêtre choisie, cadence et
-          ancienneté.
-        </p>
-      </header>
+    <main className="mx-auto max-w-7xl px-4 py-6 space-y-6">
+      <p className="text-xs text-slate-500">
+        Recherche libre dans les {rows.length} fonds publiés au{" "}
+        {fmtDateFR(refQuarter)}. Combine catégorie, gestionnaire, AUM,
+        performance sur fenêtre choisie, cadence et ancienneté.
+      </p>
 
       {/* === FILTRES === */}
       <section className="bg-white border border-slate-200 rounded-lg p-5 space-y-4">

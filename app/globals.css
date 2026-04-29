@@ -22,3 +22,265 @@ body {
   color: #171717;
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Scrollbar Pro Terminal : se fond dans le fond sombre.
+   - Invisible au repos (track + thumb transparents)
+   - Apparait discretement quand on survole la zone scrollable
+   - Tonalites slate-700/600, pas de blanc, jamais de chrome OS par defaut. */
+.pro-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 0.25s ease;
+}
+.pro-scrollbar:hover {
+  scrollbar-color: rgba(51, 65, 85, 0.55) transparent;
+}
+.pro-scrollbar::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+.pro-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+  border: none;
+}
+.pro-scrollbar::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 9999px;
+  transition: background-color 0.25s ease;
+}
+.pro-scrollbar:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(51, 65, 85, 0.55);
+}
+.pro-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(71, 85, 105, 0.75);
+}
+.pro-scrollbar::-webkit-scrollbar-corner,
+.pro-scrollbar::-webkit-scrollbar-button {
+  display: none;
+  background: transparent;
+}
+
+/* Scrollbar de page pour les routes Pro Terminal.
+   Active via document.body.dataset.pro = "1" depuis ProShell. */
+body[data-pro="1"] {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(51, 65, 85, 0.45) transparent;
+}
+body[data-pro="1"]::-webkit-scrollbar {
+  width: 8px;
+}
+body[data-pro="1"]::-webkit-scrollbar-track {
+  background: transparent;
+}
+body[data-pro="1"]::-webkit-scrollbar-thumb {
+  background-color: rgba(51, 65, 85, 0.45);
+  border-radius: 9999px;
+  transition: background-color 0.2s;
+}
+body[data-pro="1"]::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(71, 85, 105, 0.75);
+}
+body[data-pro="1"]::-webkit-scrollbar-corner,
+body[data-pro="1"]::-webkit-scrollbar-button {
+  display: none;
+  background: transparent;
+}
+
+/* ============================================================
+   Pro Tool wrapper : transforme un composant cote "site public"
+   (cartes blanches, texte fonce) en composant qui s'integre au
+   theme sombre du Pro Terminal — sans toucher au composant lui-meme.
+   ============================================================ */
+.pro-tool {
+  color: rgb(226, 232, 240); /* slate-200 par defaut */
+}
+
+/* Surfaces */
+.pro-tool .bg-white {
+  background-color: rgba(30, 41, 59, 0.55); /* slate-800 / 55% */
+  backdrop-filter: blur(2px);
+}
+.pro-tool .bg-slate-50 {
+  background-color: rgba(15, 23, 42, 0.55); /* slate-900 / 55% */
+}
+.pro-tool .bg-slate-100 {
+  background-color: rgb(30, 41, 59);
+}
+.pro-tool .bg-slate-200 {
+  background-color: rgb(51, 65, 85);
+}
+
+/* Bordures */
+.pro-tool .border-slate-100 {
+  border-color: rgb(30, 41, 59);
+}
+.pro-tool .border-slate-200 {
+  border-color: rgb(51, 65, 85);
+}
+.pro-tool .border-slate-300 {
+  border-color: rgb(71, 85, 105);
+}
+
+/* Text */
+.pro-tool .text-slate-900 {
+  color: rgb(248, 250, 252);
+}
+.pro-tool .text-slate-800 {
+  color: rgb(241, 245, 249);
+}
+.pro-tool .text-slate-700 {
+  color: rgb(203, 213, 225);
+}
+.pro-tool .text-slate-600 {
+  color: rgb(148, 163, 184);
+}
+.pro-tool .text-slate-500 {
+  color: rgb(148, 163, 184);
+}
+.pro-tool .text-slate-400 {
+  color: rgb(100, 116, 139);
+}
+
+/* Hover */
+.pro-tool .hover\:bg-slate-50:hover {
+  background-color: rgba(30, 41, 59, 0.8);
+}
+.pro-tool .hover\:bg-slate-100:hover {
+  background-color: rgb(51, 65, 85);
+}
+.pro-tool .hover\:bg-white:hover {
+  background-color: rgba(30, 41, 59, 0.8);
+}
+.pro-tool .hover\:border-slate-300:hover {
+  border-color: rgb(71, 85, 105);
+}
+.pro-tool .hover\:text-slate-900:hover {
+  color: rgb(248, 250, 252);
+}
+.pro-tool .hover\:text-slate-800:hover {
+  color: rgb(241, 245, 249);
+}
+
+/* Couleurs accent (badges, alertes, etc.) */
+.pro-tool .bg-blue-50 {
+  background-color: rgba(59, 130, 246, 0.12);
+}
+.pro-tool .bg-blue-100 {
+  background-color: rgba(59, 130, 246, 0.2);
+}
+.pro-tool .text-blue-700 {
+  color: rgb(147, 197, 253);
+}
+.pro-tool .text-blue-800 {
+  color: rgb(191, 219, 254);
+}
+.pro-tool .text-blue-900 {
+  color: rgb(219, 234, 254);
+}
+.pro-tool .border-blue-200 {
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.pro-tool .bg-emerald-50,
+.pro-tool .bg-green-50 {
+  background-color: rgba(16, 185, 129, 0.12);
+}
+.pro-tool .bg-emerald-100,
+.pro-tool .bg-green-100 {
+  background-color: rgba(16, 185, 129, 0.2);
+}
+.pro-tool .text-emerald-700,
+.pro-tool .text-green-700 {
+  color: rgb(110, 231, 183);
+}
+.pro-tool .text-emerald-800,
+.pro-tool .text-green-800 {
+  color: rgb(167, 243, 208);
+}
+.pro-tool .border-emerald-200,
+.pro-tool .border-green-200 {
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.pro-tool .bg-red-50 {
+  background-color: rgba(239, 68, 68, 0.12);
+}
+.pro-tool .bg-red-100 {
+  background-color: rgba(239, 68, 68, 0.2);
+}
+.pro-tool .text-red-700 {
+  color: rgb(252, 165, 165);
+}
+.pro-tool .text-red-800 {
+  color: rgb(254, 202, 202);
+}
+.pro-tool .border-red-200 {
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.pro-tool .bg-amber-50 {
+  background-color: rgba(245, 158, 11, 0.12);
+}
+.pro-tool .bg-amber-100 {
+  background-color: rgba(245, 158, 11, 0.2);
+}
+.pro-tool .text-amber-700 {
+  color: rgb(252, 211, 77);
+}
+.pro-tool .text-amber-800 {
+  color: rgb(253, 230, 138);
+}
+.pro-tool .border-amber-200 {
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.pro-tool .bg-purple-50 {
+  background-color: rgba(168, 85, 247, 0.12);
+}
+.pro-tool .bg-purple-100 {
+  background-color: rgba(168, 85, 247, 0.2);
+}
+.pro-tool .text-purple-700 {
+  color: rgb(216, 180, 254);
+}
+.pro-tool .text-purple-800 {
+  color: rgb(233, 213, 255);
+}
+.pro-tool .border-purple-200 {
+  border-color: rgba(168, 85, 247, 0.3);
+}
+
+/* Gradients (souvent utilises en heros) — neutralises */
+.pro-tool .bg-gradient-to-br,
+.pro-tool .bg-gradient-to-r,
+.pro-tool .bg-gradient-to-b,
+.pro-tool .bg-gradient-to-l,
+.pro-tool .bg-gradient-to-tr,
+.pro-tool .bg-gradient-to-tl {
+  background-image: none;
+}
+
+/* Inputs / formulaires */
+.pro-tool input,
+.pro-tool select,
+.pro-tool textarea {
+  background-color: rgba(15, 23, 42, 0.6);
+  color: rgb(241, 245, 249);
+  border-color: rgb(51, 65, 85);
+}
+.pro-tool input::placeholder,
+.pro-tool textarea::placeholder {
+  color: rgb(100, 116, 139);
+}
+.pro-tool select option {
+  background-color: rgb(15, 23, 42);
+  color: rgb(241, 245, 249);
+}
+
+/* Le main interne du composant ne doit pas reduplicar la largeur du layout */
+.pro-tool > main {
+  margin: 0;
+  padding-left: 0;
+  padding-right: 0;
+  max-width: none;
+}

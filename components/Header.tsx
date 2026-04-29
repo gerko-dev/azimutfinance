@@ -39,20 +39,7 @@ const menuSections: MenuSection[] = [
     label: "Marché monétaire",
     items: [
       { label: "Taux BCEAO & UEMOA", href: "/marche-monetaire" },
-      { label: "Courbes de taux", href: "/marche-monetaire#courbe" },
-      { label: "Adjudications passées", href: "/marche-monetaire#adjudications" },
-      { label: "Calendrier adjudications", href: "/marche-monetaire#calendrier" },
-    ],
-  },
-  {
-    label: "Outils Pro",
-    items: [
-      { label: "Simulateur YTM", href: "/outils/ytm", badge: "Premium" },
-      { label: "Screener d'actions", href: "/outils/screener", badge: "Premium" },
-      { label: "Screener FCP", href: "/outils/screener-fcp", badge: "Premium" },
-      { label: "Comparateur sociétés", href: "/outils/comparateur", badge: "Premium" },
-      { label: "Alertes personnalisées", href: "/outils/alertes", badge: "Premium" },
-      { label: "Portefeuille personnel", href: "/outils/portefeuille", badge: "Bientôt" },
+      { label: "Récapitulatif MTP", href: "/marche-monetaire/mtp" },
     ],
   },
   {
@@ -84,8 +71,8 @@ const menuSections: MenuSection[] = [
   {
     label: "Pros",
     items: [
+      { label: "Terminal Pro", href: "/pros", badge: "Pro" },
       { label: "Place de marché OTC", href: "/pros/otc", badge: "Pro" },
-      { label: "Terminal Pro", href: "/pros/terminal", badge: "Pro" },
       { label: "API data", href: "/pros/api", badge: "Pro" },
       { label: "Research sur mesure", href: "/pros/research", badge: "Pro" },
     ],

@@ -56,13 +56,29 @@ export async function signInAction(
   }
 
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { error, data } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error) {
     return { error: translateAuthError(error.message) };
   }
 
   revalidatePath("/", "layout");
+
+  // Si l'utilisateur n'a pas demande de redirect specifique (cible par defaut
+  // /compte) et qu'il n'a pas encore fait l'onboarding, on detoure par
+  // /bienvenue. Le LoginForm injecte toujours un hidden "redirect", donc on
+  // se base sur la valeur, pas sur la presence du champ.
+  if (redirectTo === "/compte" && data.user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("onboarded_at")
+      .eq("id", data.user.id)
+      .single();
+    if (!profile?.onboarded_at) {
+      redirect("/bienvenue");
+    }
+  }
+
   redirect(redirectTo);
 }
 

@@ -1,6 +1,7 @@
 import Header from "@/components/Header";
 import Ticker from "@/components/Ticker";
 import ActionsBRVMView from "@/components/ActionsBRVMView";
+import ProfileNudge from "@/components/profile/ProfileNudge";
 import {
   loadAllActions,
   getActionsMarketStats,
@@ -13,7 +14,8 @@ import {
   buildRiskReturnDataset,
 } from "@/lib/dataLoader";
 
-export const dynamic = "force-static";
+// Le nudge JIT lit la session Supabase -> page necessairement dynamique.
+// Les CSV sont memoizes au niveau module, donc le cout supplementaire est minime.
 
 const indexColors: Record<string, string> = {
   BRVMC: "#185FA5",
@@ -29,7 +31,7 @@ const indexColors: Record<string, string> = {
   "BRVM-TEL": "#db2777",
 };
 
-export default function Page() {
+export default async function Page() {
   const actions = loadAllActions();
   const marketStats = getActionsMarketStats(actions);
   const topGainers = getTopGainers(actions, 5);
@@ -52,6 +54,9 @@ export default function Page() {
     <div className="min-h-screen bg-slate-50">
       <Header />
       <Ticker />
+      <div className="max-w-7xl mx-auto px-4 md:px-6 pt-4">
+        <ProfileNudge field="interests" revalidate="/marches/actions" />
+      </div>
       <ActionsBRVMView
         actions={actions}
         marketStats={marketStats}
