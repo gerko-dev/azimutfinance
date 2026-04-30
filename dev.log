@@ -1,0 +1,15 @@
+
+> azimutfinance@0.1.0 dev
+> next dev
+
+⚠ Port 3000 is in use by process 12296, using available port 3001 instead.
+▲ Next.js 16.2.4 (Turbopack)
+- Local:         http://localhost:3001
+- Network:       http://192.168.100.10:3001
+- Environments: .env.local
+✓ Ready in 1625ms
+
+○ Compiling /macro/pays ...
+memory allocation of 134217728 bytes failed
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+[?25h

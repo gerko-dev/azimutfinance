@@ -33,7 +33,24 @@
       "Bash(git push *)",
       "WebFetch(domain:www.brvm.org)",
       "Read(//tmp/**)",
-      "Bash(node *)"
+      "Bash(node *)",
+      "Bash(iconv -f WINDOWS-1252 -t UTF-8)",
+      "Bash(npx --no-install eslint app/macro/pays/page.tsx components/macro/ lib/macroLoader.ts lib/macroFormat.ts)",
+      "Bash(npx --no-install tsc --noEmit)",
+      "Bash(python -c \"import sys, json; [print\\(json.loads\\(l\\).get\\('message',''\\)[:2000]\\) for l in sys.stdin if l.strip\\(\\)]\")",
+      "Bash(npx --no-install eslint app/macro/pays/page.tsx components/macro/ lib/macroLoader.ts lib/macroFormat.ts lib/macroTypes.ts)",
+      "Bash(xxd /tmp/macro_check2.html)",
+      "Bash(npx --no-install eslint components/macro/)",
+      "Bash(npx --no-install eslint app/macro/pays/page.tsx components/macro/)",
+      "Bash(iconv -f UTF-8 -t UTF-8 data/macro.csv)",
+      "Bash(python3 *)",
+      "Bash(npx next *)",
+      "Bash(tee /tmp/dev.log)",
+      "PowerShell(Get-NetTCPConnection *)",
+      "PowerShell(Out-File *)",
+      "PowerShell($countries = @\\('CI','SN','BJ','BF','ML','NE','TG','GW','UMOA'\\); foreach \\($c in $countries\\) { try { $r = Invoke-WebRequest -Uri \"http://localhost:3000/macro/pays?pays=$c\" -TimeoutSec 90 -UseBasicParsing -ErrorAction Stop; Write-Output \"$c : $\\($r.StatusCode\\)\" } catch { Write-Output \"$c : ERROR $\\($_.Exception.Message\\)\" } })",
+      "PowerShell(Get-Process *)",
+      "PowerShell($urls = @\\('/macro/devises','/macro/immobilier','/macro/matieres-premieres','/macro/pays'\\); foreach \\($u in $urls\\) { try { $r = Invoke-WebRequest -Uri \"http://localhost:3000$u\" -TimeoutSec 60 -UseBasicParsing -ErrorAction Stop; Write-Output \"$u : $\\($r.StatusCode\\)\" } catch { Write-Output \"$u : ERROR $\\($_.Exception.Response.StatusCode.value__\\) $\\($_.Exception.Message\\)\" } })"
     ]
   }
 }
