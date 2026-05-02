@@ -50,7 +50,20 @@
       "PowerShell(Out-File *)",
       "PowerShell($countries = @\\('CI','SN','BJ','BF','ML','NE','TG','GW','UMOA'\\); foreach \\($c in $countries\\) { try { $r = Invoke-WebRequest -Uri \"http://localhost:3000/macro/pays?pays=$c\" -TimeoutSec 90 -UseBasicParsing -ErrorAction Stop; Write-Output \"$c : $\\($r.StatusCode\\)\" } catch { Write-Output \"$c : ERROR $\\($_.Exception.Message\\)\" } })",
       "PowerShell(Get-Process *)",
-      "PowerShell($urls = @\\('/macro/devises','/macro/immobilier','/macro/matieres-premieres','/macro/pays'\\); foreach \\($u in $urls\\) { try { $r = Invoke-WebRequest -Uri \"http://localhost:3000$u\" -TimeoutSec 60 -UseBasicParsing -ErrorAction Stop; Write-Output \"$u : $\\($r.StatusCode\\)\" } catch { Write-Output \"$u : ERROR $\\($_.Exception.Response.StatusCode.value__\\) $\\($_.Exception.Message\\)\" } })"
+      "PowerShell($urls = @\\('/macro/devises','/macro/immobilier','/macro/matieres-premieres','/macro/pays'\\); foreach \\($u in $urls\\) { try { $r = Invoke-WebRequest -Uri \"http://localhost:3000$u\" -TimeoutSec 60 -UseBasicParsing -ErrorAction Stop; Write-Output \"$u : $\\($r.StatusCode\\)\" } catch { Write-Output \"$u : ERROR $\\($_.Exception.Response.StatusCode.value__\\) $\\($_.Exception.Message\\)\" } })",
+      "Bash(ps -W)",
+      "Bash(git stash *)",
+      "WebFetch(domain:jiji.ci)",
+      "WebSearch",
+      "WebFetch(domain:jiji.co.ci)",
+      "WebFetch(domain:ci.coinafrique.com)",
+      "Bash(where node *)",
+      "Bash(where npx *)",
+      "PowerShell(npx tsc --noEmit 2>&1 | Select-Object -First 50)",
+      "PowerShell(npm run *)",
+      "PowerShell(npx tsc --noEmit 2>&1 | Select-Object -First 30)",
+      "PowerShell(npx tsc --noEmit 2>&1 | Select-Object -First 40)",
+      "PowerShell(npx tsc --noEmit 2>&1 | Select-Object -First 20)"
     ]
   }
 }

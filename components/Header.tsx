@@ -48,7 +48,7 @@ const menuSections: MenuSection[] = [
       { label: "Indicateurs pays UEMOA", href: "/macro/pays" },
       { label: "Matières premières", href: "/macro/matieres-premieres" },
       { label: "Devises & FX", href: "/macro/devises" },
-      { label: "Immobilier Abidjan", href: "/macro/immobilier" },
+      { label: "Immobilier", href: "/macro/immobilier" },
     ],
   },
   {
@@ -57,7 +57,7 @@ const menuSections: MenuSection[] = [
       { label: "Catalogue formations", href: "/academie/formations" },
       { label: "Glossaire financier", href: "/academie/glossaire" },
       { label: "Magazine digital", href: "/academie/magazine" },
-      { label: "Simulateur de trading", href: "/academie/simulateur", badge: "Bientôt" },
+      { label: "Simulateur de portefeuille", href: "/academie/simulateur" },
     ],
   },
   {
@@ -284,6 +284,13 @@ export default function Header() {
                   >
                     Mon compte
                   </Link>
+                  <Link
+                    href="/messagerie"
+                    onClick={() => setUserMenuOpen(false)}
+                    className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                  >
+                    Messagerie
+                  </Link>
                   <form action={signOutAction}>
                     <button
                       type="submit"
@@ -443,6 +450,13 @@ export default function Header() {
                     className="px-4 py-2 text-sm text-center bg-blue-700 text-white rounded-md"
                   >
                     Mon compte
+                  </Link>
+                  <Link
+                    href="/messagerie"
+                    onClick={() => setMenuOpen(false)}
+                    className="px-4 py-2 text-sm text-center border border-slate-300 rounded-md"
+                  >
+                    Messagerie
                   </Link>
                   <form action={signOutAction}>
                     <button
