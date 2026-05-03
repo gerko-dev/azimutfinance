@@ -1,0 +1,96 @@
+# Scrape Sikafinance pour rafraichir l'historique OHLC des titres + indices
+# BRVM, puis commit + push automatiquement. Vercel redeploiera en cascade.
+#
+# Cron : tous les jours ouvres a 19h UTC (apres cloture BRVM ~12h UTC + marge
+# pour laisser Sika consolider la session). 5 runs par semaine.
+# Egalement declenchable manuellement depuis l'UI GitHub Actions.
+
+name: Scrape Sikafinance
+
+on:
+  schedule:
+    - cron: "0 19 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      only_tickers:
+        description: "Tickers a scraper (espace-separe). Vide = tous."
+        required: false
+        default: ""
+      indices_only:
+        description: "Ne scrape que les indices (skip actions)"
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: write # autorise le commit + push depuis le runner
+
+# Empeche 2 runs simultanes (eviter conflits push)
+concurrency:
+  group: scrape-sika
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Token PAT non requis : permissions:contents:write sur GITHUB_TOKEN suffit
+          fetch-depth: 1
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install requests
+
+      - name: Scrape actions BRVM
+        if: ${{ inputs.indices_only != true }}
+        run: |
+          if [ -n "${{ inputs.only_tickers }}" ]; then
+            python scripts/scrape_sika_history.py --only ${{ inputs.only_tickers }} --workers 4 --delay 0.3
+          else
+            python scripts/scrape_sika_history.py --workers 4 --delay 0.3
+          fi
+
+      - name: Scrape indices BRVM
+        run: |
+          if [ -n "${{ inputs.only_tickers }}" ]; then
+            python scripts/scrape_sika_history.py --indices --only ${{ inputs.only_tickers }} --workers 4 --delay 0.3
+          else
+            python scripts/scrape_sika_history.py --indices --workers 4 --delay 0.3
+          fi
+
+      - name: Show diff stats
+        run: |
+          echo "=== Files modified or added ==="
+          git status --short data/historique_sika data/historique_sika_indices || true
+          echo ""
+          echo "=== Lines added/removed ==="
+          git diff --stat data/historique_sika data/historique_sika_indices || true
+
+      - name: Commit & push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/historique_sika data/historique_sika_indices
+          if git diff --staged --quiet; then
+            echo "Aucun changement a commiter."
+            exit 0
+          fi
+          DATE_TAG=$(date -u +%Y-%m-%d)
+          git commit -m "chore(data): refresh Sika historique BRVM ${DATE_TAG}
+
+Mise a jour automatique via GitHub Actions (workflow scrape-sika).
+Source : Sikafinance API GetHistos."
+          git push
+          echo "Push effectue avec succes."
