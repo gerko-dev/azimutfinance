@@ -88,9 +88,9 @@ jobs:
             exit 0
           fi
           DATE_TAG=$(date -u +%Y-%m-%d)
-          git commit -m "chore(data): refresh Sika historique BRVM ${DATE_TAG}
-
-Mise a jour automatique via GitHub Actions (workflow scrape-sika).
-Source : Sikafinance API GetHistos."
+          git commit \
+            -m "chore(data): refresh Sika historique BRVM ${DATE_TAG}" \
+            -m "Mise a jour automatique via GitHub Actions (workflow scrape-sika)." \
+            -m "Source : Sikafinance API GetHistos."
           git push
           echo "Push effectue avec succes."
