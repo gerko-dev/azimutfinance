@@ -44,3 +44,7 @@ next-env.d.ts
 
 # scratch/debug
 tmp_*
+
+# python
+__pycache__/
+*.pyc
