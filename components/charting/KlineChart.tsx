@@ -168,8 +168,15 @@ export default function KlineChart({
   const [showDrawMenu, setShowDrawMenu] = useState(false);
   const [showIndMenu, setShowIndMenu] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  // Flip a true quand l'init async de klinecharts a termine ; sert de gate
+  // pour le useEffect [data] qui repeuple les bougies a chaque changement
+  // de periode dans le composant parent.
+  const [chartReady, setChartReady] = useState(false);
 
-  // Init chart au montage / sur changement de data
+  // Init chart une fois par symbole. Les changements de data (selecteur de
+  // periode parent) sont geres par un useEffect dedie plus bas — sinon on
+  // disposerait/recreerait le chart a chaque clic, en perdant indicateurs et
+  // dessins de l'utilisateur.
   useEffect(() => {
     let cancelled = false;
     let containerSnapshot: HTMLDivElement | null = null;
@@ -216,28 +223,23 @@ export default function KlineChart({
       });
       chart.setPeriod({ type: "day", span: 1 });
 
-      chart.setDataLoader({
-        getBars: ({ type, callback }) => {
-          if (type === "init") {
-            // On envoie tout d'un coup ; pas de pagination forward/backward
-            callback(data, false);
-          } else {
-            callback([], false);
-          }
-        },
-      });
-
-      // Indicateurs initiaux
+      // Indicateurs initiaux — l'alimentation des bougies est faite par le
+      // useEffect [data] ci-dessous.
       chart.createIndicator("MA", false, { id: "candle_pane" });
       chart.createIndicator("VOL", false, { id: "vol_pane" });
 
       moduleRef.current = klc;
       chartRef.current = chart;
       containerSnapshot = containerRef.current;
+      // Le state existe juste pour declencher le useEffect data ci-dessous
+      // sur le tout premier render (data peut avoir change avant que chart
+      // soit pret).
+      setChartReady(true);
     })();
 
     return () => {
       cancelled = true;
+      setChartReady(false);
       if (moduleRef.current && containerSnapshot) {
         try {
           moduleRef.current.dispose(containerSnapshot);
@@ -247,8 +249,35 @@ export default function KlineChart({
       }
       chartRef.current = null;
     };
+    // `data` est lue uniquement pour calculer la precision prix initiale ;
+    // les changements ulterieurs sont propages via le useEffect [data].
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [code, data.length]);
+  }, [code, pricePrecision]);
+
+  // Met a jour les bougies a chaque changement de `data`. setDataLoader
+  // declenche resetData() puis _processDataLoad('init'), qui rappelle getBars
+  // avec la nouvelle closure — la lib repeuple le chart automatiquement.
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart || !chartReady) return;
+    chart.setDataLoader({
+      getBars: ({ type, callback }) => {
+        if (type === "init") callback(data, false);
+        else callback([], false);
+      },
+    });
+    // Recale le viewport sur les dernieres bougies — sinon klinecharts garde
+    // la plage visible precedente (qui peut tomber hors des nouvelles donnees).
+    if (data.length > 0) {
+      try {
+        (chart as unknown as {
+          scrollToRealTime: (ms?: number) => void;
+        }).scrollToRealTime(0);
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [data, chartReady]);
 
   // Resize sur fullscreen toggle
   useEffect(() => {

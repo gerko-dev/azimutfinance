@@ -901,7 +901,7 @@ export default function StockDetailView({
                     aria-hidden={isPremium ? undefined : true}
                   >
                     <KlineChart
-                      key={isPremium ? klPeriod : "teaser"}
+                      key={isPremium ? "premium" : "teaser"}
                       data={isPremium ? filteredOhlc : ohlcHistory}
                       code={stock.code}
                       name={stock.name}
