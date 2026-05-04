@@ -8,6 +8,11 @@ type Props = {
   onClose: () => void;
   title: string;
   description: string;
+  /**
+   * Niveau d'abonnement requis. "member" (defaut) propose Inscription /
+   * Connexion. "premium" propose un upgrade vers /compte.
+   */
+  tier?: "member" | "premium";
 };
 
 export default function MemberGateDialog({
@@ -15,6 +20,7 @@ export default function MemberGateDialog({
   onClose,
   title,
   description,
+  tier = "member",
 }: Props) {
   useEffect(() => {
     if (!open) return;
@@ -40,7 +46,7 @@ export default function MemberGateDialog({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start gap-3 mb-3">
-          <div className="text-2xl shrink-0">🔓</div>
+          <div className="text-2xl shrink-0">{tier === "premium" ? "⭐" : "🔓"}</div>
           <div className="min-w-0">
             <h3
               id="member-gate-title"
@@ -59,18 +65,29 @@ export default function MemberGateDialog({
           >
             Plus tard
           </button>
-          <Link
-            href="/connexion"
-            className="px-3 py-1.5 rounded-md border border-slate-300 text-sm font-medium hover:bg-slate-50 transition"
-          >
-            Connexion
-          </Link>
-          <Link
-            href="/inscription"
-            className="px-3 py-1.5 rounded-md bg-blue-700 text-white text-sm font-medium hover:bg-blue-800 transition"
-          >
-            S&apos;inscrire
-          </Link>
+          {tier === "premium" ? (
+            <Link
+              href="/compte"
+              className="px-3 py-1.5 rounded-md bg-amber-500 text-white text-sm font-medium hover:bg-amber-600 transition"
+            >
+              Passer Premium
+            </Link>
+          ) : (
+            <>
+              <Link
+                href="/connexion"
+                className="px-3 py-1.5 rounded-md border border-slate-300 text-sm font-medium hover:bg-slate-50 transition"
+              >
+                Connexion
+              </Link>
+              <Link
+                href="/inscription"
+                className="px-3 py-1.5 rounded-md bg-blue-700 text-white text-sm font-medium hover:bg-blue-800 transition"
+              >
+                S&apos;inscrire
+              </Link>
+            </>
+          )}
         </div>
       </div>
     </div>

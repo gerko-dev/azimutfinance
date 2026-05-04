@@ -1053,6 +1053,7 @@ export default function StockDetailView({
             ticker={stock.code}
             currentPrice={stock.price}
             ratios={ratios}
+            userRole={userRole}
           />
         )}
 
@@ -1060,6 +1061,7 @@ export default function StockDetailView({
           <TechnicalAnalysisView
             ticker={stock.code}
             history={priceHistoryWithVolume}
+            userRole={userRole}
           />
         )}
 

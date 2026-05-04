@@ -15,11 +15,14 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import type { FundRatios } from "@/lib/fundamentals";
+import type { UserRole } from "@/lib/auth/userRole";
+import MemberGateDialog from "./MemberGateDialog";
 
 type Props = {
   ticker: string;
   currentPrice: number;
   ratios: FundRatios[]; // exercices croissants
+  userRole: UserRole;
 };
 
 // Les exercices antérieurs à 2020 contiennent beaucoup de DPA absents qui
@@ -237,7 +240,22 @@ function buildQualityScore(
 
 // === Composant principal ===
 
-export default function DividendsView({ ticker, currentPrice, ratios }: Props) {
+export default function DividendsView({
+  ticker,
+  currentPrice,
+  ratios,
+  userRole,
+}: Props) {
+  const isMember = userRole !== null;
+  const isPremium = userRole === "premium" || userRole === "pro";
+  const [memberGateOpen, setMemberGateOpen] = useState(false);
+  const [premiumGateOpen, setPremiumGateOpen] = useState(false);
+  const [premiumGateMsg, setPremiumGateMsg] = useState<string>("");
+  function openPremiumGate(msg: string) {
+    setPremiumGateMsg(msg);
+    setPremiumGateOpen(true);
+  }
+
   const ratiosFromStart = useMemo(
     () => ratios.filter((r) => r.exercice >= DIV_ANALYSIS_START_YEAR),
     [ratios]
@@ -409,8 +427,43 @@ export default function DividendsView({ ticker, currentPrice, ratios }: Props) {
           />
         </div>
 
-        {/* Score qualité */}
-        <ScoreCard score={qualityScore} />
+        {/* Score qualité — Premium, cadenas pour roles inf */}
+        <div className="relative">
+          <div
+            className={
+              isPremium ? "" : "blur-[3px] pointer-events-none select-none"
+            }
+            aria-hidden={isPremium ? undefined : true}
+          >
+            <ScoreCard score={qualityScore} />
+          </div>
+          {!isPremium && (
+            <div className="absolute inset-0 flex items-center justify-center p-3 pointer-events-none">
+              <button
+                type="button"
+                onClick={() =>
+                  openPremiumGate(
+                    "Le score qualité dividende est réservé à l'abonnement Premium.",
+                  )
+                }
+                className="bg-white rounded-lg shadow-xl border border-amber-200 max-w-xs w-full p-3 pointer-events-auto text-left hover:border-amber-300 transition"
+              >
+                <div className="flex items-start gap-2">
+                  <div className="text-xl shrink-0">⭐</div>
+                  <div className="min-w-0">
+                    <h4 className="text-xs font-semibold text-slate-900">
+                      Score qualité Premium
+                    </h4>
+                    <p className="text-[11px] text-slate-600 mt-0.5">
+                      Note sur 100 et critères détaillés. Disponible avec
+                      Premium.
+                    </p>
+                  </div>
+                </div>
+              </button>
+            </div>
+          )}
+        </div>
       </section>
 
       {/* === HISTORIQUE === */}
@@ -482,58 +535,94 @@ export default function DividendsView({ ticker, currentPrice, ratios }: Props) {
           </ResponsiveContainer>
         </div>
 
-        {/* Tableau historique */}
-        <div className="mt-4 overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-xs text-slate-500 bg-slate-50 border-y border-slate-200">
-                <th className="text-left px-3 py-2 font-medium">Exercice</th>
-                <th className="text-right px-3 py-2 font-medium">DPA (FCFA)</th>
-                <th className="text-right px-3 py-2 font-medium">BPA (FCFA)</th>
-                <th className="text-right px-3 py-2 font-medium">Croissance</th>
-                <th className="text-right px-3 py-2 font-medium">Yield</th>
-                <th className="text-right px-3 py-2 font-medium hidden md:table-cell">
-                  Payout
-                </th>
-                <th className="text-right px-3 py-2 font-medium hidden md:table-cell">
-                  Couverture
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {[...history].reverse().map((h) => (
-                <tr key={h.exercice} className="border-b border-slate-50 last:border-0">
-                  <td className="px-3 py-2 font-medium">{h.exercice}</td>
-                  <td className="px-3 py-2 text-right font-mono">
-                    {h.dpa > 0 ? formatFCFA(h.dpa) : "—"}
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono text-slate-500">
-                    {h.bpa !== null && h.bpa !== 0 ? formatFCFA(h.bpa) : "—"}
-                  </td>
-                  <td className={`px-3 py-2 text-right ${pctColor(h.growth)}`}>
-                    {formatPctSigned(h.growth, 1)}
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    {h.yieldPct !== null ? formatPct(h.yieldPct, 2) : "—"}
-                  </td>
-                  <td className="px-3 py-2 text-right hidden md:table-cell">
-                    {h.payout !== null && h.payout > 0 ? formatPct(h.payout, 1) : "—"}
-                  </td>
-                  <td className="px-3 py-2 text-right hidden md:table-cell">
-                    {h.cover !== null ? `${h.cover.toFixed(2).replace(".", ",")}×` : "—"}
-                  </td>
+        {/* Tableau historique — Membre+, cadenas pour visiteur */}
+        <div className="relative mt-4">
+          <div
+            className={`overflow-x-auto ${
+              isMember ? "" : "blur-[3px] pointer-events-none select-none"
+            }`}
+            aria-hidden={isMember ? undefined : true}
+          >
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-xs text-slate-500 bg-slate-50 border-y border-slate-200">
+                  <th className="text-left px-3 py-2 font-medium">Exercice</th>
+                  <th className="text-right px-3 py-2 font-medium">DPA (FCFA)</th>
+                  <th className="text-right px-3 py-2 font-medium">BPA (FCFA)</th>
+                  <th className="text-right px-3 py-2 font-medium">Croissance</th>
+                  <th className="text-right px-3 py-2 font-medium">Yield</th>
+                  <th className="text-right px-3 py-2 font-medium hidden md:table-cell">
+                    Payout
+                  </th>
+                  <th className="text-right px-3 py-2 font-medium hidden md:table-cell">
+                    Couverture
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {[...history].reverse().map((h) => (
+                  <tr key={h.exercice} className="border-b border-slate-50 last:border-0">
+                    <td className="px-3 py-2 font-medium">{h.exercice}</td>
+                    <td className="px-3 py-2 text-right font-mono">
+                      {h.dpa > 0 ? formatFCFA(h.dpa) : "—"}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono text-slate-500">
+                      {h.bpa !== null && h.bpa !== 0 ? formatFCFA(h.bpa) : "—"}
+                    </td>
+                    <td className={`px-3 py-2 text-right ${pctColor(h.growth)}`}>
+                      {formatPctSigned(h.growth, 1)}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      {h.yieldPct !== null ? formatPct(h.yieldPct, 2) : "—"}
+                    </td>
+                    <td className="px-3 py-2 text-right hidden md:table-cell">
+                      {h.payout !== null && h.payout > 0 ? formatPct(h.payout, 1) : "—"}
+                    </td>
+                    <td className="px-3 py-2 text-right hidden md:table-cell">
+                      {h.cover !== null ? `${h.cover.toFixed(2).replace(".", ",")}×` : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {!isMember && (
+            <div className="absolute inset-0 flex items-center justify-center p-4 pointer-events-none">
+              <button
+                type="button"
+                onClick={() => setMemberGateOpen(true)}
+                className="bg-white rounded-lg shadow-xl border border-slate-200 max-w-md w-full p-4 pointer-events-auto text-left hover:border-slate-300 transition"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="text-2xl shrink-0">🔓</div>
+                  <div className="min-w-0">
+                    <h4 className="text-sm font-semibold text-slate-900">
+                      Inscrivez-vous pour voir l&apos;historique détaillé
+                    </h4>
+                    <p className="text-xs text-slate-600 mt-1">
+                      DPA, BPA, croissance, yield, payout et couverture sur
+                      tous les exercices. Inscription gratuite.
+                    </p>
+                  </div>
+                </div>
+              </button>
+            </div>
+          )}
         </div>
       </section>
 
-      {/* === SIMULATEUR === */}
-      <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
+      {/* === SIMULATEUR — Premium === */}
+      <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6 relative">
         <div className="flex items-baseline justify-between flex-wrap gap-2 mb-4">
           <div>
-            <h3 className="text-base font-medium">Simulateur de revenus</h3>
+            <h3 className="text-base font-medium inline-flex items-center gap-2">
+              Simulateur de revenus
+              {!isPremium && (
+                <span className="text-[10px] md:text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-medium">
+                  PREMIUM
+                </span>
+              )}
+            </h3>
             <p className="text-xs text-slate-500 mt-0.5">
               Estime tes dividendes futurs en fonction d&apos;un investissement
               et d&apos;un horizon. Croissance = CAGR 5 ans par défaut, modifiable.
@@ -541,6 +630,12 @@ export default function DividendsView({ ticker, currentPrice, ratios }: Props) {
           </div>
         </div>
 
+        <div
+          className={
+            isPremium ? "" : "blur-[3px] pointer-events-none select-none"
+          }
+          aria-hidden={isPremium ? undefined : true}
+        >
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
           <div>
             <label className="text-xs font-medium text-slate-500 mb-1.5 block">
@@ -671,14 +766,49 @@ export default function DividendsView({ ticker, currentPrice, ratios }: Props) {
             </table>
           </div>
         )}
+        </div>
+        {!isPremium && (
+          <div className="absolute inset-0 flex items-center justify-center p-4 pointer-events-none">
+            <button
+              type="button"
+              onClick={() =>
+                openPremiumGate(
+                  "Le simulateur de revenus est réservé à l'abonnement Premium.",
+                )
+              }
+              className="bg-white rounded-lg shadow-xl border border-amber-200 max-w-md w-full p-4 md:p-5 pointer-events-auto text-left hover:border-amber-300 transition"
+            >
+              <div className="flex items-start gap-3">
+                <div className="text-2xl shrink-0">⭐</div>
+                <div className="min-w-0">
+                  <h4 className="text-base font-semibold text-slate-900">
+                    Simulateur de revenus Premium
+                  </h4>
+                  <p className="text-sm text-slate-600 mt-1">
+                    Estime tes dividendes futurs sur l&apos;horizon de ton
+                    choix avec yield-on-cost initial et final. Disponible
+                    avec Premium.
+                  </p>
+                </div>
+              </div>
+            </button>
+          </div>
+        )}
       </section>
 
-      {/* === PROJECTION MULTI-SCÉNARIOS === */}
+      {/* === PROJECTION MULTI-SCÉNARIOS — Premium === */}
       {projection.length > 0 && (
-        <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
+        <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6 relative">
           <div className="flex items-baseline justify-between flex-wrap gap-2 mb-3">
             <div>
-              <h3 className="text-base font-medium">Projection DPA · 5 ans</h3>
+              <h3 className="text-base font-medium inline-flex items-center gap-2">
+                Projection DPA · 5 ans
+                {!isPremium && (
+                  <span className="text-[10px] md:text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-medium">
+                    PREMIUM
+                  </span>
+                )}
+              </h3>
               <p className="text-xs text-slate-500 mt-0.5">
                 Trois scénarios à partir du dernier DPA versé.
               </p>
@@ -699,7 +829,12 @@ export default function DividendsView({ ticker, currentPrice, ratios }: Props) {
             </div>
           </div>
 
-          <div className="h-56 md:h-64">
+          <div
+            className={`h-56 md:h-64 ${
+              isPremium ? "" : "blur-[3px] pointer-events-none select-none"
+            }`}
+            aria-hidden={isPremium ? undefined : true}
+          >
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={projection}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -762,12 +897,43 @@ export default function DividendsView({ ticker, currentPrice, ratios }: Props) {
             </ResponsiveContainer>
           </div>
 
-          <p className="text-[11px] text-slate-400 mt-3 leading-relaxed">
+          <p
+            className={`text-[11px] text-slate-400 mt-3 leading-relaxed ${
+              isPremium ? "" : "blur-[3px] pointer-events-none select-none"
+            }`}
+            aria-hidden={isPremium ? undefined : true}
+          >
             <strong>Méthodologie :</strong> Historique = CAGR 5 ans observé.
             Optimiste = CAGR × 1,3 (ou |CAGR|/2 si CAGR négatif). Pessimiste =
             CAGR × 0,5 (ou CAGR × 1,3 si négatif). À titre indicatif — la
             performance passée ne préjuge pas de la performance future.
           </p>
+          {!isPremium && (
+            <div className="absolute inset-0 flex items-center justify-center p-4 pointer-events-none">
+              <button
+                type="button"
+                onClick={() =>
+                  openPremiumGate(
+                    "La projection DPA sur 5 ans est réservée à l'abonnement Premium.",
+                  )
+                }
+                className="bg-white rounded-lg shadow-xl border border-amber-200 max-w-md w-full p-4 md:p-5 pointer-events-auto text-left hover:border-amber-300 transition"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="text-2xl shrink-0">⭐</div>
+                  <div className="min-w-0">
+                    <h4 className="text-base font-semibold text-slate-900">
+                      Projection DPA Premium
+                    </h4>
+                    <p className="text-sm text-slate-600 mt-1">
+                      Trois scénarios (pessimiste, historique, optimiste) sur
+                      5 ans. Disponible avec Premium.
+                    </p>
+                  </div>
+                </div>
+              </button>
+            </div>
+          )}
         </section>
       )}
 
@@ -783,6 +949,23 @@ export default function DividendsView({ ticker, currentPrice, ratios }: Props) {
         antérieures sont peu fiables sur le DPA). Un dividende = 0 signifie
         soit pas de versement, soit donnée non publiée.
       </section>
+
+      <MemberGateDialog
+        open={memberGateOpen}
+        onClose={() => setMemberGateOpen(false)}
+        title="Historique des dividendes réservé aux membres"
+        description="Inscrivez-vous gratuitement pour consulter le détail année par année des dividendes versés."
+      />
+      <MemberGateDialog
+        open={premiumGateOpen}
+        onClose={() => setPremiumGateOpen(false)}
+        tier="premium"
+        title="Outils dividendes Premium"
+        description={
+          premiumGateMsg ||
+          "Cet outil dividende est réservé à l'abonnement Premium."
+        }
+      />
     </div>
   );
 }

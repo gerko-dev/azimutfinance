@@ -25,12 +25,15 @@ import {
   type GlobalSignal,
   type SignalLabel,
 } from "@/lib/technicalAnalysis";
+import type { UserRole } from "@/lib/auth/userRole";
+import MemberGateDialog from "./MemberGateDialog";
 
 type Period = "3M" | "6M" | "1A" | "3A" | "5A" | "Max";
 
 type Props = {
   ticker: string;
   history: PriceVolumePoint[];
+  userRole: UserRole;
 };
 
 // === Couleurs cohérentes avec le reste du site ===
@@ -138,7 +141,22 @@ const SIGNAL_STYLE: Record<
   },
 };
 
-export default function TechnicalAnalysisView({ ticker, history }: Props) {
+export default function TechnicalAnalysisView({
+  ticker,
+  history,
+  userRole,
+}: Props) {
+  const isMember = userRole !== null;
+  const isPremium = userRole === "premium" || userRole === "pro";
+  const [memberGateOpen, setMemberGateOpen] = useState(false);
+  const [premiumGateOpen, setPremiumGateOpen] = useState(false);
+  const [premiumGateMsg, setPremiumGateMsg] = useState<string>("");
+
+  function openPremiumGate(msg: string) {
+    setPremiumGateMsg(msg);
+    setPremiumGateOpen(true);
+  }
+
   const [period, setPeriod] = useState<Period>("1A");
   const [showSMA20, setShowSMA20] = useState(true);
   const [showSMA50, setShowSMA50] = useState(true);
@@ -219,7 +237,7 @@ export default function TechnicalAnalysisView({ ticker, history }: Props) {
   const priceRange = priceMax - priceMin;
   const padding = priceRange * 0.05;
 
-  const visiblePivots = showSR
+  const visiblePivots = isPremium && showSR
     ? pivots.filter(
         (p) =>
           p.price >= priceMin - priceRange * 0.2 &&
@@ -256,32 +274,61 @@ export default function TechnicalAnalysisView({ ticker, history }: Props) {
           </div>
         </div>
 
-        {/* Détail des votes */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 mt-4">
-          {signal.entries.map((e) => (
-            <div
-              key={e.label}
-              className="bg-white/70 border border-current/20 rounded-md px-2.5 py-1.5"
-            >
-              <div className="text-[11px] font-medium flex items-center gap-1.5">
-                <span
-                  className={
-                    e.vote === 1
-                      ? "text-green-700"
-                      : e.vote === -1
-                      ? "text-red-700"
-                      : "text-slate-500"
-                  }
-                >
-                  {e.vote === 1 ? "▲" : e.vote === -1 ? "▼" : "●"}
-                </span>
-                {e.label}
+        {/* Détail des votes — Membre, cadenas pour visiteur */}
+        <div className="relative mt-4">
+          <div
+            className={`grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 ${
+              isMember ? "" : "blur-[3px] pointer-events-none select-none"
+            }`}
+            aria-hidden={isMember ? undefined : true}
+          >
+            {signal.entries.map((e) => (
+              <div
+                key={e.label}
+                className="bg-white/70 border border-current/20 rounded-md px-2.5 py-1.5"
+              >
+                <div className="text-[11px] font-medium flex items-center gap-1.5">
+                  <span
+                    className={
+                      e.vote === 1
+                        ? "text-green-700"
+                        : e.vote === -1
+                        ? "text-red-700"
+                        : "text-slate-500"
+                    }
+                  >
+                    {e.vote === 1 ? "▲" : e.vote === -1 ? "▼" : "●"}
+                  </span>
+                  {e.label}
+                </div>
+                <div className="text-[10px] text-slate-600 mt-0.5 leading-tight">
+                  {e.detail}
+                </div>
               </div>
-              <div className="text-[10px] text-slate-600 mt-0.5 leading-tight">
-                {e.detail}
-              </div>
+            ))}
+          </div>
+          {!isMember && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <button
+                type="button"
+                onClick={() => setMemberGateOpen(true)}
+                className="bg-white rounded-lg shadow-xl border border-slate-200 max-w-md w-full p-4 pointer-events-auto text-left hover:border-slate-300 transition"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="text-2xl shrink-0">🔓</div>
+                  <div className="min-w-0">
+                    <h4 className="text-sm font-semibold text-slate-900">
+                      Inscrivez-vous pour voir le détail
+                    </h4>
+                    <p className="text-xs text-slate-600 mt-1">
+                      Détail des indicateurs qui composent la recommandation.
+                      Inscription gratuite.
+                    </p>
+                  </div>
+                </div>
+              </button>
             </div>
-          ))}
+          )}
         </div>
       </div>
 
@@ -311,49 +358,126 @@ export default function TechnicalAnalysisView({ ticker, history }: Props) {
           </div>
         </div>
 
-        {/* Toggles overlays */}
+        {/* Toggles overlays — MM Membre+, autres indicateurs Premium+ */}
         <div className="flex flex-wrap gap-2 mb-3">
           <Toggle
             label="MM 20"
             color={COL.sma20}
-            active={showSMA20}
-            onClick={() => setShowSMA20(!showSMA20)}
+            active={isMember && showSMA20}
+            locked={!isMember}
+            onClick={() => {
+              if (!isMember) {
+                setMemberGateOpen(true);
+                return;
+              }
+              setShowSMA20(!showSMA20);
+            }}
           />
           <Toggle
             label="MM 50"
             color={COL.sma50}
-            active={showSMA50}
-            onClick={() => setShowSMA50(!showSMA50)}
+            active={isMember && showSMA50}
+            locked={!isMember}
+            onClick={() => {
+              if (!isMember) {
+                setMemberGateOpen(true);
+                return;
+              }
+              setShowSMA50(!showSMA50);
+            }}
           />
           <Toggle
             label="MM 200"
             color={COL.sma200}
-            active={showSMA200}
-            onClick={() => setShowSMA200(!showSMA200)}
+            active={isMember && showSMA200}
+            locked={!isMember}
+            onClick={() => {
+              if (!isMember) {
+                setMemberGateOpen(true);
+                return;
+              }
+              setShowSMA200(!showSMA200);
+            }}
           />
           <Toggle
             label="EMA 20"
             color={COL.ema20}
-            active={showEMA20}
-            onClick={() => setShowEMA20(!showEMA20)}
+            active={isPremium && showEMA20}
+            locked={!isPremium}
+            premium
+            onClick={() => {
+              if (!isMember) {
+                setMemberGateOpen(true);
+                return;
+              }
+              if (!isPremium) {
+                openPremiumGate(
+                  "Les indicateurs EMA, Bollinger et Support/Résistance sont réservés à l'abonnement Premium.",
+                );
+                return;
+              }
+              setShowEMA20(!showEMA20);
+            }}
           />
           <Toggle
             label="EMA 50"
             color={COL.ema50}
-            active={showEMA50}
-            onClick={() => setShowEMA50(!showEMA50)}
+            active={isPremium && showEMA50}
+            locked={!isPremium}
+            premium
+            onClick={() => {
+              if (!isMember) {
+                setMemberGateOpen(true);
+                return;
+              }
+              if (!isPremium) {
+                openPremiumGate(
+                  "Les indicateurs EMA, Bollinger et Support/Résistance sont réservés à l'abonnement Premium.",
+                );
+                return;
+              }
+              setShowEMA50(!showEMA50);
+            }}
           />
           <Toggle
             label="Bollinger 20·2"
             color={COL.bollUp}
-            active={showBollinger}
-            onClick={() => setShowBollinger(!showBollinger)}
+            active={isPremium && showBollinger}
+            locked={!isPremium}
+            premium
+            onClick={() => {
+              if (!isMember) {
+                setMemberGateOpen(true);
+                return;
+              }
+              if (!isPremium) {
+                openPremiumGate(
+                  "Les bandes de Bollinger sont réservées à l'abonnement Premium.",
+                );
+                return;
+              }
+              setShowBollinger(!showBollinger);
+            }}
           />
           <Toggle
             label="Support / Résistance"
             color={COL.resistance}
-            active={showSR}
-            onClick={() => setShowSR(!showSR)}
+            active={isPremium && showSR}
+            locked={!isPremium}
+            premium
+            onClick={() => {
+              if (!isMember) {
+                setMemberGateOpen(true);
+                return;
+              }
+              if (!isPremium) {
+                openPremiumGate(
+                  "La détection automatique des supports et résistances est réservée à l'abonnement Premium.",
+                );
+                return;
+              }
+              setShowSR(!showSR);
+            }}
           />
         </div>
 
@@ -400,8 +524,8 @@ export default function TechnicalAnalysisView({ ticker, history }: Props) {
                 labelFormatter={dateLabel}
               />
 
-              {/* Bollinger : aire entre upper et lower */}
-              {showBollinger && (
+              {/* Bollinger : aire entre upper et lower — Premium */}
+              {isPremium && showBollinger && (
                 <>
                   <Area
                     yAxisId="price"
@@ -460,8 +584,8 @@ export default function TechnicalAnalysisView({ ticker, history }: Props) {
                 isAnimationActive={false}
               />
 
-              {/* Moyennes mobiles */}
-              {showSMA20 && (
+              {/* Moyennes mobiles — MM Membre+, EMA Premium+ */}
+              {isMember && showSMA20 && (
                 <Line
                   yAxisId="price"
                   type="monotone"
@@ -472,7 +596,7 @@ export default function TechnicalAnalysisView({ ticker, history }: Props) {
                   isAnimationActive={false}
                 />
               )}
-              {showSMA50 && (
+              {isMember && showSMA50 && (
                 <Line
                   yAxisId="price"
                   type="monotone"
@@ -483,7 +607,7 @@ export default function TechnicalAnalysisView({ ticker, history }: Props) {
                   isAnimationActive={false}
                 />
               )}
-              {showSMA200 && (
+              {isMember && showSMA200 && (
                 <Line
                   yAxisId="price"
                   type="monotone"
@@ -494,7 +618,7 @@ export default function TechnicalAnalysisView({ ticker, history }: Props) {
                   isAnimationActive={false}
                 />
               )}
-              {showEMA20 && (
+              {isPremium && showEMA20 && (
                 <Line
                   yAxisId="price"
                   type="monotone"
@@ -506,7 +630,7 @@ export default function TechnicalAnalysisView({ ticker, history }: Props) {
                   isAnimationActive={false}
                 />
               )}
-              {showEMA50 && (
+              {isPremium && showEMA50 && (
                 <Line
                   yAxisId="price"
                   type="monotone"
@@ -541,11 +665,18 @@ export default function TechnicalAnalysisView({ ticker, history }: Props) {
         </div>
       </section>
 
-      {/* === RSI === */}
-      <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
+      {/* === RSI — Premium === */}
+      <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6 relative">
         <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
           <div>
-            <h3 className="text-base font-medium">RSI 14</h3>
+            <h3 className="text-base font-medium inline-flex items-center gap-2">
+              RSI 14
+              {!isPremium && (
+                <span className="text-[10px] md:text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-medium">
+                  PREMIUM
+                </span>
+              )}
+            </h3>
             <p className="text-xs text-slate-500 mt-0.5">
               Indice de force relative · zones surachat (&gt;70) et survente (&lt;30)
             </p>
@@ -565,7 +696,12 @@ export default function TechnicalAnalysisView({ ticker, history }: Props) {
             </span>
           </div>
         </div>
-        <div className="h-40">
+        <div
+          className={`h-40 ${
+            isPremium ? "" : "blur-[3px] pointer-events-none select-none"
+          }`}
+          aria-hidden={isPremium ? undefined : true}
+        >
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={filtered}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -607,13 +743,31 @@ export default function TechnicalAnalysisView({ ticker, history }: Props) {
             </ComposedChart>
           </ResponsiveContainer>
         </div>
+        {!isPremium && (
+          <PremiumLock
+            label="RSI 14 réservé Premium"
+            description="Force relative et zones de surachat/survente. Disponible avec l'abonnement Premium."
+            onUnlock={() =>
+              openPremiumGate(
+                "Le RSI 14 est réservé à l'abonnement Premium.",
+              )
+            }
+          />
+        )}
       </section>
 
-      {/* === MACD === */}
-      <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
+      {/* === MACD — Premium === */}
+      <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6 relative">
         <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
           <div>
-            <h3 className="text-base font-medium">MACD 12·26·9</h3>
+            <h3 className="text-base font-medium inline-flex items-center gap-2">
+              MACD 12·26·9
+              {!isPremium && (
+                <span className="text-[10px] md:text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-medium">
+                  PREMIUM
+                </span>
+              )}
+            </h3>
             <p className="text-xs text-slate-500 mt-0.5">
               Convergence/divergence des moyennes mobiles exponentielles
             </p>
@@ -643,7 +797,12 @@ export default function TechnicalAnalysisView({ ticker, history }: Props) {
             </span>
           </div>
         </div>
-        <div className="h-40">
+        <div
+          className={`h-40 ${
+            isPremium ? "" : "blur-[3px] pointer-events-none select-none"
+          }`}
+          aria-hidden={isPremium ? undefined : true}
+        >
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={filtered}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -704,14 +863,35 @@ export default function TechnicalAnalysisView({ ticker, history }: Props) {
             </ComposedChart>
           </ResponsiveContainer>
         </div>
+        {!isPremium && (
+          <PremiumLock
+            label="MACD réservé Premium"
+            description="MACD 12·26·9 et son histogramme. Disponible avec l'abonnement Premium."
+            onUnlock={() =>
+              openPremiumGate("Le MACD est réservé à l'abonnement Premium.")
+            }
+          />
+        )}
       </section>
 
-      {/* === PANNEAU INDICATEURS === */}
+      {/* === PANNEAU INDICATEURS — Premium */}
       <section className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-        {/* Tendance */}
-        <div className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
-          <h3 className="text-base font-medium mb-3">Tendance</h3>
-          <div className="grid grid-cols-2 gap-3 text-sm">
+        {/* Tendance — Premium */}
+        <div className="bg-white rounded-lg border border-slate-200 p-4 md:p-6 relative">
+          <h3 className="text-base font-medium mb-3 inline-flex items-center gap-2">
+            Tendance
+            {!isPremium && (
+              <span className="text-[10px] md:text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-medium">
+                PREMIUM
+              </span>
+            )}
+          </h3>
+          <div
+            className={`grid grid-cols-2 gap-3 text-sm ${
+              isPremium ? "" : "blur-[3px] pointer-events-none select-none"
+            }`}
+            aria-hidden={isPremium ? undefined : true}
+          >
             <Metric
               label="Cours"
               value={formatFCFA(last.price) + " FCFA"}
@@ -775,12 +955,35 @@ export default function TechnicalAnalysisView({ ticker, history }: Props) {
               }
             />
           </div>
+          {!isPremium && (
+            <PremiumLock
+              label="Tendance réservée Premium"
+              description="Cours, MM 20/50/200, EMA et configuration MM. Disponible avec Premium."
+              onUnlock={() =>
+                openPremiumGate(
+                  "Le panneau Tendance est réservé à l'abonnement Premium.",
+                )
+              }
+            />
+          )}
         </div>
 
-        {/* Momentum & volatilité */}
-        <div className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
-          <h3 className="text-base font-medium mb-3">Momentum & volatilité</h3>
-          <div className="grid grid-cols-2 gap-3 text-sm">
+        {/* Momentum & volatilité — Premium */}
+        <div className="bg-white rounded-lg border border-slate-200 p-4 md:p-6 relative">
+          <h3 className="text-base font-medium mb-3 inline-flex items-center gap-2">
+            Momentum &amp; volatilité
+            {!isPremium && (
+              <span className="text-[10px] md:text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-medium">
+                PREMIUM
+              </span>
+            )}
+          </h3>
+          <div
+            className={`grid grid-cols-2 gap-3 text-sm ${
+              isPremium ? "" : "blur-[3px] pointer-events-none select-none"
+            }`}
+            aria-hidden={isPremium ? undefined : true}
+          >
             <Metric
               label="RSI 14"
               value={formatNum(last.rsi14, 1)}
@@ -852,12 +1055,35 @@ export default function TechnicalAnalysisView({ ticker, history }: Props) {
               }
             />
           </div>
+          {!isPremium && (
+            <PremiumLock
+              label="Momentum & volatilité réservés Premium"
+              description="RSI, Stochastique, ROC, MACD-Signal, Bollinger %B et bandwidth. Disponible avec Premium."
+              onUnlock={() =>
+                openPremiumGate(
+                  "Le panneau Momentum & volatilité est réservé à l'abonnement Premium.",
+                )
+              }
+            />
+          )}
         </div>
 
-        {/* Volume */}
-        <div className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
-          <h3 className="text-base font-medium mb-3">Volume</h3>
-          <div className="grid grid-cols-2 gap-3 text-sm">
+        {/* Volume — Premium */}
+        <div className="bg-white rounded-lg border border-slate-200 p-4 md:p-6 relative">
+          <h3 className="text-base font-medium mb-3 inline-flex items-center gap-2">
+            Volume
+            {!isPremium && (
+              <span className="text-[10px] md:text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-medium">
+                PREMIUM
+              </span>
+            )}
+          </h3>
+          <div
+            className={`grid grid-cols-2 gap-3 text-sm ${
+              isPremium ? "" : "blur-[3px] pointer-events-none select-none"
+            }`}
+            aria-hidden={isPremium ? undefined : true}
+          >
             <Metric
               label="Volume dernière séance"
               value={
@@ -907,11 +1133,35 @@ export default function TechnicalAnalysisView({ ticker, history }: Props) {
               }
             />
           </div>
+          {!isPremium && (
+            <PremiumLock
+              label="Volume réservé Premium"
+              description="Volume du jour, MA 20, et tendance OBV. Disponible avec Premium."
+              onUnlock={() =>
+                openPremiumGate(
+                  "Le panneau Volume est réservé à l'abonnement Premium.",
+                )
+              }
+            />
+          )}
         </div>
 
-        {/* Niveaux S/R */}
-        <div className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
-          <h3 className="text-base font-medium mb-3">Niveaux clés</h3>
+        {/* Niveaux S/R — Premium */}
+        <div className="bg-white rounded-lg border border-slate-200 p-4 md:p-6 relative">
+          <h3 className="text-base font-medium mb-3 inline-flex items-center gap-2">
+            Niveaux clés
+            {!isPremium && (
+              <span className="text-[10px] md:text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-medium">
+                PREMIUM
+              </span>
+            )}
+          </h3>
+          <div
+            className={
+              isPremium ? "" : "blur-[3px] pointer-events-none select-none"
+            }
+            aria-hidden={isPremium ? undefined : true}
+          >
           {pivots.length === 0 ? (
             <div className="text-sm text-slate-500">
               Pas de niveaux pivots détectés sur l&apos;historique disponible.
@@ -963,22 +1213,37 @@ export default function TechnicalAnalysisView({ ticker, history }: Props) {
             Pivots détectés sur 5 séances de chaque côté, regroupés à ±1%.
             Les points indiquent la force (nombre de tests).
           </p>
+          </div>
+          {!isPremium && (
+            <PremiumLock
+              label="Niveaux clés réservés Premium"
+              description="Détection automatique des supports et résistances pivots. Disponible avec Premium."
+              onUnlock={() =>
+                openPremiumGate(
+                  "Le panneau Niveaux clés est réservé à l'abonnement Premium.",
+                )
+              }
+            />
+          )}
         </div>
       </section>
 
-      {/* === MÉTHODOLOGIE === */}
-      <div className="text-xs text-slate-500 leading-relaxed bg-slate-50 rounded-lg p-3 md:p-4 border border-slate-100">
-        <strong>Méthodologie :</strong> indicateurs calculés sur les cours de
-        clôture quotidiens. MM = moyenne mobile arithmétique (SMA), EMA = α =
-        2/(N+1). Bollinger = MM20 ± 2σ. RSI calculé en lissage de Wilder sur 14
-        séances. MACD = EMA12 − EMA26, signal = EMA9 du MACD. Stochastique
-        approximée à partir des plus haut/bas <em>de clôture</em> sur 14 séances
-        (l&apos;absence d&apos;OHLC empêche la version intraday). OBV cumule le
-        volume signé par la direction. Le signal global agrège jusqu&apos;à 10
-        votes : ratio ≥ 60% = Achat fort, ≥ 20% = Achat, ≤ −60% = Vente fort, ≤
-        −20% = Vente, sinon Neutre. Cette grille de lecture est mécanique et ne
-        constitue pas une recommandation d&apos;investissement.
-      </div>
+      <MemberGateDialog
+        open={memberGateOpen}
+        onClose={() => setMemberGateOpen(false)}
+        title="Analyse technique réservée aux membres"
+        description="Inscrivez-vous gratuitement pour accéder aux moyennes mobiles, au détail du signal technique agrégé et aux indicateurs Premium."
+      />
+      <MemberGateDialog
+        open={premiumGateOpen}
+        onClose={() => setPremiumGateOpen(false)}
+        tier="premium"
+        title="Indicateurs avancés réservés Premium"
+        description={
+          premiumGateMsg ||
+          "Cet indicateur technique avancé est réservé à l'abonnement Premium."
+        }
+      />
     </div>
   );
 }
@@ -989,11 +1254,15 @@ function Toggle({
   label,
   color,
   active,
+  locked = false,
+  premium = false,
   onClick,
 }: {
   label: string;
   color: string;
   active: boolean;
+  locked?: boolean;
+  premium?: boolean;
   onClick: () => void;
 }) {
   return (
@@ -1001,10 +1270,20 @@ function Toggle({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`text-xs px-2.5 py-1 rounded-md border transition ${
+      aria-haspopup={locked ? "dialog" : undefined}
+      title={
+        locked
+          ? premium
+            ? `${label} — réservé Premium`
+            : `${label} — réservé aux membres`
+          : undefined
+      }
+      className={`text-xs px-2.5 py-1 rounded-md border transition inline-flex items-center gap-1 ${
         active
           ? "border-slate-300 bg-white text-slate-800"
-          : "border-slate-200 text-slate-400 bg-slate-50 hover:bg-white"
+          : locked
+            ? "border-slate-200 text-slate-400 bg-slate-50 cursor-pointer"
+            : "border-slate-200 text-slate-400 bg-slate-50 hover:bg-white"
       }`}
     >
       <span
@@ -1012,6 +1291,7 @@ function Toggle({
         style={{ backgroundColor: active ? color : "#cbd5e1" }}
       />
       {label}
+      {locked && <span aria-hidden className="text-[10px]">🔒</span>}
     </button>
   );
 }
@@ -1038,6 +1318,34 @@ function Metric({
           {hint}
         </div>
       )}
+    </div>
+  );
+}
+
+function PremiumLock({
+  label,
+  description,
+  onUnlock,
+}: {
+  label: string;
+  description: string;
+  onUnlock: () => void;
+}) {
+  return (
+    <div className="absolute inset-0 flex items-center justify-center p-4 pointer-events-none">
+      <button
+        type="button"
+        onClick={onUnlock}
+        className="bg-white rounded-lg shadow-xl border border-amber-200 max-w-sm w-full p-4 pointer-events-auto text-left hover:border-amber-300 transition"
+      >
+        <div className="flex items-start gap-3">
+          <div className="text-2xl shrink-0">⭐</div>
+          <div className="min-w-0">
+            <h4 className="text-sm font-semibold text-slate-900">{label}</h4>
+            <p className="text-xs text-slate-600 mt-1">{description}</p>
+          </div>
+        </div>
+      </button>
     </div>
   );
 }

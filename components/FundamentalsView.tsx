@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import Link from "next/link";
 import {
   BarChart,
   Bar,
@@ -767,52 +766,13 @@ export default function FundamentalsView({
         title="Ratios fondamentaux réservés aux membres"
         description="Inscrivez-vous gratuitement pour consulter les ratios des 3 derniers exercices : rentabilité, solvabilité, croissance, valorisation."
       />
-      {premiumGateOpen && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="ratios-premium-title"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm"
-          onClick={() => setPremiumGateOpen(false)}
-        >
-          <div
-            className="bg-white rounded-lg shadow-xl border border-slate-200 max-w-md w-full p-5 md:p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-start gap-3 mb-3">
-              <div className="text-2xl shrink-0">⭐</div>
-              <div className="min-w-0">
-                <h3
-                  id="ratios-premium-title"
-                  className="text-base md:text-lg font-semibold text-slate-900"
-                >
-                  Historique complet réservé Premium
-                </h3>
-                <p className="text-sm text-slate-600 mt-1">
-                  Visualisez les ratios sur l&apos;ensemble des exercices
-                  publiés ({activeRatios.length} disponibles pour {ticker})
-                  avec l&apos;abonnement Premium.
-                </p>
-              </div>
-            </div>
-            <div className="flex gap-2 flex-wrap justify-end pt-3 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setPremiumGateOpen(false)}
-                className="px-3 py-1.5 rounded-md border border-slate-300 text-sm font-medium hover:bg-slate-50 transition"
-              >
-                Plus tard
-              </button>
-              <Link
-                href="/compte"
-                className="px-3 py-1.5 rounded-md bg-amber-500 text-white text-sm font-medium hover:bg-amber-600 transition"
-              >
-                Passer Premium
-              </Link>
-            </div>
-          </div>
-        </div>
-      )}
+      <MemberGateDialog
+        open={premiumGateOpen}
+        onClose={() => setPremiumGateOpen(false)}
+        tier="premium"
+        title="Historique complet réservé Premium"
+        description={`Visualisez les ratios sur l'ensemble des exercices publiés (${activeRatios.length} disponibles pour ${ticker}) avec l'abonnement Premium.`}
+      />
     </div>
   );
 }
