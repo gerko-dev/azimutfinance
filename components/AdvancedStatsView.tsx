@@ -739,95 +739,79 @@ export default function AdvancedStatsView({
         </section>
       )}
 
-      {/* === RISQUE BASIQUE (legacy) + MÉTHODOLOGIE === */}
-      <section className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-        {/* Risque (synthese) — Membre+, sinon teaser cadenas */}
-        <div className="bg-white rounded-lg border border-slate-200 p-4 md:p-6 relative">
-          <h3 className="text-base font-medium mb-4 inline-flex items-center gap-2">
-            Risque (synthèse)
-            {!isMember && <span aria-hidden className="text-sm">🔒</span>}
-          </h3>
-          <div
-            className={
-              isMember ? "" : "blur-[3px] pointer-events-none select-none"
-            }
-            aria-hidden={isMember ? undefined : true}
-          >
-            <dl className="space-y-3 text-sm">
-              <div className="flex justify-between">
-                <dt className="text-slate-500">Volatilité 12 mois (annualisée)</dt>
-                <dd className="font-medium">{formatPct(riskMetrics.volatility1A)}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-slate-500">Max drawdown 12 mois</dt>
-                <dd
-                  className={`font-medium ${
-                    riskMetrics.maxDrawdown1A && riskMetrics.maxDrawdown1A < 0
-                      ? "text-red-700"
-                      : ""
-                  }`}
-                >
-                  {formatPct(riskMetrics.maxDrawdown1A)}
-                </dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-slate-500">Max drawdown historique</dt>
-                <dd
-                  className={`font-medium ${
-                    riskMetrics.maxDrawdownAll && riskMetrics.maxDrawdownAll < 0
-                      ? "text-red-700"
-                      : ""
-                  }`}
-                >
-                  {formatPct(riskMetrics.maxDrawdownAll)}
-                </dd>
-              </div>
-              <div className="flex justify-between pt-3 border-t border-slate-100">
-                <dt className="text-slate-500">Ratio de Sharpe (1 an)</dt>
-                <dd className="font-medium">{formatNum(riskMetrics.sharpe1A)}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-slate-500">Beta vs BRVM Composite</dt>
-                <dd className="font-medium">{formatNum(riskMetrics.beta)}</dd>
-              </div>
-            </dl>
-          </div>
-          {!isMember && (
-            <div className="absolute inset-0 flex items-center justify-center p-4 pointer-events-none">
-              <button
-                type="button"
-                onClick={() => setMemberGateOpen(true)}
-                className="bg-white rounded-lg shadow-xl border border-slate-200 max-w-sm w-full p-4 pointer-events-auto text-left hover:border-slate-300 transition"
-              >
-                <div className="flex items-start gap-3">
-                  <div className="text-2xl shrink-0">🔓</div>
-                  <div className="min-w-0">
-                    <h4 className="text-sm font-semibold text-slate-900">
-                      Inscrivez-vous pour voir le risque
-                    </h4>
-                    <p className="text-xs text-slate-600 mt-1">
-                      Volatilité, drawdowns, Sharpe et beta. Inscription
-                      gratuite.
-                    </p>
-                  </div>
-                </div>
-              </button>
+      {/* === RISQUE BASIQUE (synthese) — Membre+, sinon teaser cadenas === */}
+      <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6 relative">
+        <h3 className="text-base font-medium mb-4 inline-flex items-center gap-2">
+          Risque (synthèse)
+          {!isMember && <span aria-hidden className="text-sm">🔒</span>}
+        </h3>
+        <div
+          className={
+            isMember ? "" : "blur-[3px] pointer-events-none select-none"
+          }
+          aria-hidden={isMember ? undefined : true}
+        >
+          <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-3 text-sm">
+            <div className="flex justify-between sm:flex-col sm:gap-1">
+              <dt className="text-slate-500">Volatilité 12 mois (annualisée)</dt>
+              <dd className="font-medium">{formatPct(riskMetrics.volatility1A)}</dd>
             </div>
-          )}
+            <div className="flex justify-between sm:flex-col sm:gap-1">
+              <dt className="text-slate-500">Max drawdown 12 mois</dt>
+              <dd
+                className={`font-medium ${
+                  riskMetrics.maxDrawdown1A && riskMetrics.maxDrawdown1A < 0
+                    ? "text-red-700"
+                    : ""
+                }`}
+              >
+                {formatPct(riskMetrics.maxDrawdown1A)}
+              </dd>
+            </div>
+            <div className="flex justify-between sm:flex-col sm:gap-1">
+              <dt className="text-slate-500">Max drawdown historique</dt>
+              <dd
+                className={`font-medium ${
+                  riskMetrics.maxDrawdownAll && riskMetrics.maxDrawdownAll < 0
+                    ? "text-red-700"
+                    : ""
+                }`}
+              >
+                {formatPct(riskMetrics.maxDrawdownAll)}
+              </dd>
+            </div>
+            <div className="flex justify-between sm:flex-col sm:gap-1">
+              <dt className="text-slate-500">Ratio de Sharpe (1 an)</dt>
+              <dd className="font-medium">{formatNum(riskMetrics.sharpe1A)}</dd>
+            </div>
+            <div className="flex justify-between sm:flex-col sm:gap-1">
+              <dt className="text-slate-500">Beta vs BRVM Composite</dt>
+              <dd className="font-medium">{formatNum(riskMetrics.beta)}</dd>
+            </div>
+          </dl>
         </div>
-
-        <div className="text-xs text-slate-500 leading-relaxed bg-slate-50 rounded-lg p-3 md:p-4 border border-slate-100">
-          <strong>Méthodologie :</strong> log-returns Act/252, taux sans risque
-          3,5% (~taux directeur BCEAO), outliers {">"} 30% en 1 jour filtrés,
-          régression OLS sur l&apos;historique aligné avec BRVMC. La VaR
-          historique se base sur les quantiles empiriques 5%/1%, la VaR
-          paramétrique sur l&apos;hypothèse normale (μ - z×σ). Test de normalité :
-          Jarque-Bera (statistique JB suit χ²(2)). Ljung-Box pour
-          l&apos;autocorrélation. Rendement mensuel = (clôture du dernier jour
-          du mois / clôture du dernier jour du mois précédent - 1) ;
-          historique Sika. Pour le tout premier mois disponible, fallback sur
-          la première clôture du mois.
-        </div>
+        {!isMember && (
+          <div className="absolute inset-0 flex items-center justify-center p-4 pointer-events-none">
+            <button
+              type="button"
+              onClick={() => setMemberGateOpen(true)}
+              className="bg-white rounded-lg shadow-xl border border-slate-200 max-w-sm w-full p-4 pointer-events-auto text-left hover:border-slate-300 transition"
+            >
+              <div className="flex items-start gap-3">
+                <div className="text-2xl shrink-0">🔓</div>
+                <div className="min-w-0">
+                  <h4 className="text-sm font-semibold text-slate-900">
+                    Inscrivez-vous pour voir le risque
+                  </h4>
+                  <p className="text-xs text-slate-600 mt-1">
+                    Volatilité, drawdowns, Sharpe et beta. Inscription
+                    gratuite.
+                  </p>
+                </div>
+              </div>
+            </button>
+          </div>
+        )}
       </section>
 
       <MemberGateDialog

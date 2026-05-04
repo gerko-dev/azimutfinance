@@ -81,6 +81,43 @@ export default async function TitrePage({
   const riskMetrics = computeRiskMetrics(priceHistory, brvmcHistory);
   const advancedStats = computeAdvancedStats(priceHistory, brvmcHistory);
 
+  // Coherence des sources : recalcule 52s / variation 1 an / volatilite
+  // depuis l'historique Sika (loadAllPriceHistory) pour eviter les
+  // divergences avec titres.csv, qui est un snapshot pas toujours synchro
+  // avec le scrape Sika quotidien.
+  if (priceHistory.length > 0) {
+    const lastPoint = priceHistory[priceHistory.length - 1];
+    const cutoff = new Date(lastPoint.date + "T00:00:00Z");
+    cutoff.setUTCDate(cutoff.getUTCDate() - 365);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+    let high = -Infinity;
+    let low = Infinity;
+    let oneYearAgo: { date: string; value: number } | null = null;
+    for (const p of priceHistory) {
+      if (p.date >= cutoffStr) {
+        if (p.value > high) high = p.value;
+        if (p.value < low) low = p.value;
+      }
+      if (p.date <= cutoffStr) oneYearAgo = p;
+    }
+    if (high > 0) stock.high52w = high;
+    if (low < Infinity) stock.low52w = low;
+    if (oneYearAgo && oneYearAgo.value > 0 && lastPoint.value > 0) {
+      stock.yearChange = (lastPoint.value / oneYearAgo.value - 1) * 100;
+      stock.hasYearChange = true;
+    } else {
+      stock.hasYearChange = false;
+    }
+  }
+  // Volatilite alignee sur le bloc Risque (synthese) — meme calcul Sika.
+  if (
+    riskMetrics.volatility1A !== null &&
+    Number.isFinite(riskMetrics.volatility1A)
+  ) {
+    stock.volatility = riskMetrics.volatility1A * 100;
+  }
+
   const riskReturn = buildRiskReturnDataset();
   const quadrant = computeQuadrant(codeUpper, riskReturn.points);
 
