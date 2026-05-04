@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import Link from "next/link";
 import {
   BarChart,
   Bar,
@@ -14,6 +15,8 @@ import {
   Legend,
 } from "recharts";
 import type { FundRatios, FundTitre, StatementLine, FormatEtats } from "@/lib/fundamentals";
+import type { UserRole } from "@/lib/auth/userRole";
+import MemberGateDialog from "./MemberGateDialog";
 
 type Props = {
   ticker: string;
@@ -26,7 +29,10 @@ type Props = {
     compteResultat: StatementLine[];
     flux: StatementLine[];
   };
+  userRole: UserRole;
 };
+
+type RatiosPeriod = "3A" | "MAX";
 
 function formatBig(v: number): string {
   if (v === 0) return "—";
@@ -90,8 +96,25 @@ const protectProps = {
   onDragStart: (e: React.DragEvent) => e.preventDefault(),
 } as const;
 
-export default function FundamentalsView({ ticker, fundTitre, ratios, statements }: Props) {
+export default function FundamentalsView({
+  ticker,
+  fundTitre,
+  ratios,
+  statements,
+  userRole,
+}: Props) {
   const isBank: FormatEtats = fundTitre?.formatEtats === "Bancaire" ? "Bancaire" : "SYSCOHADA";
+
+  // Tier — voir lib/auth/userRole.ts
+  const isMember = userRole !== null;
+  const isPremium = userRole === "premium" || userRole === "pro";
+  const isPro = userRole === "pro";
+
+  // Periode du tableau ratios : 3 ans (Membre+) ou Max (Premium+).
+  // Visiteurs voient un teaser cadenas par-dessus le tableau.
+  const [ratiosPeriod, setRatiosPeriod] = useState<RatiosPeriod>("3A");
+  const [memberGateOpen, setMemberGateOpen] = useState(false);
+  const [premiumGateOpen, setPremiumGateOpen] = useState(false);
 
   // Garde uniquement les exercices avec activité
   const activeRatios = useMemo(
@@ -100,7 +123,16 @@ export default function FundamentalsView({ ticker, fundTitre, ratios, statements
   );
 
   const lastRatio = activeRatios[activeRatios.length - 1] ?? null;
-  const previousRatios = activeRatios.slice(-6, -1).reverse(); // 5 derniers avant le dernier
+  // Membre = 3 dernieres annees (lastRatio + 2 precedents), Premium = tout.
+  // Le tableau original montrait 6 colonnes (lastRatio + 5 precedents) ; on
+  // remplace cette logique par la periode choisie.
+  const effectivePeriod: RatiosPeriod = isPremium ? ratiosPeriod : "3A";
+  const previousRatios = useMemo(() => {
+    if (effectivePeriod === "MAX") {
+      return activeRatios.slice(0, -1).reverse();
+    }
+    return activeRatios.slice(-3, -1).reverse(); // 2 precedents = 3 dernieres avec lastRatio
+  }, [activeRatios, effectivePeriod]);
   const allDisplayed = useMemo(() => activeRatios.slice(-10), [activeRatios]); // 10 dernières années pour graphes
 
   // Sélecteur d'exercice pour les états financiers
@@ -361,12 +393,78 @@ export default function FundamentalsView({ ticker, fundTitre, ratios, statements
         </div>
       </section>
 
-      {/* === RATIOS · DERNIERS EXERCICES === */}
-      <section className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-        <div className="p-4 md:p-5 border-b border-slate-100">
-          <h4 className="text-sm font-medium">Ratios · 6 derniers exercices</h4>
+      {/* === RATIOS · DERNIERS EXERCICES — gating tier
+            - Visiteur : tableau floute + CTA d'inscription
+            - Membre   : 3 ans accessible, bouton Max grise (clic → CTA Premium)
+            - Premium+ : 3 ans et Max libres === */}
+      <section className="bg-white rounded-lg border border-slate-200 overflow-hidden relative">
+        <div className="p-4 md:p-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h4 className="text-sm font-medium inline-flex items-center gap-2">
+              Ratios
+              {!isMember && <span aria-hidden className="text-sm">🔒</span>}
+            </h4>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {effectivePeriod === "MAX"
+                ? `Tous les exercices disponibles (${activeRatios.length})`
+                : "3 derniers exercices"}
+            </p>
+          </div>
+          <div className="inline-flex rounded-md bg-slate-100 p-0.5 text-xs">
+            <button
+              type="button"
+              onClick={() => {
+                if (!isMember) {
+                  setMemberGateOpen(true);
+                  return;
+                }
+                setRatiosPeriod("3A");
+              }}
+              aria-pressed={effectivePeriod === "3A"}
+              className={`px-2.5 py-1 rounded transition ${
+                effectivePeriod === "3A"
+                  ? "bg-white shadow-sm font-medium text-blue-900"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              3 ans
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (!isMember) {
+                  setMemberGateOpen(true);
+                  return;
+                }
+                if (!isPremium) {
+                  setPremiumGateOpen(true);
+                  return;
+                }
+                setRatiosPeriod("MAX");
+              }}
+              aria-pressed={effectivePeriod === "MAX"}
+              aria-haspopup={isPremium ? undefined : "dialog"}
+              title={isPremium ? undefined : "Max — réservé Premium"}
+              className={`px-2.5 py-1 rounded transition inline-flex items-center gap-1 ${
+                effectivePeriod === "MAX"
+                  ? "bg-white shadow-sm font-medium text-blue-900"
+                  : isPremium
+                    ? "text-slate-500 hover:text-slate-700"
+                    : "text-slate-400 cursor-not-allowed"
+              }`}
+            >
+              Max
+              {!isPremium && <span aria-hidden className="text-[10px]">🔒</span>}
+            </button>
+          </div>
         </div>
-        <div className="overflow-x-auto select-none" {...protectProps}>
+        <div
+          className={`overflow-x-auto select-none ${
+            isMember ? "" : "blur-[3px] pointer-events-none"
+          }`}
+          aria-hidden={isMember ? undefined : true}
+          {...protectProps}
+        >
           <table className="w-full text-sm">
             <thead>
               <tr className="text-xs text-slate-500 bg-slate-50 border-b border-slate-200">
@@ -568,9 +666,32 @@ export default function FundamentalsView({ ticker, fundTitre, ratios, statements
             </tbody>
           </table>
         </div>
+        {!isMember && (
+          <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex justify-center px-4 pointer-events-none">
+            <button
+              type="button"
+              onClick={() => setMemberGateOpen(true)}
+              className="bg-white rounded-lg shadow-xl border border-slate-200 max-w-md w-full p-4 md:p-5 pointer-events-auto text-left hover:border-slate-300 transition"
+            >
+              <div className="flex items-start gap-3">
+                <div className="text-2xl shrink-0">🔓</div>
+                <div className="min-w-0">
+                  <h4 className="text-base font-semibold text-slate-900">
+                    Inscrivez-vous pour voir les ratios
+                  </h4>
+                  <p className="text-sm text-slate-600 mt-1">
+                    ROE, ROA, marges, gearing, PER, dividend yield et plus —
+                    sur les 3 derniers exercices. Inscription gratuite.
+                  </p>
+                </div>
+              </div>
+            </button>
+          </div>
+        )}
       </section>
 
-      {/* === ÉTATS FINANCIERS === */}
+      {/* === ÉTATS FINANCIERS — Pro only === */}
+      {isPro && (
       <section className="bg-white rounded-lg border border-slate-200">
         <div className="p-4 md:p-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -638,6 +759,60 @@ export default function FundamentalsView({ ticker, fundTitre, ratios, statements
           )}
         </div>
       </section>
+      )}
+
+      <MemberGateDialog
+        open={memberGateOpen}
+        onClose={() => setMemberGateOpen(false)}
+        title="Ratios fondamentaux réservés aux membres"
+        description="Inscrivez-vous gratuitement pour consulter les ratios des 3 derniers exercices : rentabilité, solvabilité, croissance, valorisation."
+      />
+      {premiumGateOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="ratios-premium-title"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm"
+          onClick={() => setPremiumGateOpen(false)}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl border border-slate-200 max-w-md w-full p-5 md:p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3 mb-3">
+              <div className="text-2xl shrink-0">⭐</div>
+              <div className="min-w-0">
+                <h3
+                  id="ratios-premium-title"
+                  className="text-base md:text-lg font-semibold text-slate-900"
+                >
+                  Historique complet réservé Premium
+                </h3>
+                <p className="text-sm text-slate-600 mt-1">
+                  Visualisez les ratios sur l&apos;ensemble des exercices
+                  publiés ({activeRatios.length} disponibles pour {ticker})
+                  avec l&apos;abonnement Premium.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2 flex-wrap justify-end pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setPremiumGateOpen(false)}
+                className="px-3 py-1.5 rounded-md border border-slate-300 text-sm font-medium hover:bg-slate-50 transition"
+              >
+                Plus tard
+              </button>
+              <Link
+                href="/compte"
+                className="px-3 py-1.5 rounded-md bg-amber-500 text-white text-sm font-medium hover:bg-amber-600 transition"
+              >
+                Passer Premium
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

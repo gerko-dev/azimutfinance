@@ -1044,6 +1044,7 @@ export default function StockDetailView({
             fundTitre={fundTitre}
             ratios={ratios}
             statements={statements}
+            userRole={userRole}
           />
         )}
 
