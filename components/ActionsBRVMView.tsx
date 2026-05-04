@@ -249,6 +249,18 @@ export default function ActionsBRVMView({
   // === SELECTEUR DE PERIODE ===
   const [period, setPeriod] = useState<Period>("1A");
 
+  // Gate « MAX » : reserve aux membres connectes. Au clic d'un visiteur,
+  // on affiche une invitation a l'inscription au lieu d'appliquer la periode.
+  const [memberGateOpen, setMemberGateOpen] = useState(false);
+  useEffect(() => {
+    if (!memberGateOpen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setMemberGateOpen(false);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [memberGateOpen]);
+
   // Mode base 100 : actif quand >=2 indices selectionnes (permet la comparaison
   // d'indices d'echelles tres differentes — ex BRVMC ~400 vs BRVM-TEL ~100).
   const useBase100 = activeIndices.size >= 2;
@@ -588,19 +600,31 @@ export default function ActionsBRVMView({
               )}
             </div>
             <div className="inline-flex rounded-md bg-slate-100 p-0.5 text-xs">
-              {(["1M", "3M", "6M", "1A", "3A", "5A", "MAX"] as Period[]).map((p) => (
-                <button
-                  key={p}
-                  onClick={() => setPeriod(p)}
-                  className={`px-2.5 py-1 rounded transition ${
-                    period === p
-                      ? "bg-white shadow-sm font-medium text-blue-900"
-                      : "text-slate-500 hover:text-slate-700"
-                  }`}
-                >
-                  {p}
-                </button>
-              ))}
+              {(["1M", "3M", "6M", "1A", "3A", "5A", "MAX"] as Period[]).map((p) => {
+                const gated = p === "MAX" && !isMember;
+                return (
+                  <button
+                    key={p}
+                    onClick={() => {
+                      if (gated) {
+                        setMemberGateOpen(true);
+                        return;
+                      }
+                      setPeriod(p);
+                    }}
+                    aria-haspopup={gated ? "dialog" : undefined}
+                    title={gated ? "Vue Max — réservée aux membres" : undefined}
+                    className={`px-2.5 py-1 rounded transition inline-flex items-center gap-1 ${
+                      period === p
+                        ? "bg-white shadow-sm font-medium text-blue-900"
+                        : "text-slate-500 hover:text-slate-700"
+                    }`}
+                  >
+                    {p}
+                    {gated && <span aria-hidden className="text-[10px]">🔒</span>}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -1297,6 +1321,59 @@ export default function ActionsBRVMView({
           )}
         </section>
       </main>
+
+      {memberGateOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="max-gate-title"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm"
+          onClick={() => setMemberGateOpen(false)}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl border border-slate-200 max-w-md w-full p-5 md:p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3 mb-3">
+              <div className="text-2xl shrink-0">🔓</div>
+              <div className="min-w-0">
+                <h3
+                  id="max-gate-title"
+                  className="text-base md:text-lg font-semibold text-slate-900"
+                >
+                  Vue Max réservée aux membres
+                </h3>
+                <p className="text-sm text-slate-600 mt-1">
+                  Inscrivez-vous gratuitement pour visualiser l&apos;historique
+                  complet des indices BRVM. Les membres accèdent aussi aux
+                  quadrants <b>Cash cows</b> et <b>Hidden gems</b>.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2 flex-wrap justify-end pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setMemberGateOpen(false)}
+                className="px-3 py-1.5 rounded-md border border-slate-300 text-sm font-medium hover:bg-slate-50 transition"
+              >
+                Plus tard
+              </button>
+              <Link
+                href="/connexion"
+                className="px-3 py-1.5 rounded-md border border-slate-300 text-sm font-medium hover:bg-slate-50 transition"
+              >
+                Connexion
+              </Link>
+              <Link
+                href="/inscription"
+                className="px-3 py-1.5 rounded-md bg-blue-700 text-white text-sm font-medium hover:bg-blue-800 transition"
+              >
+                S&apos;inscrire
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
