@@ -849,91 +849,6 @@ export default function StockDetailView({
               </div>
             </div>
 
-            {/* A propos */}
-            {stock.description && (
-              <div className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
-                <h3 className="text-base font-medium mb-3">À propos de {stock.name}</h3>
-                <p className="text-sm text-slate-700 leading-relaxed">{stock.description}</p>
-              </div>
-            )}
-
-            {/* Pairs sectoriels */}
-            {peers.length > 0 && (
-              <div className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
-                <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
-                  <h3 className="text-base font-medium">
-                    Autres titres · {stock.sector}
-                  </h3>
-                  <Link
-                    href="/marches/actions"
-                    className="text-xs text-blue-700 hover:text-blue-900"
-                  >
-                    Voir toutes les actions →
-                  </Link>
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
-                  {peers.map((p) => {
-                    const isUpPeer = p.changePercent > 0;
-                    const isDownPeer = p.changePercent < 0;
-                    const sparkline = peerSparklines[p.code] ?? [];
-                    const sparkColor = isUpPeer
-                      ? "#16a34a"
-                      : isDownPeer
-                      ? "#dc2626"
-                      : "#94a3b8";
-                    return (
-                      <Link
-                        key={p.code}
-                        href={`/titre/${p.code}`}
-                        className="flex flex-col p-2 rounded border border-slate-100 hover:border-slate-300 hover:bg-slate-50 transition"
-                      >
-                        <div className="text-sm font-mono font-medium">
-                          {p.code}
-                        </div>
-                        <div className="text-xs text-slate-500 truncate">
-                          {p.name}
-                        </div>
-                        {sparkline.length >= 2 && (
-                          <div className="h-6 mt-1 -mx-1">
-                            <ResponsiveContainer width="100%" height="100%">
-                              <LineChart data={sparkline}>
-                                <Line
-                                  type="monotone"
-                                  dataKey="value"
-                                  stroke={sparkColor}
-                                  strokeWidth={1.2}
-                                  dot={false}
-                                  isAnimationActive={false}
-                                />
-                              </LineChart>
-                            </ResponsiveContainer>
-                          </div>
-                        )}
-                        <div className="text-sm mt-1">
-                          {formatFCFA(p.price)}
-                        </div>
-                        <div
-                          className={`text-xs font-medium ${
-                            isUpPeer
-                              ? "text-green-700"
-                              : isDownPeer
-                              ? "text-red-700"
-                              : "text-slate-500"
-                          }`}
-                        >
-                          {p.changePercent === 0
-                            ? "0,00%"
-                            : `${isUpPeer ? "+" : ""}${p.changePercent
-                                .toFixed(2)
-                                .replace(".", ",")}%`}
-                        </div>
-                      </Link>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
             {/* Graphique avance pro — gating par role :
                 - visiteur (null)         : section absente
                 - membre gratuit          : floute partiellement + CTA premium
@@ -1023,6 +938,91 @@ export default function StockDetailView({
                   )}
                 </div>
               </section>
+            )}
+
+            {/* A propos */}
+            {stock.description && (
+              <div className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
+                <h3 className="text-base font-medium mb-3">À propos de {stock.name}</h3>
+                <p className="text-sm text-slate-700 leading-relaxed">{stock.description}</p>
+              </div>
+            )}
+
+            {/* Pairs sectoriels */}
+            {peers.length > 0 && (
+              <div className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
+                <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
+                  <h3 className="text-base font-medium">
+                    Autres titres · {stock.sector}
+                  </h3>
+                  <Link
+                    href="/marches/actions"
+                    className="text-xs text-blue-700 hover:text-blue-900"
+                  >
+                    Voir toutes les actions →
+                  </Link>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
+                  {peers.map((p) => {
+                    const isUpPeer = p.changePercent > 0;
+                    const isDownPeer = p.changePercent < 0;
+                    const sparkline = peerSparklines[p.code] ?? [];
+                    const sparkColor = isUpPeer
+                      ? "#16a34a"
+                      : isDownPeer
+                      ? "#dc2626"
+                      : "#94a3b8";
+                    return (
+                      <Link
+                        key={p.code}
+                        href={`/titre/${p.code}`}
+                        className="flex flex-col p-2 rounded border border-slate-100 hover:border-slate-300 hover:bg-slate-50 transition"
+                      >
+                        <div className="text-sm font-mono font-medium">
+                          {p.code}
+                        </div>
+                        <div className="text-xs text-slate-500 truncate">
+                          {p.name}
+                        </div>
+                        {sparkline.length >= 2 && (
+                          <div className="h-6 mt-1 -mx-1">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <LineChart data={sparkline}>
+                                <Line
+                                  type="monotone"
+                                  dataKey="value"
+                                  stroke={sparkColor}
+                                  strokeWidth={1.2}
+                                  dot={false}
+                                  isAnimationActive={false}
+                                />
+                              </LineChart>
+                            </ResponsiveContainer>
+                          </div>
+                        )}
+                        <div className="text-sm mt-1">
+                          {formatFCFA(p.price)}
+                        </div>
+                        <div
+                          className={`text-xs font-medium ${
+                            isUpPeer
+                              ? "text-green-700"
+                              : isDownPeer
+                              ? "text-red-700"
+                              : "text-slate-500"
+                          }`}
+                        >
+                          {p.changePercent === 0
+                            ? "0,00%"
+                            : `${isUpPeer ? "+" : ""}${p.changePercent
+                                .toFixed(2)
+                                .replace(".", ",")}%`}
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
             )}
           </>
         )}
