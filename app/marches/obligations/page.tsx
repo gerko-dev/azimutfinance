@@ -8,12 +8,17 @@ import {
   loadListedBondEvents,
   getMarketStats,
 } from "@/lib/dataLoader";
+import { fetchUserRole } from "@/lib/auth/userRole";
+
+// Lecture de cookies (auth Supabase) → rendu dynamique requis.
+export const dynamic = "force-dynamic";
 
 export default async function Page() {
   const bonds = loadListedBonds();
   const prices = loadListedBondPrices();
   const events = loadListedBondEvents();
   const stats = getMarketStats(bonds);
+  const userRole = await fetchUserRole();
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -27,6 +32,7 @@ export default async function Page() {
         prices={prices}
         events={events}
         stats={stats}
+        userRole={userRole}
       />
     </div>
   );

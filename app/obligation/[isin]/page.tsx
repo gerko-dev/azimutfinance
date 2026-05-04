@@ -17,6 +17,7 @@ import {
   getBrvmBondQuote,
   getBrvmBondsSnapshot,
 } from "@/lib/brvm/liveBonds";
+import { fetchUserRole } from "@/lib/auth/userRole";
 
 // Page rendue dynamiquement pour beneficier du cours live BRVM.
 // Le cache module-level dans liveBonds.ts limite la frequence des fetchs reels.
@@ -41,9 +42,10 @@ export default async function Page({
 
   // Cours en direct depuis BRVM (cache 5 min, mise a jour BRVM toutes les 15 min).
   // Le code mnemonique BRVM matche le champ `code` du CSV (ex "EOM.O10").
-  const [liveQuote, brvmSnapshot] = await Promise.all([
+  const [liveQuote, brvmSnapshot, userRole] = await Promise.all([
     getBrvmBondQuote(bond.code),
     getBrvmBondsSnapshot(),
+    fetchUserRole(),
   ]);
 
   // Chargement des emissions UMOA-Titres pour le prix theorique
@@ -96,6 +98,7 @@ export default async function Page({
               }
             : null
         }
+        userRole={userRole}
       />
     </div>
   );

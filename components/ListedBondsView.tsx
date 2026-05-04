@@ -21,6 +21,8 @@ import type {
   MarketStats,
 } from "@/lib/listedBondsTypes";
 import { getBondYTMFromLatest } from "@/lib/listedBondsTypes";
+import type { UserRole } from "@/lib/auth/userRole";
+import MemberGateDialog from "./MemberGateDialog";
 import CountryFlag from "./CountryFlag";
 
 // === HELPERS DE FORMATAGE ===
@@ -49,6 +51,7 @@ type Props = {
   prices: ListedBondPrice[];
   events: ListedBondEvent[];
   stats: MarketStats;
+  userRole: UserRole;
 };
 
 type SortKey = "name" | "couponRate" | "maturity" | "ytm" | "outstanding";
@@ -69,7 +72,18 @@ const TYPE_COLORS: Record<string, string> = {
   Autre: "#64748b",
 };
 
-export default function ListedBondsView({ bonds, prices, events, stats }: Props) {
+export default function ListedBondsView({
+  bonds,
+  prices,
+  events,
+  stats,
+  userRole,
+}: Props) {
+  const isMember = userRole !== null;
+  const isPremium = userRole === "premium" || userRole === "pro";
+  const isPro = userRole === "pro";
+  const [premiumGateOpen, setPremiumGateOpen] = useState(false);
+
   // === ETATS DE FILTRAGE (TABLEAU) ===
   const [search, setSearch] = useState("");
   // useDeferredValue : on laisse React garder l'input fluide et différer
@@ -317,17 +331,19 @@ export default function ListedBondsView({ bonds, prices, events, stats }: Props)
       </div>
 
       <main className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8 space-y-6 md:space-y-8">
-        {/* ====== COURBE DES TAUX ====== */}
+        {/* ====== COURBE DES TAUX — Pro only ====== */}
         {/* Isolée dans un composant memo : ne re-render plus quand on tape
             dans la recherche (Recharts est très coûteux à reconcilier). */}
-        <YieldCurveSection
-          enrichedBonds={enrichedBonds}
-          availableTypes={availableTypes}
-        />
+        {isPro && (
+          <YieldCurveSection
+            enrichedBonds={enrichedBonds}
+            availableTypes={availableTypes}
+          />
+        )}
 
-        {/* ====== A SURVEILLER ====== */}
-        {anomalies.length > 0 && (
-          <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
+        {/* ====== A SURVEILLER — Premium, cadenas pour membre, retire pour visiteur ====== */}
+        {anomalies.length > 0 && isMember && (
+          <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6 relative">
             <div className="flex items-start gap-2 mb-4 flex-wrap">
               <h2 className="text-lg md:text-xl font-semibold">🔎 À surveiller</h2>
               <span className="text-[10px] md:text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
@@ -339,42 +355,71 @@ export default function ListedBondsView({ bonds, prices, events, stats }: Props)
               même notation, durée similaire). Z-score &gt; 1,5σ. Une analyse approfondie est
               recommandée avant toute décision.
             </p>
-            <div className="space-y-2">
-              {anomalies.map((a, i) => (
-                <Link
-                  key={i}
-                  href={`/obligation/${a.bond.isin}`}
-                  className={`block p-3 rounded-md border text-sm hover:shadow-sm transition ${
-                    a.severity === "watch_high"
-                      ? "bg-blue-50 border-blue-200 hover:border-blue-300"
-                      : "bg-slate-50 border-slate-200 hover:border-slate-300"
-                  }`}
-                >
-                  <div className="flex justify-between items-start gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium">
-                        {a.severity === "watch_high" ? "📈" : "📉"} {a.bond.name}
-                        {a.bond.code && (
-                          <span className="ml-2 text-xs text-slate-500 font-normal">
-                            ({a.bond.code})
-                          </span>
-                        )}
+            <div
+              className={
+                isPremium ? "" : "blur-[3px] pointer-events-none select-none"
+              }
+              aria-hidden={isPremium ? undefined : true}
+            >
+              <div className="space-y-2">
+                {anomalies.map((a, i) => (
+                  <Link
+                    key={i}
+                    href={`/obligation/${a.bond.isin}`}
+                    className={`block p-3 rounded-md border text-sm hover:shadow-sm transition ${
+                      a.severity === "watch_high"
+                        ? "bg-blue-50 border-blue-200 hover:border-blue-300"
+                        : "bg-slate-50 border-slate-200 hover:border-slate-300"
+                    }`}
+                  >
+                    <div className="flex justify-between items-start gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium">
+                          {a.severity === "watch_high" ? "📈" : "📉"} {a.bond.name}
+                          {a.bond.code && (
+                            <span className="ml-2 text-xs text-slate-500 font-normal">
+                              ({a.bond.code})
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-slate-600 mt-0.5">{a.reason}</div>
                       </div>
-                      <div className="text-xs text-slate-600 mt-0.5">{a.reason}</div>
+                      <span className="text-xs text-slate-500 whitespace-nowrap font-mono">
+                        {a.bond.isin}
+                      </span>
                     </div>
-                    <span className="text-xs text-slate-500 whitespace-nowrap font-mono">
-                      {a.bond.isin}
-                    </span>
+                  </Link>
+                ))}
+              </div>
+              <div className="mt-3 pt-3 border-t border-slate-100 text-xs text-slate-500">
+                <strong>Méthodologie :</strong> pour chaque obligation, calcul de la moyenne et
+                de l&apos;écart-type des YTM de ses pairs (même pays × même notation × durée ±2
+                ans). Un Z-score &gt; 1,5σ ou &lt; −1,5σ est signalé. Minimum 3 pairs requis.
+                Ceci n&apos;est pas un conseil en investissement.
+              </div>
+            </div>
+            {!isPremium && (
+              <div className="absolute inset-0 flex items-center justify-center p-4 pointer-events-none">
+                <button
+                  type="button"
+                  onClick={() => setPremiumGateOpen(true)}
+                  className="bg-white rounded-lg shadow-xl border border-amber-200 max-w-md w-full p-4 md:p-5 pointer-events-auto text-left hover:border-amber-300 transition"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="text-2xl shrink-0">⭐</div>
+                    <div className="min-w-0">
+                      <h4 className="text-base font-semibold text-slate-900">
+                        À surveiller — réservé Premium
+                      </h4>
+                      <p className="text-sm text-slate-600 mt-1">
+                        Détection automatique des obligations dont le YTM
+                        s&apos;écarte de leurs pairs. Disponible avec Premium.
+                      </p>
+                    </div>
                   </div>
-                </Link>
-              ))}
-            </div>
-            <div className="mt-3 pt-3 border-t border-slate-100 text-xs text-slate-500">
-              <strong>Méthodologie :</strong> pour chaque obligation, calcul de la moyenne et
-              de l&apos;écart-type des YTM de ses pairs (même pays × même notation × durée ±2
-              ans). Un Z-score &gt; 1,5σ ou &lt; −1,5σ est signalé. Minimum 3 pairs requis.
-              Ceci n&apos;est pas un conseil en investissement.
-            </div>
+                </button>
+              </div>
+            )}
           </section>
         )}
 
@@ -522,6 +567,14 @@ export default function ListedBondsView({ bonds, prices, events, stats }: Props)
           </div>
         </section>
       </main>
+
+      <MemberGateDialog
+        open={premiumGateOpen}
+        onClose={() => setPremiumGateOpen(false)}
+        tier="premium"
+        title="Détection d'anomalies réservée Premium"
+        description="L'analyse automatique des obligations dont le YTM s'écarte de leurs pairs est réservée à l'abonnement Premium."
+      />
     </>
   );
 }

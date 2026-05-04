@@ -24,8 +24,10 @@ import {
   calculateBPV,
   getBondCashflows,
 } from "@/lib/listedBondsTypes";
+import type { UserRole } from "@/lib/auth/userRole";
 import CountryFlag from "./CountryFlag";
 import LivePriceBadge from "./LivePriceBadge";
+import MemberGateDialog from "./MemberGateDialog";
 
 // === HELPERS DE FORMATAGE ===
 function formatFCFA(value: number): string {
@@ -200,6 +202,7 @@ type Props = {
     sessionLabel: string | null;
     isClosed: boolean | null;
   } | null;
+  userRole: UserRole;
 };
 
 type Tab =
@@ -218,7 +221,19 @@ export default function BondDetailView({
   theoreticalHistory,
   signatureSpread,
   livePrice,
+  userRole,
 }: Props) {
+  const isMember = userRole !== null;
+  const isPremium = userRole === "premium" || userRole === "pro";
+  const isPro = userRole === "pro";
+  const [premiumGateOpen, setPremiumGateOpen] = useState(false);
+  const [premiumGateMsg, setPremiumGateMsg] = useState<string>("");
+  const [gateFor, setGateFor] = useState<"watchlist" | "alerte" | null>(null);
+  function openPremiumGate(msg: string) {
+    setPremiumGateMsg(msg);
+    setPremiumGateOpen(true);
+  }
+
   const [activeTab, setActiveTab] = useState<Tab>("overview");
 
   // Émetteur souverain : l'écart vs courbe UMOA-Titres du pays n'est pas une
@@ -394,11 +409,45 @@ export default function BondDetailView({
             </div>
 
             <div className="flex gap-2 flex-wrap">
-              <button className="px-3 py-1.5 text-xs md:text-sm border border-slate-300 rounded-md hover:bg-slate-50">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isMember) {
+                    setGateFor("watchlist");
+                    return;
+                  }
+                  // TODO: brancher la watchlist obligataire (cf. fiche action).
+                }}
+                aria-haspopup={isMember ? undefined : "dialog"}
+                title={
+                  isMember ? undefined : "Watchlist — réservée aux membres"
+                }
+                className="px-3 py-1.5 text-xs md:text-sm border border-slate-300 rounded-md hover:bg-slate-50 inline-flex items-center gap-1"
+              >
                 + Watchlist
+                {!isMember && (
+                  <span aria-hidden className="text-[10px]">🔒</span>
+                )}
               </button>
-              <button className="px-3 py-1.5 text-xs md:text-sm border border-slate-300 rounded-md hover:bg-slate-50">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isMember) {
+                    setGateFor("alerte");
+                    return;
+                  }
+                  // TODO: brancher la creation d'alerte obligataire.
+                }}
+                aria-haspopup={isMember ? undefined : "dialog"}
+                title={
+                  isMember ? undefined : "Alertes — réservées aux membres"
+                }
+                className="px-3 py-1.5 text-xs md:text-sm border border-slate-300 rounded-md hover:bg-slate-50 inline-flex items-center gap-1"
+              >
                 🔔 Alerte
+                {!isMember && (
+                  <span aria-hidden className="text-[10px]">🔒</span>
+                )}
               </button>
             </div>
           </div>
@@ -443,28 +492,52 @@ export default function BondDetailView({
             )}
           </div>
 
-          {/* Onglets */}
+          {/* Onglets — gating tier :
+              · Pricing / Echeancier & flux / Simulateur : Premium (cadenas + CTA)
+              · Risque & analytics : Pro uniquement (retire sinon) */}
           <div className="flex gap-0 text-sm overflow-x-auto border-b border-slate-200 -mb-px">
-            {[
-              { id: "overview", label: "Vue d'ensemble" },
-              { id: "quotations", label: "Pricing" },
-              { id: "cashflow", label: "Échéancier & flux" },
-              { id: "risk", label: "Risque & analytics" },
-              { id: "simulator", label: "Simulateur" },
-              { id: "characteristics", label: "Caractéristiques" },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as Tab)}
-                className={`px-3 md:px-4 py-3 whitespace-nowrap border-b-2 transition ${
-                  activeTab === tab.id
-                    ? "border-blue-700 text-blue-700 font-medium"
-                    : "border-transparent text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+            {(
+              [
+                { id: "overview", label: "Vue d'ensemble", requires: null },
+                { id: "quotations", label: "Pricing", requires: "premium" },
+                { id: "cashflow", label: "Échéancier & flux", requires: "premium" },
+                { id: "risk", label: "Risque & analytics", requires: "pro" },
+                { id: "simulator", label: "Simulateur", requires: "premium" },
+                { id: "characteristics", label: "Caractéristiques", requires: null },
+              ] as Array<{ id: Tab; label: string; requires: "premium" | "pro" | null }>
+            )
+              .filter((tab) => !(tab.requires === "pro" && !isPro))
+              .map((tab) => {
+                const locked = tab.requires === "premium" && !isPremium;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => {
+                      if (locked) {
+                        openPremiumGate(
+                          `L'onglet « ${tab.label} » est réservé à l'abonnement Premium.`,
+                        );
+                        return;
+                      }
+                      setActiveTab(tab.id);
+                    }}
+                    aria-haspopup={locked ? "dialog" : undefined}
+                    title={
+                      locked ? `${tab.label} — réservé Premium` : undefined
+                    }
+                    className={`px-3 md:px-4 py-3 whitespace-nowrap border-b-2 transition inline-flex items-center gap-1 ${
+                      activeTab === tab.id
+                        ? "border-blue-700 text-blue-700 font-medium"
+                        : "border-transparent text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    {tab.label}
+                    {locked && (
+                      <span aria-hidden className="text-[10px]">🔒</span>
+                    )}
+                  </button>
+                );
+              })}
           </div>
         </div>
       </div>
@@ -1422,6 +1495,31 @@ export default function BondDetailView({
           </Link>
         </div>
       </main>
+
+      <MemberGateDialog
+        open={gateFor !== null}
+        onClose={() => setGateFor(null)}
+        title={
+          gateFor === "alerte"
+            ? "Alertes réservées aux membres"
+            : "Watchlist réservée aux membres"
+        }
+        description={
+          gateFor === "alerte"
+            ? "Inscrivez-vous gratuitement pour créer des alertes sur les obligations (variation de YTM, échéances, événements)."
+            : "Inscrivez-vous gratuitement pour suivre vos obligations préférées et retrouver votre watchlist sur tous vos appareils."
+        }
+      />
+      <MemberGateDialog
+        open={premiumGateOpen}
+        onClose={() => setPremiumGateOpen(false)}
+        tier="premium"
+        title="Outils obligataires Premium"
+        description={
+          premiumGateMsg ||
+          "Cet onglet de la fiche obligation est réservé à l'abonnement Premium."
+        }
+      />
     </>
   );
 }
