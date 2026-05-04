@@ -42,6 +42,8 @@ import NewsView from "./NewsView";
 import AdvancedStatsView from "./AdvancedStatsView";
 import LivePriceBadge from "./LivePriceBadge";
 import TechnicalAnalysisView from "./TechnicalAnalysisView";
+import MemberGateDialog from "./MemberGateDialog";
+import type { UserRole } from "@/lib/auth/userRole";
 
 type Tab =
   | "overview"
@@ -189,6 +191,7 @@ type Props = {
     isClosed: boolean | null;
     hasLive: boolean;
   };
+  userRole: UserRole;
 };
 
 function formatFCFA(value: number): string {
@@ -248,12 +251,16 @@ export default function StockDetailView({
   news,
   advancedStats,
   livePrice,
+  userRole,
 }: Props) {
+  const isMember = userRole !== null;
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [period, setPeriod] = useState<Period>("1A");
   const [showBrvmc, setShowBrvmc] = useState(false);
   const [showSector, setShowSector] = useState(false);
   const [inWatchlist, setInWatchlist] = useState(false);
+  // Gate « Membre » declenche par les actions reservees (watchlist, alerte).
+  const [gateFor, setGateFor] = useState<"watchlist" | "alerte" | null>(null);
 
   // Sync watchlist depuis localStorage au montage (SSR-safe).
   // Le setState dans l'effet est volontaire : on initialise à false côté
@@ -404,7 +411,7 @@ export default function StockDetailView({
                   <span className="text-xs px-2 py-0.5 bg-blue-50 rounded text-blue-700">
                     BRVM · {stock.country}
                   </span>
-                  {quadrant && (
+                  {quadrant && isMember && (
                     <Link
                       href={`/marches/actions#${quadrant}`}
                       title="Classification Azimut · cliquer pour voir le scatter"
@@ -423,22 +430,50 @@ export default function StockDetailView({
             <div className="flex gap-2 flex-wrap">
               <button
                 type="button"
-                onClick={toggleWatchlist}
-                aria-pressed={inWatchlist}
-                className={`px-3 py-1.5 text-xs md:text-sm border rounded-md transition ${
-                  inWatchlist
+                onClick={() => {
+                  if (!isMember) {
+                    setGateFor("watchlist");
+                    return;
+                  }
+                  toggleWatchlist();
+                }}
+                aria-pressed={isMember ? inWatchlist : undefined}
+                aria-haspopup={isMember ? undefined : "dialog"}
+                title={isMember ? undefined : "Watchlist — réservée aux membres"}
+                className={`px-3 py-1.5 text-xs md:text-sm border rounded-md transition inline-flex items-center gap-1 ${
+                  isMember && inWatchlist
                     ? "border-blue-300 bg-blue-50 text-blue-800 hover:bg-blue-100"
                     : "border-slate-300 hover:bg-slate-50"
                 }`}
               >
-                {inWatchlist ? "✓ Dans la watchlist" : "+ Watchlist"}
+                {isMember ? (
+                  inWatchlist ? "✓ Dans la watchlist" : "+ Watchlist"
+                ) : (
+                  <>
+                    + Watchlist
+                    <span aria-hidden className="text-[10px]">🔒</span>
+                  </>
+                )}
               </button>
-              <Link
-                href="/outils/alertes"
-                className="px-3 py-1.5 text-xs md:text-sm border border-slate-300 rounded-md hover:bg-slate-50 inline-flex items-center"
-              >
-                🔔 Alerte
-              </Link>
+              {isMember ? (
+                <Link
+                  href="/outils/alertes"
+                  className="px-3 py-1.5 text-xs md:text-sm border border-slate-300 rounded-md hover:bg-slate-50 inline-flex items-center"
+                >
+                  🔔 Alerte
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setGateFor("alerte")}
+                  aria-haspopup="dialog"
+                  title="Alertes — réservées aux membres"
+                  className="px-3 py-1.5 text-xs md:text-sm border border-slate-300 rounded-md hover:bg-slate-50 inline-flex items-center gap-1"
+                >
+                  🔔 Alerte
+                  <span aria-hidden className="text-[10px]">🔒</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -930,6 +965,21 @@ export default function StockDetailView({
           <NewsView ticker={stock.code} news={news} />
         )}
       </main>
+
+      <MemberGateDialog
+        open={gateFor !== null}
+        onClose={() => setGateFor(null)}
+        title={
+          gateFor === "alerte"
+            ? "Alertes réservées aux membres"
+            : "Watchlist réservée aux membres"
+        }
+        description={
+          gateFor === "alerte"
+            ? "Inscrivez-vous gratuitement pour créer des alertes de cours, de variation et de volume sur vos titres préférés."
+            : "Inscrivez-vous gratuitement pour suivre vos titres préférés et retrouver votre watchlist sur tous vos appareils."
+        }
+      />
     </>
   );
 }

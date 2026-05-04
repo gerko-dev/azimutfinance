@@ -16,7 +16,7 @@ import {
 import { getBrvmSnapshot } from "@/lib/brvm/liveQuotes";
 import { getBrvmIndicesSnapshot } from "@/lib/brvm/liveIndices";
 import { getLatestRatios } from "@/lib/fundamentals";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { fetchUserRole } from "@/lib/auth/userRole";
 
 export const dynamic = "force-dynamic";
 
@@ -33,34 +33,6 @@ const indexColors: Record<string, string> = {
   "BRVM-SP": "#0891b2",
   "BRVM-TEL": "#db2777",
 };
-
-type UserRole = "member" | "premium" | "pro" | null;
-
-async function fetchUserRole(): Promise<UserRole> {
-  try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return null;
-    const { data } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .maybeSingle();
-    const role = (data as { role?: string } | null)?.role;
-    // Niveaux applicatifs explicites
-    if (role === "member" || role === "premium" || role === "pro") return role;
-    // Admins (adminlevel1/2/3) : niveau au-dessus de "pro" — assimile a pro
-    // pour les besoins d'autorisation membre.
-    if (typeof role === "string" && role.startsWith("adminlevel")) return "pro";
-    // User authentifie avec role inconnu/null : trigger handle_new_user normalement
-    // cree une row profiles avec role='member' — on tolere les cas degraders.
-    return "member";
-  } catch {
-    return null;
-  }
-}
 
 export default async function Page() {
   const actions = loadAllActions();

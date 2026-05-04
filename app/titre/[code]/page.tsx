@@ -27,6 +27,7 @@ import {
 } from "@/lib/fundamentals";
 import { loadNewsByTicker } from "@/lib/news";
 import { loadDbNewsByTicker } from "@/lib/newsFromDb";
+import { fetchUserRole } from "@/lib/auth/userRole";
 
 // Page rendue dynamiquement a chaque requete pour beneficier du cours live BRVM.
 // Le cache module-level dans liveQuotes.ts limite la frequence des fetchs reels.
@@ -48,9 +49,10 @@ export default async function TitrePage({
 
   // Cours en direct depuis BRVM (cache 5 min, mise a jour BRVM toutes les 15 min).
   // Override price/change/changePercent de la fiche CSV par les valeurs live.
-  const [liveQuote, brvmSnapshot] = await Promise.all([
+  const [liveQuote, brvmSnapshot, userRole] = await Promise.all([
     getBrvmQuote(codeUpper),
     getBrvmSnapshot(),
+    fetchUserRole(),
   ]);
   if (liveQuote && Number.isFinite(liveQuote.currentPrice) && liveQuote.currentPrice > 0) {
     stock.price = liveQuote.currentPrice;
@@ -160,6 +162,7 @@ export default async function TitrePage({
           isClosed: brvmSnapshot.isClosed,
           hasLive: !!liveQuote,
         }}
+        userRole={userRole}
       />
     </div>
   );
