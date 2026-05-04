@@ -6,7 +6,6 @@ import {
   BarChart,
   Bar,
   Line,
-  LineChart,
   ScatterChart,
   Scatter,
   XAxis,
@@ -824,8 +823,10 @@ export default function AdvancedStatsView({
           historique se base sur les quantiles empiriques 5%/1%, la VaR
           paramétrique sur l&apos;hypothèse normale (μ - z×σ). Test de normalité :
           Jarque-Bera (statistique JB suit χ²(2)). Ljung-Box pour
-          l&apos;autocorrélation. Heatmap mensuelle = (cours fin de mois / cours
-          début de mois - 1).
+          l&apos;autocorrélation. Rendement mensuel = (clôture du dernier jour
+          du mois / clôture du dernier jour du mois précédent - 1) ;
+          historique Sika. Pour le tout premier mois disponible, fallback sur
+          la première clôture du mois.
         </div>
       </section>
 

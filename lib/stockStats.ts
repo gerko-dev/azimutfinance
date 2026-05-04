@@ -834,6 +834,8 @@ export type MonthlyReturn = { year: number; month: number; ret: number };
 
 export function buildMonthlyReturns(history: PricePoint[]): MonthlyReturn[] {
   if (history.length === 0) return [];
+
+  // Pour chaque mois civil on retient la 1re et la derniere cloture observees.
   const byMonth = new Map<string, { first: number; last: number }>();
   for (const p of history) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(p.date)) continue;
@@ -842,11 +844,22 @@ export function buildMonthlyReturns(history: PricePoint[]): MonthlyReturn[] {
     if (!existing) byMonth.set(key, { first: p.value, last: p.value });
     else existing.last = p.value;
   }
+
+  // Rendement mensuel base sur la derniere cloture du mois civil precedent
+  // (convention Bloomberg / Yahoo) — capte le gap entre la cloture de fin de
+  // mois et la 1re seance du mois suivant. Fallback sur la 1re cloture du mois
+  // courant pour le tout premier mois de la serie (titre recemment cote ou
+  // trou de donnees), afin de ne pas omettre l'observation.
   const out: MonthlyReturn[] = [];
   for (const [key, { first, last }] of byMonth) {
     if (first <= 0 || last <= 0) continue;
     const [y, m] = key.split("-").map(Number);
-    out.push({ year: y, month: m, ret: last / first - 1 });
+    const prevY = m === 1 ? y - 1 : y;
+    const prevM = m === 1 ? 12 : m - 1;
+    const prevKey = `${prevY}-${String(prevM).padStart(2, "0")}`;
+    const prev = byMonth.get(prevKey);
+    const base = prev && prev.last > 0 ? prev.last : first;
+    out.push({ year: y, month: m, ret: last / base - 1 });
   }
   out.sort((a, b) => a.year - b.year || a.month - b.month);
   return out;
