@@ -15,7 +15,11 @@ import {
   Scatter,
 } from "recharts";
 import CountryFlag from "./CountryFlag";
+import LivePriceBadge from "./LivePriceBadge";
 import type { ActionRow, RiskReturnPoint } from "@/lib/dataLoader";
+import type { BrvmLiveIndex } from "@/lib/brvm/liveIndices";
+
+type UserRole = "member" | "premium" | "pro" | null;
 
 // === HELPERS ===
 function formatFCFA(value: number): string {
@@ -126,18 +130,35 @@ type Props = {
     bySector: Record<string, number>;
     byCountry: Record<string, number>;
   };
+  liveListedCount: number;
   topGainers: ActionRow[];
   topLosers: ActionRow[];
   indicesSeries: IndexSeries[];
   compositeStat: IndexStat;
+  liveIndices: BrvmLiveIndex[];
+  liveIndicesYtd: Record<string, number | null>;
+  ytdByAction: Record<string, number | null>;
+  liveSession: {
+    fetchedAt: string;
+    sessionLabel: string | null;
+    isClosed: boolean | null;
+  };
   riskReturn: {
     points: RiskReturnPoint[];
     excludedCount: number;
     excludedReasons: { noYield: number; insufficientHistory: number };
   };
+  userRole: UserRole;
 };
 
-type SortKey = "code" | "price" | "changePercent" | "capitalization" | "per" | "yieldPct";
+type SortKey =
+  | "code"
+  | "price"
+  | "changePercent"
+  | "ytd"
+  | "capitalization"
+  | "per"
+  | "yieldPct";
 type SortOrder = "asc" | "desc";
 
 const PAGE_SIZE = 20;
@@ -166,12 +187,19 @@ const periodToDays: Record<Period, number | null> = {
 export default function ActionsBRVMView({
   actions,
   marketStats,
+  liveListedCount,
   topGainers,
   topLosers,
   indicesSeries,
   compositeStat,
+  liveIndices,
+  liveIndicesYtd,
+  ytdByAction,
+  liveSession,
   riskReturn,
+  userRole,
 }: Props) {
+  const isMember = userRole !== null;
   // === ETATS ===
   const [search, setSearch] = useState("");
   const [filterSector, setFilterSector] = useState("all");
@@ -221,6 +249,10 @@ export default function ActionsBRVMView({
   // === SELECTEUR DE PERIODE ===
   const [period, setPeriod] = useState<Period>("1A");
 
+  // Mode base 100 : actif quand >=2 indices selectionnes (permet la comparaison
+  // d'indices d'echelles tres differentes — ex BRVMC ~400 vs BRVM-TEL ~100).
+  const useBase100 = activeIndices.size >= 2;
+
   // === DONNEES POUR LE GRAPHIQUE ===
   const chartData = useMemo(() => {
     const days = periodToDays[period];
@@ -232,19 +264,32 @@ export default function ActionsBRVMView({
     }
 
     const dateMap = new Map<string, Record<string, number | string>>();
+    // Valeurs de reference (1er point >= cutoff) pour la base 100, calculees
+    // par serie — permet de tracer chaque indice sur la meme echelle.
+    const baseValues = new Map<string, number>();
+
     for (const series of indicesSeries) {
       if (!activeIndices.has(series.code)) continue;
-      for (const point of series.data) {
-        if (cutoffDate && point.date < cutoffDate) continue;
+      const filtered = cutoffDate
+        ? series.data.filter((p) => p.date >= cutoffDate!)
+        : series.data;
+      const baseValue = filtered.find((p) => p.value > 0)?.value ?? 0;
+      if (useBase100 && baseValue > 0) baseValues.set(series.code, baseValue);
+
+      for (const point of filtered) {
         const entry = dateMap.get(point.date) || { date: point.date };
-        entry[series.code] = point.value;
+        if (useBase100 && baseValue > 0) {
+          entry[series.code] = (point.value / baseValue) * 100;
+        } else {
+          entry[series.code] = point.value;
+        }
         dateMap.set(point.date, entry);
       }
     }
     return Array.from(dateMap.values()).sort((a, b) =>
       String(a.date).localeCompare(String(b.date))
     );
-  }, [indicesSeries, activeIndices, period]);
+  }, [indicesSeries, activeIndices, period, useBase100]);
 
   // === CLASSIFICATION PAR QUADRANT (medianes du dataset risk-return) ===
   const { codeToQuadrant, quadrantCounts } = useMemo(() => {
@@ -329,6 +374,13 @@ export default function ActionsBRVMView({
         case "changePercent":
           cmp = a.changePercent - b.changePercent;
           break;
+        case "ytd": {
+          const ya = ytdByAction[a.code];
+          const yb = ytdByAction[b.code];
+          // null → -Infinity pour rejeter les actions sans YTD au tri desc
+          cmp = (ya ?? -Infinity) - (yb ?? -Infinity);
+          break;
+        }
         case "capitalization":
           cmp = a.capitalization - b.capitalization;
           break;
@@ -343,7 +395,7 @@ export default function ActionsBRVMView({
     });
 
     return sorted;
-  }, [actions, deferredSearch, deferredSector, deferredCountry, sortKey, sortOrder, quadrantCodeSet]);
+  }, [actions, deferredSearch, deferredSector, deferredCountry, sortKey, sortOrder, quadrantCodeSet, ytdByAction]);
 
   const totalPages = Math.ceil(processedActions.length / PAGE_SIZE);
   const pagedActions = useMemo(() => {
@@ -388,12 +440,20 @@ export default function ActionsBRVMView({
             <span>Actions BRVM</span>
           </div>
 
-          <h1 className="text-2xl md:text-3xl font-semibold mb-2">
-            Actions BRVM UEMOA
-          </h1>
+          <div className="flex items-baseline justify-between flex-wrap gap-3 mb-2">
+            <h1 className="text-2xl md:text-3xl font-semibold">
+              Actions BRVM UEMOA
+            </h1>
+            <LivePriceBadge
+              fetchedAt={liveSession.fetchedAt}
+              sessionLabel={liveSession.sessionLabel}
+              isClosed={liveSession.isClosed}
+            />
+          </div>
           <p className="text-sm md:text-base text-slate-600 max-w-3xl">
-            {marketStats.totalActions} sociétés cotées sur la Bourse Régionale des Valeurs
-            Mobilières. Indices, valorisation et analyses sectorielles.
+            {liveListedCount > 0 ? liveListedCount : marketStats.totalActions} sociétés
+            cotées sur la Bourse Régionale des Valeurs Mobilières. Indices, valorisation
+            et analyses sectorielles.
           </p>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mt-6">
@@ -422,7 +482,7 @@ export default function ActionsBRVMView({
             <div className="bg-white rounded-lg border border-slate-200 p-4">
               <div className="text-xs text-slate-500 mb-1">Sociétés cotées</div>
               <div className="text-2xl md:text-3xl font-semibold">
-                {marketStats.totalActions}
+                {liveListedCount > 0 ? liveListedCount : marketStats.totalActions}
               </div>
               <div className="text-xs text-slate-400 mt-1">
                 {Object.keys(marketStats.byCountry).length} pays UEMOA
@@ -447,12 +507,86 @@ export default function ActionsBRVMView({
       </div>
 
       <main className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8 space-y-6 md:space-y-8">
+        {/* ====== INDICES LIVE ====== */}
+        {liveIndices.length > 0 && (
+          <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
+            <div className="flex justify-between items-baseline flex-wrap gap-2 mb-4">
+              <h2 className="text-lg md:text-xl font-semibold">📈 Indices BRVM</h2>
+              <Link
+                href="/marches/indices"
+                className="text-xs text-blue-700 hover:text-blue-900"
+              >
+                Tous les indices →
+              </Link>
+            </div>
+
+            {/* Indices principaux */}
+            <div className="mb-4">
+              <div className="text-[11px] uppercase tracking-wide text-slate-500 font-medium mb-2">
+                Principaux
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
+                {liveIndices
+                  .filter((i) => i.category === "principal")
+                  .map((i) => (
+                    <IndexCard
+                      key={i.code}
+                      index={i}
+                      ytdValue={liveIndicesYtd[i.code] ?? i.ytdPct}
+                    />
+                  ))}
+              </div>
+            </div>
+
+            {/* Indices sectoriels */}
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-slate-500 font-medium mb-2">
+                Sectoriels
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2">
+                {liveIndices
+                  .filter((i) => i.category === "sectoriel")
+                  .map((i) => (
+                    <IndexCard
+                      key={i.code}
+                      index={i}
+                      compact
+                      ytdValue={liveIndicesYtd[i.code] ?? i.ytdPct}
+                    />
+                  ))}
+              </div>
+            </div>
+          </section>
+        )}
+
         {/* ====== GRAPHIQUE INDICES ====== */}
         <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
           <div className="flex justify-between items-center flex-wrap gap-2 mb-3">
-            <h2 className="text-lg md:text-xl font-semibold">
-              📊 Évolution des indices BRVM
-            </h2>
+            <div>
+              <h2 className="text-lg md:text-xl font-semibold">
+                📊 Évolution des indices BRVM
+              </h2>
+              {useBase100 ? (
+                <div className="text-[11px] text-slate-500 mt-1">
+                  Base 100 au {(() => {
+                    const first = chartData[0];
+                    if (!first) return "—";
+                    const d = String(first.date);
+                    return new Date(d).toLocaleDateString("fr-FR", {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                      timeZone: "UTC",
+                    });
+                  })()} · permet la comparaison entre indices
+                </div>
+              ) : (
+                <div className="text-[11px] text-slate-500 mt-1">
+                  Ouvrez un indice pour les outils d&apos;analyse technique
+                  (SMA, EMA, Bollinger, RSI, MACD).
+                </div>
+              )}
+            </div>
             <div className="inline-flex rounded-md bg-slate-100 p-0.5 text-xs">
               {(["1M", "3M", "6M", "1A", "3A", "5A", "MAX"] as Period[]).map((p) => (
                 <button
@@ -531,8 +665,11 @@ export default function ActionsBRVMView({
                   }
                   formatter={(value, name) => {
                     const series = indicesSeries.find((s) => s.code === name);
+                    const formatted = Number(value ?? 0)
+                      .toFixed(2)
+                      .replace(".", ",");
                     return [
-                      Number(value ?? 0).toFixed(2).replace(".", ","),
+                      useBase100 ? `${formatted} (base 100)` : formatted,
                       series?.name || name,
                     ];
                   }}
@@ -564,9 +701,10 @@ export default function ActionsBRVMView({
           </div>
         </section>
 
-        {/* ====== SCATTER RENDEMENT vs VOLATILITE ====== */}
+        {/* ====== SCATTER RENDEMENT vs VOLATILITE (Membres uniquement) ====== */}
         {riskReturn.points.length > 0 && (
           <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
+            {/* Header non-floute : titre + badge restent toujours lisibles */}
             <div className="flex justify-between items-start flex-wrap gap-2 mb-3">
               <div>
                 <h2 className="text-lg md:text-xl font-semibold">
@@ -577,11 +715,18 @@ export default function ActionsBRVMView({
                 </p>
               </div>
               <span className="text-[10px] md:text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
-                EXCLUSIVITÉ AZIMUT
+                EXCLUSIVITÉ MEMBRE
               </span>
             </div>
 
-            <div style={{ width: "100%", height: 400 }}>
+            {/* Zone floutable : graphique + legende quadrants + methodologie.
+                Le wrapper relative cible l'overlay sur cette zone seulement. */}
+            <div className="relative">
+            <div
+              style={{ width: "100%", height: 400 }}
+              className={isMember ? "" : "pointer-events-none select-none"}
+              aria-hidden={isMember ? undefined : true}
+            >
               <ResponsiveContainer width="100%" height="100%">
                 <ScatterChart margin={{ top: 20, right: 30, bottom: 50, left: 30 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -793,6 +938,49 @@ export default function ActionsBRVMView({
                 quotidiens × √252, sur 12 mois glissants. Outliers (jumps {">"} 30% en 1 jour) filtrés.
               </div>
             </div>
+
+            {/* Flou partiel pour invites : on laisse voir la forme du scatter
+                (pour donner envie) mais on rend les details illisibles, et on
+                affiche un bandeau d'incitation a l'inscription en bas. */}
+            {!isMember && (
+              <>
+                <div
+                  className="absolute inset-0 backdrop-blur-[3px] bg-white/10 rounded-lg pointer-events-none"
+                  aria-hidden
+                />
+                <div className="absolute inset-x-0 bottom-0 p-4 md:p-6 pointer-events-none">
+                  <div className="bg-white/95 backdrop-blur-sm rounded-lg shadow-lg border border-slate-200 px-4 py-3 md:px-5 md:py-4 flex items-center justify-between gap-3 flex-wrap pointer-events-auto">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="text-2xl shrink-0">🔓</div>
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold">
+                          Inscrivez-vous pour voir le détail
+                        </div>
+                        <div className="text-xs text-slate-600">
+                          Identifiez les <b>Cash cows</b> et <b>Hidden gems</b>{" "}
+                          de la BRVM. Inscription gratuite.
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 flex-wrap shrink-0">
+                      <Link
+                        href="/inscription"
+                        className="inline-flex items-center px-3 py-1.5 rounded-md bg-blue-700 text-white text-xs md:text-sm font-medium hover:bg-blue-800 transition whitespace-nowrap"
+                      >
+                        S&apos;inscrire
+                      </Link>
+                      <Link
+                        href="/connexion"
+                        className="inline-flex items-center px-3 py-1.5 rounded-md border border-slate-300 text-xs md:text-sm font-medium hover:bg-slate-50 transition whitespace-nowrap"
+                      >
+                        Connexion
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+            </div>
           </section>
         )}
 
@@ -955,6 +1143,14 @@ export default function ActionsBRVMView({
                       Var % {sortIcon("changePercent")}
                     </button>
                   </th>
+                  <th className="text-right px-3 py-3 font-medium">
+                    <button
+                      onClick={() => toggleSort("ytd")}
+                      className="flex items-center gap-1 hover:text-slate-900 ml-auto"
+                    >
+                      YTD {sortIcon("ytd")}
+                    </button>
+                  </th>
                   <th className="text-right px-3 py-3 font-medium hidden md:table-cell">
                     <button
                       onClick={() => toggleSort("capitalization")}
@@ -1036,6 +1232,23 @@ export default function ActionsBRVMView({
                             .toFixed(2)
                             .replace(".", ",")}%`}
                     </td>
+                    {(() => {
+                      const ytd = ytdByAction[a.code];
+                      if (ytd === null || ytd === undefined) {
+                        return (
+                          <td className="px-3 py-3 text-right text-slate-400">—</td>
+                        );
+                      }
+                      const cls =
+                        ytd > 0 ? "text-green-700" : ytd < 0 ? "text-red-700" : "text-slate-500";
+                      return (
+                        <td className={`px-3 py-3 text-right font-medium ${cls}`}>
+                          {ytd === 0
+                            ? "0,00%"
+                            : `${ytd > 0 ? "+" : ""}${ytd.toFixed(2).replace(".", ",")}%`}
+                        </td>
+                      );
+                    })()}
                     <td className="px-3 py-3 text-right text-xs hidden md:table-cell">
                       {a.capitalization > 0 ? formatBigFCFA(a.capitalization) : "—"}
                     </td>
@@ -1085,5 +1298,72 @@ export default function ActionsBRVMView({
         </section>
       </main>
     </>
+  );
+}
+
+// ============================================================================
+// INDEX CARD : carte synthetique d'un indice live (valeur + variation)
+// ============================================================================
+function IndexCard({
+  index,
+  compact = false,
+  ytdValue,
+}: {
+  index: BrvmLiveIndex;
+  compact?: boolean;
+  ytdValue: number;
+}) {
+  const positive = index.variationPct > 0;
+  const negative = index.variationPct < 0;
+  const colorClass = positive
+    ? "text-green-700"
+    : negative
+      ? "text-red-700"
+      : "text-slate-500";
+  const bgClass = positive
+    ? "bg-green-50/40 border-green-100"
+    : negative
+      ? "bg-red-50/40 border-red-100"
+      : "bg-slate-50 border-slate-100";
+
+  // Libelle court : retire le prefixe "BRVM - "
+  const shortLabel = index.name
+    .replace(/^BRVM\s*[-–—]\s*/i, "")
+    .replace(/^BRVM\s*-\s*/i, "");
+  const isPrincipal = index.category === "principal";
+  const displayLabel = isPrincipal ? index.name : shortLabel;
+
+  return (
+    <Link
+      href={`/marches/indices/${encodeURIComponent(index.code)}`}
+      className={`block rounded-md border p-${compact ? "2" : "3"} ${bgClass} hover:shadow-sm hover:border-slate-300 transition`}
+    >
+      <div
+        className={`${
+          compact ? "text-[10px]" : "text-[11px]"
+        } font-medium text-slate-600 truncate`}
+        title={index.name}
+      >
+        {displayLabel}
+      </div>
+      <div
+        className={`${
+          compact ? "text-base" : "text-xl"
+        } font-semibold tabular-nums mt-0.5`}
+      >
+        {index.value.toLocaleString("fr-FR", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })}
+      </div>
+      <div className={`${compact ? "text-[10px]" : "text-xs"} ${colorClass} font-medium`}>
+        {positive ? "+" : ""}
+        {index.variationPct.toFixed(2).replace(".", ",")}%
+        <span className="text-slate-400 font-normal ml-1">
+          (YTD {ytdValue >= 0 ? "+" : ""}
+          {ytdValue.toFixed(2).replace(".", ",")}%)
+        </span>
+      </div>
+    </Link>
   );
 }

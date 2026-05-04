@@ -25,6 +25,7 @@ import {
   getBondCashflows,
 } from "@/lib/listedBondsTypes";
 import CountryFlag from "./CountryFlag";
+import LivePriceBadge from "./LivePriceBadge";
 
 // === HELPERS DE FORMATAGE ===
 function formatFCFA(value: number): string {
@@ -190,6 +191,15 @@ type Props = {
   similarBonds: ListedBond[];
   theoreticalHistory: Array<{ date: string; theoreticalPrice: number; ytm: number }>;
   signatureSpread: number | null;
+  livePrice?: {
+    currentPrice: number;
+    couponCouru: number;
+    lastPaymentDate: string;
+    lastPaymentAmount: number;
+    fetchedAt: string;
+    sessionLabel: string | null;
+    isClosed: boolean | null;
+  } | null;
 };
 
 type Tab =
@@ -207,6 +217,7 @@ export default function BondDetailView({
   similarBonds,
   theoreticalHistory,
   signatureSpread,
+  livePrice,
 }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("overview");
 
@@ -230,6 +241,9 @@ export default function BondDetailView({
       : null;
 
   const marketPrice =
+    (livePrice && Number.isFinite(livePrice.currentPrice) && livePrice.currentPrice > 0
+      ? livePrice.currentPrice
+      : null) ||
     latestHistoricalPrice?.cleanPrice ||
     latestTheoretical?.theoreticalPrice ||
     bond.nominalValue;
@@ -410,7 +424,13 @@ export default function BondDetailView({
               </span>
               <span className="text-xs text-slate-400 ml-2">vs nominal</span>
             </div>
-            {latestHistoricalPrice ? (
+            {livePrice ? (
+              <LivePriceBadge
+                fetchedAt={livePrice.fetchedAt}
+                sessionLabel={livePrice.sessionLabel}
+                isClosed={livePrice.isClosed}
+              />
+            ) : latestHistoricalPrice ? (
               <div className="text-xs text-slate-400">
                 Date de cotation : {formatDateShort(latestHistoricalPrice.date)}
               </div>

@@ -185,19 +185,30 @@ export default function NewsView({ ticker, news }: Props) {
                   {n.resume}
                 </p>
               )}
-              {n.url && (
-                <div className="mt-2">
-                  <a
-                    href={n.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-blue-700 hover:text-blue-900 inline-flex items-center gap-1"
-                  >
-                    Lire la source
-                    <span aria-hidden>↗</span>
-                  </a>
-                </div>
-              )}
+              {n.url &&
+                (n.url.startsWith("/") ? (
+                  <div className="mt-2">
+                    <a
+                      href={n.url}
+                      className="text-xs text-blue-700 hover:text-blue-900 inline-flex items-center gap-1"
+                    >
+                      Lire l&apos;article
+                      <span aria-hidden>→</span>
+                    </a>
+                  </div>
+                ) : (
+                  <div className="mt-2">
+                    <a
+                      href={n.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-blue-700 hover:text-blue-900 inline-flex items-center gap-1"
+                    >
+                      Lire la source
+                      <span aria-hidden>↗</span>
+                    </a>
+                  </div>
+                ))}
             </article>
           ))
         )}

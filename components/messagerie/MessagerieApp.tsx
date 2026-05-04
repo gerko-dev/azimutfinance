@@ -14,6 +14,7 @@ import type {
   Profile,
 } from "@/lib/messagerie/types";
 import Avatar from "./Avatar";
+import ReportMessageModal from "./ReportMessageModal";
 import { displayName, fmtTimeFull, fmtTimeShort } from "./format";
 
 type Props = {
@@ -42,6 +43,10 @@ export default function MessagerieApp({
   const [isSending, startSend] = useTransition();
   const [sendError, setSendError] = useState<string | null>(null);
 
+  // Signalement
+  const [reportTarget, setReportTarget] = useState<Message | null>(null);
+  const [reportFlash, setReportFlash] = useState<string | null>(null);
+
   // Search state pour demarrer une nouvelle conversation
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -56,11 +61,13 @@ export default function MessagerieApp({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages.length, activeId]);
 
-  // Realtime : abonner aux nouveaux messages de la conversation active
+  // Realtime : abonner aux nouveaux messages de la conversation active.
+  // Nom unique par mount pour eviter le conflit StrictMode (double useEffect).
   useEffect(() => {
     if (!activeId) return;
+    const channelName = `messages:${activeId}:${Math.random().toString(36).slice(2)}`;
     const channel = supabase
-      .channel(`messages:${activeId}`)
+      .channel(channelName)
       .on(
         "postgres_changes",
         {
@@ -72,8 +79,20 @@ export default function MessagerieApp({
         (payload) => {
           const msg = payload.new as Message;
           setMessages((prev) => {
-            // Eviter les doublons (si on a deja insere optimistement)
+            // Deja present par id reel : skip (cas ou le server a repondu avant le realtime)
             if (prev.some((m) => m.id === msg.id)) return prev;
+            // Mon propre message : il y a probablement un placeholder optimiste tmp-XXX
+            // avec le meme body — on le remplace au lieu d'ajouter un doublon.
+            if (msg.sender_id === currentUserId) {
+              const tmpIdx = prev.findIndex(
+                (m) => m.id.startsWith("tmp-") && m.body === msg.body,
+              );
+              if (tmpIdx >= 0) {
+                const next = prev.slice();
+                next[tmpIdx] = msg;
+                return next;
+              }
+            }
             return [...prev, msg];
           });
           // Si le message vient de l'autre, marquer comme lu
@@ -115,8 +134,9 @@ export default function MessagerieApp({
     const convIds = conversations.map((c) => c.id);
     if (convIds.length === 0) return;
 
+    const sidebarChannelName = `messages:sidebar:${currentUserId}:${Math.random().toString(36).slice(2)}`;
     const channel = supabase
-      .channel(`messages:sidebar:${currentUserId}`)
+      .channel(sidebarChannelName)
       .on(
         "postgres_changes",
         {
@@ -452,17 +472,30 @@ export default function MessagerieApp({
                         </div>
                       )}
                       <div
-                        className={`flex ${isMine ? "justify-end" : "justify-start"}`}
+                        className={`group flex items-center gap-1.5 ${
+                          isMine ? "justify-end" : "justify-start"
+                        }`}
                       >
                         <div
                           className={`max-w-[75%] px-3.5 py-2 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap break-words ${
                             isMine
-                              ? "bg-blue-600 text-white rounded-br-sm"
+                              ? "bg-blue-600 text-white rounded-br-sm order-2"
                               : "bg-white text-slate-900 border border-slate-200 rounded-bl-sm"
                           }`}
                         >
                           {m.body}
                         </div>
+                        {!isMine && !m.id.startsWith("tmp-") && (
+                          <button
+                            type="button"
+                            onClick={() => setReportTarget(m)}
+                            title="Signaler ce message"
+                            aria-label="Signaler ce message"
+                            className="opacity-0 group-hover:opacity-100 focus:opacity-100 text-slate-400 hover:text-rose-600 text-base px-1 transition-opacity"
+                          >
+                            ⚑
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
@@ -501,6 +534,28 @@ export default function MessagerieApp({
           </>
         )}
       </section>
+
+      {reportTarget && (
+        <ReportMessageModal
+          messageId={reportTarget.id}
+          bodyPreview={reportTarget.body}
+          onClose={() => setReportTarget(null)}
+          onSuccess={() => {
+            setReportTarget(null);
+            setReportFlash("Signalement envoyé. Merci, un modérateur va l'examiner.");
+            setTimeout(() => setReportFlash(null), 4000);
+          }}
+        />
+      )}
+
+      {reportFlash && (
+        <div
+          role="status"
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-emerald-600 text-white text-sm px-4 py-2 rounded-lg shadow-lg"
+        >
+          {reportFlash}
+        </div>
+      )}
     </div>
   );
 }

@@ -1,12 +1,16 @@
 // === CHARGEMENT DES DONNEES CSV ===
 
-import { readFileSync } from "fs";
+import { readFileSync, readdirSync, existsSync } from "fs";
 import { join } from "path";
 import Papa from "papaparse";
 import type { Bond, BondCountry, IssuanceResult } from "./bondsUEMOA";
 import { UMOA_COUNTRY_CODE } from "./listedBondsTypes";
 
 const DATA_DIR = join(process.cwd(), "data");
+// Historiques scrapes depuis Sikafinance : un CSV par titre/indice avec OHLCV
+// Format : date_iso ; date_fr ; open ; high ; low ; close ; volume (separateur ;)
+const SIKA_ACTIONS_DIR = join(DATA_DIR, "historique_sika");
+const SIKA_INDICES_DIR = join(DATA_DIR, "historique_sika_indices");
 
 function parseCSV<T>(filename: string, delimiter: "," | ";" = ";"): T[] {
   const filePath = join(DATA_DIR, filename);
@@ -161,11 +165,11 @@ export function loadIssuances(): IssuanceResult[] {
 }
 
 export function loadPriceHistory(code: string): { date: string; value: number }[] {
-  // historique-prix.csv utilise désormais la virgule comme délimiteur
-  const allRows = parseCSV<PriceHistoryRow>("historique-prix.csv", ",");
-  return allRows
-    .filter((r) => r.code?.trim().toUpperCase() === code.toUpperCase())
-    .map((r) => ({ date: r.date, value: parseNum(r.value) }));
+  const codeUpper = code.toUpperCase();
+  return loadAllPriceHistory()
+    .filter((r) => r.code === codeUpper)
+    .map((r) => ({ date: r.date, value: r.value }))
+    .sort((a, b) => a.date.localeCompare(b.date));
 }
 
 /** Variante exposant le volume quotidien lorsque disponible. Mémoisé via loadAllPriceHistory. */
@@ -656,10 +660,59 @@ export function getSectorIndexCode(sector: string): string | null {
   return SECTOR_TO_INDEX[normalizeSectorKey(sector)] ?? null;
 }
 
-/** Cache pour eviter de re-parser le CSV a chaque appel */
-let _allHistoryCache:
-  | { code: string; date: string; value: number; volume: number | null }[]
-  | null = null;
+type SikaHistoryRow = {
+  date_iso: string;
+  date_fr: string;
+  open: string;
+  high: string;
+  low: string;
+  close: string;
+  volume: string;
+};
+
+type PriceHistoryEntry = {
+  code: string;
+  date: string;
+  value: number;
+  volume: number | null;
+  // Champs OHLC pour les graphiques avances (chandeliers, Heikin Ashi...)
+  open: number | null;
+  high: number | null;
+  low: number | null;
+};
+
+/** Cache pour eviter de re-parser les CSVs a chaque appel.
+ *  Type interne complet (avec OHLC) ; l'API publique en expose un subset. */
+let _allHistoryCache: PriceHistoryEntry[] | null = null;
+
+/** Parse un fichier CSV Sika (chemin absolu) en lignes PriceHistoryEntry. */
+function loadSikaFile(filePath: string, code: string): PriceHistoryEntry[] {
+  let content = readFileSync(filePath, "utf-8");
+  if (content.charCodeAt(0) === 0xfeff) content = content.slice(1);
+
+  const result = Papa.parse<SikaHistoryRow>(content, {
+    header: true,
+    delimiter: ";",
+    skipEmptyLines: true,
+    dynamicTyping: false,
+    transformHeader: (h) => h.trim().replace(/^﻿/, ""),
+  });
+
+  return result.data
+    .map((r) => {
+      const close = parseNum(r.close);
+      return {
+        code,
+        date: r.date_iso?.trim() || "",
+        value: close,
+        volume: isPresent(r.volume) ? parseNum(r.volume) : null,
+        open: isPresent(r.open) ? parseNum(r.open) : null,
+        high: isPresent(r.high) ? parseNum(r.high) : null,
+        low: isPresent(r.low) ? parseNum(r.low) : null,
+      };
+    })
+    .filter((r) => r.code && r.date && r.value > 0);
+}
 
 function loadAllPriceHistory(): {
   code: string;
@@ -669,19 +722,69 @@ function loadAllPriceHistory(): {
 }[] {
   if (_allHistoryCache !== null) return _allHistoryCache;
 
-  // historique-prix.csv utilise désormais la virgule comme délimiteur
-  // et expose une colonne `volume` optionnelle
-  const rows = parseCSV<PriceHistoryRow>("historique-prix.csv", ",");
-  _allHistoryCache = rows
-    .map((r) => ({
-      code: r.code?.trim() || "",
-      date: normalizeDateISO(r.date),
-      value: parseNum(r.value),
-      volume: isPresent(r.volume) ? parseNum(r.volume) : null,
-    }))
-    .filter((r) => r.code && r.date && r.value > 0);
+  const out: PriceHistoryEntry[] = [];
 
-  return _allHistoryCache;
+  // 1) Actions : un fichier par titre, nomme TICKER.pays.csv
+  // Le code titre = avant le 1er point (ex "BOAC.ci.csv" → "BOAC")
+  if (existsSync(SIKA_ACTIONS_DIR)) {
+    for (const file of readdirSync(SIKA_ACTIONS_DIR)) {
+      if (!file.toLowerCase().endsWith(".csv")) continue;
+      const code = file.replace(/\.csv$/i, "").split(".")[0].toUpperCase();
+      if (!code) continue;
+      out.push(...loadSikaFile(join(SIKA_ACTIONS_DIR, file), code));
+    }
+  }
+
+  // 2) Indices : un fichier par indice, nomme INDEX.csv (sans suffixe pays)
+  // ex "BRVM-SF.csv" → code = "BRVM-SF"
+  if (existsSync(SIKA_INDICES_DIR)) {
+    for (const file of readdirSync(SIKA_INDICES_DIR)) {
+      if (!file.toLowerCase().endsWith(".csv")) continue;
+      const code = file.replace(/\.csv$/i, "").toUpperCase();
+      if (!code) continue;
+      out.push(...loadSikaFile(join(SIKA_INDICES_DIR, file), code));
+    }
+  }
+
+  // 3) Fallback historique-prix.csv si les dossiers Sika sont vides
+  // (premier deploiement sans scrape, ou env de dev)
+  if (out.length === 0) {
+    try {
+      const rows = parseCSV<PriceHistoryRow>("historique-prix.csv", ",");
+      out.push(
+        ...rows
+          .map((r) => ({
+            code: r.code?.trim().toUpperCase() || "",
+            date: normalizeDateISO(r.date),
+            value: parseNum(r.value),
+            volume: isPresent(r.volume) ? parseNum(r.volume) : null,
+            open: null,
+            high: null,
+            low: null,
+          }))
+          .filter((r) => r.code && r.date && r.value > 0),
+      );
+    } catch {
+      // historique-prix.csv absent : on retourne juste un tableau vide
+    }
+  }
+
+  _allHistoryCache = out;
+  return out;
+}
+
+/**
+ * Charge l'historique OHLC complet d'un code (titre ou indice).
+ * Inclus open, high, low, close, volume — utilisable pour graphiques
+ * en chandeliers, Heikin Ashi, Renko, etc.
+ */
+export function loadOhlcHistory(code: string): PriceHistoryEntry[] {
+  loadAllPriceHistory(); // remplit le cache
+  const codeUpper = code.toUpperCase();
+  const cache = _allHistoryCache ?? [];
+  return cache
+    .filter((r) => r.code === codeUpper)
+    .sort((a, b) => a.date.localeCompare(b.date));
 }
 
 /** Charge l'historique d'un indice BRVM (code = BRVMC, BRVM30, BRVM-SF, etc.) */
@@ -720,6 +823,52 @@ export function loadMultipleIndicesHistory(
   }
 
   return result;
+}
+
+/**
+ * Calcule la performance Year-To-Date d'un indice (ou titre) :
+ * variation entre `currentValue` et la derniere valeur observee dans
+ * l'historique CSV au plus tard le 31/12 de l'annee precedente.
+ *
+ * Si le 31/12 est non cote (week-end/ferie), on prend le dernier jour
+ * de cotation avant cette date.
+ *
+ * Renvoie `null` si :
+ *   - l'historique ne contient pas de point dans la fenetre
+ *     (cas typique d'un nouvel indice)
+ *   - le CSV est sur une echelle differente du `currentValue`
+ *     (rebasing d'indice par BRVM detecte par un ecart abrupt entre la
+ *     derniere valeur CSV et la valeur live) — dans ce cas l'appelant
+ *     doit retomber sur la valeur YTD scrapee BRVM
+ */
+export function computeYtdPct(
+  code: string,
+  currentValue: number,
+  asOfYear?: number,
+): number | null {
+  if (!Number.isFinite(currentValue) || currentValue <= 0) return null;
+  const year = asOfYear ?? new Date().getUTCFullYear();
+  const cutoff = `${year - 1}-12-31`;
+  const history = loadIndexHistory(code);
+  if (history.length === 0) return null;
+
+  // Detection rebasing : si la derniere valeur CSV diffère du live d'un
+  // facteur > 3x, le CSV est sur une echelle obsolete (changement de base
+  // officiel BRVM). Le YTD calcule serait absurde, on abandonne.
+  const lastCsvValue = history[history.length - 1].value;
+  if (lastCsvValue > 0) {
+    const liveVsCsv = currentValue / lastCsvValue;
+    if (liveVsCsv > 3 || liveVsCsv < 1 / 3) return null;
+  }
+
+  // history est trie par date asc. Cherche le dernier point <= cutoff.
+  let referenceValue: number | null = null;
+  for (const p of history) {
+    if (p.date <= cutoff) referenceValue = p.value;
+    else break;
+  }
+  if (referenceValue === null || referenceValue <= 0) return null;
+  return ((currentValue - referenceValue) / referenceValue) * 100;
 }
 
 /** Statistiques d'un indice : derniere valeur + variation %  */

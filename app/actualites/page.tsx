@@ -1,0 +1,100 @@
+import Link from "next/link";
+import Header from "@/components/Header";
+import { listPublishedActualites } from "@/lib/actualites/queries";
+
+export const metadata = {
+  title: "Actualités BRVM — AzimutFinance",
+  description: "Actualités sur les valeurs cotées à la BRVM par AzimutFinance.",
+};
+
+export const dynamic = "force-dynamic";
+
+function fmtDateShort(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
+}
+
+export default async function ActualitesListPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ ticker?: string }>;
+}) {
+  const sp = await searchParams;
+  const ticker = sp.ticker?.trim().toUpperCase() || undefined;
+  const items = await listPublishedActualites({ ticker, limit: 100 });
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <Header />
+      <main className="max-w-4xl mx-auto px-4 md:px-6 py-8 md:py-10">
+        <div className="text-xs text-slate-500 mb-3">
+          <Link href="/" className="hover:text-slate-700">Accueil</Link> &rsaquo; Actualités
+        </div>
+        <h1 className="text-3xl md:text-4xl font-bold text-slate-900">
+          Actualités BRVM{ticker ? ` · ${ticker}` : ""}
+        </h1>
+        <p className="text-sm text-slate-600 mt-2">
+          Communications, résultats et annonces des sociétés cotées à la BRVM.
+        </p>
+
+        {ticker && (
+          <div className="mt-3">
+            <Link href="/actualites" className="text-xs text-blue-700 hover:underline">
+              ← Voir toutes les valeurs
+            </Link>
+          </div>
+        )}
+
+        {items.length === 0 ? (
+          <div className="mt-8 text-center text-sm text-slate-500 py-12 bg-white rounded-lg border border-slate-200">
+            Aucune actualité publiée{ticker ? ` pour ${ticker}` : ""} pour le moment.
+          </div>
+        ) : (
+          <ul className="mt-6 space-y-3">
+            {items.map((a) => (
+              <li key={a.id}>
+                <Link
+                  href={`/actualites/${a.id}`}
+                  className="block bg-white border border-slate-200 hover:border-slate-300 hover:shadow-sm rounded-lg p-4 transition group"
+                >
+                  <div className="flex items-baseline gap-2 mb-1.5">
+                    <span className="text-[10px] uppercase tracking-wider font-semibold bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-mono">
+                      {a.ticker}
+                    </span>
+                    <span className="text-[11px] text-slate-500 tabular-nums">
+                      {fmtDateShort(a.published_at)}
+                    </span>
+                    {a.attachment_name && (
+                      <span
+                        className="text-[10px] text-amber-700 font-medium"
+                        title={a.attachment_name}
+                      >
+                        📎 doc joint
+                      </span>
+                    )}
+                  </div>
+                  <h2
+                    className="text-base md:text-lg font-bold text-slate-900 group-hover:text-blue-700 transition leading-snug"
+                    style={{ fontFamily: "Georgia, serif" }}
+                  >
+                    {a.title}
+                  </h2>
+                  {a.excerpt && (
+                    <p className="text-sm text-slate-600 mt-1.5 line-clamp-2 leading-relaxed">
+                      {a.excerpt}
+                    </p>
+                  )}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </main>
+    </div>
+  );
+}

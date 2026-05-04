@@ -4,17 +4,20 @@ import Header from "@/components/Header";
 import {
   CATEGORY_META,
   FORMAT_META,
-  FORMATIONS,
-  FORMATIONS_BY_SLUG,
+  INSCRIPTION_STATUS_COLOR,
+  INSCRIPTION_STATUS_LABEL,
   LEVEL_META,
   pricingLabel,
   pricingShortLabel,
   totalDurationLabel,
 } from "@/lib/formations";
+import {
+  getMyInscriptionForFormation,
+  getPublishedFormationBySlug,
+  listPublishedFormations,
+} from "@/lib/formations/queries";
 
-export function generateStaticParams() {
-  return FORMATIONS.map((f) => ({ slug: f.slug }));
-}
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata({
   params,
@@ -22,7 +25,7 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const f = FORMATIONS_BY_SLUG[slug];
+  const f = await getPublishedFormationBySlug(slug);
   if (!f) return { title: "Formation — AzimutFinance" };
   return {
     title: `${f.title} — Académie AzimutFinance`,
@@ -49,8 +52,10 @@ export default async function FormationPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const formation = FORMATIONS_BY_SLUG[slug];
+  const formation = await getPublishedFormationBySlug(slug);
   if (!formation) notFound();
+
+  const myInscription = await getMyInscriptionForFormation(formation.id);
 
   const categoryMeta = CATEGORY_META[formation.category];
   const levelMeta = LEVEL_META[formation.level];
@@ -60,10 +65,10 @@ export default async function FormationPage({
   const totalMinutes = formation.modules.reduce((s, m) => s + m.durationMinutes, 0);
   const totalLabel = totalDurationLabel(formation);
 
-  // Suggestions : autres formations même catégorie + niveau adjacent
-  const suggestions = FORMATIONS.filter(
-    (f) => f.slug !== formation.slug && f.category === formation.category,
-  ).slice(0, 3);
+  const all = await listPublishedFormations();
+  const suggestions = all
+    .filter((f) => f.slug !== formation.slug && f.category === formation.category)
+    .slice(0, 3);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -81,7 +86,6 @@ export default async function FormationPage({
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 mt-4">
-            {/* Header content */}
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap mb-2">
                 <span
@@ -174,14 +178,36 @@ export default async function FormationPage({
                     {pricingShortLabel(formation)}
                   </span>
                 </div>
-                <button
-                  type="button"
-                  className="mt-3 w-full text-sm bg-slate-900 hover:bg-slate-700 text-white py-2.5 rounded font-medium transition"
-                >
-                  {formation.pricing.type === "gratuit"
-                    ? "Démarrer la formation"
-                    : "S'inscrire à cette formation"}
-                </button>
+
+                {myInscription ? (
+                  <div className="mt-3 space-y-2">
+                    <div
+                      className="text-xs px-3 py-2 rounded text-center font-medium"
+                      style={{
+                        background: INSCRIPTION_STATUS_COLOR[myInscription.status] + "15",
+                        color: INSCRIPTION_STATUS_COLOR[myInscription.status],
+                      }}
+                    >
+                      Inscription · {INSCRIPTION_STATUS_LABEL[myInscription.status]}
+                    </div>
+                    <Link
+                      href="/compte"
+                      className="block text-center text-[11px] text-slate-600 hover:text-slate-900 underline"
+                    >
+                      Voir mes inscriptions →
+                    </Link>
+                  </div>
+                ) : (
+                  <Link
+                    href={`/academie/formations/${formation.slug}/inscription`}
+                    className="mt-3 block w-full text-center text-sm bg-slate-900 hover:bg-slate-700 text-white py-2.5 rounded font-medium transition"
+                  >
+                    {formation.pricing.type === "gratuit"
+                      ? "S'inscrire gratuitement"
+                      : "S'inscrire à cette formation"}
+                  </Link>
+                )}
+
                 {formation.format === "atelier" && (
                   <div className="mt-3 text-[11px] text-slate-500 text-center">
                     Atelier en visioconférence — calendrier sur demande
@@ -219,7 +245,6 @@ export default async function FormationPage({
       <main className="max-w-7xl mx-auto px-4 md:px-6 py-6">
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
           <div className="space-y-6 min-w-0">
-            {/* Description longue */}
             <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
               <h2 className="text-sm font-semibold text-slate-900 mb-2">
                 À propos de cette formation
@@ -229,7 +254,6 @@ export default async function FormationPage({
               </p>
             </section>
 
-            {/* Outcomes */}
             <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
               <h2 className="text-sm font-semibold text-slate-900 mb-3">
                 Ce que vous saurez faire à la fin
@@ -249,7 +273,6 @@ export default async function FormationPage({
               </ul>
             </section>
 
-            {/* Programme / modules */}
             <section className="bg-white rounded-lg border border-slate-200 overflow-hidden">
               <div className="px-4 md:px-6 py-3 border-b border-slate-200 bg-slate-50/60">
                 <h2 className="text-sm font-semibold text-slate-900">Programme détaillé</h2>
@@ -300,7 +323,6 @@ export default async function FormationPage({
               </div>
             </section>
 
-            {/* Prerequisites */}
             {formation.prerequisites.length > 0 && (
               <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
                 <h2 className="text-sm font-semibold text-slate-900 mb-3">Prérequis</h2>
@@ -315,7 +337,6 @@ export default async function FormationPage({
               </section>
             )}
 
-            {/* Tags */}
             {formation.tags.length > 0 && (
               <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
                 <h3 className="text-xs font-semibold text-slate-900 mb-2">Mots-clés</h3>
@@ -333,7 +354,6 @@ export default async function FormationPage({
             )}
           </div>
 
-          {/* Aside : suggestions */}
           <aside className="space-y-3">
             <div className="text-[10px] text-slate-500 uppercase tracking-wide font-medium px-2">
               Dans la même catégorie

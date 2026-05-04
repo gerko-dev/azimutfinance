@@ -5,17 +5,20 @@ import ProfileNudge from "@/components/profile/ProfileNudge";
 import {
   loadAllActions,
   getActionsMarketStats,
-  getTopGainers,
-  getTopLosers,
   loadMultipleIndicesHistory,
   getIndexStats,
   BRVM_INDEX_CODES,
   BRVM_INDEX_NAMES,
   buildRiskReturnDataset,
+  computeYtdPct,
+  type ActionRow,
 } from "@/lib/dataLoader";
+import { getBrvmSnapshot } from "@/lib/brvm/liveQuotes";
+import { getBrvmIndicesSnapshot } from "@/lib/brvm/liveIndices";
+import { getLatestRatios } from "@/lib/fundamentals";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-// Le nudge JIT lit la session Supabase -> page necessairement dynamique.
-// Les CSV sont memoizes au niveau module, donc le cout supplementaire est minime.
+export const dynamic = "force-dynamic";
 
 const indexColors: Record<string, string> = {
   BRVMC: "#185FA5",
@@ -31,15 +34,149 @@ const indexColors: Record<string, string> = {
   "BRVM-TEL": "#db2777",
 };
 
+type UserRole = "member" | "premium" | "pro" | null;
+
+async function fetchUserRole(): Promise<UserRole> {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return null;
+    const { data } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+    const role = (data as { role?: string } | null)?.role;
+    // Niveaux applicatifs explicites
+    if (role === "member" || role === "premium" || role === "pro") return role;
+    // Admins (adminlevel1/2/3) : niveau au-dessus de "pro" — assimile a pro
+    // pour les besoins d'autorisation membre.
+    if (typeof role === "string" && role.startsWith("adminlevel")) return "pro";
+    // User authentifie avec role inconnu/null : trigger handle_new_user normalement
+    // cree une row profiles avec role='member' — on tolere les cas degraders.
+    return "member";
+  } catch {
+    return null;
+  }
+}
+
 export default async function Page() {
   const actions = loadAllActions();
-  const marketStats = getActionsMarketStats(actions);
-  const topGainers = getTopGainers(actions, 5);
-  const topLosers = getTopLosers(actions, 5);
 
+  const [liveSnapshot, indicesSnapshot, userRole] = await Promise.all([
+    getBrvmSnapshot(),
+    getBrvmIndicesSnapshot(),
+    fetchUserRole(),
+  ]);
+
+  // === FUSION CSV + LIVE + FONDAMENTAUX ===
+  // Override price/changePercent/volume par le live BRVM, et recalcule
+  // capi/PER/yield depuis DB_Ratios (BPA, DPA, Nb_Titres) :
+  //   - capi   = nbTitres × prix_live              (source : DB_Ratios)
+  //   - PER    = prix_live / BPA(dernier exercice) (source : DB_Ratios)
+  //   - yield  = DPA(dernier exercice) / prix_live (source : DB_Ratios)
+  // Si DB_Ratios n'a pas de BPA/DPA pour un ticker (ou BPA<=0 = pertes),
+  // PER/yield sont marques absents. Si pas de ratios du tout, on retombe sur
+  // la valeur titres.csv scalee par le ratio de prix.
+  const liveByCode = new Map(liveSnapshot.quotes.map((q) => [q.code, q]));
+  const mergedActions: ActionRow[] = actions.map((a) => {
+    const lv = liveByCode.get(a.code);
+    const ratios = getLatestRatios(a.code);
+
+    const newPrice = lv && lv.currentPrice > 0 ? lv.currentPrice : a.price;
+    const newChange =
+      lv && Number.isFinite(lv.variationPct) ? lv.variationPct : a.changePercent;
+    const newVolume =
+      lv && Number.isFinite(lv.volume) && lv.volume > 0 ? lv.volume : a.volume;
+    const priceChanged = a.price > 0 && newPrice !== a.price;
+
+    // --- Capitalisation ---
+    let capitalization = a.capitalization;
+    if (ratios && ratios.nbTitres > 0 && newPrice > 0) {
+      capitalization = ratios.nbTitres * newPrice;
+    } else if (priceChanged && a.capitalization > 0) {
+      capitalization = a.capitalization * (newPrice / a.price);
+    }
+
+    // --- PER : prix_live / BPA(dernier exercice) ---
+    let per = a.per;
+    let hasPer = a.hasPer;
+    if (ratios) {
+      const bpa = ratios.bpa ?? 0;
+      if (bpa > 0 && newPrice > 0) {
+        per = newPrice / bpa;
+        hasPer = true;
+      } else {
+        // BPA <= 0 (pertes) ou non renseigne : PER non significatif
+        per = 0;
+        hasPer = false;
+      }
+    } else if (priceChanged && a.hasPer && a.per > 0) {
+      per = a.per * (newPrice / a.price);
+    }
+
+    // --- Rendement du dividende : DPA(dernier exercice) / prix_live ---
+    let yieldPct = a.yieldPct;
+    let hasYield = a.hasYield;
+    if (ratios) {
+      if (ratios.dpa > 0 && newPrice > 0) {
+        yieldPct = (ratios.dpa / newPrice) * 100;
+        hasYield = yieldPct > 0 && yieldPct < 50;
+      } else {
+        // Pas de dividende sur le dernier exercice connu
+        yieldPct = 0;
+        hasYield = false;
+      }
+    } else if (priceChanged && a.hasYield && a.yieldPct > 0) {
+      yieldPct = a.yieldPct * (a.price / newPrice);
+    }
+
+    return {
+      ...a,
+      price: newPrice,
+      changePercent: newChange,
+      volume: newVolume,
+      capitalization,
+      per,
+      yieldPct,
+      hasPer,
+      hasYield,
+    };
+  });
+
+  const marketStats = getActionsMarketStats(mergedActions);
+  // Live count : nombre d'actions cotees vu sur la page BRVM aujourd'hui
+  const liveListedCount = liveSnapshot.quotes.length;
+
+  // === TOP/FLOP DEPUIS LE LIVE ===
+  // Tri sur la variation % live, ties broken by volume desc pour eviter les
+  // ex-aequo a 0% qui flotteraient en tete arbitrairement.
+  const liveActionsOnly = mergedActions.filter((a) =>
+    liveByCode.has(a.code),
+  );
+  const topGainers = [...liveActionsOnly]
+    .filter((a) => a.changePercent > 0 && a.price > 0)
+    .sort((a, b) =>
+      b.changePercent !== a.changePercent
+        ? b.changePercent - a.changePercent
+        : b.volume - a.volume,
+    )
+    .slice(0, 5);
+  const topLosers = [...liveActionsOnly]
+    .filter((a) => a.changePercent < 0 && a.price > 0)
+    .sort((a, b) =>
+      a.changePercent !== b.changePercent
+        ? a.changePercent - b.changePercent
+        : b.volume - a.volume,
+    )
+    .slice(0, 5);
+
+  // === HISTORIQUES INDICES (CSV) ===
   const allIndicesHistory = loadMultipleIndicesHistory(BRVM_INDEX_CODES);
   const indicesSeries = BRVM_INDEX_CODES.filter(
-    (code) => allIndicesHistory[code]?.length > 0
+    (code) => allIndicesHistory[code]?.length > 0,
   ).map((code) => ({
     code,
     name: BRVM_INDEX_NAMES[code] || code,
@@ -47,9 +184,33 @@ export default async function Page() {
     color: indexColors[code] || "#6b7280",
   }));
 
-  const compositeStat = getIndexStats("BRVMC");
-  // === Phase 2 : Scatter Rendement vs Volatilite ===
+  // === KPI BRVM COMPOSITE : prefere live, fallback CSV ===
+  const liveComposite = indicesSnapshot.indices.find((i) => i.code === "BRVMC");
+  const compositeStat = liveComposite
+    ? {
+        code: "BRVMC",
+        name: "BRVM Composite",
+        latestValue: liveComposite.value,
+        latestDate: indicesSnapshot.fetchedAt.slice(0, 10),
+        variationPct: liveComposite.variationPct,
+        variationValue: liveComposite.value - liveComposite.previousValue,
+      }
+    : getIndexStats("BRVMC");
+
   const riskReturn = buildRiskReturnDataset();
+
+  // YTD recalcule depuis l'historique CSV (cours live vs cours 31/12 N-1)
+  const ytdComputed: Record<string, number | null> = {};
+  for (const idx of indicesSnapshot.indices) {
+    ytdComputed[idx.code] = computeYtdPct(idx.code, idx.value);
+  }
+
+  // YTD par action : meme logique, le helper computeYtdPct est generique
+  const ytdByAction: Record<string, number | null> = {};
+  for (const a of mergedActions) {
+    ytdByAction[a.code] = computeYtdPct(a.code, a.price);
+  }
+
   return (
     <div className="min-h-screen bg-slate-50">
       <Header />
@@ -58,13 +219,23 @@ export default async function Page() {
         <ProfileNudge field="interests" revalidate="/marches/actions" />
       </div>
       <ActionsBRVMView
-        actions={actions}
+        actions={mergedActions}
         marketStats={marketStats}
+        liveListedCount={liveListedCount}
         topGainers={topGainers}
         topLosers={topLosers}
         indicesSeries={indicesSeries}
         compositeStat={compositeStat}
+        liveIndices={indicesSnapshot.indices}
+        liveIndicesYtd={ytdComputed}
+        ytdByAction={ytdByAction}
+        liveSession={{
+          fetchedAt: indicesSnapshot.fetchedAt,
+          sessionLabel: indicesSnapshot.sessionLabel,
+          isClosed: indicesSnapshot.isClosed,
+        }}
         riskReturn={riskReturn}
+        userRole={userRole}
       />
     </div>
   );

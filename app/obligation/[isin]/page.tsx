@@ -13,6 +13,14 @@ import {
   calculateSignatureSpread,
   getBondYTMFromLatest,
 } from "@/lib/listedBondsTypes";
+import {
+  getBrvmBondQuote,
+  getBrvmBondsSnapshot,
+} from "@/lib/brvm/liveBonds";
+
+// Page rendue dynamiquement pour beneficier du cours live BRVM.
+// Le cache module-level dans liveBonds.ts limite la frequence des fetchs reels.
+export const dynamic = "force-dynamic";
 
 export default async function Page({
   params,
@@ -30,6 +38,13 @@ export default async function Page({
   const priceHistory = allPrices.filter((p) => p.isin === isinUpper);
 
   const events = loadListedBondEvents().filter((e) => e.isin === isinUpper);
+
+  // Cours en direct depuis BRVM (cache 5 min, mise a jour BRVM toutes les 15 min).
+  // Le code mnemonique BRVM matche le champ `code` du CSV (ex "EOM.O10").
+  const [liveQuote, brvmSnapshot] = await Promise.all([
+    getBrvmBondQuote(bond.code),
+    getBrvmBondsSnapshot(),
+  ]);
 
   // Chargement des emissions UMOA-Titres pour le prix theorique
   const emissions = loadUmoaEmissions();
@@ -68,6 +83,19 @@ export default async function Page({
         similarBonds={similarBonds}
         theoreticalHistory={theoreticalHistory}
         signatureSpread={signatureSpread}
+        livePrice={
+          liveQuote
+            ? {
+                currentPrice: liveQuote.currentPrice,
+                couponCouru: liveQuote.couponCouru,
+                lastPaymentDate: liveQuote.lastPaymentDate,
+                lastPaymentAmount: liveQuote.lastPaymentAmount,
+                fetchedAt: brvmSnapshot.fetchedAt,
+                sessionLabel: brvmSnapshot.sessionLabel,
+                isClosed: brvmSnapshot.isClosed,
+              }
+            : null
+        }
       />
     </div>
   );

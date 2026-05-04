@@ -3,24 +3,24 @@ import Header from "@/components/Header";
 import FormationsCatalog from "@/components/academie/FormationsCatalog";
 import {
   CATEGORY_META,
-  FORMATIONS,
   getCatalogStats,
   totalDurationMinutes,
 } from "@/lib/formations";
+import { listPublishedFormations } from "@/lib/formations/queries";
 
 export const metadata = {
   title: "Catalogue de formations — AzimutFinance",
   description:
-    "14 formations couvrant la BRVM, les obligations UEMOA, l'analyse fondamentale et technique, la macro UEMOA, la gestion de portefeuille et la fiscalité. Parcours certifiant niveau 1 disponible.",
+    "Formations couvrant la BRVM, les obligations UEMOA, l'analyse fondamentale et technique, la macro UEMOA, la gestion de portefeuille et la fiscalité. Parcours certifiant niveau 1 disponible.",
 };
 
-export const dynamic = "force-static";
+export const dynamic = "force-dynamic";
 
 export default async function Page() {
-  const stats = getCatalogStats();
+  const formations = await listPublishedFormations();
+  const stats = getCatalogStats(formations);
 
-  // Map vers le format card (light, sans modules détaillés)
-  const cards = FORMATIONS.map((f) => ({
+  const cards = formations.map((f) => ({
     slug: f.slug,
     title: f.title,
     shortDescription: f.shortDescription,
@@ -52,9 +52,9 @@ export default async function Page() {
                 Catalogue de formations
               </h1>
               <p className="text-xs md:text-sm text-slate-500 mt-1 max-w-3xl">
-                {stats.total} formations structurées sur les marchés financiers de l&apos;UEMOA :
+                {stats.total} formation{stats.total > 1 ? "s" : ""} structurée{stats.total > 1 ? "s" : ""} sur les marchés financiers de l&apos;UEMOA :
                 BRVM, obligations souveraines et corporates, analyse, macro, gestion de portefeuille
-                et fiscalité. {stats.freeCount} formations gratuites pour démarrer.
+                et fiscalité. {stats.freeCount} formation{stats.freeCount > 1 ? "s" : ""} gratuite{stats.freeCount > 1 ? "s" : ""} pour démarrer.
               </p>
             </div>
             <div className="text-right text-[11px] text-slate-500">
@@ -70,7 +70,7 @@ export default async function Page() {
             <HeroKpi
               label="Formations"
               value={stats.total.toString()}
-              sub={`${stats.freeCount} gratuites · ${stats.premiumCount} premium · ${stats.certifyingCount} certifiante`}
+              sub={`${stats.freeCount} gratuites · ${stats.premiumCount} premium · ${stats.certifyingCount} certifiante${stats.certifyingCount > 1 ? "s" : ""}`}
             />
             <HeroKpi
               label="Heures de contenu"
@@ -118,7 +118,15 @@ export default async function Page() {
 
       <main className="max-w-7xl mx-auto px-4 md:px-6 py-6 space-y-6">
         {/* Catalogue interactif */}
-        <FormationsCatalog formations={cards} />
+        {cards.length === 0 ? (
+          <div className="bg-white rounded-lg border border-slate-200 p-8 text-center">
+            <p className="text-sm text-slate-600">
+              Aucune formation publiée pour le moment.
+            </p>
+          </div>
+        ) : (
+          <FormationsCatalog formations={cards} />
+        )}
 
         {/* Sections par catégorie (ancres pour les quick links) */}
         <section className="hidden">
@@ -128,30 +136,32 @@ export default async function Page() {
         </section>
 
         {/* Bandeau parcours certifiant */}
-        <section className="bg-gradient-to-br from-purple-50 via-white to-blue-50 rounded-lg border border-purple-100 p-5 md:p-6">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="max-w-2xl">
-              <span className="text-[11px] px-2 py-0.5 rounded bg-purple-100 text-purple-800 font-medium">
-                Parcours certifiant
-              </span>
-              <h2 className="text-lg md:text-xl font-semibold text-slate-900 mt-2">
-                Certification AzimutFinance — Niveau 1
-              </h2>
-              <p className="text-xs md:text-sm text-slate-700 mt-2 leading-relaxed">
-                40 heures de contenu structuré, 8 modules thématiques couvrant la BRVM, les
-                obligations UEMOA, l&apos;analyse, la gestion de portefeuille, le risque et la
-                fiscalité. Examen final en ligne (60 QCM, 90 minutes), certificat numérique
-                vérifiable, valorisable sur LinkedIn et CV.
-              </p>
+        {stats.certifyingCount > 0 && (
+          <section className="bg-gradient-to-br from-purple-50 via-white to-blue-50 rounded-lg border border-purple-100 p-5 md:p-6">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="max-w-2xl">
+                <span className="text-[11px] px-2 py-0.5 rounded bg-purple-100 text-purple-800 font-medium">
+                  Parcours certifiant
+                </span>
+                <h2 className="text-lg md:text-xl font-semibold text-slate-900 mt-2">
+                  Certification AzimutFinance — Niveau 1
+                </h2>
+                <p className="text-xs md:text-sm text-slate-700 mt-2 leading-relaxed">
+                  40 heures de contenu structuré, 8 modules thématiques couvrant la BRVM, les
+                  obligations UEMOA, l&apos;analyse, la gestion de portefeuille, le risque et la
+                  fiscalité. Examen final en ligne (60 QCM, 90 minutes), certificat numérique
+                  vérifiable, valorisable sur LinkedIn et CV.
+                </p>
+              </div>
+              <Link
+                href="/academie/formations/certification-azimut-niveau-1"
+                className="text-sm bg-slate-900 hover:bg-slate-700 text-white px-4 py-2 rounded font-medium transition"
+              >
+                Voir le parcours →
+              </Link>
             </div>
-            <Link
-              href="/academie/formations/certification-azimut-niveau-1"
-              className="text-sm bg-slate-900 hover:bg-slate-700 text-white px-4 py-2 rounded font-medium transition"
-            >
-              Voir le parcours →
-            </Link>
-          </div>
-        </section>
+          </section>
+        )}
 
         {/* À propos */}
         <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
@@ -165,11 +175,6 @@ export default async function Page() {
             <p>
               <strong>Format :</strong> cours en ligne (vidéo + lecture + quiz), ateliers live
               animés en visioconférence, et parcours certifiants avec examen final.
-            </p>
-            <p>
-              <strong>Tarifs :</strong> {stats.freeCount} formations gratuites pour démarrer ;
-              les modules premium se situent entre 25 000 et 55 000 FCFA ; le parcours certifiant
-              niveau 1 est à 250 000 FCFA tout inclus.
             </p>
             <p>
               <strong>Mise à jour :</strong> chaque formation est révisée a minima une fois par an.

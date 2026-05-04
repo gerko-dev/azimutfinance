@@ -66,6 +66,41 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // Sanctions : si l'utilisateur est suspendu, on le force sur /suspendu.
+  // On lit DIRECTEMENT la colonne suspended_until via la RLS de profiles
+  // (l'utilisateur peut lire son propre profil), pas via une RPC, pour
+  // etre resilient meme si sanctions.sql n'a pas encore ete execute.
+  if (user) {
+    const isAuthRoute =
+      pathname.startsWith("/connexion") ||
+      pathname.startsWith("/inscription") ||
+      pathname.startsWith("/auth") ||
+      pathname === "/suspendu";
+    if (!isAuthRoute) {
+      const { data: profile, error } = await supabase
+        .from("profiles")
+        .select("suspended_until")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (error) {
+        // Colonne absente (sanctions.sql pas encore execute) ou autre.
+        // On loge pour diagnostic mais on laisse passer pour ne pas bloquer
+        // tout le site sur une erreur infra.
+        console.warn("[proxy] suspension check failed:", error.message);
+      } else if (profile && (profile as { suspended_until: string | null }).suspended_until) {
+        const until = new Date(
+          (profile as { suspended_until: string }).suspended_until,
+        );
+        if (!isNaN(until.getTime()) && until.getTime() > Date.now()) {
+          const url = request.nextUrl.clone();
+          url.pathname = "/suspendu";
+          url.search = "";
+          return NextResponse.redirect(url);
+        }
+      }
+    }
+  }
+
   return response;
 }
 

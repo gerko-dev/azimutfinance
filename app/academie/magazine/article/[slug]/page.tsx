@@ -4,19 +4,18 @@ import Header from "@/components/Header";
 import ReadingProgressBar from "@/components/academie/ReadingProgressBar";
 import {
   ARTICLE_CATEGORY_META,
-  ARTICLES,
-  ARTICLES_BY_SLUG,
-  AUTHORS,
   buildToc,
   fmtArticleDate,
-  getRelatedArticles,
-  ISSUES_BY_SLUG,
   type ContentBlock,
 } from "@/lib/magazine";
+import {
+  getAuthorById,
+  getPublishedArticleBySlug,
+  getPublishedIssueBySlug,
+  getRelatedArticles,
+} from "@/lib/magazine/queries";
 
-export function generateStaticParams() {
-  return ARTICLES.map((a) => ({ slug: a.slug }));
-}
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata({
   params,
@@ -24,7 +23,7 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const a = ARTICLES_BY_SLUG[slug];
+  const a = await getPublishedArticleBySlug(slug);
   if (!a) return { title: "Article — Azimut Magazine" };
   return {
     title: `${a.title} — Azimut Magazine`,
@@ -48,13 +47,16 @@ export default async function ArticlePage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const article = ARTICLES_BY_SLUG[slug];
+  const article = await getPublishedArticleBySlug(slug);
   if (!article) notFound();
 
-  const author = AUTHORS[article.authorSlug];
+  const [author, issue, related] = await Promise.all([
+    article.authorId ? getAuthorById(article.authorId) : Promise.resolve(null),
+    article.issueSlug ? getPublishedIssueBySlug(article.issueSlug) : Promise.resolve(null),
+    getRelatedArticles(article, 3),
+  ]);
+
   const category = ARTICLE_CATEGORY_META[article.category];
-  const issue = ISSUES_BY_SLUG[article.issueSlug];
-  const related = getRelatedArticles(article, 3);
   const toc = buildToc(article);
 
   return (
@@ -62,13 +64,9 @@ export default async function ArticlePage({
       <ReadingProgressBar accent={article.accent} />
       <Header />
 
-      {/* Bandeau magazine */}
       <div className="bg-slate-900 text-white py-2">
         <div className="max-w-5xl mx-auto px-4 flex items-center justify-between text-[11px]">
-          <Link
-            href="/academie/magazine"
-            className="flex items-baseline gap-1.5 hover:text-slate-300 transition"
-          >
+          <Link href="/academie/magazine" className="flex items-baseline gap-1.5 hover:text-slate-300 transition">
             <span className="font-bold tracking-tight" style={{ fontFamily: "Georgia, serif" }}>
               AZIMUT
             </span>
@@ -87,25 +85,17 @@ export default async function ArticlePage({
         </div>
       </div>
 
-      {/* HERO ARTICLE */}
       <header
         className="border-b border-slate-200"
-        style={{
-          background: `linear-gradient(180deg, ${article.accent}08 0%, transparent 100%)`,
-        }}
+        style={{ background: `linear-gradient(180deg, ${article.accent}08 0%, transparent 100%)` }}
       >
         <div className="max-w-3xl mx-auto px-4 md:px-6 py-8 md:py-12">
           <div className="text-xs text-slate-500 mb-3 flex items-center gap-1.5 flex-wrap">
-            <Link href="/academie/magazine" className="hover:text-slate-700">
-              Magazine
-            </Link>
+            <Link href="/academie/magazine" className="hover:text-slate-700">Magazine</Link>
             <span>›</span>
             {issue && (
               <>
-                <Link
-                  href={`/academie/magazine/numero/${issue.slug}`}
-                  className="hover:text-slate-700"
-                >
+                <Link href={`/academie/magazine/numero/${issue.slug}`} className="hover:text-slate-700">
                   {issue.monthLabel}
                 </Link>
                 <span>›</span>
@@ -116,10 +106,7 @@ export default async function ArticlePage({
 
           <span
             className="text-[11px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded inline-block"
-            style={{
-              background: category.color + "15",
-              color: category.color,
-            }}
+            style={{ background: category.color + "15", color: category.color }}
           >
             {category.label}
           </span>
@@ -130,27 +117,30 @@ export default async function ArticlePage({
           >
             {article.title}
           </h1>
-          <p className="text-lg md:text-xl text-slate-600 mt-4 leading-relaxed font-light">
-            {article.dek}
-          </p>
+          {article.dek && (
+            <p className="text-lg md:text-xl text-slate-600 mt-4 leading-relaxed font-light">
+              {article.dek}
+            </p>
+          )}
 
           <div className="mt-6 flex items-center gap-3 text-sm text-slate-600">
-            <AuthorAvatar slug={article.authorSlug} />
+            <AuthorAvatar initials={article.authorInitials} />
             <div>
-              <div className="font-medium text-slate-800">{author?.name}</div>
+              <div className="font-medium text-slate-800">
+                {article.authorName ?? "La rédaction"}
+              </div>
               <div className="text-[11px] text-slate-500">
-                {fmtArticleDate(article.publishedAt)} · {article.readingTimeMinutes} min de
-                lecture
+                {article.publishedAt ? fmtArticleDate(article.publishedAt) : "—"}
+                {" · "}
+                {article.readingTimeMinutes} min de lecture
               </div>
             </div>
           </div>
         </div>
       </header>
 
-      {/* CONTENT */}
       <main className="max-w-7xl mx-auto px-4 md:px-6 py-8 md:py-12">
         <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-8">
-          {/* TOC sticky aside */}
           <aside className="hidden lg:block">
             <div className="sticky top-6 space-y-4">
               {toc.length > 0 && (
@@ -175,25 +165,26 @@ export default async function ArticlePage({
                 </nav>
               )}
 
-              <div className="pt-3 border-t border-slate-200">
-                <div className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold mb-2">
-                  Mots-clés
+              {article.tags.length > 0 && (
+                <div className="pt-3 border-t border-slate-200">
+                  <div className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold mb-2">
+                    Mots-clés
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {article.tags.map((t) => (
+                      <span
+                        key={t}
+                        className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-700"
+                      >
+                        {t}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {article.tags.map((t) => (
-                    <span
-                      key={t}
-                      className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-700"
-                    >
-                      {t}
-                    </span>
-                  ))}
-                </div>
-              </div>
+              )}
             </div>
           </aside>
 
-          {/* BODY */}
           <article id="article-body" className="max-w-2xl">
             <div className="prose-magazine">
               {article.body.map((block, i) => (
@@ -201,21 +192,21 @@ export default async function ArticlePage({
               ))}
             </div>
 
-            {/* Auteur en bas */}
             {author && (
               <div className="mt-12 pt-6 border-t border-slate-200 flex items-start gap-4">
-                <AuthorAvatar slug={article.authorSlug} large />
+                <AuthorAvatar initials={author.initials} large />
                 <div>
                   <div className="text-base font-semibold text-slate-900">{author.name}</div>
                   <div className="text-[11px] uppercase tracking-wide text-slate-500 font-medium">
                     {author.title}
                   </div>
-                  <p className="text-sm text-slate-700 mt-2 leading-relaxed">{author.bio}</p>
+                  {author.bio && (
+                    <p className="text-sm text-slate-700 mt-2 leading-relaxed">{author.bio}</p>
+                  )}
                 </div>
               </div>
             )}
 
-            {/* Articles liés */}
             {related.length > 0 && (
               <section className="mt-12 pt-6 border-t border-slate-200">
                 <div className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold mb-4">
@@ -243,7 +234,8 @@ export default async function ArticlePage({
                           {r.title}
                         </div>
                         <div className="text-[11px] text-slate-500 mt-2">
-                          {r.readingTimeMinutes} min · {fmtArticleDate(r.publishedAt)}
+                          {r.readingTimeMinutes} min ·{" "}
+                          {r.publishedAt ? fmtArticleDate(r.publishedAt) : ""}
                         </div>
                       </Link>
                     );
@@ -252,7 +244,6 @@ export default async function ArticlePage({
               </section>
             )}
 
-            {/* Retour au sommaire */}
             {issue && (
               <div className="mt-12 pt-6 border-t border-slate-200">
                 <Link
@@ -269,10 +260,6 @@ export default async function ArticlePage({
     </div>
   );
 }
-
-// =============================================================================
-// BLOCK RENDERERS
-// =============================================================================
 
 function BlockRenderer({
   block,
@@ -306,11 +293,7 @@ function BlockRenderer({
           <h2
             id={id}
             className="text-2xl md:text-3xl font-bold text-slate-900 mt-10 mb-4 leading-tight scroll-mt-20"
-            style={{
-              fontFamily: "Georgia, serif",
-              borderTop: `2px solid ${accent}`,
-              paddingTop: 16,
-            }}
+            style={{ fontFamily: "Georgia, serif", borderTop: `2px solid ${accent}`, paddingTop: 16 }}
           >
             {block.text}
           </h2>
@@ -329,10 +312,7 @@ function BlockRenderer({
 
     case "quote":
       return (
-        <blockquote
-          className="my-8 border-l-4 pl-6 py-1"
-          style={{ borderColor: accent }}
-        >
+        <blockquote className="my-8 border-l-4 pl-6 py-1" style={{ borderColor: accent }}>
           <p
             className="text-xl md:text-2xl text-slate-800 leading-relaxed italic font-light"
             style={{ fontFamily: "Georgia, serif" }}
@@ -361,16 +341,11 @@ function BlockRenderer({
           style={{ background: t.bg, borderColor: t.border }}
         >
           {block.title && (
-            <div
-              className="text-xs uppercase tracking-wide font-bold mb-1"
-              style={{ color: t.text }}
-            >
+            <div className="text-xs uppercase tracking-wide font-bold mb-1" style={{ color: t.text }}>
               {block.title}
             </div>
           )}
-          <p className="text-sm leading-relaxed" style={{ color: t.text }}>
-            {block.text}
-          </p>
+          <p className="text-sm leading-relaxed" style={{ color: t.text }}>{block.text}</p>
         </aside>
       );
     }
@@ -380,9 +355,7 @@ function BlockRenderer({
         return (
           <ol className="my-5 ml-6 list-decimal space-y-2 text-base text-slate-800 leading-relaxed">
             {block.items.map((it, i) => (
-              <li key={i} className="pl-1">
-                {it}
-              </li>
+              <li key={i} className="pl-1">{it}</li>
             ))}
           </ol>
         );
@@ -390,9 +363,7 @@ function BlockRenderer({
       return (
         <ul className="my-5 ml-6 space-y-2 text-base text-slate-800 leading-relaxed">
           {block.items.map((it, i) => (
-            <li key={i} className="pl-1 list-disc">
-              {it}
-            </li>
+            <li key={i} className="pl-1 list-disc">{it}</li>
           ))}
         </ul>
       );
@@ -410,10 +381,7 @@ function BlockRenderer({
               </div>
               <div
                 className="text-xl md:text-2xl font-bold mt-1 tabular-nums"
-                style={{
-                  color: s.accent ?? accent,
-                  fontFamily: "Georgia, serif",
-                }}
+                style={{ color: s.accent ?? accent, fontFamily: "Georgia, serif" }}
               >
                 {s.value}
               </div>
@@ -422,6 +390,36 @@ function BlockRenderer({
           ))}
         </div>
       );
+
+    case "image": {
+      const w = block.width ?? "wide";
+      const widthClass =
+        w === "narrow"
+          ? "max-w-2xl"
+          : w === "full"
+            ? "max-w-none"
+            : "max-w-3xl md:-mx-12 lg:-mx-20";
+      return (
+        <figure className={`my-8 mx-auto ${widthClass}`}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={block.src}
+            alt={block.alt}
+            loading="lazy"
+            className="w-full h-auto rounded-lg border border-slate-200 bg-slate-50"
+          />
+          {(block.caption || block.credit) && (
+            <figcaption className="mt-2 text-xs text-slate-500 text-center leading-relaxed">
+              {block.caption && <span>{block.caption}</span>}
+              {block.caption && block.credit && <span className="mx-1">·</span>}
+              {block.credit && (
+                <span className="text-slate-400 italic">{block.credit}</span>
+              )}
+            </figcaption>
+          )}
+        </figure>
+      );
+    }
 
     case "divider":
       return (
@@ -434,24 +432,24 @@ function BlockRenderer({
   }
 }
 
-function AuthorAvatar({ slug, large = false }: { slug: string; large?: boolean }) {
-  const author = AUTHORS[slug];
-  if (!author) return null;
+function AuthorAvatar({
+  initials,
+  large = false,
+}: {
+  initials: string | null;
+  large?: boolean;
+}) {
+  if (!initials) return null;
   const dim = large ? 56 : 36;
   const colors = ["#1d4ed8", "#7c3aed", "#be185d", "#059669", "#b45309", "#0d9488"];
-  const code = author.initials.charCodeAt(0) + (author.initials.charCodeAt(1) || 0);
+  const code = initials.charCodeAt(0) + (initials.charCodeAt(1) || 0);
   const color = colors[code % colors.length];
   return (
     <span
       className="inline-flex items-center justify-center rounded-full text-white font-semibold shrink-0"
-      style={{
-        width: dim,
-        height: dim,
-        background: color,
-        fontSize: large ? 16 : 12,
-      }}
+      style={{ width: dim, height: dim, background: color, fontSize: large ? 16 : 12 }}
     >
-      {author.initials}
+      {initials}
     </span>
   );
 }

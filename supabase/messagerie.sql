@@ -274,6 +274,30 @@ $$;
 grant execute on function public.get_users_public(uuid[]) to authenticated;
 
 -- ============================================================
+-- RPC : get_unread_count (badge messagerie dans le header)
+-- Compte les messages non-lus de l'utilisateur courant : messages
+-- envoyes par d'autres apres son last_read_at sur chaque conversation.
+-- ============================================================
+
+create or replace function public.get_unread_count()
+returns int
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce(count(*), 0)::int
+  from public.messages m
+  join public.conversation_participants cp
+    on cp.conversation_id = m.conversation_id
+    and cp.user_id = coalesce(auth.uid(), '00000000-0000-0000-0000-000000000000'::uuid)
+  where m.sender_id <> cp.user_id
+    and m.created_at > cp.last_read_at;
+$$;
+
+grant execute on function public.get_unread_count() to authenticated;
+
+-- ============================================================
 -- Realtime : activer la publication pour les messages
 -- ============================================================
 
@@ -302,5 +326,18 @@ begin
       and tablename = 'conversations'
   ) then
     alter publication supabase_realtime add table public.conversations;
+  end if;
+end$$;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'conversation_participants'
+  ) then
+    alter publication supabase_realtime add table public.conversation_participants;
   end if;
 end$$;

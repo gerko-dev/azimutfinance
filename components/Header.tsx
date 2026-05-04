@@ -5,6 +5,8 @@ import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { signOutAction } from "@/lib/auth/actions";
+import MessagerieIconBadge from "@/components/messagerie/MessagerieIconBadge";
+import HeartbeatPinger from "@/components/HeartbeatPinger";
 
 type MenuItem = {
   label: string;
@@ -56,8 +58,8 @@ const menuSections: MenuSection[] = [
     items: [
       { label: "Catalogue formations", href: "/academie/formations" },
       { label: "Glossaire financier", href: "/academie/glossaire" },
-      { label: "Magazine digital", href: "/academie/magazine" },
-      { label: "Simulateur de portefeuille", href: "/academie/simulateur" },
+      { label: "Suivi de compte titre", href: "/academie/compte-titre" },
+      { label: "Ligue Azimut", href: "/academie/simulateur" },
     ],
   },
   {
@@ -65,16 +67,8 @@ const menuSections: MenuSection[] = [
     items: [
       { label: "Forum investisseurs", href: "/communaute/forum", badge: "Bientôt" },
       { label: "Classements", href: "/communaute/classements", badge: "Bientôt" },
+      { label: "Magazine digital", href: "/academie/magazine" },
       { label: "Newsletter", href: "/communaute/newsletter" },
-    ],
-  },
-  {
-    label: "Pros",
-    items: [
-      { label: "Terminal Pro", href: "/pros", badge: "Pro" },
-      { label: "Place de marché OTC", href: "/pros/otc", badge: "Pro" },
-      { label: "API data", href: "/pros/api", badge: "Pro" },
-      { label: "Research sur mesure", href: "/pros/research", badge: "Pro" },
     ],
   },
 ];
@@ -110,6 +104,8 @@ export default function Header() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoaded, setAuthLoaded] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [adminLevel, setAdminLevel] = useState<number | null>(null);
+  const [userRole, setUserRole] = useState<"member" | "premium" | "pro" | null>(null);
   const headerRef = useRef<HTMLElement>(null);
 
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
@@ -117,21 +113,44 @@ export default function Header() {
   // Charger la session au montage + ecouter les changements (login / logout / refresh)
   useEffect(() => {
     let cancelled = false;
-    supabase.auth.getUser().then(({ data }) => {
-      if (!cancelled) {
-        setUser(data.user);
-        setAuthLoaded(true);
+    async function loadUserAndAdmin() {
+      const { data } = await supabase.auth.getUser();
+      if (cancelled) return;
+      setUser(data.user);
+      setAuthLoaded(true);
+      if (data.user) {
+        const [{ data: lvl }, { data: profile }] = await Promise.all([
+          supabase.rpc("my_admin_level"),
+          supabase.from("profiles").select("role").eq("id", data.user.id).maybeSingle(),
+        ]);
+        if (!cancelled) {
+          setAdminLevel(typeof lvl === "number" ? lvl : null);
+          const role = (profile as { role?: string } | null)?.role;
+          setUserRole(
+            role === "pro" || role === "premium" || role === "member" ? role : null,
+          );
+        }
+      } else {
+        setAdminLevel(null);
+        setUserRole(null);
       }
-    });
+    }
+    loadUserAndAdmin();
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
       setAuthLoaded(true);
+      if (!session?.user) {
+        setAdminLevel(null);
+        setUserRole(null);
+      }
     });
     return () => {
       cancelled = true;
       sub.subscription.unsubscribe();
     };
   }, [supabase]);
+
+  const showProButton = userRole === "pro" || adminLevel !== null;
 
   // Fermer les menus au clic exterieur
   useEffect(() => {
@@ -147,6 +166,7 @@ export default function Header() {
 
   return (
     <header ref={headerRef} className="bg-white border-b border-slate-200 relative z-30">
+      <HeartbeatPinger user={user} />
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 md:py-4 flex items-center justify-between">
         {/* Logo + Menu desktop */}
         <div className="flex items-center gap-4 lg:gap-8">
@@ -256,6 +276,28 @@ export default function Header() {
           {!authLoaded ? (
             <div className="h-9 w-24 bg-slate-100 rounded-md animate-pulse" />
           ) : user ? (
+            <>
+              {showProButton && (
+                <Link
+                  href="/pros"
+                  className="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-semibold bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white shadow-sm hover:shadow transition"
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M12 2l2.39 7.36H22l-6.18 4.49 2.39 7.36L12 16.72l-6.21 4.49 2.39-7.36L2 9.36h7.61z" />
+                  </svg>
+                  Espace Pro
+                </Link>
+              )}
+              <MessagerieIconBadge user={user} />
             <div className="relative">
               <button
                 onClick={() => setUserMenuOpen((v) => !v)}
@@ -291,6 +333,15 @@ export default function Header() {
                   >
                     Messagerie
                   </Link>
+                  {adminLevel !== null && (
+                    <Link
+                      href="/admin"
+                      onClick={() => setUserMenuOpen(false)}
+                      className="block px-4 py-2 text-sm text-rose-700 font-medium hover:bg-rose-50 border-t border-slate-100"
+                    >
+                      Administration · N{adminLevel}
+                    </Link>
+                  )}
                   <form action={signOutAction}>
                     <button
                       type="submit"
@@ -302,6 +353,7 @@ export default function Header() {
                 </div>
               )}
             </div>
+            </>
           ) : (
             <>
               <Link
@@ -318,6 +370,11 @@ export default function Header() {
               </Link>
             </>
           )}
+        </div>
+
+        {/* Mobile : icone messagerie + hamburger */}
+        <div className="flex items-center gap-1 md:hidden">
+          {authLoaded && user && <MessagerieIconBadge user={user} />}
         </div>
 
         {/* Bouton hamburger mobile */}
@@ -340,6 +397,30 @@ export default function Header() {
       {menuOpen && (
         <nav className="lg:hidden border-t border-slate-200 bg-white max-h-[70vh] overflow-y-auto">
           <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col gap-1">
+            {showProButton && (
+              <Link
+                href="/pros"
+                onClick={() => {
+                  setMenuOpen(false);
+                  setActiveMobileMenu(null);
+                }}
+                className="flex items-center justify-center gap-1.5 px-3 py-2.5 mb-2 rounded-md text-sm font-semibold bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-sm"
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M12 2l2.39 7.36H22l-6.18 4.49 2.39 7.36L12 16.72l-6.21 4.49 2.39-7.36L2 9.36h7.61z" />
+                </svg>
+                Espace Pro
+              </Link>
+            )}
             {menuSections.map((section) => (
               <div key={section.label}>
                 <button
@@ -458,6 +539,15 @@ export default function Header() {
                   >
                     Messagerie
                   </Link>
+                  {adminLevel !== null && (
+                    <Link
+                      href="/admin"
+                      onClick={() => setMenuOpen(false)}
+                      className="px-4 py-2 text-sm text-center bg-rose-600 text-white rounded-md font-medium"
+                    >
+                      Administration · N{adminLevel}
+                    </Link>
+                  )}
                   <form action={signOutAction}>
                     <button
                       type="submit"

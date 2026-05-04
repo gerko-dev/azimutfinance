@@ -398,11 +398,15 @@ export function getStatement(
     }
   }
 
-  // Map (codePoste|exercice → valeur)
+  // Map (codePoste|exercice → valeur). On ne garde que la période "Annuel" :
+  // sans ce filtre, les valeurs trimestrielles cumulees (T1/S1/T3) ecrasent
+  // l'annuel selon l'ordre de lecture du CSV (ex SNTS 2025 CR_RNET : T3=311 Mds
+  // s'imposait alors que l'annuel vaut 246,65 Mds).
   const exSet = new Set(exercices);
   const valuesByCodeEx = new Map<string, number>();
   for (const v of allValeurs) {
     if (v.ticker.trim().toUpperCase() !== t) continue;
+    if (v.periode?.trim() !== "Annuel") continue;
     const ex = num(v.exercice);
     if (!exSet.has(ex)) continue;
     if (!postesByCode.has(v.code_poste.trim())) continue;

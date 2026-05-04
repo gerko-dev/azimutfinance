@@ -9,6 +9,12 @@ import {
   HORIZONS,
   INTERESTS,
 } from "@/lib/onboarding/types";
+import { getMyInscriptions } from "@/lib/formations/queries";
+import {
+  INSCRIPTION_STATUS_COLOR,
+  INSCRIPTION_STATUS_LABEL,
+  PAYMENT_METHOD_LABEL,
+} from "@/lib/formations";
 
 export const metadata = {
   title: "Mon compte — AzimutFinance",
@@ -52,6 +58,8 @@ export default async function ComptePage() {
   const role = profile?.role ?? "member";
   const roleBadge = ROLE_LABELS[role] ?? ROLE_LABELS.member;
   const interests: string[] = profile?.interests ?? [];
+
+  const inscriptions = await getMyInscriptions();
 
   // Bandeau "Complétez votre profil" : on regarde les champs réellement
   // manquants plutôt qu'onboarded_at, pour rattraper les utilisateurs qui
@@ -183,6 +191,68 @@ export default async function ComptePage() {
               )}
             </div>
           </div>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-lg p-6 space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-medium text-slate-900">
+              Mes formations
+            </h2>
+            <Link
+              href="/academie/formations"
+              className="text-xs text-blue-700 hover:underline"
+            >
+              Catalogue
+            </Link>
+          </div>
+          {inscriptions.length === 0 ? (
+            <div className="text-sm text-slate-500 pt-2 border-t border-slate-100">
+              Vous n&apos;êtes inscrit à aucune formation pour le moment.{" "}
+              <Link href="/academie/formations" className="text-blue-700 hover:underline">
+                Découvrir le catalogue →
+              </Link>
+            </div>
+          ) : (
+            <ul className="divide-y divide-slate-100 -mx-2">
+              {inscriptions.map((i) => {
+                const color = INSCRIPTION_STATUS_COLOR[i.status];
+                return (
+                  <li key={i.id} className="px-2 py-3">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <Link
+                        href={`/academie/formations/${i.formation_slug}`}
+                        className="text-sm font-medium text-slate-900 hover:text-blue-700 truncate"
+                      >
+                        {i.formation_title}
+                      </Link>
+                      <span
+                        className="text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded shrink-0"
+                        style={{ background: color + "15", color }}
+                      >
+                        {INSCRIPTION_STATUS_LABEL[i.status]}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-slate-500 mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                      <span>{PAYMENT_METHOD_LABEL[i.payment_method]}</span>
+                      {i.montant_fcfa > 0 && (
+                        <>
+                          <span className="text-slate-300">·</span>
+                          <span className="tabular-nums">
+                            {i.montant_fcfa.toLocaleString("fr-FR")} FCFA
+                          </span>
+                        </>
+                      )}
+                      <span className="text-slate-300">·</span>
+                      <span>
+                        Inscrit le{" "}
+                        {new Date(i.created_at).toLocaleDateString("fr-FR")}
+                      </span>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
 
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-5 text-sm text-blue-900">

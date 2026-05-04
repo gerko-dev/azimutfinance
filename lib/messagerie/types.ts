@@ -41,3 +41,20 @@ export type ConversationSummary = {
 export type ActionResult<T = void> =
   | { ok: true; data: T }
   | { ok: false; error: string };
+
+export const REPORT_CATEGORIES = [
+  "spam",
+  "harcelement",
+  "insulte",
+  "arnaque",
+  "autre",
+] as const;
+export type ReportCategory = (typeof REPORT_CATEGORIES)[number];
+
+export const REPORT_CATEGORY_LABEL: Record<ReportCategory, string> = {
+  spam: "Spam / publicité",
+  harcelement: "Harcèlement",
+  insulte: "Insultes / violence verbale",
+  arnaque: "Arnaque / escroquerie",
+  autre: "Autre",
+};

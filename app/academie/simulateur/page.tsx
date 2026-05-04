@@ -21,9 +21,9 @@ import {
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const metadata = {
-  title: "Simulateur de portefeuille — AzimutFinance",
+  title: "Ligue Azimut — AzimutFinance",
   description:
-    "Jeu de portefeuille BRVM avec saisons, achats/ventes, valorisation quotidienne et classement général. Réservé aux membres AzimutFinance.",
+    "Compétition de portefeuille BRVM par saisons : capital virtuel, achats/ventes, valorisation quotidienne et classement général. Réservée aux membres AzimutFinance.",
 };
 
 export const dynamic = "force-dynamic";
@@ -42,15 +42,15 @@ export default async function Page() {
         <main className="max-w-3xl mx-auto px-4 md:px-6 py-12 md:py-16">
           <div className="bg-white rounded-lg border border-slate-200 p-6 md:p-10 text-center">
             <div className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">
-              Académie · Simulateur
+              Académie · Ligue Azimut
             </div>
             <h1 className="text-2xl md:text-3xl font-semibold text-slate-900 mt-2">
-              Simulateur de portefeuille — réservé aux membres
+              Ligue Azimut — réservée aux membres
             </h1>
             <p className="text-sm text-slate-600 mt-3 max-w-xl mx-auto leading-relaxed">
-              Le simulateur est un jeu de portefeuille avec saisons : capital virtuel, ordres
-              d&apos;achat et de vente sur la BRVM, valorisation au jour le jour et classement
-              général en fin de saison. Connectez-vous pour participer.
+              La Ligue Azimut est une compétition saisonnière de portefeuille : capital virtuel,
+              ordres d&apos;achat et de vente sur la BRVM, valorisation au jour le jour et
+              classement général en fin de saison. Connectez-vous pour participer.
             </p>
             <div className="mt-6 flex justify-center gap-3 flex-wrap">
               <Link
@@ -115,7 +115,7 @@ export default async function Page() {
           <SeasonBanner season={season} />
           <div className="bg-white rounded-lg border border-slate-200 p-6 md:p-10 text-center">
             <div className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">
-              Bienvenue dans le simulateur
+              Bienvenue dans la Ligue Azimut
             </div>
             <h1 className="text-2xl md:text-3xl font-semibold text-slate-900 mt-2">
               Rejoignez la saison en cours
@@ -176,7 +176,7 @@ export default async function Page() {
 
       <main className="max-w-7xl mx-auto px-4 md:px-6 py-5 md:py-6 space-y-5">
         <div className="text-xs text-slate-500">
-          Accueil &rsaquo; Académie &rsaquo; Simulateur de portefeuille
+          Accueil &rsaquo; Académie &rsaquo; Ligue Azimut
         </div>
 
         {/* Bandeau saison */}

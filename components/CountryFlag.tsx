@@ -8,9 +8,43 @@ type Props = {
   showLabel?: boolean;
 };
 
+// Mapping libelles francais (CSV) -> codes ISO. Tolere accents et casse.
+const COUNTRY_NAME_TO_CODE: Record<string, string> = {
+  "cote d'ivoire": "CI",
+  "côte d'ivoire": "CI",
+  ivoirien: "CI",
+  ivoire: "CI",
+  senegal: "SN",
+  "sénégal": "SN",
+  "burkina faso": "BF",
+  burkina: "BF",
+  mali: "ML",
+  benin: "BJ",
+  "bénin": "BJ",
+  togo: "TG",
+  niger: "NE",
+  "guinee-bissau": "GW",
+  "guinée-bissau": "GW",
+  "guinee bissau": "GW",
+  "guinée bissau": "GW",
+  uemoa: "UEMOA",
+  cedeao: "CEDEAO",
+};
+
+function resolveCountryCode(input: string): string {
+  if (!input) return "";
+  const trimmed = input.trim();
+  // Deja un code ISO 2 lettres ou label deja capitalise (UEMOA/CEDEAO)
+  if (/^[A-Z]{2}$/.test(trimmed) || trimmed === "UEMOA" || trimmed === "CEDEAO") {
+    return trimmed;
+  }
+  return COUNTRY_NAME_TO_CODE[trimmed.toLowerCase()] ?? trimmed;
+}
+
 export default function CountryFlag({ country, size = 16, showLabel = false }: Props) {
   const width = size * 1.5; // ratio 3:2
   const height = size;
+  const code = resolveCountryCode(country);
 
   const flags: Record<string, React.ReactElement> = {
     CI: (
@@ -108,7 +142,7 @@ export default function CountryFlag({ country, size = 16, showLabel = false }: P
     ),
   };
 
-  const flag = flags[country];
+  const flag = flags[code];
 
   return (
     <span className="inline-flex items-center gap-1.5 align-middle">

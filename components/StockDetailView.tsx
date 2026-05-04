@@ -2,6 +2,18 @@
 
 import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
+
+// KLineChart manipule directement le DOM (canvas) — chargement dynamique sans SSR
+const KlineChart = dynamic(() => import("./charting/KlineChart"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-[560px] flex items-center justify-center text-sm text-slate-400 bg-slate-50 rounded-md">
+      Chargement du graphique avancé…
+    </div>
+  ),
+});
+
 import {
   ComposedChart,
   LineChart,
@@ -28,6 +40,7 @@ import FundamentalsView from "./FundamentalsView";
 import DividendsView from "./DividendsView";
 import NewsView from "./NewsView";
 import AdvancedStatsView from "./AdvancedStatsView";
+import LivePriceBadge from "./LivePriceBadge";
 import TechnicalAnalysisView from "./TechnicalAnalysisView";
 
 type Tab =
@@ -138,11 +151,20 @@ type PricePoint = {
 };
 
 type PriceVolumePoint = { date: string; value: number; volume: number | null };
+type OhlcChartPoint = {
+  timestamp: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume?: number;
+};
 
 type Props = {
   stock: StockDetails;
   priceHistory: PricePoint[];
   priceHistoryWithVolume: PriceVolumePoint[];
+  ohlcHistory: OhlcChartPoint[];
   returnsMatrix: ReturnsMatrix;
   riskMetrics: RiskMetrics;
   quadrant: Quadrant | null;
@@ -161,6 +183,12 @@ type Props = {
   };
   news: NewsItem[];
   advancedStats: AdvancedStatsSnapshot;
+  livePrice?: {
+    fetchedAt: string;
+    sessionLabel: string | null;
+    isClosed: boolean | null;
+    hasLive: boolean;
+  };
 };
 
 function formatFCFA(value: number): string {
@@ -206,6 +234,7 @@ export default function StockDetailView({
   stock,
   priceHistory,
   priceHistoryWithVolume,
+  ohlcHistory,
   returnsMatrix,
   riskMetrics,
   quadrant,
@@ -218,6 +247,7 @@ export default function StockDetailView({
   statements,
   news,
   advancedStats,
+  livePrice,
 }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [period, setPeriod] = useState<Period>("1A");
@@ -426,9 +456,15 @@ export default function StockDetailView({
                 ({changeSign}{stock.changePercent.toFixed(2)}%)
               </span>
             </div>
-            <div className="text-xs text-slate-400">
-              Dernière séance
-            </div>
+            {livePrice?.hasLive ? (
+              <LivePriceBadge
+                fetchedAt={livePrice.fetchedAt}
+                sessionLabel={livePrice.sessionLabel}
+                isClosed={livePrice.isClosed}
+              />
+            ) : (
+              <div className="text-xs text-slate-400">Dernière séance</div>
+            )}
           </div>
 
           {/* Onglets */}
@@ -461,6 +497,25 @@ export default function StockDetailView({
       <main className="max-w-7xl mx-auto px-4 md:px-6 py-4 md:py-6 space-y-4 md:space-y-6">
         {activeTab === "overview" && (
           <>
+            {/* Graphique avance pro (chandeliers + indicateurs + outils dessin) */}
+            {ohlcHistory.length > 0 && (
+              <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
+                <div className="mb-3">
+                  <h3 className="text-base font-medium">📊 Graphique avancé</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Chandeliers · 50+ indicateurs · outils de dessin
+                    (Fibonacci, Elliott, patterns…) · zoom &amp; plein écran
+                  </p>
+                </div>
+                <KlineChart
+                  data={ohlcHistory}
+                  code={stock.code}
+                  name={stock.name}
+                  height={520}
+                />
+              </section>
+            )}
+
             {/* Graphique + Donnees cles */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
               {/* Graphique historique */}
