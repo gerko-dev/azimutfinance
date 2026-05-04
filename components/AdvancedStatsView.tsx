@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import {
   BarChart,
   Bar,
@@ -23,6 +24,8 @@ import type {
   Quadrant,
   AdvancedStatsSnapshot,
 } from "@/lib/stockStats";
+import type { UserRole } from "@/lib/auth/userRole";
+import MemberGateDialog from "./MemberGateDialog";
 
 type Props = {
   ticker: string;
@@ -30,6 +33,7 @@ type Props = {
   returnsMatrix: ReturnsMatrix;
   riskMetrics: RiskMetrics;
   advanced: AdvancedStatsSnapshot;
+  userRole: UserRole;
 };
 
 // === Formatters ===
@@ -123,9 +127,23 @@ export default function AdvancedStatsView({
   returnsMatrix,
   riskMetrics,
   advanced,
+  userRole,
 }: Props) {
   const { descriptive, normality, histogram, qqPlot, risk, regression, autocorr, monthlyReturns } =
     advanced;
+
+  // Tiers — voir lib/auth/userRole.ts
+  // - null      : visiteur anonyme
+  // - "member"  : compte gratuit
+  // - "premium" : abonnement payant
+  // - "pro"     : abonnement pro (admins inclus)
+  const isMember = userRole !== null;
+  const isPremium = userRole === "premium" || userRole === "pro";
+  const isPro = userRole === "pro";
+
+  // Modal d'incitation a l'inscription pour les visiteurs qui cliquent sur
+  // une section gated (rendements mensuels, regression, risque synthese).
+  const [memberGateOpen, setMemberGateOpen] = useState(false);
 
   const hasData = descriptive !== null && descriptive.n >= 30;
 
@@ -168,8 +186,8 @@ export default function AdvancedStatsView({
 
   return (
     <div className="space-y-4 md:space-y-6">
-      {/* === BANDEAU QUADRANT === */}
-      {quadrant && (
+      {/* === BANDEAU QUADRANT — Membre+ uniquement (Classification Azimut) === */}
+      {quadrant && isMember && (
         <div
           className={`rounded-lg border p-4 md:p-5 ${QUADRANT_INFO[quadrant].cls}`}
         >
@@ -187,6 +205,124 @@ export default function AdvancedStatsView({
             </div>
           </div>
         </div>
+      )}
+
+      {/* === RENDEMENTS MENSUELS (HEATMAP) — Membre+ avec teaser cadenas pour visiteur === */}
+      {heatmap.years.length > 0 && (
+        <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6 relative">
+          <div className="flex items-baseline justify-between flex-wrap gap-2 mb-4">
+            <div>
+              <h3 className="text-base font-medium inline-flex items-center gap-2">
+                Rendements mensuels
+                {!isMember && (
+                  <span aria-hidden className="text-sm">🔒</span>
+                )}
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Heatmap par mois et par année — performance simple ouverture/clôture
+              </p>
+            </div>
+          </div>
+
+          <div
+            className={
+              isMember ? "" : "blur-[3px] pointer-events-none select-none"
+            }
+            aria-hidden={isMember ? undefined : true}
+          >
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr>
+                    <th className="text-left px-2 py-1.5 font-medium text-slate-500">
+                      Année
+                    </th>
+                    {MONTH_LABELS.map((m) => (
+                      <th
+                        key={m}
+                        className="text-center px-1 py-1.5 font-medium text-slate-500 min-w-[44px]"
+                      >
+                        {m}
+                      </th>
+                    ))}
+                    <th className="text-right px-2 py-1.5 font-medium text-slate-500">
+                      Total
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {heatmap.years.map((y) => (
+                    <tr key={y}>
+                      <td className="px-2 py-0.5 font-mono font-medium text-slate-700">
+                        {y}
+                      </td>
+                      {Array.from({ length: 12 }, (_, i) => i + 1).map((mo) => {
+                        const r = heatmap.grid[y][mo];
+                        return (
+                          <td
+                            key={mo}
+                            className="px-1 py-0.5 text-center"
+                            title={
+                              r !== undefined
+                                ? `${MONTH_LABELS[mo - 1]} ${y} : ${formatPctSigned(r, 2)}`
+                                : "Pas de données"
+                            }
+                          >
+                            {r !== undefined ? (
+                              <span
+                                className={`inline-block w-full px-1 py-0.5 rounded font-mono ${heatmapColor(r)}`}
+                              >
+                                {formatPctSigned(r, 1)}
+                              </span>
+                            ) : (
+                              <span className="text-slate-300">—</span>
+                            )}
+                          </td>
+                        );
+                      })}
+                      <td className="px-2 py-0.5 text-right">
+                        {heatmap.yearTotal[y] !== null ? (
+                          <span
+                            className={`inline-block px-2 py-0.5 rounded font-mono font-semibold ${heatmapColor(
+                              heatmap.yearTotal[y]!
+                            )}`}
+                          >
+                            {formatPctSigned(heatmap.yearTotal[y], 1)}
+                          </span>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {!isMember && (
+            <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex justify-center px-4 pointer-events-none">
+              <button
+                type="button"
+                onClick={() => setMemberGateOpen(true)}
+                className="bg-white rounded-lg shadow-xl border border-slate-200 max-w-md w-full p-4 md:p-5 pointer-events-auto text-left hover:border-slate-300 transition"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="text-2xl shrink-0">🔓</div>
+                  <div className="min-w-0">
+                    <h4 className="text-base font-semibold text-slate-900">
+                      Inscrivez-vous pour voir les rendements mensuels
+                    </h4>
+                    <p className="text-sm text-slate-600 mt-1">
+                      Heatmap mois × année pour identifier les saisonnalités du
+                      titre. Inscription gratuite.
+                    </p>
+                  </div>
+                </div>
+              </button>
+            </div>
+          )}
+        </section>
       )}
 
       {/* === DESCRIPTIVES & PERFORMANCE === */}
@@ -211,76 +347,114 @@ export default function AdvancedStatsView({
           </table>
         </div>
 
-        {/* Statistiques descriptives */}
-        <div className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
-          <h3 className="text-base font-medium mb-4">
+        {/* Statistiques descriptives — Premium+ : visible. Sinon : floutee + CTA */}
+        <div className="bg-white rounded-lg border border-slate-200 p-4 md:p-6 relative">
+          <h3 className="text-base font-medium mb-4 inline-flex items-center gap-2">
             Distribution des rendements journaliers
+            {!isPremium && (
+              <span className="text-[10px] md:text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-medium">
+                PREMIUM
+              </span>
+            )}
           </h3>
-          <div className="grid grid-cols-2 gap-3">
-            <Stat label="Observations" value={descriptive!.n.toString()} />
-            <Stat
-              label="Moyenne quotidienne"
-              value={formatPctSigned(descriptive!.mean, 3)}
-              colorClass={pctColor(descriptive!.mean)}
-            />
-            <Stat
-              label="Médiane"
-              value={formatPctSigned(descriptive!.median, 3)}
-              colorClass={pctColor(descriptive!.median)}
-            />
-            <Stat
-              label="Écart-type quotidien"
-              value={formatPct(descriptive!.stdev, 3)}
-            />
-            <Stat
-              label="Moyenne annualisée"
-              value={formatPctSigned(descriptive!.meanAnnualized, 1)}
-              colorClass={pctColor(descriptive!.meanAnnualized)}
-            />
-            <Stat
-              label="Volatilité annualisée"
-              value={formatPct(descriptive!.stdevAnnualized, 1)}
-            />
-            <Stat
-              label="Skewness"
-              value={formatNum(descriptive!.skewness)}
-              hint={
-                descriptive!.skewness < -0.5
-                  ? "Asymétrie négative (queues à gauche)"
-                  : descriptive!.skewness > 0.5
-                  ? "Asymétrie positive (queues à droite)"
-                  : "Quasi-symétrique"
-              }
-            />
-            <Stat
-              label="Excess kurtosis"
-              value={formatNum(descriptive!.excessKurtosis)}
-              hint={
-                descriptive!.excessKurtosis > 1
-                  ? "Queues épaisses (leptokurtique)"
-                  : descriptive!.excessKurtosis < -0.5
-                  ? "Queues fines"
-                  : "Proche d'une normale"
-              }
-            />
-            <Stat
-              label="Plus mauvaise séance"
-              value={formatPctSigned(descriptive!.min, 2)}
-              colorClass="text-red-700"
-            />
-            <Stat
-              label="Plus belle séance"
-              value={formatPctSigned(descriptive!.max, 2)}
-              colorClass="text-green-700"
-            />
-            <Stat label="1er quartile" value={formatPctSigned(descriptive!.q1, 2)} />
-            <Stat label="3e quartile" value={formatPctSigned(descriptive!.q3, 2)} />
+          <div
+            className={
+              isPremium ? "" : "blur-[3px] pointer-events-none select-none"
+            }
+            aria-hidden={isPremium ? undefined : true}
+          >
+            <div className="grid grid-cols-2 gap-3">
+              <Stat label="Observations" value={descriptive!.n.toString()} />
+              <Stat
+                label="Moyenne quotidienne"
+                value={formatPctSigned(descriptive!.mean, 3)}
+                colorClass={pctColor(descriptive!.mean)}
+              />
+              <Stat
+                label="Médiane"
+                value={formatPctSigned(descriptive!.median, 3)}
+                colorClass={pctColor(descriptive!.median)}
+              />
+              <Stat
+                label="Écart-type quotidien"
+                value={formatPct(descriptive!.stdev, 3)}
+              />
+              <Stat
+                label="Moyenne annualisée"
+                value={formatPctSigned(descriptive!.meanAnnualized, 1)}
+                colorClass={pctColor(descriptive!.meanAnnualized)}
+              />
+              <Stat
+                label="Volatilité annualisée"
+                value={formatPct(descriptive!.stdevAnnualized, 1)}
+              />
+              <Stat
+                label="Skewness"
+                value={formatNum(descriptive!.skewness)}
+                hint={
+                  descriptive!.skewness < -0.5
+                    ? "Asymétrie négative (queues à gauche)"
+                    : descriptive!.skewness > 0.5
+                    ? "Asymétrie positive (queues à droite)"
+                    : "Quasi-symétrique"
+                }
+              />
+              <Stat
+                label="Excess kurtosis"
+                value={formatNum(descriptive!.excessKurtosis)}
+                hint={
+                  descriptive!.excessKurtosis > 1
+                    ? "Queues épaisses (leptokurtique)"
+                    : descriptive!.excessKurtosis < -0.5
+                    ? "Queues fines"
+                    : "Proche d'une normale"
+                }
+              />
+              <Stat
+                label="Plus mauvaise séance"
+                value={formatPctSigned(descriptive!.min, 2)}
+                colorClass="text-red-700"
+              />
+              <Stat
+                label="Plus belle séance"
+                value={formatPctSigned(descriptive!.max, 2)}
+                colorClass="text-green-700"
+              />
+              <Stat label="1er quartile" value={formatPctSigned(descriptive!.q1, 2)} />
+              <Stat label="3e quartile" value={formatPctSigned(descriptive!.q3, 2)} />
+            </div>
           </div>
+          {!isPremium && (
+            <div className="absolute inset-0 flex items-center justify-center p-4 pointer-events-none">
+              <div className="bg-white/95 backdrop-blur-sm rounded-lg shadow-xl border border-amber-200 max-w-sm w-full p-4 pointer-events-auto">
+                <div className="flex items-start gap-3 mb-3">
+                  <div className="text-2xl shrink-0">⭐</div>
+                  <div className="min-w-0">
+                    <h4 className="text-sm font-semibold text-slate-900">
+                      Distribution Premium
+                    </h4>
+                    <p className="text-xs text-slate-600 mt-1">
+                      Skewness, kurtosis, quartiles et statistiques
+                      descriptives complètes des rendements quotidiens.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex justify-end pt-2 border-t border-slate-100">
+                  <Link
+                    href="/compte"
+                    className="px-3 py-1.5 rounded-md bg-amber-500 text-white text-xs font-medium hover:bg-amber-600 transition"
+                  >
+                    Passer Premium →
+                  </Link>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
-      {/* === TEST DE NORMALITÉ === */}
-      {normality && (
+      {/* === TEST DE NORMALITÉ — Pro only === */}
+      {isPro && normality && (
         <NormalityCard
           ticker={ticker}
           normality={normality}
@@ -289,8 +463,8 @@ export default function AdvancedStatsView({
         />
       )}
 
-      {/* === RISQUE AVANCÉ === */}
-      {risk && (
+      {/* === RISQUE AVANCÉ — Pro only === */}
+      {isPro && risk && (
         <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
           <div className="flex items-baseline justify-between flex-wrap gap-2 mb-4">
             <div>
@@ -370,19 +544,29 @@ export default function AdvancedStatsView({
         </section>
       )}
 
-      {/* === RÉGRESSION VS BRVMC === */}
+      {/* === RÉGRESSION VS BRVMC — Membre+, sinon teaser cadenas === */}
       {regression && (
-        <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
+        <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6 relative">
           <div className="flex items-baseline justify-between flex-wrap gap-2 mb-4">
             <div>
-              <h3 className="text-base font-medium">Régression vs BRVM Composite</h3>
+              <h3 className="text-base font-medium inline-flex items-center gap-2">
+                Régression vs BRVM Composite
+                {!isMember && (
+                  <span aria-hidden className="text-sm">🔒</span>
+                )}
+              </h3>
               <p className="text-xs text-slate-500 mt-0.5">
                 Modèle linéaire des rendements journaliers — {regression.observations} observations
               </p>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div
+            className={
+              isMember ? "" : "blur-[3px] pointer-events-none select-none"
+            }
+            aria-hidden={isMember ? undefined : true}
+          ><div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <Stat
               label="Beta"
               value={formatNum(regression.beta)}
@@ -440,11 +624,34 @@ export default function AdvancedStatsView({
               colorClass={pctColor(regression.upCapture - regression.downCapture)}
             />
           </div>
+          </div>
+          {!isMember && (
+            <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex justify-center px-4 pointer-events-none">
+              <button
+                type="button"
+                onClick={() => setMemberGateOpen(true)}
+                className="bg-white rounded-lg shadow-xl border border-slate-200 max-w-md w-full p-4 md:p-5 pointer-events-auto text-left hover:border-slate-300 transition"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="text-2xl shrink-0">🔓</div>
+                  <div className="min-w-0">
+                    <h4 className="text-base font-semibold text-slate-900">
+                      Inscrivez-vous pour voir la régression
+                    </h4>
+                    <p className="text-sm text-slate-600 mt-1">
+                      Beta, alpha, R², up/down capture vs BRVM Composite.
+                      Inscription gratuite.
+                    </p>
+                  </div>
+                </div>
+              </button>
+            </div>
+          )}
         </section>
       )}
 
-      {/* === AUTOCORRÉLATION === */}
-      {autocorr && (
+      {/* === AUTOCORRÉLATION — Pro only === */}
+      {isPro && autocorr && (
         <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
           <div className="flex items-baseline justify-between flex-wrap gap-2 mb-4">
             <div>
@@ -533,131 +740,81 @@ export default function AdvancedStatsView({
         </section>
       )}
 
-      {/* === HEATMAP MENSUELLE === */}
-      {heatmap.years.length > 0 && (
-        <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
-          <div className="flex items-baseline justify-between flex-wrap gap-2 mb-4">
-            <div>
-              <h3 className="text-base font-medium">Rendements mensuels</h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Heatmap par mois et par année — performance simple ouverture/clôture
-              </p>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr>
-                  <th className="text-left px-2 py-1.5 font-medium text-slate-500">
-                    Année
-                  </th>
-                  {MONTH_LABELS.map((m) => (
-                    <th
-                      key={m}
-                      className="text-center px-1 py-1.5 font-medium text-slate-500 min-w-[44px]"
-                    >
-                      {m}
-                    </th>
-                  ))}
-                  <th className="text-right px-2 py-1.5 font-medium text-slate-500">
-                    Total
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {heatmap.years.map((y) => (
-                  <tr key={y}>
-                    <td className="px-2 py-0.5 font-mono font-medium text-slate-700">
-                      {y}
-                    </td>
-                    {Array.from({ length: 12 }, (_, i) => i + 1).map((mo) => {
-                      const r = heatmap.grid[y][mo];
-                      return (
-                        <td
-                          key={mo}
-                          className="px-1 py-0.5 text-center"
-                          title={
-                            r !== undefined
-                              ? `${MONTH_LABELS[mo - 1]} ${y} : ${formatPctSigned(r, 2)}`
-                              : "Pas de données"
-                          }
-                        >
-                          {r !== undefined ? (
-                            <span
-                              className={`inline-block w-full px-1 py-0.5 rounded font-mono ${heatmapColor(r)}`}
-                            >
-                              {formatPctSigned(r, 1)}
-                            </span>
-                          ) : (
-                            <span className="text-slate-300">—</span>
-                          )}
-                        </td>
-                      );
-                    })}
-                    <td className="px-2 py-0.5 text-right">
-                      {heatmap.yearTotal[y] !== null ? (
-                        <span
-                          className={`inline-block px-2 py-0.5 rounded font-mono font-semibold ${heatmapColor(
-                            heatmap.yearTotal[y]!
-                          )}`}
-                        >
-                          {formatPctSigned(heatmap.yearTotal[y], 1)}
-                        </span>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
-
       {/* === RISQUE BASIQUE (legacy) + MÉTHODOLOGIE === */}
       <section className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-        <div className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
-          <h3 className="text-base font-medium mb-4">Risque (synthèse)</h3>
-          <dl className="space-y-3 text-sm">
-            <div className="flex justify-between">
-              <dt className="text-slate-500">Volatilité 12 mois (annualisée)</dt>
-              <dd className="font-medium">{formatPct(riskMetrics.volatility1A)}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-slate-500">Max drawdown 12 mois</dt>
-              <dd
-                className={`font-medium ${
-                  riskMetrics.maxDrawdown1A && riskMetrics.maxDrawdown1A < 0
-                    ? "text-red-700"
-                    : ""
-                }`}
+        {/* Risque (synthese) — Membre+, sinon teaser cadenas */}
+        <div className="bg-white rounded-lg border border-slate-200 p-4 md:p-6 relative">
+          <h3 className="text-base font-medium mb-4 inline-flex items-center gap-2">
+            Risque (synthèse)
+            {!isMember && <span aria-hidden className="text-sm">🔒</span>}
+          </h3>
+          <div
+            className={
+              isMember ? "" : "blur-[3px] pointer-events-none select-none"
+            }
+            aria-hidden={isMember ? undefined : true}
+          >
+            <dl className="space-y-3 text-sm">
+              <div className="flex justify-between">
+                <dt className="text-slate-500">Volatilité 12 mois (annualisée)</dt>
+                <dd className="font-medium">{formatPct(riskMetrics.volatility1A)}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-slate-500">Max drawdown 12 mois</dt>
+                <dd
+                  className={`font-medium ${
+                    riskMetrics.maxDrawdown1A && riskMetrics.maxDrawdown1A < 0
+                      ? "text-red-700"
+                      : ""
+                  }`}
+                >
+                  {formatPct(riskMetrics.maxDrawdown1A)}
+                </dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-slate-500">Max drawdown historique</dt>
+                <dd
+                  className={`font-medium ${
+                    riskMetrics.maxDrawdownAll && riskMetrics.maxDrawdownAll < 0
+                      ? "text-red-700"
+                      : ""
+                  }`}
+                >
+                  {formatPct(riskMetrics.maxDrawdownAll)}
+                </dd>
+              </div>
+              <div className="flex justify-between pt-3 border-t border-slate-100">
+                <dt className="text-slate-500">Ratio de Sharpe (1 an)</dt>
+                <dd className="font-medium">{formatNum(riskMetrics.sharpe1A)}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-slate-500">Beta vs BRVM Composite</dt>
+                <dd className="font-medium">{formatNum(riskMetrics.beta)}</dd>
+              </div>
+            </dl>
+          </div>
+          {!isMember && (
+            <div className="absolute inset-0 flex items-center justify-center p-4 pointer-events-none">
+              <button
+                type="button"
+                onClick={() => setMemberGateOpen(true)}
+                className="bg-white rounded-lg shadow-xl border border-slate-200 max-w-sm w-full p-4 pointer-events-auto text-left hover:border-slate-300 transition"
               >
-                {formatPct(riskMetrics.maxDrawdown1A)}
-              </dd>
+                <div className="flex items-start gap-3">
+                  <div className="text-2xl shrink-0">🔓</div>
+                  <div className="min-w-0">
+                    <h4 className="text-sm font-semibold text-slate-900">
+                      Inscrivez-vous pour voir le risque
+                    </h4>
+                    <p className="text-xs text-slate-600 mt-1">
+                      Volatilité, drawdowns, Sharpe et beta. Inscription
+                      gratuite.
+                    </p>
+                  </div>
+                </div>
+              </button>
             </div>
-            <div className="flex justify-between">
-              <dt className="text-slate-500">Max drawdown historique</dt>
-              <dd
-                className={`font-medium ${
-                  riskMetrics.maxDrawdownAll && riskMetrics.maxDrawdownAll < 0
-                    ? "text-red-700"
-                    : ""
-                }`}
-              >
-                {formatPct(riskMetrics.maxDrawdownAll)}
-              </dd>
-            </div>
-            <div className="flex justify-between pt-3 border-t border-slate-100">
-              <dt className="text-slate-500">Ratio de Sharpe (1 an)</dt>
-              <dd className="font-medium">{formatNum(riskMetrics.sharpe1A)}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-slate-500">Beta vs BRVM Composite</dt>
-              <dd className="font-medium">{formatNum(riskMetrics.beta)}</dd>
-            </div>
-          </dl>
+          )}
         </div>
 
         <div className="text-xs text-slate-500 leading-relaxed bg-slate-50 rounded-lg p-3 md:p-4 border border-slate-100">
@@ -671,6 +828,13 @@ export default function AdvancedStatsView({
           début de mois - 1).
         </div>
       </section>
+
+      <MemberGateDialog
+        open={memberGateOpen}
+        onClose={() => setMemberGateOpen(false)}
+        title="Statistiques avancées réservées aux membres"
+        description="Inscrivez-vous gratuitement pour accéder à la classification Azimut, aux rendements mensuels, à la régression vs BRVM Composite et à la synthèse du risque."
+      />
     </div>
   );
 }

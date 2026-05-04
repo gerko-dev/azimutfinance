@@ -1034,6 +1034,7 @@ export default function StockDetailView({
             returnsMatrix={returnsMatrix}
             riskMetrics={riskMetrics}
             advanced={advancedStats}
+            userRole={userRole}
           />
         )}
 
