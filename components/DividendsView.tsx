@@ -270,7 +270,6 @@ export default function DividendsView({
   );
   const cagr5 = useMemo(() => computeCagr(history, 5), [history]);
   const cagr3 = useMemo(() => computeCagr(history, 3), [history]);
-  const cagrAll = useMemo(() => computeCagr(history, 99), [history]);
   const consecutive = useMemo(() => consecutivePayingYears(history), [history]);
   const longestStreak = useMemo(() => maxConsecutivePaying(history), [history]);
   const freq5 = useMemo(() => payingFrequency(history, 5), [history]);
@@ -431,7 +430,9 @@ export default function DividendsView({
         <div className="relative">
           <div
             className={
-              isPremium ? "" : "blur-[3px] pointer-events-none select-none"
+              isPremium
+                ? ""
+                : "blur-md pointer-events-none select-none"
             }
             aria-hidden={isPremium ? undefined : true}
           >
@@ -936,19 +937,6 @@ export default function DividendsView({
           )}
         </section>
       )}
-
-      {/* === MÉTHODOLOGIE & ALL-TIME === */}
-      <section className="bg-slate-50 rounded-lg border border-slate-100 p-4 md:p-5 text-xs text-slate-600 leading-relaxed">
-        <strong>Métriques détaillées :</strong> CAGR 3 ans{" "}
-        {cagr3 !== null ? formatPctSigned(cagr3, 2) : "—"} · CAGR 5 ans{" "}
-        {cagr5 !== null ? formatPctSigned(cagr5, 2) : "—"} · CAGR depuis le
-        premier versement {cagrAll !== null ? formatPctSigned(cagrAll, 2) : "—"}
-        . Plus longue série de versement : {longestStreak} an
-        {longestStreak > 1 ? "s" : ""}. <strong>Périmètre :</strong> analyse
-        à partir de l&apos;exercice {DIV_ANALYSIS_START_YEAR} (les données
-        antérieures sont peu fiables sur le DPA). Un dividende = 0 signifie
-        soit pas de versement, soit donnée non publiée.
-      </section>
 
       <MemberGateDialog
         open={memberGateOpen}
