@@ -1,7 +1,7 @@
 # Scrape Sikafinance pour rafraichir l'historique OHLC des titres + indices
 # BRVM, puis commit + push automatiquement. Vercel redeploiera en cascade.
 #
-# Cron : tous les jours ouvres a 19h UTC (apres cloture BRVM ~12h UTC + marge
+# Cron : tous les jours ouvres a 16h GMT (apres cloture BRVM ~12h UTC + marge
 # pour laisser Sika consolider la session). 5 runs par semaine.
 # Egalement declenchable manuellement depuis l'UI GitHub Actions.
 
@@ -9,7 +9,7 @@ name: Scrape Sikafinance
 
 on:
   schedule:
-    - cron: "0 19 * * 1-5"
+    - cron: "0 16 * * 1-5"
   workflow_dispatch:
     inputs:
       only_tickers:
@@ -92,5 +92,15 @@ jobs:
             -m "chore(data): refresh Sika historique BRVM ${DATE_TAG}" \
             -m "Mise a jour automatique via GitHub Actions (workflow scrape-sika)." \
             -m "Source : Sikafinance API GetHistos."
-          git push
-          echo "Push effectue avec succes."
+          # Retry pour gerer les pushs concurrents : si main a avance pendant
+          # le scraping, on rebase notre commit dessus puis on retente.
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main && git push && {
+              echo "Push effectue avec succes (essai $i)."
+              exit 0
+            }
+            echo "Essai $i echoue, nouvelle tentative dans 10s..."
+            sleep 10
+          done
+          echo "Push definitivement echoue apres 5 essais."
+          exit 1
