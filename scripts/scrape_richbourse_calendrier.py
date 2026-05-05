@@ -67,11 +67,14 @@ PUB_TYPES = ("annuelle", "t1", "s1", "t3", "dividende")
 def classify(slug: str) -> str | None:
     """Retourne le type de publication ou None si non pertinent.
 
-    Ordre des tests important : on teste les sous-periodes (trimestre,
-    semestre) avant l'annuel, puisque le mot "etats-financiers" peut
-    apparaitre sur n'importe quoi.
+    Ordre : (1) trimestre/semestre, (2) dividendes, (3) exclusions de bruit,
+    (4) annuel via une liste de markers etablie via audit_richbourse_slugs.
     """
-    s = slug.lower()
+    raw = slug.lower()
+    # Normalisation : "d-activite[s]" et "dactivite[s]" sont equivalents.
+    # Ex NSBC ecrit "rapport-d-activites-annuel" avec tirets, SNTS ecrit
+    # "rapport-dactivites-annuel" sans. On ramene tout a la forme sans tiret.
+    s = raw.replace("d-activites", "dactivites").replace("d-activite", "dactivite")
 
     if (
         "1er-trimestre" in s
@@ -90,6 +93,7 @@ def classify(slug: str) -> str | None:
     if (
         "3eme-trimestre" in s
         or "3e-trimestre" in s
+        or "3-trimestre" in s              # SNTS ancien : "3-trimestre-2019"
         or "troisieme-trimestre" in s
         or "rapport-dactivites-t3" in s
     ):
@@ -99,35 +103,43 @@ def classify(slug: str) -> str | None:
     if "dividende" in s or "mise-en-paiement" in s:
         return "dividende"
 
-    # Bruit a exclure explicitement : les bilans des contrats de liquidite
-    # contiennent souvent "exercice-YYYY" mais ne sont pas des resultats
-    # annuels. Vu chez Sonatel sous "bilan-semestriel-du-contrat-de-liquidite".
-    if "contrat-de-liquidite" in s or "contrat-d-animation" in s:
+    # Bruit a exclure explicitement avant les markers annuels :
+    # - bilan du contrat de liquidite (Sonatel/ETIT/ORGT/SGBC/SIBC), publie
+    #   2x/an avec "exercice-YYYY" mais ce n'est pas un resultat
+    # - rapport RSE (Sonatel) qui contient aussi "exercice-YYYY"
+    if (
+        "contrat-de-liquidite" in s
+        or "contrat-d-animation" in s
+        or "rapport-rse" in s
+    ):
         return None
 
-    # Annuel : couvre toutes les variantes d'annonces de resultats annuels
-    # observees sur RichBourse — le wording n'est pas standardise.
-    # Exemples reels :
-    #   - etats-financiers-(syscohada|ifrs|)-exercice-YYYY
-    #   - etats-financiers-YYYY                          (forme courte Sonatel)
-    #   - rapport-annuel / rapport-dactivites-annuel
-    #   - rapport-de-gestion-exercice-YYYY               (Sonatel)
-    #   - synthese-du-rapport-de-gestion-YYYY            (Sonatel)
-    #   - resultats-consolides-exercice-YYYY
-    #   - resultats-financiers-exercice-YYYY
-    #   - resultats-financiers-YYYY                      (forme courte)
-    #   - presentation-des-resultats-de-l-exercice-YYYY
-    #   - attestation-de-sincerite-sur-les-etats-financiers
+    # Annuel : liste etablie via audit_richbourse_slugs.py — chaque emetteur
+    # a son propre wording, pas de standard sur RichBourse.
     annual_markers = (
-        "etats-financiers",
+        # === Etats financiers ===
+        "etats-financiers",                       # forme la plus courante
+        "comptes-annuels",                         # SGBC : "rapport-...-comptes-annuels-YYYY"
+        "comptes-consolides",                      # SDCC, SGBC
+        # === Rapport annuel / d'activite annuel ===
         "rapport-annuel",
-        "rapport-dactivites-annuel",
-        "rapport-de-gestion",
+        "rapport-dactivites-annuel",               # apres normalisation : NSBC, SDCC
+        "rapport-dactivite-annuel",                # singulier : SGBC, SIBC
+        "rapport-dactivites-exercice",
+        "rapport-dactivite-exercice",              # SGBC : "...-rapport-dactivite-exercice-YYYY"
+        "rapport-dactivite-resultats",             # SGBC : "...-rapport-dactivite-resultats-YYYY"
+        # === Rapport de gestion ===
+        "rapport-de-gestion",                      # Sonatel
         "synthese-du-rapport-de-gestion",
         "synthese-rapport-de-gestion",
+        # === Resultats / communiques ===
         "resultats-consolides",
-        "resultats-financiers",
+        "resultats-financiers",                    # forme courte Sonatel
+        "resultats-exercice",                      # ex "communique-resultats-exercice-YYYY"
+        "resultats-au-31-decembre",                # Onatel BF
         "presentation-des-resultats",
+        # === Documents AGO publies en meme temps que les comptes ===
+        "projet-daffectation-du-resultat",         # Orange CI
     )
     if any(k in s for k in annual_markers):
         return "annuelle"
