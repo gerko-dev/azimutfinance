@@ -99,18 +99,69 @@ def classify(slug: str) -> str | None:
     if "dividende" in s or "mise-en-paiement" in s:
         return "dividende"
 
-    # Annuel : "etats-financiers" + indice d'exercice complet, sans
-    # mots-cles trimestre/semestre (deja captes au-dessus).
-    if "etats-financiers" in s and (
-        "exercice" in s
-        or "syscohada" in s
-        or "ifrs" in s
-        or "rapport-annuel" in s
-        or "annuel" in s
-    ):
+    # Bruit a exclure explicitement : les bilans des contrats de liquidite
+    # contiennent souvent "exercice-YYYY" mais ne sont pas des resultats
+    # annuels. Vu chez Sonatel sous "bilan-semestriel-du-contrat-de-liquidite".
+    if "contrat-de-liquidite" in s or "contrat-d-animation" in s:
+        return None
+
+    # Annuel : couvre toutes les variantes d'annonces de resultats annuels
+    # observees sur RichBourse — le wording n'est pas standardise.
+    # Exemples reels :
+    #   - etats-financiers-(syscohada|ifrs|)-exercice-YYYY
+    #   - etats-financiers-YYYY                          (forme courte Sonatel)
+    #   - rapport-annuel / rapport-dactivites-annuel
+    #   - rapport-de-gestion-exercice-YYYY               (Sonatel)
+    #   - synthese-du-rapport-de-gestion-YYYY            (Sonatel)
+    #   - resultats-consolides-exercice-YYYY
+    #   - resultats-financiers-exercice-YYYY
+    #   - resultats-financiers-YYYY                      (forme courte)
+    #   - presentation-des-resultats-de-l-exercice-YYYY
+    #   - attestation-de-sincerite-sur-les-etats-financiers
+    annual_markers = (
+        "etats-financiers",
+        "rapport-annuel",
+        "rapport-dactivites-annuel",
+        "rapport-de-gestion",
+        "synthese-du-rapport-de-gestion",
+        "synthese-rapport-de-gestion",
+        "resultats-consolides",
+        "resultats-financiers",
+        "presentation-des-resultats",
+    )
+    if any(k in s for k in annual_markers):
         return "annuelle"
 
     return None
+
+
+# Annee 4-chiffres isolee dans le slug (pas a l'interieur d'un nombre plus long)
+YEAR_RE = re.compile(r"(?<!\d)(\d{4})(?!\d)")
+
+
+def fiscal_year(slug: str, pub_date: datetime, pub_type: str) -> int | None:
+    """Annee de l'EXERCICE concerne par la publication.
+
+    Ex : `16-02-2026-sonatel-sn-etats-financiers-2025` → 2025 (exercice
+    2025 publie debut 2026). On prend le DERNIER nombre 4-chiffres du slug
+    dans la fenetre [2009, 2030], qui est typiquement l'annee de
+    l'exercice (l'annee de publication etant en debut de slug).
+
+    Si le slug ne contient qu'une seule annee (typiquement la date de
+    publication), on infere :
+      - annuelle, dividende : exercice = annee_publication - 1
+      - t1, s1, t3          : exercice = annee_publication
+    """
+    nums = [int(y) for y in YEAR_RE.findall(slug) if 2009 <= int(y) <= 2030]
+    if not nums:
+        return None
+    if len(nums) >= 2 and nums[-1] != nums[0]:
+        # Au moins 2 annees distinctes : la derniere est l'exercice.
+        return nums[-1]
+    # Une seule annee dans le slug → c'est la date de publication, on infere.
+    if pub_type in ("annuelle", "dividende"):
+        return pub_date.year - 1
+    return pub_date.year
 
 
 def parse_date(slug: str) -> datetime | None:
@@ -143,6 +194,7 @@ class Article:
     slug: str
     date: datetime
     pub_type: str
+    exercise_year: int
 
 
 RETRYABLE_STATUS = {429, 500, 502, 503, 504}
@@ -250,7 +302,12 @@ def fetch_articles_for_ticker(
             d = parse_date(slug)
             if not d:
                 continue
-            articles.append(Article(slug=slug, date=d, pub_type=pub_type))
+            ex_year = fiscal_year(slug, d, pub_type)
+            if ex_year is None:
+                continue
+            articles.append(
+                Article(slug=slug, date=d, pub_type=pub_type, exercise_year=ex_year)
+            )
 
         # Fin de pagination : pas de bouton "Suiv." actif, ou rien de nouveau
         next_li = soup.select_one("li.next a")
@@ -363,12 +420,15 @@ def main() -> int:
             continue
 
         for a in articles:
-            if a.date.year < args.start_year:
+            # Le pivot est l'annee de l'exercice (extraite du slug), pas
+            # l'annee de publication. Ex : "etats-financiers-2025" publie en
+            # 2026 → colonne 2025.
+            if a.exercise_year < args.start_year:
                 continue
             year_map = by_type[a.pub_type][ticker]
-            cur = year_map.get(a.date.year)
+            cur = year_map.get(a.exercise_year)
             if cur is None or a.date < cur:
-                year_map[a.date.year] = a.date
+                year_map[a.exercise_year] = a.date
 
         per_type_count = {t: sum(1 for _ in by_type[t][ticker]) for t in PUB_TYPES}
         print(
