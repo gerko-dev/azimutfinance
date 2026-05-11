@@ -865,7 +865,7 @@ export type CalendarCell = {
 };
 
 // ==========================================
-// FICHE GESTIONNAIRE (SGP) — HELPERS DEDIES
+// FICHE GESTIONNAIRE (SGO) — HELPERS DEDIES
 // ==========================================
 
 /**
@@ -876,7 +876,7 @@ export type CategoryBreakdown = {
   categorie: string;
   aum: number;
   nbFunds: number;
-  share: number; // 0..1 dans le portefeuille de la SGP
+  share: number; // 0..1 dans le portefeuille de la SGO
 };
 
 export function categoryBreakdownForManager(
@@ -910,7 +910,7 @@ export function categoryBreakdownForManager(
 }
 
 /**
- * Score qualité d'une SGP : % de fonds en Q1+Q2 sur la fenêtre 1Y, ainsi
+ * Score qualité d'une SGO : % de fonds en Q1+Q2 sur la fenêtre 1Y, ainsi
  * que la perf médiane et la perf pondérée AUM.
  */
 export type ManagerQualityScore = {
@@ -964,8 +964,15 @@ export function managerQualityScore(
 }
 
 /**
- * Décomposition AUM agrégée d'une SGP entre 2 trimestres canoniques.
+ * Décomposition AUM agrégée d'une SGO entre 2 trimestres canoniques.
  * Somme par fonds : ΣΔAUM = ΣeffetPerf + ΣcollecteNette.
+ *
+ * Restriction importante : seuls les fonds publiés AUX DEUX dates entrent
+ * dans la décomposition. Les fonds créés ou fermés entre `fromDate` et
+ * `toDate` sont remontés séparément (`newFundsCount`/`newFundsAUM`,
+ * `closedFundsCount`/`closedFundsAUM`) pour permettre la réconciliation
+ * avec l'encours total — sinon on attribuerait à tort un AUM entrant en
+ * "collecte nette" alors qu'on n'a pas son AUM de référence.
  */
 export function managerAumGrowthDecomposition(
   managerFunds: Fund[],
@@ -979,12 +986,20 @@ export function managerAumGrowthDecomposition(
   netFlow: number;
   perfPctApprox: number | null; // perf agrégée pondérée par AUM_start
   fundsContributing: number;
+  newFundsCount: number;
+  newFundsAUM: number;
+  closedFundsCount: number;
+  closedFundsAUM: number;
 } {
   let startAUM = 0;
   let endAUM = 0;
   let perfEffect = 0;
   let netFlow = 0;
   let fundsContributing = 0;
+  let newFundsCount = 0;
+  let newFundsAUM = 0;
+  let closedFundsCount = 0;
+  let closedFundsAUM = 0;
   for (const f of managerFunds) {
     const start = f.observations.find(
       (o) => o.date === fromDate && o.kind === "quarter" && o.aum !== null && o.vl !== null
@@ -992,23 +1007,23 @@ export function managerAumGrowthDecomposition(
     const end = f.observations.find(
       (o) => o.date === toDate && o.kind === "quarter" && o.aum !== null && o.vl !== null
     );
-    if (
-      !start ||
-      !end ||
-      start.aum === null ||
-      end.aum === null ||
-      start.vl === null ||
-      end.vl === null
-    ) {
-      continue;
+    const hasStart = !!start && start.aum !== null && start.vl !== null;
+    const hasEnd = !!end && end.aum !== null && end.vl !== null;
+    if (hasStart && hasEnd) {
+      fundsContributing++;
+      startAUM += start!.aum as number;
+      endAUM += end!.aum as number;
+      const perfTr = (end!.vl as number) / (start!.vl as number) - 1;
+      const pe = (start!.aum as number) * perfTr;
+      perfEffect += pe;
+      netFlow += (end!.aum as number) - (start!.aum as number) - pe;
+    } else if (hasEnd) {
+      newFundsCount++;
+      newFundsAUM += end!.aum as number;
+    } else if (hasStart) {
+      closedFundsCount++;
+      closedFundsAUM += start!.aum as number;
     }
-    fundsContributing++;
-    startAUM += start.aum;
-    endAUM += end.aum;
-    const perfTr = end.vl / start.vl - 1;
-    const pe = start.aum * perfTr;
-    perfEffect += pe;
-    netFlow += end.aum - start.aum - pe;
   }
   return {
     startAUM,
@@ -1018,11 +1033,15 @@ export function managerAumGrowthDecomposition(
     netFlow,
     perfPctApprox: startAUM > 0 ? perfEffect / startAUM : null,
     fundsContributing,
+    newFundsCount,
+    newFundsAUM,
+    closedFundsCount,
+    closedFundsAUM,
   };
 }
 
 /**
- * Comptage des cadences de publication des fonds d'une SGP — proxy de
+ * Comptage des cadences de publication des fonds d'une SGO — proxy de
  * transparence.
  */
 export type ManagerCadenceMix = {
@@ -1054,8 +1073,8 @@ export function managerCadenceMix(
 }
 
 /**
- * Perf médiane des fonds d'une SGP par catégorie × trimestre. Sert à la
- * heatmap "où la SGP excelle ou sous-perf".
+ * Perf médiane des fonds d'une SGO par catégorie × trimestre. Sert à la
+ * heatmap "où la SGO excelle ou sous-perf".
  */
 export type ManagerPerfHeatmapCell = {
   categorie: string;

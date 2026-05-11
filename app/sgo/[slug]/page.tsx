@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
 import Header from "@/components/Header";
 import Ticker from "@/components/Ticker";
-import SGPDetailView from "@/components/SGPDetailView";
+import SGODetailView from "@/components/SGODetailView";
+import PremiumPaywall from "@/components/PremiumPaywall";
+import { fetchUserRole } from "@/lib/auth/userRole";
 import {
   loadFunds,
   listQuarterEnds,
@@ -11,6 +13,7 @@ import {
   aumAt,
   getManagerBySlug,
   listManagers,
+  getLatestBocDate,
 } from "@/lib/fcp";
 import {
   perfWindow,
@@ -24,9 +27,10 @@ import {
   quartileInCohort,
 } from "@/lib/fcpMath";
 
-export const dynamic = "force-static";
+// userRole lu via cookies → rendu dynamique requis pour le gating premium.
+export const dynamic = "force-dynamic";
 
-export default async function SGPDetailPage({
+export default async function SGODetailPage({
   params,
 }: {
   params: Promise<{ slug: string }>;
@@ -35,6 +39,38 @@ export default async function SGPDetailPage({
   const result = getManagerBySlug(slug);
   if (!result) notFound();
   const { manager, funds: managerFunds } = result;
+
+  // === GATING PREMIUM : fiche SGO reservee aux abonnes Premium ===
+  const userRole = await fetchUserRole();
+  const isMember = userRole !== null;
+  const isPremium = userRole === "premium" || userRole === "pro";
+  if (!isPremium) {
+    return (
+      <div className="min-h-screen bg-slate-50">
+        <Header />
+        <Ticker />
+        <PremiumPaywall
+          breadcrumb={[
+            { label: "Marchés", href: "/" },
+            { label: "FCP / OPCVM", href: "/marches/fcp" },
+            { label: "Sociétés de gestion", href: "/sgo" },
+            { label: manager.name },
+          ]}
+          title={`Fiche détaillée — ${manager.name}`}
+          description="Analyse complète d'une société de gestion réservée aux abonnés Premium : encours, répartition par catégorie, position concurrentielle, qualité de la gestion."
+          features={[
+            "Évolution d'encours agrégé sur 3 ans + décomposition perf / flux",
+            "Répartition catégorielle vs marché et score de qualité",
+            "League table : position vs toutes les SGO UEMOA",
+            "Heatmap de performance par catégorie × trimestre",
+            "Cadence de publication des fonds gérés",
+          ]}
+          isMember={isMember}
+          back={{ label: "Retour aux sociétés de gestion", href: "/sgo" }}
+        />
+      </div>
+    );
+  }
 
   const allFunds = loadFunds();
   const quarterEnds = listQuarterEnds();
@@ -82,7 +118,7 @@ export default async function SGPDetailPage({
     })
   );
 
-  // === BLOCK 3 - EVOLUTION AUM SGP ===
+  // === BLOCK 3 - EVOLUTION AUM SGO ===
   const aumTimeline = aumTimelineByCategory(managerFunds, quarterEnds);
 
   // === BLOCK 4 - SCORE QUALITE ===
@@ -117,6 +153,9 @@ export default async function SGPDetailPage({
         quartile,
         latestVLDate,
         isStale,
+        vlLatest: f.bocSnapshot?.vlActuelle ?? null,
+        dayChange: f.bocSnapshot?.dayChange ?? null,
+        bocDate: f.bocSnapshot?.bocDate ?? "",
       };
     })
     .sort((a, b) => (b.aum ?? -1) - (a.aum ?? -1));
@@ -130,7 +169,7 @@ export default async function SGPDetailPage({
     : null;
 
   // === BLOCK 7 - POSITION CONCURRENTIELLE ===
-  // League table : toutes les SGP triées par AUM
+  // League table : toutes les SGO triées par AUM
   const allManagers = listManagers().map((m) => {
     const mFunds = allFunds.filter((f) => f.gestionnaire === m.name);
     const q = managerQualityScore(mFunds, allFunds);
@@ -146,17 +185,20 @@ export default async function SGPDetailPage({
   });
   const myRank = allManagers.findIndex((m) => m.slug === manager.slug) + 1;
 
-  // === BLOCK 8 - HEATMAP PERF SGP CAT × TRIM ===
+  // === BLOCK 8 - HEATMAP PERF SGO CAT × TRIM ===
   const perfHeatmap = managerPerfHeatmap(managerFunds, quarterEnds);
 
   // === BLOCK 9 - CADENCE AGREGEE ===
   const cadenceMix = managerCadenceMix(managerFunds, latestVLGlobal || refQuarter, quarterEnds);
 
+  // === BANDEAU BOC : date du dernier scrap ===
+  const latestBocDate = getLatestBocDate(allFunds);
+
   return (
     <div className="min-h-screen bg-slate-50">
       <Header />
       <Ticker />
-      <SGPDetailView
+      <SGODetailView
         manager={manager}
         refQuarter={refQuarter}
         latestVLGlobal={latestVLGlobal}
@@ -174,6 +216,7 @@ export default async function SGPDetailPage({
         myRank={myRank}
         perfHeatmap={perfHeatmap}
         cadenceMix={cadenceMix}
+        latestBocDate={latestBocDate}
       />
     </div>
   );

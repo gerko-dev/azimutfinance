@@ -342,7 +342,7 @@ export default function FCPScreenerView(props: Props) {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Nom du fonds ou de la SGP…"
+            placeholder="Nom du fonds ou de la SGO…"
             className="mt-1 w-full md:w-96 px-3 py-2 text-sm border border-slate-200 rounded-md"
           />
         </div>
@@ -565,7 +565,7 @@ export default function FCPScreenerView(props: Props) {
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
                 <SortableTh col="nom" label="Fonds" sortKey={sortKey} sortOrder={sortOrder} setSortKey={setSortKey} setSortOrder={setSortOrder} />
-                <SortableTh col="gestionnaire" label="SGP" sortKey={sortKey} sortOrder={sortOrder} setSortKey={setSortKey} setSortOrder={setSortOrder} className="hidden md:table-cell" />
+                <SortableTh col="gestionnaire" label="SGO" sortKey={sortKey} sortOrder={sortOrder} setSortKey={setSortKey} setSortOrder={setSortOrder} className="hidden md:table-cell" />
                 <SortableTh col="categorie" label="Catégorie" sortKey={sortKey} sortOrder={sortOrder} setSortKey={setSortKey} setSortOrder={setSortOrder} className="hidden lg:table-cell" />
                 <SortableTh col="aum" label="AUM" sortKey={sortKey} sortOrder={sortOrder} setSortKey={setSortKey} setSortOrder={setSortOrder} align="right" />
                 <SortableTh
@@ -601,7 +601,7 @@ export default function FCPScreenerView(props: Props) {
                       </Link>
                       <div className="text-[11px] text-slate-500 md:hidden">
                         <Link
-                          href={`/sgp/${managerSlug(r.gestionnaire)}`}
+                          href={`/sgo/${managerSlug(r.gestionnaire)}`}
                           className="hover:underline"
                         >
                           {r.gestionnaire}
@@ -611,7 +611,7 @@ export default function FCPScreenerView(props: Props) {
                     </td>
                     <td className="px-3 py-2 text-xs text-slate-600 hidden md:table-cell">
                       <Link
-                        href={`/sgp/${managerSlug(r.gestionnaire)}`}
+                        href={`/sgo/${managerSlug(r.gestionnaire)}`}
                         className="hover:underline"
                       >
                         {r.gestionnaire}

@@ -1,13 +1,19 @@
-// === LOADER FCP / OPCVM (data/dataasgop.csv) ===
+// === LOADER FCP / OPCVM ===
 //
-// Source : 1 ligne = 1 observation (fonds × date). Le CSV mélange deux types
-// de points :
-//   - "quarter"  : fin de trimestre canonique (mar/juin/sept/déc 31). Inclut
-//                  la VL ET l'Actif net. Grille de référence pour les agrégats
-//                  d'encours.
-//   - "latest"   : VL intra-trimestre (cadence propre à chaque société de
-//                  gestion : quotidien pour certains, ad hoc pour d'autres).
-//                  Sans Actif net. C'est le dernier point connu pour le fonds.
+// Deux sources :
+//   1. data/fcp/aumfcp.csv (latin-1, ";") — historique trimestriel publié
+//      par l'AGP UEMOA. 4 dates par an (mar/juin/sept/déc 31). Donne VL +
+//      Actif net pour chaque fonds. Sert de grille de référence pour les
+//      perfs et les agrégats d'encours.
+//   2. data/fcp.csv (utf-8, ";") — scrap quotidien du Bulletin Officiel de
+//      la Cote (BOC) BRVM, dernière page. Apporte la VL la plus récente
+//      par fonds (intra-trimestre), le dépositaire, la fréquence de calcul.
+//      Le scraper résout déjà gestionnaire + nomAumfcp côté Python pour
+//      117/120 fonds, donc le matching côté TS est direct.
+//
+// On distingue deux types d'observations :
+//   - "quarter" : point aumfcp (fin de trimestre, AUM publié).
+//   - "latest"  : VL BOC du jour scrapée (sans AUM).
 //
 // On ne calcule PAS de volatilité, Sharpe, drawdown, capture ratio : la
 // fréquence hétérogène et la rareté des points trimestriels rendraient ces
@@ -18,7 +24,13 @@ import { join } from "path";
 import Papa from "papaparse";
 
 const DATA_DIR = join(process.cwd(), "data");
-const CSV_FILE = "dataasgop.csv";
+// Historique trimestriel AGP UEMOA (latin-1 / ; / colonnes "Gestionnaire",
+// "Nom de l'OPC", "Type d'OPC", "Catégorie", "Date", "Valeur Liquidative",
+// " Actif net "). Le header " Actif net " a des espaces, on le trim.
+const AUMFCP_FILE = "fcp/aumfcp.csv";
+// Snapshot BOC du jour (utf-8 / ; / colonnes typeOpc + actifNet + vlActuelle
+// + dateActuelle + depositaire + frequenceCalcul + nomAumfcp...).
+const BOC_FILE = "fcp.csv";
 
 // ==========================================
 // TYPES
@@ -42,6 +54,21 @@ export type FundObservation = {
   categorieRaw: string;
 };
 
+export type BocSnapshot = {
+  /** Date du BOC d'où provient le snapshot (ISO). */
+  bocDate: string;
+  depositaire: string;
+  frequenceCalcul: string;
+  vlActuelle: number | null;
+  dateActuelle: string;
+  vlPrecedente: number | null;
+  datePrecedente: string;
+  vlOrigine: number | null;
+  dateOrigine: string;
+  /** (vlActuelle / vlPrecedente - 1), null si une des deux valeurs manque. */
+  dayChange: number | null;
+};
+
 export type Fund = {
   id: string;                   // slug stable (gestionnaire-nom)
   gestionnaire: string;
@@ -54,15 +81,21 @@ export type Fund = {
   latestVL: { date: string; vl: number; kind: "quarter" | "latest" } | null;
   latestQuarter: { date: string; vl: number; aum: number } | null;
   firstObsDate: string | null;
+  // Snapshot BOC (rempli si le fond a matché côté Python via nomAumfcp).
+  bocSnapshot: BocSnapshot | null;
 };
 
 // ==========================================
 // PARSING HELPERS (alignés sur dataLoader.ts)
 // ==========================================
 
-function parseCSV<T>(filename: string, delimiter: "," | ";" = ";"): T[] {
+function parseCSV<T>(
+  filename: string,
+  delimiter: "," | ";" = ";",
+  encoding: BufferEncoding = "utf-8",
+): T[] {
   const filePath = join(DATA_DIR, filename);
-  let content = readFileSync(filePath, "utf-8");
+  let content = readFileSync(filePath, encoding);
   if (content.charCodeAt(0) === 0xfeff) content = content.slice(1);
   const result = Papa.parse<T>(content, {
     header: true,
@@ -117,21 +150,36 @@ function slugify(s: string): string {
 }
 
 /**
- * Clé canonique pour fusionner les variantes d'un même fonds présentes dans le
- * CSV. Le fichier mélange les nommages (« AURORE OPPORTUNITES » vs
+ * Alias de fusion entre clés normalisées, pour les fonds dont le nom a
+ * changé ou qui ont été saisis avec une orthographe alternative à un
+ * moment de leur historique. Chaque clé pointe vers le nom canonique.
+ *
+ * Confirmé manuellement (vérifier `gestionnaire` identique avant d'ajouter
+ * un alias) :
+ *   - MONERATIS (NSIA AM, 1 obs juin 2024) = AURORE MONETARIS (NSIA AM,
+ *     7 obs sept 2024 → déc 2025).
+ */
+const NAME_ALIASES: Record<string, string> = {
+  MONERATIS: "AURORE MONETARIS",
+};
+
+/**
+ * Clé canonique pour fusionner les variantes d'un même fonds présentes dans
+ * les sources. Le CSV mélange les nommages (« AURORE OPPORTUNITES » vs
  * « FCP Aurore Opportunités »), ce qui fragmenterait l'historique d'un même
  * produit. On déduit une clé robuste :
  *   - retire le préfixe FCP / FCPE / FCPR / SICAV
  *   - retire les accents
  *   - uppercase
  *   - écrase les espaces multiples et la ponctuation
+ *   - applique enfin NAME_ALIASES pour les fusions explicites
  *
- * Cas connus volontairement non fusionnés (orthographes vraiment différentes,
- * pas des variantes du même fonds) : MONERATIS ≠ MONETARIS, ASSURANCE ≠
- * ASSURANCES (suffixe pluriel ambigu), TRESORIE ≠ TRESORERIE.
+ * Cas connus volontairement non fusionnés (orthographes proches mais fonds
+ * différents) : ASSURANCE ≠ ASSURANCES (suffixe pluriel ambigu), TRESORIE
+ * ≠ TRESORERIE.
  */
 function fundNameKey(raw: string): string {
-  return (raw || "")
+  const key = (raw || "")
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
     .toUpperCase()
@@ -139,6 +187,7 @@ function fundNameKey(raw: string): string {
     .replace(/[^A-Z0-9 ]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+  return NAME_ALIASES[key] ?? key;
 }
 
 function normalizeFundType(raw: string): FundType {
@@ -167,8 +216,7 @@ function normalizeCategory(raw: string): { canon: FundCategory; rawTrim: string 
 // LOADER (memoized)
 // ==========================================
 
-type CSVRow = {
-  "N°": string;
+type AumfcpRow = {
   "Gestionnaire": string;
   "Nom de l'OPC": string;
   "Type d'OPC": string;
@@ -178,17 +226,80 @@ type CSVRow = {
   "Actif net": string;
 };
 
+type BocRow = {
+  bocDate: string;
+  gestionnaire: string;
+  depositaire: string;
+  opcvm: string;
+  categorie: string;
+  frequenceCalcul: string;
+  vlOrigine: string;
+  dateOrigine: string;
+  vlPrecedente: string;
+  datePrecedente: string;
+  vlActuelle: string;
+  dateActuelle: string;
+  typeOpc: string;
+  actifNet: string;
+  vlAumfcp: string;
+  dateAumfcp: string;
+  /** Nom canonique aumfcp résolu par le scraper (clef de jointure). Vide pour
+   *  les 3 fonds BOC absents d'aumfcp. */
+  nomAumfcp: string;
+};
+
 let _fundsCache: Fund[] | null = null;
+
+/**
+ * Lit data/fcp.csv et construit un index BOC -> snapshot, indexé sur la clef
+ * (gestionnaire, fundNameKey(nomAumfcp)) — identique à la clef qu'on utilise
+ * côté aumfcp. Le scraper Python a déjà résolu le mapping nom BOC -> nom
+ * aumfcp, donc on s'appuie sur `nomAumfcp` plutôt que sur `opcvm` (qui peut
+ * différer du nom AGP : abréviations, suffixes numérotés, ordre des mots).
+ */
+function loadBocSnapshots(): Map<string, BocSnapshot> {
+  const out = new Map<string, BocSnapshot>();
+  let rows: BocRow[] = [];
+  try {
+    rows = parseCSV<BocRow>(BOC_FILE, ";", "utf-8");
+  } catch {
+    return out; // fichier absent (CI build avant 1er scrap) → silencieux
+  }
+  for (const r of rows) {
+    const gest = (r.gestionnaire || "").trim();
+    const nomAum = (r.nomAumfcp || "").trim();
+    if (!gest || !nomAum) continue; // pas de pont vers aumfcp → ignoré
+    const key = `${gest}__${fundNameKey(nomAum)}`;
+    const vlA = parseNumOrNull(r.vlActuelle);
+    const vlP = parseNumOrNull(r.vlPrecedente);
+    const dayChange =
+      vlA !== null && vlP !== null && vlP > 0 ? vlA / vlP - 1 : null;
+    out.set(key, {
+      bocDate: normalizeDateISO(r.bocDate || ""),
+      depositaire: (r.depositaire || "").trim(),
+      frequenceCalcul: (r.frequenceCalcul || "").trim(),
+      vlActuelle: vlA,
+      dateActuelle: normalizeDateISO(r.dateActuelle || ""),
+      vlPrecedente: vlP,
+      datePrecedente: normalizeDateISO(r.datePrecedente || ""),
+      vlOrigine: parseNumOrNull(r.vlOrigine),
+      dateOrigine: normalizeDateISO(r.dateOrigine || ""),
+      dayChange,
+    });
+  }
+  return out;
+}
 
 export function loadFunds(): Fund[] {
   if (_fundsCache !== null) return _fundsCache;
 
-  const rows = parseCSV<CSVRow>(CSV_FILE, ",");
+  const rows = parseCSV<AumfcpRow>(AUMFCP_FILE, ";", "latin1");
+  const bocSnapshots = loadBocSnapshots();
 
   // Groupage par (gestionnaire, clé canonique du nom). La clé canonique fusionne
   // les variantes du même fonds (ex: « AURORE OPPORTUNITES » et
   // « FCP Aurore Opportunités »).
-  type RowMeta = { row: CSVRow; date: string };
+  type RowMeta = { row: AumfcpRow; date: string };
   const groups = new Map<string, { metaByDate: RowMeta[]; obs: FundObservation[] }>();
 
   for (const r of rows) {
@@ -212,14 +323,35 @@ export function loadFunds(): Fund[] {
   }
 
   const funds: Fund[] = [];
-  for (const [, { metaByDate, obs }] of groups) {
+  for (const [groupKey, { metaByDate, obs }] of groups) {
     // Nom affiché : on prend celui de la ligne la plus récente (= forme actuelle
-    // utilisée par la SGP). Idem pour le gestionnaire (au cas où la SGP serait
+    // utilisée par la SGO). Idem pour le gestionnaire (au cas où la SGO serait
     // renommée).
     metaByDate.sort((a, b) => a.date.localeCompare(b.date));
     const latestMeta = metaByDate[metaByDate.length - 1].row;
     const gestionnaire = latestMeta["Gestionnaire"].trim();
     const nom = latestMeta["Nom de l'OPC"].trim();
+
+    // === Injection BOC : on cherche une VL fraîche pour ce fonds. Le key BOC
+    //     utilise gestionnaire + fundNameKey(nomAumfcp), donc identique à
+    //     groupKey si le scraper a bien résolu le matching.
+    const bocSnap = bocSnapshots.get(groupKey) ?? null;
+    if (bocSnap && bocSnap.dateActuelle && bocSnap.vlActuelle !== null) {
+      // On ajoute la VL BOC comme observation "latest" seulement si plus
+      // récente que la plus récente obs aumfcp (sinon redondant).
+      const lastAumfcpDate = obs.length > 0 ? obs[obs.length - 1].date : "";
+      if (bocSnap.dateActuelle > lastAumfcpDate) {
+        const lastObsCat = obs.length > 0 ? obs[obs.length - 1] : null;
+        obs.push({
+          date: bocSnap.dateActuelle,
+          vl: bocSnap.vlActuelle,
+          aum: null,
+          kind: "latest",
+          categorie: lastObsCat?.categorie ?? "Diversifié",
+          categorieRaw: lastObsCat?.categorieRaw ?? "",
+        });
+      }
+    }
 
     obs.sort((a, b) => a.date.localeCompare(b.date));
 
@@ -255,6 +387,7 @@ export function loadFunds(): Fund[] {
         ? { date: latestQ.date, vl: latestQ.vl as number, aum: latestQ.aum as number }
         : null,
       firstObsDate: obs.length > 0 ? obs[0].date : null,
+      bocSnapshot: bocSnap,
     });
   }
 
@@ -267,6 +400,31 @@ export function loadFunds(): Fund[] {
 
   _fundsCache = funds;
   return funds;
+}
+
+/**
+ * Date du BOC le plus récent disponible sur l'ensemble des fonds. Sert à
+ * afficher un bandeau "Données BOC du DD/MM/YYYY". Vide si fcp.csv absent.
+ */
+export function getLatestBocDate(funds?: Fund[]): string {
+  const list = funds ?? loadFunds();
+  let latest = "";
+  for (const f of list) {
+    const d = f.bocSnapshot?.bocDate ?? "";
+    if (d > latest) latest = d;
+  }
+  return latest;
+}
+
+/**
+ * Nombre de fonds qui ont un snapshot BOC frais (au sens : bocDate ≥ refIso).
+ * Si refIso vide, compte tous les fonds avec un bocSnapshot non null.
+ */
+export function countFundsWithFreshBoc(refIso: string = "", funds?: Fund[]): number {
+  const list = funds ?? loadFunds();
+  return list.filter((f) =>
+    f.bocSnapshot && (refIso === "" || f.bocSnapshot.bocDate >= refIso)
+  ).length;
 }
 
 // ==========================================
@@ -369,7 +527,7 @@ export const FCP_CATEGORIES: FundCategory[] = [
 ];
 
 // ==========================================
-// SOCIETES DE GESTION (SGP)
+// SOCIETES DE GESTION (SGO)
 // ==========================================
 
 export type ManagerSummary = {
@@ -384,7 +542,7 @@ let _managersCache: ManagerSummary[] | null = null;
 
 /**
  * Liste des sociétés de gestion avec leur slug stable et un récap léger.
- * Utilise le refQuarter pour calculer l'AUM ponctuel de la SGP.
+ * Utilise le refQuarter pour calculer l'AUM ponctuel de la SGO.
  */
 export function listManagers(): ManagerSummary[] {
   if (_managersCache !== null) return _managersCache;

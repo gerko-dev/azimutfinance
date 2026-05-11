@@ -46,6 +46,9 @@ type FundRow = {
   quartile: 1 | 2 | 3 | 4 | null;
   latestVLDate: string;
   isStale: boolean;
+  vlLatest: number | null;
+  dayChange: number | null;
+  bocDate: string;
 };
 
 type Growth = {
@@ -56,6 +59,10 @@ type Growth = {
   netFlow: number;
   perfPctApprox: number | null;
   fundsContributing: number;
+  newFundsCount: number;
+  newFundsAUM: number;
+  closedFundsCount: number;
+  closedFundsAUM: number;
 };
 
 type ManagerLeagueEntry = {
@@ -95,6 +102,8 @@ type Props = {
   myRank: number;
   perfHeatmap: HeatmapCell[];
   cadenceMix: CadenceMix;
+  /** Date BOC la plus récente toutes valeurs confondues (ISO). */
+  latestBocDate: string;
 };
 
 // ==========================================
@@ -171,7 +180,7 @@ function interpolate(a: string, b: string, t: number): string {
 // ==========================================
 // COMPONENT
 // ==========================================
-export default function SGPDetailView(props: Props) {
+export default function SGODetailView(props: Props) {
   const {
     manager,
     refQuarter,
@@ -189,6 +198,7 @@ export default function SGPDetailView(props: Props) {
     myRank,
     perfHeatmap,
     cadenceMix,
+    latestBocDate,
   } = props;
 
   // === Heatmap : matrice cat × dates (8 derniers trimestres) ===
@@ -206,7 +216,7 @@ export default function SGPDetailView(props: Props) {
     return m;
   }, [perfHeatmap]);
 
-  // === Pie data (répartition SGP) ===
+  // === Pie data (répartition SGO) ===
   const pieData = useMemo(
     () => breakdown.map((b) => ({ name: b.categorie, value: b.aum })),
     [breakdown]
@@ -214,6 +224,14 @@ export default function SGPDetailView(props: Props) {
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-8 space-y-8">
+      {/* === BANDEAU FRAÎCHEUR BOC === */}
+      {latestBocDate && (
+        <div className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs font-semibold text-emerald-900">
+          <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+          Données au {fmtDateFR(latestBocDate)}
+        </div>
+      )}
+
       {/* ============================================ */}
       {/* BLOCK 1 : HEADER */}
       {/* ============================================ */}
@@ -284,7 +302,7 @@ export default function SGPDetailView(props: Props) {
           <div className="mb-3">
             <h2 className="text-lg font-semibold text-slate-900">Répartition par catégorie</h2>
             <p className="text-xs text-slate-500">
-              Allocation interne vs marché — où la SGP est sur/sous-pondérée
+              Allocation interne vs marché — où la SGO est sur/sous-pondérée
             </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-center">
@@ -381,7 +399,7 @@ export default function SGPDetailView(props: Props) {
             Évolution de l&apos;encours par catégorie
           </h2>
           <p className="text-xs text-slate-500">
-            Empilement trimestriel — révèle la stratégie d&apos;allocation de la SGP dans le temps
+            Empilement trimestriel — révèle la stratégie d&apos;allocation de la SGO dans le temps
           </p>
         </div>
         <div style={{ width: "100%", height: 320 }}>
@@ -462,7 +480,7 @@ export default function SGPDetailView(props: Props) {
                   Q
                 </th>
                 <th className="text-right px-4 py-2 text-xs font-semibold text-slate-600 hidden lg:table-cell">
-                  Dernière VL
+                  VL (BOC) · Δ jour
                 </th>
               </tr>
             </thead>
@@ -520,11 +538,34 @@ export default function SGPDetailView(props: Props) {
                     )}
                   </td>
                   <td className="px-4 py-2 text-right text-xs hidden lg:table-cell">
-                    <span className={f.isStale ? "text-slate-400" : "text-slate-600"}>
-                      {fmtDateFR(f.latestVLDate)}
-                    </span>
-                    {f.isStale && (
-                      <span className="ml-1 text-[10px] text-rose-600">stale</span>
+                    {f.vlLatest !== null ? (
+                      <div className="flex flex-col items-end leading-tight tabular-nums">
+                        <span className="font-medium text-slate-800">
+                          {f.vlLatest.toLocaleString("fr-FR", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </span>
+                        <span
+                          className={
+                            f.dayChange === null
+                              ? "text-[10px] text-slate-400"
+                              : f.dayChange >= 0
+                                ? "text-[10px] text-emerald-700"
+                                : "text-[10px] text-rose-700"
+                          }
+                          title={f.bocDate ? `au ${fmtDateFR(f.bocDate)}` : undefined}
+                        >
+                          {f.dayChange === null ? "—" : fmtPct(f.dayChange, 2)}
+                        </span>
+                      </div>
+                    ) : (
+                      <span className={f.isStale ? "text-slate-400" : "text-slate-600"}>
+                        {fmtDateFR(f.latestVLDate)}
+                        {f.isStale && (
+                          <span className="ml-1 text-[10px] text-rose-600">stale</span>
+                        )}
+                      </span>
                     )}
                   </td>
                 </tr>
@@ -535,15 +576,15 @@ export default function SGPDetailView(props: Props) {
       </section>
 
       {/* ============================================ */}
-      {/* BLOCK 8 : HEATMAP PERF SGP */}
+      {/* BLOCK 8 : HEATMAP PERF SGO */}
       {/* ============================================ */}
       <section className="bg-white border border-slate-200 rounded-lg p-5 overflow-x-auto">
         <div className="mb-3">
           <h2 className="text-lg font-semibold text-slate-900">
-            Performance trimestrielle de la SGP par catégorie
+            Performance trimestrielle de la SGO par catégorie
           </h2>
           <p className="text-xs text-slate-500">
-            Médiane des fonds de la SGP dans chaque catégorie — révèle où elle excelle ou sous-perf
+            Médiane des fonds de la SGO dans chaque catégorie — révèle où elle excelle ou sous-perf
           </p>
         </div>
         {heatmapCats.length === 0 ? (
@@ -627,7 +668,7 @@ export default function SGPDetailView(props: Props) {
         <div className="px-5 pt-4 pb-3">
           <h2 className="text-lg font-semibold text-slate-900">Position concurrentielle</h2>
           <p className="text-xs text-slate-500">
-            Toutes les SGP UEMOA — {manager.name} surlignée
+            Toutes les SGO UEMOA — {manager.name} surlignée
           </p>
         </div>
         <div className="overflow-x-auto">
@@ -635,7 +676,7 @@ export default function SGPDetailView(props: Props) {
             <thead className="bg-slate-50 border-y border-slate-200">
               <tr>
                 <th className="text-left px-3 py-2 text-xs font-semibold text-slate-600 w-12">#</th>
-                <th className="text-left px-4 py-2 text-xs font-semibold text-slate-600">SGP</th>
+                <th className="text-left px-4 py-2 text-xs font-semibold text-slate-600">SGO</th>
                 <th className="text-right px-3 py-2 text-xs font-semibold text-slate-600">Fonds</th>
                 <th className="text-right px-3 py-2 text-xs font-semibold text-slate-600">AUM</th>
                 <th className="text-right px-3 py-2 text-xs font-semibold text-slate-600">PdM</th>
@@ -660,7 +701,7 @@ export default function SGPDetailView(props: Props) {
                     <td className="px-3 py-2 text-xs font-bold text-slate-500">{i + 1}</td>
                     <td className="px-4 py-2">
                       <Link
-                        href={`/sgp/${m.slug}`}
+                        href={`/sgo/${m.slug}`}
                         className={`text-sm hover:underline ${
                           isMe ? "font-bold text-blue-900" : "font-medium text-slate-900"
                         }`}
@@ -698,7 +739,7 @@ export default function SGPDetailView(props: Props) {
       </section>
 
       <p className="text-xs text-slate-400">
-        Source : publications BRVM / SGP UEMOA. Encours ponctuel à la date trimestrielle. Quartiles
+        Source : publications BRVM / SGO UEMOA. Encours ponctuel à la date trimestrielle. Quartiles
         et scores qualité calculés sur la cohorte de chaque catégorie. Indicateurs de risque non
         affichés (fréquence de publication des VL hétérogène entre fonds).
       </p>
@@ -795,9 +836,29 @@ function ManagerGrowthBlock({ title, g }: { title: string; g: Growth | null }) {
         AUM <strong>{fmtBigFCFA(g.startAUM)}</strong> →{" "}
         <strong>{fmtBigFCFA(g.endAUM)}</strong>{" "}
         <span className="text-xs text-slate-500">
-          ({g.fundsContributing} fonds)
+          ({g.fundsContributing} fonds présents aux 2 dates)
         </span>
       </div>
+      {(g.newFundsCount > 0 || g.closedFundsCount > 0) && (
+        <div className="space-y-0.5 text-[11px] text-slate-500 mb-2 pl-1 border-l-2 border-slate-200">
+          {g.newFundsCount > 0 && (
+            <div>
+              + {g.newFundsCount} fonds créé{g.newFundsCount > 1 ? "s" : ""} sur la période :{" "}
+              <span className="font-medium text-slate-700">
+                {fmtBigFCFA(g.newFundsAUM)} FCFA
+              </span>
+            </div>
+          )}
+          {g.closedFundsCount > 0 && (
+            <div>
+              − {g.closedFundsCount} fonds clos sur la période :{" "}
+              <span className="font-medium text-slate-700">
+                {fmtBigFCFA(g.closedFundsAUM)} FCFA
+              </span>
+            </div>
+          )}
+        </div>
+      )}
       <div className="space-y-1.5 text-xs">
         <div className="flex justify-between">
           <span className="text-slate-500">Variation totale</span>

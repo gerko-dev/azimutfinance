@@ -22,9 +22,9 @@ import {
 } from "@/lib/stockStats";
 import {
   getFundTitre,
-  getRatiosByTicker,
   getStatement,
 } from "@/lib/fundamentals";
+import { computeRatiosByTicker } from "@/lib/fundamentalsCalc";
 import { loadNewsByTicker } from "@/lib/news";
 import { loadDbNewsByTicker } from "@/lib/newsFromDb";
 import { fetchUserRole } from "@/lib/auth/userRole";
@@ -160,7 +160,7 @@ export default async function TitrePage({
 
   // Fondamentaux
   const fundTitre = getFundTitre(codeUpper);
-  const ratios = getRatiosByTicker(codeUpper);
+  const ratios = computeRatiosByTicker(codeUpper);
   const exercices = ratios.map((r) => r.exercice);
   const statements = {
     exercices,

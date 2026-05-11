@@ -13,6 +13,7 @@ import {
   categoryFromSlug,
   categorySlug,
   managerSlug,
+  getLatestBocDate,
   FCP_CATEGORIES,
 } from "@/lib/fcp";
 import {
@@ -214,7 +215,7 @@ export default async function CategoryDetailPage({
   // === EVOLUTION AUM (de la catégorie sur le marché) ===
   const aumTimeline = aumTimelineByCategory(inCat, quarterEnds);
 
-  // === Concentration : top 5 fonds, top 5 SGP ===
+  // === Concentration : top 5 fonds, top 5 SGO ===
   const top5FundsShare =
     aumTotal > 0
       ? fundsRows.slice(0, 5).reduce((s, r) => s + (r.aum ?? 0), 0) / aumTotal
@@ -249,6 +250,7 @@ export default async function CategoryDetailPage({
         top5FundsShare={top5FundsShare}
         top5MgrShare={top5MgrShare}
         otherCategories={otherCategories}
+        latestBocDate={getLatestBocDate(funds)}
       />
     </div>
   );

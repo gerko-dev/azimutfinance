@@ -22,7 +22,9 @@ import {
   calculateActuarialYTM,
   calculateDuration,
   calculateBPV,
-  getBondCashflows,
+  generateBondLifecycleEvents,
+  buildBondCashflowSchedule,
+  priceFromYtm,
 } from "@/lib/listedBondsTypes";
 import type { UserRole } from "@/lib/auth/userRole";
 import CountryFlag from "./CountryFlag";
@@ -75,57 +77,19 @@ function formatPctSigned(v: number, decimals = 2): string {
 }
 
 // === HELPER : prix pied de coupon a partir d'un YTM cible ===
+// Wrapper sur le moteur partage qui gere IF / AC / ACD.
 function priceFromYtmActuarial(
   bond: ListedBond,
   operationDate: Date,
   ytm: number
 ): number {
-  const issueDate = new Date(bond.issueDate);
-  const maturityDate = new Date(bond.maturityDate);
-  const monthsPerPeriod = 12 / bond.couponFrequency;
-
-  const couponDates: Date[] = [];
-  const current = new Date(maturityDate);
-  while (current.getTime() > issueDate.getTime()) {
-    couponDates.unshift(new Date(current));
-    current.setUTCMonth(current.getUTCMonth() - monthsPerPeriod);
-  }
-
-  const futureDates = couponDates.filter((d) => d.getTime() > operationDate.getTime());
-  const periodicCoupon = (bond.nominalValue * bond.couponRate) / bond.couponFrequency;
-
-  let dirtyPrice = 0;
-  for (let i = 0; i < futureDates.length; i++) {
-    const daysFromNow =
-      (futureDates[i].getTime() - operationDate.getTime()) / (24 * 60 * 60 * 1000);
-    const years = daysFromNow / 365;
-    const df = Math.pow(1 + ytm, -years);
-    const cashflow =
-      i === futureDates.length - 1 ? periodicCoupon + bond.nominalValue : periodicCoupon;
-    dirtyPrice += cashflow * df;
-  }
-
-  const pastDates = couponDates.filter((d) => d.getTime() <= operationDate.getTime());
-  const previousCouponDate =
-    pastDates.length > 0 ? pastDates[pastDates.length - 1] : issueDate;
-
-  const daysSinceLastCoupon = Math.floor(
-    (operationDate.getTime() - previousCouponDate.getTime()) / (24 * 60 * 60 * 1000)
-  );
-  const nextCouponDateForAccrual =
-    futureDates.length > 0 ? futureDates[0] : maturityDate;
-  const daysInPeriod = Math.round(
-    (nextCouponDateForAccrual.getTime() - previousCouponDate.getTime()) /
-      (24 * 60 * 60 * 1000)
-  );
-
-  const accruedInterest =
-    daysInPeriod > 0 ? (periodicCoupon * daysSinceLastCoupon) / daysInPeriod : 0;
-
-  return dirtyPrice - accruedInterest;
+  return priceFromYtm(bond, operationDate, ytm).cleanPrice;
 }
 
 // === HELPER : calcul complet des metriques ===
+// Toutes les valeurs derivent de buildBondCashflowSchedule, donc le coupon
+// couru est sur capital restant du, et duration / convexite / BPV reflectent
+// la cascade d'amortissement reelle.
 function computeMetrics(
   bond: ListedBond,
   operationDate: Date,
@@ -140,35 +104,23 @@ function computeMetrics(
       : calculateActuarialYTM(bond, operationDate, cleanPrice);
 
   const { macaulay, modified, convexity } = calculateDuration(bond, operationDate, ytm);
-  const bpv = calculateBPV(bond, operationDate, ytm, cleanPrice);
 
-  const issueDate = new Date(bond.issueDate);
-  const maturityDate = new Date(bond.maturityDate);
-  const monthsPerPeriod = 12 / bond.couponFrequency;
-  const couponDates: Date[] = [];
-  const cur = new Date(maturityDate);
-  while (cur.getTime() > issueDate.getTime()) {
-    couponDates.unshift(new Date(cur));
-    cur.setUTCMonth(cur.getUTCMonth() - monthsPerPeriod);
-  }
-
-  const pastDates = couponDates.filter((d) => d.getTime() <= operationDate.getTime());
-  const previousCouponDate =
-    pastDates.length > 0 ? pastDates[pastDates.length - 1] : issueDate;
-
-  const daysSinceLastCoupon = Math.floor(
-    (operationDate.getTime() - previousCouponDate.getTime()) / (24 * 60 * 60 * 1000)
-  );
-  const nextCouponDate =
-    couponDates.find((d) => d.getTime() > operationDate.getTime()) || maturityDate;
-  const daysInPeriod = Math.round(
-    (nextCouponDate.getTime() - previousCouponDate.getTime()) / (24 * 60 * 60 * 1000)
-  );
-
-  const periodicCoupon = (bond.nominalValue * bond.couponRate) / bond.couponFrequency;
+  const sched = buildBondCashflowSchedule(bond, operationDate);
   const accruedInterest =
-    daysInPeriod > 0 ? (periodicCoupon * daysSinceLastCoupon) / daysInPeriod : 0;
+    sched.daysInPeriod > 0
+      ? (sched.periodicCoupon * sched.daysSinceLastCoupon) / sched.daysInPeriod
+      : 0;
   const dirtyPrice = cleanPrice + accruedInterest;
+  // PV01 sur dirty price (convention UMOA-Titres).
+  const bpv = calculateBPV(bond, operationDate, ytm, dirtyPrice);
+
+  const futureCouponDates = sched.futureCashflows
+    .filter((cf) => cf.coupon > 0)
+    .map((cf) => cf.date);
+  const nextCouponDate =
+    futureCouponDates.length > 0
+      ? futureCouponDates[0]
+      : new Date(bond.maturityDate);
 
   return {
     ytm,
@@ -179,9 +131,9 @@ function computeMetrics(
     bpv,
     accruedInterest,
     dirtyPrice,
-    daysSinceLastCoupon,
-    daysInPeriod,
-    periodicCoupon,
+    daysSinceLastCoupon: sched.daysSinceLastCoupon,
+    daysInPeriod: sched.daysInPeriod,
+    periodicCoupon: sched.periodicCoupon,
     nextCouponDate,
   };
 }
@@ -228,9 +180,16 @@ export default function BondDetailView({
   const isPro = userRole === "pro";
   const [premiumGateOpen, setPremiumGateOpen] = useState(false);
   const [premiumGateMsg, setPremiumGateMsg] = useState<string>("");
+  // tier du gate ouvert : "member" (CTA inscription) ou "premium" (CTA upgrade).
+  // Distingue Onglet Caractéristiques/Échéancier/Simulateur (member) vs
+  // Pricing/Risque (premium) selon les regles produit.
+  const [premiumGateTier, setPremiumGateTier] = useState<"member" | "premium">(
+    "premium",
+  );
   const [gateFor, setGateFor] = useState<"watchlist" | "alerte" | null>(null);
-  function openPremiumGate(msg: string) {
+  function openPremiumGate(msg: string, tier: "member" | "premium" = "premium") {
     setPremiumGateMsg(msg);
+    setPremiumGateTier(tier);
     setPremiumGateOpen(true);
   }
 
@@ -264,7 +223,29 @@ export default function BondDetailView({
     bond.nominalValue;
 
   // === DATE DE COTATION ===
+  // Priorité : date de la dernière session live BRVM > dernier prix CSV >
+  // dernier point théorique > aujourd'hui. Le coupon couru est calculé en
+  // s'arrêtant à cette date.
   const operationDate = useMemo(() => {
+    if (livePrice) {
+      // sessionLabel = ex. "Séance du 06/05/2026" — on en extrait la date.
+      const m = livePrice.sessionLabel?.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+      if (m) {
+        const [, dd, mm, yyyy] = m;
+        return new Date(Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd)));
+      }
+      // Fallback : timestamp du fetch (tronqué à minuit UTC).
+      const fetched = new Date(livePrice.fetchedAt);
+      if (!isNaN(fetched.getTime())) {
+        return new Date(
+          Date.UTC(
+            fetched.getUTCFullYear(),
+            fetched.getUTCMonth(),
+            fetched.getUTCDate()
+          )
+        );
+      }
+    }
     if (latestHistoricalPrice) {
       const [y, m, d] = latestHistoricalPrice.date.split("-").map(Number);
       return new Date(Date.UTC(y, m - 1, d));
@@ -277,7 +258,7 @@ export default function BondDetailView({
     return new Date(
       Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
     );
-  }, [latestHistoricalPrice, latestTheoretical]);
+  }, [livePrice, latestHistoricalPrice, latestTheoretical]);
 
   // === METRIQUES MARCHE ===
   const marketMetrics = useMemo(
@@ -286,25 +267,346 @@ export default function BondDetailView({
   );
 
   // === ETATS DU SIMULATEUR ===
+  // Style UMOA-Titres : date de simulation editable, mode YTM par defaut,
+  // panneau de frais BRVM/DC-BR/SGI/TPS calcules sur le dirty price.
   const [simPrice, setSimPrice] = useState<number>(marketPrice);
   const [simYtm, setSimYtm] = useState<number>(bond.couponRate);
-  const [simMode, setSimMode] = useState<"price" | "ytm">("price");
+  // Etats string pour la saisie : evitent le reformatage agressif via
+  // .toFixed() a chaque keystroke (qui interrompt la saisie du point decimal).
+  // Le canonical (simYtm/simPrice) est mis a jour des qu'un parse reussit.
+  // simPriceInput est en FCFA (valeur absolue), simYtmInput en % de coupon.
+  const [simYtmInput, setSimYtmInput] = useState<string>(
+    (bond.couponRate * 100).toFixed(4)
+  );
+  const [simPriceInput, setSimPriceInput] = useState<string>(
+    marketPrice.toFixed(2)
+  );
+  const [simMode, setSimMode] = useState<"price" | "ytm">("ytm");
+  const [simDate, setSimDate] = useState<Date>(operationDate);
+  // Frais en pourcentage du dirty price (conventions place BRVM/UEMOA).
+  const [feeBRVM, setFeeBRVM] = useState<number>(0.0375);
+  const [feeDCBR, setFeeDCBR] = useState<number>(0.1);
+  const [feeSGI, setFeeSGI] = useState<number>(0.15);
+  const [feeTPS, setFeeTPS] = useState<number>(10); // % applique sur le frais SGI
 
   const simMetrics = useMemo(() => {
     if (simMode === "price") {
-      return computeMetrics(bond, operationDate, simPrice);
+      return computeMetrics(bond, simDate, simPrice);
     } else {
-      const cleanPrice = priceFromYtmActuarial(bond, operationDate, simYtm);
-      return computeMetrics(bond, operationDate, cleanPrice, simYtm);
+      const cleanPrice = priceFromYtmActuarial(bond, simDate, simYtm);
+      return computeMetrics(bond, simDate, cleanPrice, simYtm);
     }
-  }, [bond, simPrice, simYtm, simMode, operationDate]);
+  }, [bond, simPrice, simYtm, simMode, simDate]);
+
+  // Toggle Prix↔YTM : on transfere la metrique courante vers l'autre mode
+  // pour preserver la continuite numerique (l'utilisateur voit le prix
+  // correspondant a son YTM saisi, et reciproquement).
+  const switchSimMode = (newMode: "price" | "ytm") => {
+    if (newMode === simMode || !simMetrics) {
+      setSimMode(newMode);
+      return;
+    }
+    if (newMode === "price") {
+      setSimPrice(simMetrics.cleanPrice);
+      setSimPriceInput(simMetrics.cleanPrice.toFixed(2));
+    } else {
+      setSimYtm(simMetrics.ytm);
+      setSimYtmInput((simMetrics.ytm * 100).toFixed(4));
+    }
+    setSimMode(newMode);
+  };
+
+  // Avertissements de plausibilite (bornes empiriques marche UEMOA).
+  const simWarnings = useMemo(() => {
+    const warnings: string[] = [];
+    if (simMode === "price") {
+      if (simPrice < bond.nominalValue * 0.5) {
+        warnings.push(
+          `Prix saisi inferieur a 50 % du nominal (${formatFCFA(bond.nominalValue * 0.5)} FCFA) — bond distresse ?`
+        );
+      } else if (simPrice > bond.nominalValue * 1.5) {
+        warnings.push(
+          `Prix saisi superieur a 150 % du nominal (${formatFCFA(bond.nominalValue * 1.5)} FCFA) — verifier la cotation.`
+        );
+      }
+    } else {
+      if (simYtm < 0) {
+        warnings.push("YTM negatif — possible mais inhabituel sur le marche UEMOA.");
+      } else if (simYtm > 0.25) {
+        warnings.push(
+          `YTM > 25 % — au-dela des spreads observes en zone UEMOA, verifier la saisie.`
+        );
+      }
+    }
+    return warnings;
+  }, [simMode, simPrice, simYtm, bond.nominalValue]);
 
   // === ECHEANCIER DES FLUX ===
-  const cashflows = useMemo(() => getBondCashflows(bond), [bond]);
+  // Source unique : generateBondLifecycleEvents — la même fonction qui alimente
+  // le calendrier global (/marches/obligations/calendrier). Garantit l'égalité
+  // stricte entre la fiche et le calendrier (montants round2, descriptions,
+  // index k/N, capital restant).
+  const cashflows = useMemo(() => {
+    return generateBondLifecycleEvents(bond)
+      .filter(
+        (e): e is typeof e & { eventType: "coupon" | "amortissement" | "remboursement" } =>
+          e.eventType === "coupon" ||
+          e.eventType === "amortissement" ||
+          e.eventType === "remboursement"
+      )
+      .map((e) => ({
+        date: e.date,
+        type: e.eventType,
+        amount: e.amount,
+        outstandingAfter: e.outstandingAfter,
+        description: e.description,
+      }));
+  }, [bond]);
   const todayMs = operationDate.getTime();
   const futureCashflows = cashflows.filter((cf) => new Date(cf.date).getTime() > todayMs);
   const pastCashflows = cashflows.filter((cf) => new Date(cf.date).getTime() <= todayMs);
   const nextCashflow = futureCashflows[0];
+
+  // Export du tableau d'amortissement complet au format .xlsx
+  // (exceljs lazy-loadé au clic pour ne pas alourdir le bundle initial).
+  const exportCashflowsCSV = async () => {
+    type Row = {
+      date: string;
+      capitalDebut: number;
+      coupon: number;
+      amortissement: number;
+      capitalFin: number;
+    };
+    // `cashflows` contient deja passe + futur (sortie de generateBondLifecycleEvents).
+    const allFlows = cashflows;
+    const rowsByDate = new Map<string, Row>();
+    // outstandingDebut de la 1ere ligne = capital avant le 1er flux. On le
+    // reconstruit a partir de outstandingAfter + (amort si non-coupon), ce qui
+    // donne le capital initial par titre. Fallback au nominal courant.
+    let prevOutstanding =
+      allFlows.length > 0
+        ? allFlows[0].outstandingAfter +
+          (allFlows[0].type !== "coupon" ? allFlows[0].amount : 0)
+        : bond.nominalValue;
+    for (const cf of allFlows) {
+      let row = rowsByDate.get(cf.date);
+      if (!row) {
+        row = {
+          date: cf.date,
+          capitalDebut: prevOutstanding,
+          coupon: 0,
+          amortissement: 0,
+          capitalFin: cf.outstandingAfter,
+        };
+        rowsByDate.set(cf.date, row);
+      }
+      if (cf.type === "coupon") row.coupon += cf.amount;
+      else row.amortissement += cf.amount;
+      row.capitalFin = cf.outstandingAfter;
+      prevOutstanding = cf.outstandingAfter;
+    }
+    const rows = Array.from(rowsByDate.values()).sort((a, b) =>
+      a.date.localeCompare(b.date)
+    );
+    const totalCoupon = rows.reduce((s, r) => s + r.coupon, 0);
+    const totalAmort = rows.reduce((s, r) => s + r.amortissement, 0);
+
+    const ExcelJSMod = await import("exceljs");
+    const ExcelJS = ExcelJSMod.default ?? ExcelJSMod;
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "Azimut Finance";
+    wb.created = new Date();
+    const ws = wb.addWorksheet("Tableau d'amortissement", {
+      views: [{ state: "frozen", ySplit: 9 }],
+    });
+
+    ws.columns = [
+      { width: 8 },   // N°
+      { width: 14 },  // Date
+      { width: 12 },  // Statut
+      { width: 22 },  // Capital début
+      { width: 22 },  // Coupon
+      { width: 24 },  // Amortissement
+      { width: 22 },  // Annuité totale
+      { width: 22 },  // Capital fin
+    ];
+
+    // === BANDEAU LOGO AZIMUT (cellules fusionnées avec rich text) ===
+    ws.mergeCells("A1:H2");
+    const logoCell = ws.getCell("A1");
+    logoCell.value = {
+      richText: [
+        {
+          text: "Azimut",
+          font: { name: "Calibri", size: 22, bold: true, color: { argb: "FF1D4ED8" } },
+        },
+        {
+          text: "Finance",
+          font: { name: "Calibri", size: 22, bold: true, color: { argb: "FF0F172A" } },
+        },
+      ],
+    };
+    logoCell.alignment = { vertical: "middle", horizontal: "left", indent: 1 };
+    logoCell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFF8FAFC" },
+    };
+    ws.getRow(1).height = 24;
+    ws.getRow(2).height = 24;
+
+    // === TITRE DOCUMENT ===
+    ws.mergeCells("A3:H3");
+    const titleCell = ws.getCell("A3");
+    titleCell.value = "Tableau d'amortissement";
+    titleCell.font = { name: "Calibri", size: 14, bold: true, color: { argb: "FF0F172A" } };
+    titleCell.alignment = { vertical: "middle", horizontal: "left", indent: 1 };
+    ws.getRow(3).height = 22;
+
+    // === MÉTADONNÉES OBLIGATION ===
+    const meta: [string, string][] = [
+      ["Émission", `${bond.name} (${bond.code})`],
+      ["ISIN", bond.isin],
+      ["Émetteur", `${bond.issuer} · ${bond.country}`],
+      ["Nominal / Coupon / Fréq.", `${bond.nominalValue.toLocaleString("fr-FR")} FCFA · ${(bond.couponRate * 100).toFixed(2)}% · ${bond.couponFrequency}/an`],
+      ["Émission → Maturité", `${bond.issueDate} → ${bond.maturityDate} · Amort. ${bond.amortizationType}`],
+    ];
+    meta.forEach(([k, v], i) => {
+      const r = 4 + i;
+      ws.getCell(`A${r}`).value = k;
+      ws.getCell(`A${r}`).font = { bold: true, color: { argb: "FF475569" }, size: 10 };
+      ws.mergeCells(`B${r}:H${r}`);
+      ws.getCell(`B${r}`).value = v;
+      ws.getCell(`B${r}`).font = { color: { argb: "FF0F172A" }, size: 10 };
+    });
+
+    // === EN-TÊTES TABLEAU (ligne 9) ===
+    const headerRow = ws.getRow(9);
+    const headers = [
+      "N°",
+      "Date",
+      "Statut",
+      "Capital début",
+      "Coupon — intérêts",
+      "Amortissement — capital",
+      "Annuité totale",
+      "Capital fin",
+    ];
+    headers.forEach((h, i) => {
+      const c = headerRow.getCell(i + 1);
+      c.value = h;
+      c.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+      c.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF1D4ED8" },
+      };
+      c.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+      c.border = {
+        top: { style: "thin", color: { argb: "FFCBD5E1" } },
+        bottom: { style: "thin", color: { argb: "FFCBD5E1" } },
+        left: { style: "thin", color: { argb: "FFCBD5E1" } },
+        right: { style: "thin", color: { argb: "FFCBD5E1" } },
+      };
+    });
+    headerRow.height = 28;
+
+    // === LIGNES DE DONNÉES ===
+    const FCFA_FMT = "#,##0.00 \"FCFA\";[Red]-#,##0.00 \"FCFA\"";
+    const startRow = 10;
+    rows.forEach((r, i) => {
+      const isPast = new Date(r.date).getTime() <= todayMs;
+      const xlRow = ws.getRow(startRow + i);
+      xlRow.getCell(1).value = i + 1;
+      xlRow.getCell(2).value = r.date;
+      xlRow.getCell(3).value = isPast ? "Versé" : "À venir";
+      xlRow.getCell(4).value = r.capitalDebut;
+      xlRow.getCell(5).value = r.coupon;
+      xlRow.getCell(6).value = r.amortissement;
+      xlRow.getCell(7).value = r.coupon + r.amortissement;
+      xlRow.getCell(8).value = r.capitalFin;
+
+      [4, 5, 6, 7, 8].forEach((col) => {
+        xlRow.getCell(col).numFmt = FCFA_FMT;
+      });
+      xlRow.getCell(1).alignment = { horizontal: "center" };
+      xlRow.getCell(2).alignment = { horizontal: "center" };
+      xlRow.getCell(3).alignment = { horizontal: "center" };
+      xlRow.getCell(3).font = isPast
+        ? { color: { argb: "FF94A3B8" }, italic: true }
+        : { color: { argb: "FF1D4ED8" }, bold: true };
+
+      // Alternance de couleur de fond pour lisibilité.
+      if (i % 2 === 1) {
+        for (let col = 1; col <= 8; col++) {
+          xlRow.getCell(col).fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: "FFF8FAFC" },
+          };
+        }
+      }
+      // Bordures fines
+      for (let col = 1; col <= 8; col++) {
+        xlRow.getCell(col).border = {
+          bottom: { style: "thin", color: { argb: "FFE2E8F0" } },
+        };
+      }
+    });
+
+    // === LIGNE TOTAUX ===
+    const totalRow = ws.getRow(startRow + rows.length);
+    totalRow.getCell(1).value = "TOTAL";
+    totalRow.getCell(5).value = totalCoupon;
+    totalRow.getCell(6).value = totalAmort;
+    totalRow.getCell(7).value = totalCoupon + totalAmort;
+    [5, 6, 7].forEach((col) => {
+      totalRow.getCell(col).numFmt = FCFA_FMT;
+    });
+    for (let col = 1; col <= 8; col++) {
+      totalRow.getCell(col).font = { bold: true, color: { argb: "FF0F172A" } };
+      totalRow.getCell(col).fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFE0E7FF" },
+      };
+      totalRow.getCell(col).border = {
+        top: { style: "medium", color: { argb: "FF1D4ED8" } },
+        bottom: { style: "medium", color: { argb: "FF1D4ED8" } },
+      };
+    }
+    totalRow.getCell(1).alignment = { horizontal: "center" };
+
+    // === FOOTER MÉTHODOLOGIE ===
+    const footerRow = startRow + rows.length + 2;
+    ws.mergeCells(`A${footerRow}:H${footerRow}`);
+    const footerCell = ws.getCell(`A${footerRow}`);
+    const amortLabel =
+      bond.amortizationType === "IF"
+        ? "in fine"
+        : bond.amortizationType === "ACD"
+        ? "constant différé"
+        : "constant";
+    footerCell.value = `Convention UEMOA · coupon sur capital restant dû · amortissement ${amortLabel} · valeurs par titre.`;
+    footerCell.font = { italic: true, color: { argb: "FF64748B" }, size: 9 };
+    footerCell.alignment = { wrapText: true };
+
+    // === DOWNLOAD ===
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `tableau-amortissement-${bond.code}-${new Date()
+      .toISOString()
+      .slice(0, 10)}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   // === DONNEES POUR L'ONGLET COTATIONS : merge theorique + observe par date ===
   const quotationsSeries = useMemo(() => {
@@ -331,6 +633,30 @@ export default function BondDetailView({
   }, [theoreticalHistory, priceHistory]);
 
   const hasObservedPrices = priceHistory.length > 0;
+  const liveCleanPrice =
+    livePrice && Number.isFinite(livePrice.currentPrice) && livePrice.currentPrice > 0
+      ? livePrice.currentPrice
+      : null;
+
+  // Domaine Y calé sur l'enveloppe réelle des séries + lignes de référence,
+  // avec 2 % de marge haut/bas pour ne pas coller les courbes aux bords.
+  const quotationsYDomain = useMemo<[number, number]>(() => {
+    const values: number[] = [bond.nominalValue];
+    if (liveCleanPrice !== null) values.push(liveCleanPrice);
+    for (const r of quotationsSeries) {
+      if (r.theoretical !== null && Number.isFinite(r.theoretical)) {
+        values.push(r.theoretical);
+      }
+      if (r.observed !== null && Number.isFinite(r.observed)) {
+        values.push(r.observed);
+      }
+    }
+    if (values.length === 0) return [0, bond.nominalValue * 1.1];
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const span = Math.max(max - min, 1);
+    return [min - span * 0.02, max + span * 0.02];
+  }, [quotationsSeries, liveCleanPrice, bond.nominalValue]);
 
   // === STRESS TEST TAUX (Risque & analytics) ===
   // Variation prix ≈ -ModDur × Δy × P + 0.5 × Convex × Δy² × P
@@ -492,52 +818,66 @@ export default function BondDetailView({
             )}
           </div>
 
-          {/* Onglets — gating tier :
-              · Pricing / Echeancier & flux / Simulateur : Premium (cadenas + CTA)
-              · Risque & analytics : Pro uniquement (retire sinon) */}
+          {/* Onglets — gating 3 niveaux :
+              · Vue d'ensemble                  : guest (toujours ouvert)
+              · Échéancier & flux / Simulateur
+                / Caractéristiques              : member (cadenas pour invité)
+              · Pricing / Risque & analytics    : premium (cadenas pour invité+membre)
+              · Premium / Pro                   : tout déverrouillé */}
           <div className="flex gap-0 text-sm overflow-x-auto border-b border-slate-200 -mb-px">
             {(
               [
-                { id: "overview", label: "Vue d'ensemble", requires: null },
-                { id: "quotations", label: "Pricing", requires: "premium" },
-                { id: "cashflow", label: "Échéancier & flux", requires: "premium" },
-                { id: "risk", label: "Risque & analytics", requires: "pro" },
-                { id: "simulator", label: "Simulateur", requires: "premium" },
-                { id: "characteristics", label: "Caractéristiques", requires: null },
-              ] as Array<{ id: Tab; label: string; requires: "premium" | "pro" | null }>
-            )
-              .filter((tab) => !(tab.requires === "pro" && !isPro))
-              .map((tab) => {
-                const locked = tab.requires === "premium" && !isPremium;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => {
-                      if (locked) {
-                        openPremiumGate(
-                          `L'onglet « ${tab.label} » est réservé à l'abonnement Premium.`,
-                        );
-                        return;
-                      }
-                      setActiveTab(tab.id);
-                    }}
-                    aria-haspopup={locked ? "dialog" : undefined}
-                    title={
-                      locked ? `${tab.label} — réservé Premium` : undefined
+                { id: "overview", label: "Vue d'ensemble", tier: "guest" },
+                { id: "quotations", label: "Pricing", tier: "premium" },
+                { id: "cashflow", label: "Échéancier & flux", tier: "member" },
+                { id: "risk", label: "Risque & analytics", tier: "premium" },
+                { id: "simulator", label: "Simulateur", tier: "member" },
+                { id: "characteristics", label: "Caractéristiques", tier: "member" },
+              ] as Array<{
+                id: Tab;
+                label: string;
+                tier: "guest" | "member" | "premium";
+              }>
+            ).map((tab) => {
+              const locked =
+                (tab.tier === "member" && !isMember) ||
+                (tab.tier === "premium" && !isPremium);
+              const gateTier: "member" | "premium" =
+                tab.tier === "premium" ? "premium" : "member";
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => {
+                    if (locked) {
+                      openPremiumGate(
+                        gateTier === "premium"
+                          ? `L'onglet « ${tab.label} » est réservé à l'abonnement Premium.`
+                          : `L'onglet « ${tab.label} » est réservé aux membres inscrits.`,
+                        gateTier,
+                      );
+                      return;
                     }
-                    className={`px-3 md:px-4 py-3 whitespace-nowrap border-b-2 transition inline-flex items-center gap-1 ${
-                      activeTab === tab.id
-                        ? "border-blue-700 text-blue-700 font-medium"
-                        : "border-transparent text-slate-600 hover:text-slate-900"
-                    }`}
-                  >
-                    {tab.label}
-                    {locked && (
-                      <span aria-hidden className="text-[10px]">🔒</span>
-                    )}
-                  </button>
-                );
-              })}
+                    setActiveTab(tab.id);
+                  }}
+                  aria-haspopup={locked ? "dialog" : undefined}
+                  title={
+                    locked
+                      ? `${tab.label} — réservé ${gateTier === "premium" ? "Premium" : "aux membres"}`
+                      : undefined
+                  }
+                  className={`px-3 md:px-4 py-3 whitespace-nowrap border-b-2 transition inline-flex items-center gap-1 ${
+                    activeTab === tab.id
+                      ? "border-blue-700 text-blue-700 font-medium"
+                      : "border-transparent text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  {tab.label}
+                  {locked && (
+                    <span aria-hidden className="text-[10px]">🔒</span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -707,7 +1047,7 @@ export default function BondDetailView({
             <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
               <div className="flex justify-between items-start mb-4 flex-wrap gap-2">
                 <div>
-                  <h3 className="text-base font-medium">📈 Historique du prix</h3>
+                  <h3 className="text-base font-medium">📈 Historique du prix théorique</h3>
                   <p className="text-xs text-slate-500 mt-0.5">
                     {hasObservedPrices
                       ? `${priceHistory.length} cotations observées + ${theoreticalHistory.length} points théoriques`
@@ -738,7 +1078,8 @@ export default function BondDetailView({
                       <YAxis
                         stroke="#94a3b8"
                         fontSize={11}
-                        domain={["auto", "auto"]}
+                        domain={quotationsYDomain}
+                        allowDataOverflow={false}
                         tickFormatter={(v) => formatFCFA(Number(v))}
                       />
                       <Tooltip
@@ -770,6 +1111,20 @@ export default function BondDetailView({
                           fontSize: 10,
                         }}
                       />
+                      {liveCleanPrice !== null && (
+                        <ReferenceLine
+                          y={liveCleanPrice}
+                          stroke="#0f172a"
+                          strokeWidth={1.8}
+                          ifOverflow="extendDomain"
+                          label={{
+                            value: "Prix observé (live BRVM)",
+                            position: "insideTopRight",
+                            fill: "#0f172a",
+                            fontSize: 10,
+                          }}
+                        />
+                      )}
                       <Area
                         type="monotone"
                         dataKey="theoretical"
@@ -779,17 +1134,6 @@ export default function BondDetailView({
                         connectNulls
                         isAnimationActive={false}
                       />
-                      {hasObservedPrices && (
-                        <Line
-                          type="monotone"
-                          dataKey="observed"
-                          stroke="#0f172a"
-                          strokeWidth={1.8}
-                          dot={{ r: 2 }}
-                          connectNulls={false}
-                          isAnimationActive={false}
-                        />
-                      )}
                     </ComposedChart>
                   </ResponsiveContainer>
                 </div>
@@ -798,13 +1142,6 @@ export default function BondDetailView({
                   Aucun historique de prix disponible.
                 </div>
               )}
-              <div className="mt-3 pt-3 border-t border-slate-100 text-xs text-slate-500 leading-relaxed">
-                <strong>Méthodologie :</strong> à chaque date hebdomadaire, le prix
-                théorique est calculé en actualisant les flux futurs au YTM moyen pondéré
-                des émissions UMOA-Titres du même pays (OAT, 3 derniers mois), interpolé
-                sur la maturité résiduelle. Les prix observés (en noir) proviennent des
-                cotations BRVM.
-              </div>
             </section>
           </>
         )}
@@ -844,101 +1181,33 @@ export default function BondDetailView({
               </section>
             )}
 
-            {events.length > 0 && (
-              <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
-                <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
-                  <div>
-                    <h3 className="text-base font-medium">📜 Événements observés</h3>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Coupons, amortissements et remboursements effectivement déclarés
-                    </p>
-                  </div>
-                  <span className="text-xs text-slate-500">
-                    {events.length} événement{events.length > 1 ? "s" : ""}
-                  </span>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-xs text-slate-500 border-b border-slate-200">
-                        <th className="text-left py-2 px-2 font-medium">Statut</th>
-                        <th className="text-left py-2 px-2 font-medium">Date</th>
-                        <th className="text-left py-2 px-2 font-medium">Type</th>
-                        <th className="text-left py-2 px-2 font-medium">Description</th>
-                        <th className="text-right py-2 px-2 font-medium">
-                          Montant par titre
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {events
-                        .slice()
-                        .sort((a, b) => b.date.localeCompare(a.date))
-                        .map((e, i) => {
-                          const isPast = new Date(e.date).getTime() <= todayMs;
-                          const badge =
-                            e.eventType === "coupon" ? (
-                              <span className="text-xs px-2 py-0.5 bg-blue-50 text-blue-700 rounded">
-                                💰 Coupon
-                              </span>
-                            ) : e.eventType === "remboursement" ? (
-                              <span className="text-xs px-2 py-0.5 bg-purple-50 text-purple-700 rounded">
-                                📉 Remboursement
-                              </span>
-                            ) : e.eventType === "call" ? (
-                              <span className="text-xs px-2 py-0.5 bg-amber-50 text-amber-700 rounded">
-                                📞 Call
-                              </span>
-                            ) : (
-                              <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-700 rounded">
-                                🔨 Adjudication
-                              </span>
-                            );
-                          return (
-                            <tr
-                              key={i}
-                              className={`border-b border-slate-100 hover:bg-slate-50 ${
-                                isPast ? "opacity-60" : ""
-                              }`}
-                            >
-                              <td className="py-2 px-2">
-                                <span
-                                  className={`text-xs px-1.5 py-0.5 rounded ${
-                                    isPast
-                                      ? "bg-slate-100 text-slate-500"
-                                      : "bg-blue-50 text-blue-700"
-                                  }`}
-                                >
-                                  {isPast ? "Versé" : "À venir"}
-                                </span>
-                              </td>
-                              <td className="py-2 px-2 whitespace-nowrap">
-                                {formatDate(e.date)}
-                              </td>
-                              <td className="py-2 px-2">{badge}</td>
-                              <td className="py-2 px-2 text-slate-600">
-                                {e.description || "—"}
-                              </td>
-                              <td className="py-2 px-2 text-right font-medium">
-                                {e.amount > 0 ? formatFCFA2(e.amount) + " FCFA" : "—"}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            )}
-
             {cashflows.length > 0 && (
               <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
                 <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
                   <h3 className="text-base font-medium">📅 Échéancier complet des flux</h3>
-                  <div className="text-xs text-slate-500 flex gap-3">
-                    <span>{pastCashflows.length} versés</span>
-                    <span>·</span>
-                    <span>{futureCashflows.length} à venir</span>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <div className="text-xs text-slate-500 flex gap-3">
+                      <span>{pastCashflows.length} versés</span>
+                      <span>·</span>
+                      <span>{futureCashflows.length} à venir</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={exportCashflowsCSV}
+                      className="text-xs px-3 py-1.5 rounded-md bg-emerald-600 text-white hover:bg-emerald-700 transition flex items-center gap-1.5"
+                      title="Télécharger le tableau d'amortissement au format Excel (.xlsx)"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                        className="w-3.5 h-3.5"
+                      >
+                        <path d="M10.75 2.75a.75.75 0 0 0-1.5 0v8.614L6.295 8.235a.75.75 0 1 0-1.09 1.03l4.25 4.5a.75.75 0 0 0 1.09 0l4.25-4.5a.75.75 0 0 0-1.09-1.03l-2.955 3.129V2.75Z" />
+                        <path d="M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z" />
+                      </svg>
+                      Exporter Excel
+                    </button>
                   </div>
                 </div>
                 <div className="overflow-x-auto">
@@ -1214,17 +1483,7 @@ export default function BondDetailView({
               <h3 className="text-base font-medium">🧮 Simulateur obligataire</h3>
               <div className="inline-flex rounded-md bg-slate-100 p-0.5 text-xs">
                 <button
-                  onClick={() => setSimMode("price")}
-                  className={`px-3 py-1 rounded transition ${
-                    simMode === "price"
-                      ? "bg-white shadow-sm font-medium"
-                      : "text-slate-500 hover:text-slate-700"
-                  }`}
-                >
-                  Prix → YTM
-                </button>
-                <button
-                  onClick={() => setSimMode("ytm")}
+                  onClick={() => switchSimMode("ytm")}
                   className={`px-3 py-1 rounded transition ${
                     simMode === "ytm"
                       ? "bg-white shadow-sm font-medium"
@@ -1233,133 +1492,226 @@ export default function BondDetailView({
                 >
                   YTM → Prix
                 </button>
+                <button
+                  onClick={() => switchSimMode("price")}
+                  className={`px-3 py-1 rounded transition ${
+                    simMode === "price"
+                      ? "bg-white shadow-sm font-medium"
+                      : "text-slate-500 hover:text-slate-700"
+                  }`}
+                >
+                  Prix → YTM
+                </button>
               </div>
             </div>
 
-            <p className="text-sm text-slate-600 mb-4">
-              {simMode === "price"
-                ? "Saisissez un prix pied de coupon pour calculer le YTM actuariel correspondant."
-                : "Saisissez un YTM cible pour calculer le prix pied de coupon correspondant."}
-            </p>
+            {simWarnings.length > 0 && (
+              <div className="mb-3 space-y-1">
+                {simWarnings.map((w, i) => (
+                  <div
+                    key={i}
+                    className="text-xs px-3 py-2 rounded-md bg-amber-50 border border-amber-200 text-amber-800 flex items-start gap-2"
+                  >
+                    <span className="shrink-0">⚠️</span>
+                    <span>{w}</span>
+                  </div>
+                ))}
+              </div>
+            )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* INPUTS */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
               <div>
-                {simMode === "price" ? (
+                <label className="block text-xs text-slate-500 mb-1">
+                  Date de simulation
+                </label>
+                <input
+                  type="date"
+                  value={simDate.toISOString().slice(0, 10)}
+                  onChange={(e) => {
+                    const d = new Date(e.target.value);
+                    if (!isNaN(d.getTime())) setSimDate(d);
+                  }}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:border-blue-500"
+                />
+              </div>
+              <div>
+                {simMode === "ytm" ? (
                   <>
-                    <label className="block text-sm text-slate-600 mb-1">
-                      Prix pied de coupon (FCFA)
+                    <label className="block text-xs text-slate-500 mb-1">
+                      Yield to maturity
                     </label>
-                    <input
-                      type="number"
-                      step="1"
-                      value={simPrice}
-                      onChange={(e) => setSimPrice(Number(e.target.value))}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:border-blue-500"
-                    />
-                    <p className="text-xs text-slate-400 mt-1">
-                      Nominal : {formatFCFA(bond.nominalValue)} FCFA · Marché :{" "}
-                      {formatFCFA(marketPrice)} FCFA
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        step="0.01"
+                        inputMode="decimal"
+                        value={simYtmInput}
+                        onChange={(e) => {
+                          setSimYtmInput(e.target.value);
+                          const n = Number(e.target.value);
+                          if (Number.isFinite(n)) setSimYtm(n / 100);
+                        }}
+                        onBlur={() => {
+                          // Reformate l'affichage en sortie de saisie ; canonical
+                          // deja a jour via onChange.
+                          if (Number.isFinite(simYtm)) {
+                            setSimYtmInput((simYtm * 100).toFixed(4));
+                          }
+                        }}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:border-blue-500 tabular-nums"
+                      />
+                      <span className="text-sm text-slate-500">%</span>
+                    </div>
                   </>
                 ) : (
                   <>
-                    <label className="block text-sm text-slate-600 mb-1">
-                      YTM cible (%)
+                    <label className="block text-xs text-slate-500 mb-1">
+                      Clean Price
                     </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={(simYtm * 100).toFixed(2)}
-                      onChange={(e) => setSimYtm(Number(e.target.value) / 100)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:border-blue-500"
-                    />
-                    <p className="text-xs text-slate-400 mt-1">
-                      Taux coupon :{" "}
-                      {(bond.couponRate * 100).toFixed(2).replace(".", ",")}%
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        step="1"
+                        inputMode="decimal"
+                        value={simPriceInput}
+                        onChange={(e) => {
+                          setSimPriceInput(e.target.value);
+                          const n = Number(e.target.value);
+                          if (Number.isFinite(n)) setSimPrice(n);
+                        }}
+                        onBlur={() => {
+                          if (Number.isFinite(simPrice)) {
+                            setSimPriceInput(simPrice.toFixed(2));
+                          }
+                        }}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:border-blue-500 tabular-nums"
+                      />
+                      <span className="text-sm text-slate-500">FCFA</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Nominal courant : {formatFCFA(bond.nominalValue)} FCFA
                     </p>
                   </>
                 )}
               </div>
-
-              {simMetrics && (
-                <div>
-                  <label className="block text-sm text-slate-600 mb-1">
-                    {simMode === "price"
-                      ? "YTM résultant"
-                      : "Prix pied de coupon résultant"}
-                  </label>
-                  <div className="p-3 bg-blue-50 rounded-md border border-blue-100">
-                    <div className="text-2xl font-semibold text-blue-900">
-                      {simMode === "price"
-                        ? `${(simMetrics.ytm * 100).toFixed(3).replace(".", ",")}%`
-                        : `${formatFCFA2(simMetrics.cleanPrice)} FCFA`}
-                    </div>
-                    <div className="text-xs text-slate-600 mt-1">
-                      {simMode === "price"
-                        ? "Convention Act/365 · bissection"
-                        : "Prix pied de coupon théorique"}
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
 
-            {simMetrics && (
-              <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-2">
-                <div className="p-2 bg-slate-50 rounded">
-                  <div className="text-[10px] text-slate-500 uppercase">YTM sim.</div>
-                  <div className="text-sm font-medium">
-                    {(simMetrics.ytm * 100).toFixed(2).replace(".", ",")}%
-                  </div>
-                </div>
-                <div className="p-2 bg-slate-50 rounded">
-                  <div className="text-[10px] text-slate-500 uppercase">Duration</div>
-                  <div className="text-sm font-medium">
-                    {simMetrics.modified.toFixed(2).replace(".", ",")}
-                  </div>
-                </div>
-                <div className="p-2 bg-slate-50 rounded">
-                  <div className="text-[10px] text-slate-500 uppercase">Convexité</div>
-                  <div className="text-sm font-medium">
-                    {simMetrics.convexity.toFixed(2).replace(".", ",")}
-                  </div>
-                </div>
-                <div className="p-2 bg-slate-50 rounded">
-                  <div className="text-[10px] text-slate-500 uppercase">BPV</div>
-                  <div className="text-sm font-medium">{formatFCFA2(simMetrics.bpv)}</div>
-                </div>
-              </div>
-            )}
+            {/* OUTPUTS — prix en valeur absolue (FCFA) */}
+            {simMetrics &&
+              (() => {
+                const dirty = simMetrics.dirtyPrice;
+                const dayToMatYears = Math.max(
+                  0,
+                  (new Date(bond.maturityDate).getTime() - simDate.getTime()) /
+                    (365 * 24 * 60 * 60 * 1000)
+                );
 
-            {simMetrics && (
-              <div className="mt-4 p-3 bg-slate-50 rounded-md text-sm">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div>
-                    <div className="text-xs text-slate-500 mb-0.5">Coupon couru</div>
-                    <div className="font-medium">
-                      {formatFCFA2(simMetrics.accruedInterest)} FCFA
+                // Frais en absolu (% × dirty price), TPS appliquee sur frais SGI.
+                const brvmAbs = (feeBRVM / 100) * dirty;
+                const dcbrAbs = (feeDCBR / 100) * dirty;
+                const sgiAbs = (feeSGI / 100) * dirty;
+                const tpsAbs = (feeTPS / 100) * sgiAbs;
+                const totalFees = brvmAbs + dcbrAbs + sgiAbs + tpsAbs;
+                const tousFraisCompris = dirty + totalFees;
+
+                return (
+                  <>
+                    <div className="border border-slate-200 rounded-md overflow-hidden mb-4 text-sm">
+                      <table className="w-full">
+                        <tbody className="divide-y divide-slate-100">
+                          <SimRow
+                            label="Yield to maturity"
+                            value={`${(simMetrics.ytm * 100).toFixed(4)} %`}
+                          />
+                          <SimRow
+                            label="Clean Price"
+                            value={`${formatFCFA2(simMetrics.cleanPrice)} FCFA`}
+                          />
+                          <SimRow
+                            label="Dirty Price"
+                            value={`${formatFCFA2(simMetrics.dirtyPrice)} FCFA`}
+                          />
+                          <SimRow
+                            label="Coupon couru"
+                            value={`${formatFCFA2(simMetrics.accruedInterest)} FCFA`}
+                          />
+                          <SimRow
+                            label="Day to maturity"
+                            value={`${dayToMatYears.toFixed(3)} years`}
+                          />
+                          <SimRow
+                            label="Mac Duration"
+                            value={`${simMetrics.macaulay.toFixed(3)} years`}
+                          />
+                          <SimRow
+                            label="Mod Duration"
+                            value={simMetrics.modified.toFixed(3)}
+                          />
+                          <SimRow
+                            label="PV01"
+                            value={`${formatFCFA2(simMetrics.bpv)} FCFA`}
+                          />
+                          <SimRow
+                            label="Convexity"
+                            value={simMetrics.convexity.toFixed(4)}
+                          />
+                        </tbody>
+                      </table>
                     </div>
-                    <div className="text-xs text-slate-400">
-                      {simMetrics.daysSinceLastCoupon}/{simMetrics.daysInPeriod} jours · Act/Act
+
+                    {/* FRAIS BRVM / DC-BR / SGI / TPS — montants en FCFA */}
+                    <div className="border border-slate-200 rounded-md overflow-hidden text-sm">
+                      <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 text-[11px] font-semibold text-slate-700 uppercase tracking-wide">
+                        Frais
+                      </div>
+                      <table className="w-full">
+                        <tbody className="divide-y divide-slate-100">
+                          <FeeRow
+                            label="Frais BRVM"
+                            rate={feeBRVM}
+                            onRate={setFeeBRVM}
+                            absolute={brvmAbs}
+                          />
+                          <FeeRow
+                            label="Frais DC/BR"
+                            rate={feeDCBR}
+                            onRate={setFeeDCBR}
+                            absolute={dcbrAbs}
+                          />
+                          <FeeRow
+                            label="Frais SGI"
+                            rate={feeSGI}
+                            onRate={setFeeSGI}
+                            absolute={sgiAbs}
+                          />
+                          <FeeRow
+                            label="TPS"
+                            rate={feeTPS}
+                            onRate={setFeeTPS}
+                            absolute={tpsAbs}
+                            note="(% sur frais SGI)"
+                          />
+                        </tbody>
+                      </table>
+                      <div className="px-3 py-2 bg-blue-50 border-t border-slate-200 flex justify-between items-center">
+                        <span className="text-sm font-medium">
+                          Prix tout compris
+                        </span>
+                        <span className="text-base font-semibold text-blue-900 tabular-nums">
+                          {formatFCFA2(tousFraisCompris)} FCFA
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-slate-500 mb-0.5">Prix pied de coupon</div>
-                    <div className="font-medium">
-                      {formatFCFA2(simMetrics.cleanPrice)} FCFA
-                    </div>
-                    <div className="text-xs text-slate-400">prix marché théorique</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-slate-500 mb-0.5">Prix coupon couru</div>
-                    <div className="font-semibold text-blue-900">
-                      {formatFCFA2(simMetrics.dirtyPrice)} FCFA
-                    </div>
-                    <div className="text-xs text-slate-400">prix réel payé</div>
-                  </div>
-                </div>
-              </div>
-            )}
+
+                    <p className="text-[11px] text-slate-400 mt-3 leading-relaxed">
+                      Convention Act/365 · cascade d&apos;amortissement (IF / AC / ACD) prise en
+                      compte. Les frais sont appliqués au dirty price ; TPS = TVA sur la
+                      commission SGI uniquement (convention place UEMOA).
+                    </p>
+                  </>
+                );
+              })()}
           </section>
         )}
 
@@ -1513,11 +1865,17 @@ export default function BondDetailView({
       <MemberGateDialog
         open={premiumGateOpen}
         onClose={() => setPremiumGateOpen(false)}
-        tier="premium"
-        title="Outils obligataires Premium"
+        tier={premiumGateTier}
+        title={
+          premiumGateTier === "premium"
+            ? "Outils obligataires Premium"
+            : "Onglet réservé aux membres"
+        }
         description={
           premiumGateMsg ||
-          "Cet onglet de la fiche obligation est réservé à l'abonnement Premium."
+          (premiumGateTier === "premium"
+            ? "Cet onglet de la fiche obligation est réservé à l'abonnement Premium."
+            : "Cet onglet de la fiche obligation est réservé aux membres inscrits.")
         }
       />
     </>
@@ -1568,5 +1926,58 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
     <div className="md:col-span-2 pt-3 mt-1 border-t border-slate-100 text-[11px] uppercase tracking-wide text-slate-400 font-medium">
       {children}
     </div>
+  );
+}
+
+// Ligne de resultat du simulateur UMOA-Titres (label gauche / valeur droite).
+function SimRow({ label, value }: { label: string; value: string }) {
+  return (
+    <tr>
+      <td className="px-3 py-2 text-slate-600">{label}</td>
+      <td className="px-3 py-2 text-right font-medium text-slate-900 tabular-nums">
+        {value}
+      </td>
+    </tr>
+  );
+}
+
+// Ligne de frais : taux editable a gauche, montant absolu a droite.
+function FeeRow({
+  label,
+  rate,
+  onRate,
+  absolute,
+  note,
+}: {
+  label: string;
+  rate: number;
+  onRate: (n: number) => void;
+  absolute: number;
+  note?: string;
+}) {
+  return (
+    <tr>
+      <td className="px-3 py-2 text-slate-600 align-middle">
+        {label}
+        {note && (
+          <span className="text-[10px] text-slate-400 ml-1">{note}</span>
+        )}
+      </td>
+      <td className="px-3 py-2 text-right">
+        <div className="inline-flex items-center gap-1">
+          <input
+            type="number"
+            step="0.001"
+            value={rate}
+            onChange={(e) => onRate(Number(e.target.value))}
+            className="w-20 px-2 py-1 border border-slate-300 rounded text-sm text-right focus:outline-none focus:border-blue-500 tabular-nums"
+          />
+          <span className="text-xs text-slate-500">%</span>
+        </div>
+      </td>
+      <td className="px-3 py-2 text-right font-medium text-slate-900 tabular-nums whitespace-nowrap">
+        {formatFCFA2(absolute)} FCFA
+      </td>
+    </tr>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import type { SGPIndexRow } from "@/app/sgp/page";
+import type { SGOIndexRow } from "@/app/sgo/page";
 
 // ==========================================
 // HELPERS
@@ -57,13 +57,15 @@ type SortKey =
 type SortOrder = "asc" | "desc";
 
 type Props = {
-  rows: SGPIndexRow[];
+  rows: SGOIndexRow[];
   refQuarter: string;
   marketTotalAUM: number;
   totalFunds: number;
+  /** Date BOC la plus récente toutes valeurs confondues (ISO). */
+  latestBocDate: string;
 };
 
-export default function SGPIndexView({ rows, refQuarter, marketTotalAUM, totalFunds }: Props) {
+export default function SGOIndexView({ rows, refQuarter, marketTotalAUM, totalFunds, latestBocDate }: Props) {
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("aum");
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
@@ -96,6 +98,14 @@ export default function SGPIndexView({ rows, refQuarter, marketTotalAUM, totalFu
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-8 space-y-6">
+      {/* === BANDEAU FRAÎCHEUR BOC === */}
+      {latestBocDate && (
+        <div className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs font-semibold text-emerald-900">
+          <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+          Données au {fmtDateFR(latestBocDate)}
+        </div>
+      )}
+
       <header className="space-y-2">
         <p className="text-xs uppercase tracking-wider text-slate-500">
           <Link href="/marches/fcp" className="hover:underline">FCP / OPCVM</Link>
@@ -128,7 +138,7 @@ export default function SGPIndexView({ rows, refQuarter, marketTotalAUM, totalFu
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Recherche par nom de SGP…"
+          placeholder="Recherche par nom de SGO…"
           className="w-full md:w-96 px-3 py-2 text-sm border border-slate-200 rounded-md"
         />
       </section>
@@ -154,7 +164,7 @@ export default function SGPIndexView({ rows, refQuarter, marketTotalAUM, totalFu
               {sorted.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="px-5 py-8 text-center text-sm text-slate-500">
-                    Aucune SGP ne correspond.
+                    Aucune SGO ne correspond.
                   </td>
                 </tr>
               ) : (
@@ -163,7 +173,7 @@ export default function SGPIndexView({ rows, refQuarter, marketTotalAUM, totalFu
                     <td className="px-3 py-2.5 text-xs font-bold text-slate-500">{i + 1}</td>
                     <td className="px-3 py-2.5">
                       <Link
-                        href={`/sgp/${r.slug}`}
+                        href={`/sgo/${r.slug}`}
                         className="text-sm font-medium text-slate-900 hover:underline"
                       >
                         {r.name}

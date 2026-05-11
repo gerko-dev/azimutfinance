@@ -11,8 +11,12 @@
 #   3. Si rien dispo aujourd'hui (jour ferie, retard de publication...),
 #      remonte jusqu'a 10 jours en arriere pour trouver le dernier BOC.
 #
-# Sortie : data/obligations-cotees-vn-boc.csv (audit) + injection des VN
-# dans data/obligations-cotees.csv (colonne nominalValue).
+# Sortie :
+#   - data/obligations-cotees-vn-boc.csv (audit VN par mnemonique)
+#   - data/obligations-cotees-boc-synthese.json (KPIs marche : capitalisation,
+#     volume echange, valeur transigee de la page 1 du BOC)
+#   - data/fcp.csv (tableau FCP / SICAV extrait de la derniere page du BOC)
+#   - data/obligations-cotees.csv (injection des VN dans nominalValue, --merge)
 
 name: Scrape BOC BRVM
 
@@ -66,16 +70,16 @@ jobs:
       - name: Show diff stats
         run: |
           echo "=== Files modified ==="
-          git status --short data/obligations-cotees.csv data/obligations-cotees-vn-boc.csv || true
+          git status --short data/obligations-cotees.csv data/obligations-cotees-vn-boc.csv data/obligations-cotees-boc-synthese.json data/fcp.csv || true
           echo ""
           echo "=== Diff summary ==="
-          git diff --stat data/obligations-cotees.csv data/obligations-cotees-vn-boc.csv || true
+          git diff --stat data/obligations-cotees.csv data/obligations-cotees-vn-boc.csv data/obligations-cotees-boc-synthese.json data/fcp.csv || true
 
       - name: Commit & push if changed
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/obligations-cotees.csv data/obligations-cotees-vn-boc.csv
+          git add data/obligations-cotees.csv data/obligations-cotees-vn-boc.csv data/obligations-cotees-boc-synthese.json data/fcp.csv
           if git diff --staged --quiet; then
             echo "Aucun changement a commiter."
             exit 0

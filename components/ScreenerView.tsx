@@ -5,7 +5,7 @@ import Link from "next/link";
 import CountryFlag from "./CountryFlag";
 import type { ActionRow } from "@/lib/dataLoader";
 import type { Quadrant } from "@/lib/stockStats";
-import type { FundScreenerSnapshot, FundWindow } from "@/lib/fundamentals";
+import type { FundScreenerSnapshot, FundWindow } from "@/lib/fundamentalsCalc";
 
 type EnrichedStock = ActionRow & {
   volatility: number | null;

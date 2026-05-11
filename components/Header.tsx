@@ -32,7 +32,7 @@ const menuSections: MenuSection[] = [
         href: "/marches/fcp",
         children: [
           { label: "OPC", href: "/fcp/categories" },
-          { label: "Sociétés de gestion", href: "/sgp" },
+          { label: "Sociétés de gestion", href: "/sgo" },
         ],
       },
     ],

@@ -55,11 +55,21 @@ type Props = {
   refQuarter: string;
   marketTotalAUM: number;
   totalFunds: number;
+  /** Date BOC la plus récente toutes valeurs confondues (ISO). */
+  latestBocDate: string;
 };
 
-export default function CategoryIndexView({ rows, refQuarter, marketTotalAUM, totalFunds }: Props) {
+export default function CategoryIndexView({ rows, refQuarter, marketTotalAUM, totalFunds, latestBocDate }: Props) {
   return (
     <main className="mx-auto max-w-7xl px-4 py-8 space-y-6">
+      {/* === BANDEAU FRAÎCHEUR BOC === */}
+      {latestBocDate && (
+        <div className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs font-semibold text-emerald-900">
+          <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+          Données au {fmtDateFR(latestBocDate)}
+        </div>
+      )}
+
       <header className="space-y-2">
         <p className="text-xs uppercase tracking-wider text-slate-500">
           <Link href="/marches/fcp" className="hover:underline">FCP / OPCVM</Link>
@@ -92,7 +102,7 @@ export default function CategoryIndexView({ rows, refQuarter, marketTotalAUM, to
             </div>
             <p className="text-xs text-slate-500 mb-4">{CATEGORY_DESC[r.categorie] || ""}</p>
             <div className="grid grid-cols-3 gap-2 mb-3">
-              <Stat label="Fonds" value={String(r.nbFunds)} sub={`${r.nbManagers} SGP`} />
+              <Stat label="Fonds" value={String(r.nbFunds)} sub={`${r.nbManagers} SGO`} />
               <Stat label="AUM total" value={fmtBigFCFA(r.aumTotal)} sub="FCFA" />
               <Stat label="Médiane 1A" value={fmtPct(r.perfMedian1Y, 1)} sub="par fonds" />
             </div>

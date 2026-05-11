@@ -796,20 +796,20 @@ export const GLOSSAIRE: GlossTerm[] = [
     long:
       "Toute opération sur la BRVM passe par une SGI. Une vingtaine de SGI agréées dans l'UEMOA (BICI Bourse, SGI CI, Hudson and Cie, etc.). Frais variables : commission + droits + taxes (1 à 2 % par opération typique). Comparer avant de choisir.",
     category: "reglementation",
-    related: ["crepmf", "brvm", "sgp"],
+    related: ["crepmf", "brvm", "sgo"],
     tags: ["SGI", "courtage"],
   },
   {
-    slug: "sgp",
-    term: "SGP",
+    slug: "sgo",
+    term: "SGO",
     acronym: "Société de Gestion de Patrimoine",
     short:
       "Société agréée pour la gestion de portefeuilles individuels et d'OPCVM.",
     long:
-      "La SGP gère les FCP / SICAV pour le compte d'investisseurs privés et institutionnels. Différente de la SGI qui n'est qu'un intermédiaire d'exécution. Quelques SGP majeures : Phoenix Capital, NSIA Asset Management, Africaine de Bourse Asset Management.",
+      "La SGO gère les FCP / SICAV pour le compte d'investisseurs privés et institutionnels. Différente de la SGI qui n'est qu'un intermédiaire d'exécution. Quelques SGO majeures : Phoenix Capital, NSIA Asset Management, Africaine de Bourse Asset Management.",
     category: "reglementation",
     related: ["sgi", "fcp", "opcvm"],
-    tags: ["SGP", "gestion d'actifs"],
+    tags: ["SGO", "gestion d'actifs"],
   },
   {
     slug: "dc-br",
@@ -831,7 +831,7 @@ export const GLOSSAIRE: GlossTerm[] = [
     long:
       "Catégorie qui regroupe les SICAV et les FCP. L'OPCVM est obligatoirement agréé par le CREPMF, doit respecter des règles de diversification strictes et publier régulièrement sa valeur liquidative. Frais clés : entrée, gestion annuelle, sortie.",
     category: "reglementation",
-    related: ["fcp", "sgp"],
+    related: ["fcp", "sgo"],
     tags: ["OPCVM"],
   },
   {
@@ -842,7 +842,7 @@ export const GLOSSAIRE: GlossTerm[] = [
     long:
       "Le FCP est la forme juridique la plus courante d'OPCVM dans l'UEMOA. L'investisseur achète des parts dont la valeur (VL = valeur liquidative) varie selon la performance du portefeuille sous-jacent. Pas d'AG d'actionnaires (différence avec SICAV). Listing CREPMF des FCP autorisés en commercialisation.",
     category: "reglementation",
-    related: ["opcvm", "sgp"],
+    related: ["opcvm", "sgo"],
     tags: ["FCP"],
   },
 

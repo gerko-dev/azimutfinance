@@ -10,6 +10,7 @@ import {
   subtractCalendarDays,
   aumAt,
   categoryAt,
+  getLatestBocDate,
   FCP_CATEGORIES,
 } from "@/lib/fcp";
 import {
@@ -36,6 +37,11 @@ export type FundCard = {
   latestVLDate: string;
   isStale: boolean;
   perf: Record<PeriodKey, number | null>;
+  // Snapshot BOC (VL fraîche scrapée du Bulletin Officiel)
+  vlLatest: number | null;
+  vlPrev: number | null;
+  dayChange: number | null;   // (vlLatest / vlPrev - 1)
+  bocDate: string;            // ISO de la date du BOC d'origine
 };
 
 export type CategoryStat = {
@@ -103,6 +109,10 @@ export default async function Page() {
       latestVLDate,
       isStale,
       perf,
+      vlLatest: f.bocSnapshot?.vlActuelle ?? null,
+      vlPrev: f.bocSnapshot?.vlPrecedente ?? null,
+      dayChange: f.bocSnapshot?.dayChange ?? null,
+      bocDate: f.bocSnapshot?.bocDate ?? "",
     };
   });
 
@@ -138,6 +148,9 @@ export default async function Page() {
   const aumTimeline = aumTimelineByCategory(funds, quarterEnds);
   const heatmap = quarterlyPerfHeatmap(funds, quarterEnds);
 
+  // === BANDEAU BOC : date du dernier scrap ===
+  const latestBocDate = getLatestBocDate(funds);
+
   return (
     <div className="min-h-screen bg-slate-50">
       <Header />
@@ -157,6 +170,7 @@ export default async function Page() {
         categoryStats={categoryStats}
         aumTimeline={aumTimeline}
         heatmap={heatmap}
+        latestBocDate={latestBocDate}
       />
     </div>
   );

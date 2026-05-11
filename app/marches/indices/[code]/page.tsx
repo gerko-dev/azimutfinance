@@ -5,8 +5,10 @@ import IndexDetailView from "@/components/IndexDetailView";
 import {
   loadIndexHistory,
   loadOhlcHistory,
+  loadSectorComponents,
   computeYtdPct,
   BRVM_INDEX_NAMES,
+  BRVM_SECTORIAL_INDICES,
 } from "@/lib/dataLoader";
 import {
   getBrvmIndicesSnapshot,
@@ -58,6 +60,13 @@ export default async function Page({
   const high52w = last52w.length > 0 ? Math.max(...last52w.map((p) => p.value)) : null;
   const low52w = last52w.length > 0 ? Math.min(...last52w.map((p) => p.value)) : null;
 
+  // Composants sectoriels : titres du secteur avec contribution YTD
+  // (uniquement pour les indices sectoriels — composition principale non
+  // disponible publiquement, on ne veut pas afficher d'approximation faussee)
+  const sectorComponents = BRVM_SECTORIAL_INDICES.includes(code)
+    ? loadSectorComponents(code)
+    : [];
+
   // Volatilite annualisee 252j sur la fenetre 52 semaines
   const volatility52w = (() => {
     if (last52w.length < 30) return null;
@@ -89,6 +98,7 @@ export default async function Page({
         high52w={high52w}
         low52w={low52w}
         volatility52w={volatility52w}
+        sectorComponents={sectorComponents}
         session={{
           fetchedAt: snapshot.fetchedAt,
           sessionLabel: snapshot.sessionLabel,

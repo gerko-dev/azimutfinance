@@ -4,7 +4,10 @@ import { readFileSync, readdirSync, existsSync } from "fs";
 import { join } from "path";
 import Papa from "papaparse";
 import type { Bond, BondCountry, IssuanceResult } from "./bondsUEMOA";
-import { UMOA_COUNTRY_CODE } from "./listedBondsTypes";
+import {
+  UMOA_COUNTRY_CODE,
+  generateAllListedBondEvents,
+} from "./listedBondsTypes";
 
 const DATA_DIR = join(process.cwd(), "data");
 // Historiques scrapes depuis Sikafinance : un CSV par titre/indice avec OHLCV
@@ -296,7 +299,9 @@ import type {
   ListedBondPrice,
   ListedBondEvent,
   MarketStats,
+  BocSynthese,
 } from "./listedBondsTypes";
+import { computeCurrentNominalPerTitre } from "./listedBondsTypes";
 
 type ListedBondCSVRow = {
   isin: string;
@@ -314,14 +319,18 @@ type ListedBondCSVRow = {
   couponFrequency: string;
   issueDate: string;
   maturityDate: string;
-  firstAmortizationDate: string;
-  amortizationType: string;
+  /** CSV utilise l'entete "firstCouponDate" mais la valeur est en realite
+   *  la premiere date d'amortissement (apres differe). */
+  firstCouponDate: string;
   rating: string;
   ratingAgency: string;
   callable: string;
   callDate: string;
   greenBond: string;
   description: string;
+  amortizationType: string;
+  /** "T" = amortissement sur titre, "N" = sur nominal (par defaut). */
+  "Titre/Nominal": string;
 };
 
 type ListedBondPriceRow = {
@@ -331,14 +340,6 @@ type ListedBondPriceRow = {
   dirtyPrice: string;
   volume: string;
   transactions: string;
-};
-
-type ListedBondEventRow = {
-  isin: string;
-  date: string;
-  type: string;
-  amount: string;
-  description: string;
 };
 
 function parseDate(s: string): Date {
@@ -384,28 +385,84 @@ function normalizeAmortizationType(value: string): "IF" | "AC" | "ACD" {
   return "AC";
 }
 
+type BocVnRow = { code: string; valeurNominale: string; bocDate: string };
+
+/** VN scrapees du BOC officiel BRVM (cf. scripts/scrape_brvm_boc.py).
+ *  Memoize : le fichier ne change qu'une fois par jour apres scrape. */
+let _bocVnCache: Map<string, number> | null = null;
+function loadBocNominalValues(): Map<string, number> {
+  if (_bocVnCache) return _bocVnCache;
+  const m = new Map<string, number>();
+  const filePath = join(DATA_DIR, "obligations-cotees-vn-boc.csv");
+  if (!existsSync(filePath)) {
+    _bocVnCache = m;
+    return m;
+  }
+  try {
+    const rows = parseCSV<BocVnRow>("obligations-cotees-vn-boc.csv");
+    for (const r of rows) {
+      const code = r.code?.trim();
+      const vn = parseNum(r.valeurNominale);
+      if (code && vn > 0) m.set(code, vn);
+    }
+  } catch {
+    // pas grave : on tombe sur le calcul auto
+  }
+  _bocVnCache = m;
+  return m;
+}
+
 export function loadListedBonds(): ListedBond[] {
   const rows = parseCSV<ListedBondCSVRow>("obligations-cotees.csv");
-  return rows.map((r) => {
+  const bocVn = loadBocNominalValues();
+  return rows
+    .filter((r) => r.isin?.trim())
+    .map((r) => {
     const maturityISO = normalizeDateISO(r.maturityDate);
+    const issueDateISO = normalizeDateISO(r.issueDate);
+    // CSV header "firstCouponDate" mais la valeur = 1ere date d'amort (apres
+    // differe). On garde le nom semantique cote objet.
+    const firstAmortDateISO = normalizeDateISO(r.firstCouponDate);
+    const amortizationType = normalizeAmortizationType(r.amortizationType);
+    const couponFrequency = parseNum(r.couponFrequency, 1) as 1 | 2 | 4;
+    const amortizationMode: "T" | "N" =
+      r["Titre/Nominal"]?.trim().toUpperCase() === "T" ? "T" : "N";
+
+    // VN courante : preference au BOC officiel BRVM (scrape via
+    // scripts/scrape_brvm_boc.py → data/obligations-cotees-vn-boc.csv).
+    // Sinon fallback sur le calcul auto depuis les dates + mode + INITIAL=10 000.
+    // La colonne `nominalValue` du CSV obligations-cotees.csv est ignoree.
+    const code = r.code?.trim() || "";
+    const nominalValue =
+      bocVn.get(code) ??
+      computeCurrentNominalPerTitre({
+        amortizationType,
+        amortizationMode,
+        issueDate: issueDateISO,
+        maturityDate: maturityISO,
+        firstAmortizationDate: firstAmortDateISO,
+        couponFrequency,
+      });
+
     return {
       isin: r.isin?.trim() || "",
-      code: r.code?.trim() || "",
+      code,
       name: r.name?.trim() || "",
       issuer: r.issuer?.trim() || "",
       issuerType: r.issuerType?.trim() || "Autre",
       country: r.country?.trim() || "",
       sector: r.sector?.trim() || "",
       currency: r.currency?.trim() || "XOF",
-      nominalValue: parseNum(r.nominalValue, 10000),
+      nominalValue,
       totalIssued: parseNum(r.totalIssued),
       outstanding: parseNum(r.outstanding),
       couponRate: parseNum(r.couponRate) / 100,
-      couponFrequency: parseNum(r.couponFrequency, 1) as 1 | 2 | 4,
-      issueDate: normalizeDateISO(r.issueDate),
+      couponFrequency,
+      issueDate: issueDateISO,
       maturityDate: maturityISO,
-      firstAmortizationDate: normalizeDateISO(r.firstAmortizationDate),
-      amortizationType: normalizeAmortizationType(r.amortizationType),
+      firstAmortizationDate: firstAmortDateISO,
+      amortizationType,
+      amortizationMode,
       rating: r.rating?.trim() || "",
       ratingAgency: r.ratingAgency?.trim() || "",
       callable: r.callable?.trim().toLowerCase() === "true",
@@ -429,20 +486,68 @@ export function loadListedBondPrices(): ListedBondPrice[] {
   }));
 }
 
+/**
+ * Source UNIQUE des evenements : la fiche de chaque obligation.
+ * Les coupons, amortissements intermediaires et remboursement final sont
+ * generes par calcul (cf. generateBondLifecycleEvents) — plus aucune lecture
+ * du CSV obligations-cotees-evenements.csv, qui n'a plus a etre maintenu.
+ */
 export function loadListedBondEvents(): ListedBondEvent[] {
-  const rows = parseCSV<ListedBondEventRow>("obligations-cotees-evenements.csv");
-  return rows.map((r) => {
-    const raw = r.type?.trim().toLowerCase() || "coupon";
-    // CSV utilise PRINCIPAL pour les amortissements / remboursements de capital
-    const eventType = (raw === "principal" ? "remboursement" : raw) as ListedBondEvent["eventType"];
-    return {
-      isin: r.isin?.trim() || "",
-      date: normalizeDateISO(r.date),
-      eventType,
-      amount: parseNum(r.amount),
-      description: r.description?.trim() || "",
-    };
-  });
+  return generateAllListedBondEvents(loadListedBonds());
+}
+
+// Synthese marche obligataire scrapee du BOC BRVM (page 1) — JSON memoise.
+// Si le fichier est absent / invalide, on retourne null et l'UI retombe sur
+// les calculs locaux (totalOutstanding agrege depuis le CSV obligations-cotees).
+let _bocSyntheseCache: BocSynthese | null | undefined = undefined;
+
+/** Compte les lignes (hors header, hors lignes vides) du CSV audit
+ *  obligations-cotees-vn-boc.csv = nombre d'obligations cotees publiees au BOC.
+ *  Lecture independante du JSON synthese : ce compteur reflete les pages
+ *  detaillees (5+) du BOC, pas la page 1. */
+function readBocBondsCount(): number | null {
+  const path = join(DATA_DIR, "obligations-cotees-vn-boc.csv");
+  if (!existsSync(path)) return null;
+  try {
+    let content = readFileSync(path, "utf-8");
+    if (content.charCodeAt(0) === 0xfeff) content = content.slice(1);
+    const lines = content.split(/\r?\n/).filter((l) => l.trim().length > 0);
+    return Math.max(0, lines.length - 1);
+  } catch {
+    return null;
+  }
+}
+
+export function loadBocSynthese(): BocSynthese | null {
+  if (_bocSyntheseCache !== undefined) return _bocSyntheseCache;
+  const path = join(DATA_DIR, "obligations-cotees-boc-synthese.json");
+  if (!existsSync(path)) {
+    _bocSyntheseCache = null;
+    return null;
+  }
+  try {
+    const raw = readFileSync(path, "utf-8");
+    const parsed = JSON.parse(raw) as Partial<BocSynthese>;
+    if (
+      typeof parsed.bocDate === "string" &&
+      typeof parsed.capitalisationBoursiere === "number" &&
+      typeof parsed.volumeEchange === "number" &&
+      typeof parsed.valeurTransigee === "number"
+    ) {
+      _bocSyntheseCache = {
+        bocDate: parsed.bocDate,
+        capitalisationBoursiere: parsed.capitalisationBoursiere,
+        volumeEchange: parsed.volumeEchange,
+        valeurTransigee: parsed.valeurTransigee,
+        bondsCount: readBocBondsCount(),
+      };
+      return _bocSyntheseCache;
+    }
+  } catch {
+    // JSON corrompu : on degrade silencieusement, le cron remettra le bon fichier.
+  }
+  _bocSyntheseCache = null;
+  return null;
 }
 
 export function getMarketStats(bonds: ListedBond[]): MarketStats {
@@ -476,6 +581,7 @@ export function getMarketStats(bonds: ListedBond[]): MarketStats {
     averageDuration,
     byCountry,
     byType,
+    boc: loadBocSynthese(),
   };
 }
 
@@ -497,107 +603,222 @@ function parseNumOrNull(value: unknown): number | null {
 }
 
 /**
- * Charge les emissions UMOA-Titres pour la calibration des prix theoriques.
+ * Charge les emissions UMOA-Titres REALISEES (historique adjudications)
+ * depuis data/umoa-emissions-realisees.csv (23 colonnes, separateur ';').
  *
- * Format CSV : 25 colonnes, separateur virgule, headers en francais.
- * Les colonnes principales sont mappees vers les champs historiques de
- * EmissionUMOA pour preserver la compat avec calibrateTheoreticalYTM,
- * et les nouveaux champs (couponRate, amortizationType, etc.) sont aussi
- * exposes pour les vues detaillees.
+ * Source : scraper scripts/scrape_umoa_emissions.py (cron 19h GMT) qui applique
+ * deja TOUT le nettoyage AVANT ecriture du CSV :
+ *  - normalisation pays (aliases "Burkina", apostrophe courbe...)
+ *  - filtrage lignes incoherentes (dates, montants <= 0, rendement hors borne)
+ *  - reclassification BAT > 2 ans en OAT
+ *
+ * Cote TS, on se contente donc de :
+ *  - mapper les colonnes vers le shape EmissionUMOA
+ *  - convertir les unites "% scrape" (5.5200) en decimal historique (0.0552)
+ *  - laisser un garde-fou minimal pour les cas extremes (defense-in-depth)
+ *
+ * Les taux sont publies en UNITES POURCENT (5.5200 = 5,52%) dans le CSV, on
+ * divise par 100 pour matcher le format decimal historique de EmissionUMOA.
  */
 export function loadUmoaEmissions(): import("./listedBondsTypes").EmissionUMOA[] {
   if (_emissionsCache !== null) return _emissionsCache;
 
   type Row = {
-    "Instrument": string;
-    "Précisions": string;
-    "Date de l'opération": string;
-    "Date de valeur": string;
-    "Échéance": string;
-    "Maturité (mois)": string;
-    "Différé (année)": string;
-    "Montant(millions de FCFA)": string;
-    "Montant soumis(millions de FCFA)": string;
-    "Montant retenu(millions de FCFA)": string;
-    "ISIN": string;
-    "Taux d'interet": string;
-    "Prix marginal": string;
-    "Taux marginal (%)": string;
-    "Prix moyen pondéré": string;
-    "Taux moyen pondéré (%)": string;
-    "Rendement moyen pondéré": string;
-    "Type d'amortissement": string;
-    "Pondération (%)": string;
-    "Etat": string;
-    "Pays": string;
+    pays: string;
+    titreES: string;
+    instrument: string;
+    precisions: string;
+    dateOperation: string;
+    dateValeur: string;
+    echeance: string;
+    maturiteMois: string;
+    differeAnnee: string;
+    montantM: string;
+    montantSoumisM: string;
+    montantRetenuM: string;
+    isin: string;
+    tauxInteret: string;
+    prixMarginal: string;
+    tauxMarginalPct: string;
+    prixMoyenPondere: string;
+    tauxMoyenPonderePct: string;
+    rendementMoyenPondere: string;
+    typeAmortissement: string;
+    ponderationPct: string;
+    etat: string;
+    url: string;
   };
 
-  const rows = parseCSV<Row>("emissions.csv", ",");
+  // Convertit une valeur "5.5200" (% units, CSV scrape) en 0.0552 (decimal,
+  // format EmissionUMOA historique). Retourne null pour "multiple", vide, ou
+  // valeur non parseable.
+  const pctToDecimal = (s: string): number | null => {
+    if (!s) return null;
+    const t = s.trim();
+    if (!t || t.toLowerCase() === "multiple") return null;
+    const n = parseFloat(t);
+    if (!Number.isFinite(n)) return null;
+    return n / 100;
+  };
+
+  const rows = parseCSV<Row>("umoa-emissions-realisees.csv", ";");
 
   _emissionsCache = rows
     .map((r) => {
-      const countryName = r["Pays"]?.trim() || "";
+      const countryName = r.pays?.trim() || "";
       const country = UMOA_COUNTRY_CODE[countryName] || "";
-      const instrument = (r["Instrument"]?.trim() || "OAT").toUpperCase();
-      const type: "OAT" | "BAT" = instrument === "BAT" ? "BAT" : "OAT";
+      const instrumentRaw = (r.instrument?.trim() || "OAT").toUpperCase();
 
-      // La maturite est calculee depuis les dates plutot que via "Maturite (mois)" :
-      // - pour les OAT re-abondes, le champ porte la duree initiale (faux residuel)
-      // - pour certaines lignes BAT le champ est en jours, ou contient des erreurs de saisie
-      // On garde maturityMonths brut pour reference / debug.
-      const issueDateISO = normalizeDateISO(r["Date de valeur"]);
-      const maturityDateISO = normalizeDateISO(r["Échéance"]);
+      const issueDateISO = r.dateValeur?.trim() || "";
+      const maturityDateISO = r.echeance?.trim() || "";
       let maturity = 0;
       if (issueDateISO && maturityDateISO) {
-        const ms = new Date(maturityDateISO).getTime() - new Date(issueDateISO).getTime();
+        const ms =
+          new Date(maturityDateISO).getTime() -
+          new Date(issueDateISO).getTime();
         if (ms > 0) maturity = ms / (365.25 * 24 * 60 * 60 * 1000);
       }
-      const maturityMonths = parseNum(r["Maturité (mois)"]);
-      const amortRaw = r["Type d'amortissement"]?.trim();
-      const amortizationType: "Linéaire" | "In Fine" | null =
-        amortRaw === "Linéaire" ? "Linéaire" : amortRaw === "In Fine" ? "In Fine" : null;
 
-      // Le rendement moyen pondere est deja en decimal dans le CSV (0.0605 pour 6,05%).
-      // C'est aussi vrai pour Taux d'interet, Rendement moyen pondere.
-      // En revanche "Taux marginal (%)" et "Taux moyen pondere (%)" sont aussi en decimal
-      // (0.0524 pour 5,24%) malgre le "(%)" dans l'entete — cela reflete le format du fichier.
+      // Reclassification : un BAT avec maturite > 2,05 ans est un OAT mal
+      // saisi cote UMOA (5 cas observes). On reclasse silencieusement plutot
+      // que de jeter la donnee. Inversement, un instrument vide ou "ES" est
+      // mappe sur OAT (le defaut historique).
+      const type: "OAT" | "BAT" =
+        instrumentRaw === "BAT" && maturity <= 2.05 ? "BAT" : "OAT";
+
+      const maturityMonths = parseNum(r.maturiteMois);
+      const amortRaw = r.typeAmortissement?.trim();
+      const amortizationType: "Linéaire" | "In Fine" | null =
+        amortRaw === "Linéaire"
+          ? "Linéaire"
+          : amortRaw === "In Fine"
+            ? "In Fine"
+            : null;
+
       return {
         date: issueDateISO,
         country,
-        isin: r["ISIN"]?.trim() || "",
+        isin: r.isin?.trim() || "",
         type,
         maturity,
-        amount: parseNum(r["Montant retenu(millions de FCFA)"]),
-        weightedAvgYield: parseNum(r["Rendement moyen pondéré"]),
+        amount: parseNum(r.montantRetenuM),
+        weightedAvgYield: pctToDecimal(r.rendementMoyenPondere) ?? 0,
 
-        tradeDate: normalizeDateISO(r["Date de l'opération"]),
+        tradeDate: r.dateOperation?.trim() || "",
         maturityDate: maturityDateISO,
         maturityMonths,
-        graceYears: parseNum(r["Différé (année)"]),
-        couponRate: parseNumOrNull(r["Taux d'interet"]),
+        graceYears: parseNum(r.differeAnnee),
+        couponRate: pctToDecimal(r.tauxInteret),
         amortizationType,
-        marginalPrice: parseNumOrNull(r["Prix marginal"]),
-        marginalYield: parseNumOrNull(r["Taux marginal (%)"]),
-        weightedAvgPrice: parseNumOrNull(r["Prix moyen pondéré"]),
-        weightedAvgRate: parseNumOrNull(r["Taux moyen pondéré (%)"]),
-        precisions: r["Précisions"]?.trim() || "",
+        marginalPrice: parseNumOrNull(r.prixMarginal),
+        marginalYield: pctToDecimal(r.tauxMarginalPct),
+        weightedAvgPrice: parseNumOrNull(r.prixMoyenPondere),
+        weightedAvgRate: pctToDecimal(r.tauxMoyenPonderePct),
+        precisions: r.precisions?.trim() || "",
         countryName,
-        amountSubmitted: parseNum(r["Montant soumis(millions de FCFA)"]),
-        amountIssued: parseNum(r["Montant(millions de FCFA)"]),
+        amountSubmitted: parseNum(r.montantSoumisM),
+        amountIssued: parseNum(r.montantM),
+        url: r.url?.trim() || "",
       };
     })
+    // Garde-fou minimal : si le scraper a laisse passer une ligne aberrante,
+    // on protege le calcul actuariel aval. Avec le nettoyage Python en place,
+    // ces conditions ne devraient JAMAIS se declencher.
     .filter((e) => {
       if (!e.date || !e.country) return false;
       if (e.maturity <= 0 || e.maturity > 50) return false;
-      // BAT plafonnes a 2 ans par regle UMOA-Titres : au-dela c'est une
-      // erreur de saisie (mauvaise date d'echeance ou mauvais Instrument).
-      if (e.type === "BAT" && e.maturity > 2) return false;
       if (e.amount <= 0) return false;
       if (e.weightedAvgYield <= 0 || e.weightedAvgYield > 0.3) return false;
       return true;
     });
 
   return _emissionsCache;
+}
+
+// === UMOA-Titres : Emissions A VENIR (calendrier 30 jours environ) ===
+let _emissionsAVenirCache: import("./listedBondsTypes").EmissionUMOAFuture[] | null = null;
+
+export function loadUmoaEmissionsAVenir(): import("./listedBondsTypes").EmissionUMOAFuture[] {
+  if (_emissionsAVenirCache !== null) return _emissionsAVenirCache;
+
+  type Row = {
+    pays: string;
+    titreES: string;
+    instrument: string;
+    precisions: string;
+    dateOperation: string;
+    dateValeur: string;
+    echeance: string;
+    maturiteMois: string;
+    differeAnnee: string;
+    montantM: string;
+    etat: string;
+    url: string;
+  };
+
+  const rows = parseCSV<Row>("umoa-emissions-a-venir.csv", ";");
+
+  _emissionsAVenirCache = rows
+    .map((r) => {
+      const countryName = r.pays?.trim() || "";
+      const country = UMOA_COUNTRY_CODE[countryName] || "";
+      return {
+        country,
+        countryName,
+        titreES: r.titreES?.trim() || "",
+        instrument: r.instrument?.trim() || "",
+        precisions: r.precisions?.trim() || "",
+        dateOperation: r.dateOperation?.trim() || "",
+        dateValeur: r.dateValeur?.trim() || "",
+        echeance: r.echeance?.trim() || "",
+        maturityMonths: parseNum(r.maturiteMois),
+        graceYears: parseNum(r.differeAnnee),
+        amount: parseNum(r.montantM),
+        url: r.url?.trim() || "",
+      };
+    })
+    .filter((e) => e.country && e.dateOperation);
+
+  return _emissionsAVenirCache;
+}
+
+// === UMOA-Titres : Emissions PLANIFIEES (calendrier annuel) ===
+let _emissionsPlanifieesCache: import("./listedBondsTypes").EmissionUMOAPlanned[] | null = null;
+
+export function loadUmoaEmissionsPlanifiees(): import("./listedBondsTypes").EmissionUMOAPlanned[] {
+  if (_emissionsPlanifieesCache !== null) return _emissionsPlanifieesCache;
+
+  type Row = {
+    pays: string;
+    titreES: string;
+    instrument: string;
+    precisions: string;
+    dateOperation: string;
+    montantM: string;
+    etat: string;
+    url: string;
+  };
+
+  const rows = parseCSV<Row>("umoa-emissions-planifiees.csv", ";");
+
+  _emissionsPlanifieesCache = rows
+    .map((r) => {
+      const countryName = r.pays?.trim() || "";
+      const country = UMOA_COUNTRY_CODE[countryName] || "";
+      return {
+        country,
+        countryName,
+        titreES: r.titreES?.trim() || "",
+        instrument: r.instrument?.trim() || "",
+        precisions: r.precisions?.trim() || "",
+        dateOperation: r.dateOperation?.trim() || "",
+        amount: parseNum(r.montantM),
+        url: r.url?.trim() || "",
+      };
+    })
+    .filter((e) => e.country && e.dateOperation);
+
+  return _emissionsPlanifieesCache;
 }
 // ==========================================
 // INDICES BRVM
@@ -898,6 +1119,108 @@ export function getIndexStats(
     variationPct,
     variationValue,
   };
+}
+
+/** Inverse de SECTOR_TO_INDEX : code d'indice → libellé secteur normalisé */
+const INDEX_TO_SECTOR_KEY: Record<string, string> = Object.fromEntries(
+  Object.entries(SECTOR_TO_INDEX).map(([sector, code]) => [code, sector]),
+);
+
+
+export type SectorComponent = {
+  code: string;
+  name: string;
+  country: string;
+  currentPrice: number;
+  startPrice: number | null;
+  ytdPct: number | null;
+  /** Capitalisation totale au 31/12 N-1 (start_price × sharesOutstanding). Null si indisponible. */
+  startCap: number | null;
+  /** Poids dans le secteur en % (0–100). 0 si capitalisation indisponible. */
+  weightPct: number;
+  /** Contribution à la variation YTD du secteur, en points de %. */
+  contributionPct: number | null;
+};
+
+/**
+ * Composants d'un indice sectoriel BRVM : poids en capitalisation totale au
+ * 31/12 N-1 (rapporté au total du secteur) et contribution = poids × YTD.
+ * Trié par contribution décroissante.
+ */
+export function loadSectorComponents(indexCode: string): SectorComponent[] {
+  const targetSector = INDEX_TO_SECTOR_KEY[indexCode];
+  if (!targetSector) return [];
+
+  const stocks = loadStocks().filter(
+    (s) => normalizeSectorKey(s.sector) === targetSector,
+  );
+  if (stocks.length === 0) return [];
+
+  const year = new Date().getUTCFullYear();
+  const cutoff = `${year - 1}-12-31`;
+
+  const enriched = stocks
+    .map((s): SectorComponent | null => {
+      const code = (s.code || "").trim().toUpperCase();
+      if (!code) return null;
+      const sharesOut = parseNum(s.sharesOutstanding, 0);
+      const history = loadPriceHistory(code);
+      if (history.length === 0) return null;
+
+      // Prix de référence YTD : dernier point ≤ 31/12 N-1
+      let startPrice: number | null = null;
+      for (const p of history) {
+        if (p.date <= cutoff) startPrice = p.value;
+        else break;
+      }
+
+      const lastPoint = history[history.length - 1];
+      const csvPrice = parseNum(s.price, 0);
+      const currentPrice = csvPrice > 0 ? csvPrice : lastPoint.value;
+
+      const ytdPct =
+        startPrice !== null && startPrice > 0
+          ? ((currentPrice - startPrice) / startPrice) * 100
+          : null;
+
+      const startCap =
+        startPrice !== null && startPrice > 0 && sharesOut > 0
+          ? startPrice * sharesOut
+          : null;
+
+      return {
+        code,
+        name: (s.name || "").trim(),
+        country: (s.country || "").trim(),
+        currentPrice,
+        startPrice,
+        ytdPct,
+        startCap,
+        weightPct: 0,
+        contributionPct: null,
+      };
+    })
+    .filter((c): c is SectorComponent => c !== null);
+
+  const totalCap = enriched.reduce(
+    (sum, c) => sum + (c.startCap ?? 0),
+    0,
+  );
+
+  for (const c of enriched) {
+    if (totalCap > 0 && c.startCap !== null) {
+      c.weightPct = (c.startCap / totalCap) * 100;
+      if (c.ytdPct !== null) {
+        c.contributionPct = (c.weightPct / 100) * c.ytdPct;
+      }
+    }
+  }
+
+  return enriched.sort((a, b) => {
+    const ca = a.contributionPct ?? -Infinity;
+    const cb = b.contributionPct ?? -Infinity;
+    return cb - ca;
+  });
 }
 
 // ==========================================

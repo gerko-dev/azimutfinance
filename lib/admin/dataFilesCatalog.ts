@@ -68,11 +68,46 @@ export const DATA_FILES_CATALOG: Record<string, DataFileMeta> = {
     description: "Coupons et amortissements obligations",
   },
   "emissions.csv": {
-    category: "Cours BRVM",
+    category: "Legacy",
     cadence: "event-driven",
     dateColumn: "Date de l'opération",
     delimiter: ",",
-    description: "Adjudications UMOA-Titres",
+    description: "Adjudications UMOA-Titres (legacy, remplacé par umoa-emissions-*)",
+  },
+  "umoa-emissions-realisees.csv": {
+    category: "UMOA-Titres",
+    cadence: "daily",
+    dateColumn: "dateOperation",
+    delimiter: ";",
+    description: "Adjudications UMOA-Titres réalisées (scraper daily 19h GMT)",
+  },
+  "umoa-emissions-a-venir.csv": {
+    category: "UMOA-Titres",
+    cadence: "daily",
+    dateColumn: "dateOperation",
+    delimiter: ";",
+    description: "Émissions à venir UMOA-Titres",
+  },
+  "umoa-emissions-planifiees.csv": {
+    category: "UMOA-Titres",
+    cadence: "daily",
+    dateColumn: "dateOperation",
+    delimiter: ";",
+    description: "Calendrier annuel UMOA-Titres",
+  },
+  "fcp.csv": {
+    category: "Cours BRVM",
+    cadence: "daily-business",
+    dateColumn: "bocDate",
+    delimiter: ";",
+    description: "FCP / SICAV (dernière page du BOC BRVM)",
+  },
+  "fcp/aumfcp.csv": {
+    category: "Cours BRVM",
+    cadence: "yearly",
+    dateColumn: "Date",
+    delimiter: ";",
+    description: "Historique trimestriel VL + Actif net OPCVM (source AGP UEMOA)",
   },
   "actualites.csv": {
     category: "Cours BRVM",
@@ -122,14 +157,6 @@ export const DATA_FILES_CATALOG: Record<string, DataFileMeta> = {
     delimiter: ",",
     description: "Taux directeurs et taux interbancaires",
   },
-  "dataasgop.csv": {
-    category: "Macro & taux",
-    cadence: "daily",
-    dateColumn: "Date",
-    delimiter: ",",
-    description: "Valeurs liquidatives OPC",
-  },
-
   // === Immobilier (scrap) ===
   "jiji-achat.csv": { category: "Immobilier", cadence: "monthly", dateColumn: "scraped_at", delimiter: ";", description: "Annonces achat (Jiji)" },
   "jiji-location.csv": { category: "Immobilier", cadence: "monthly", dateColumn: "scraped_at", delimiter: ";", description: "Annonces location (Jiji)" },
@@ -139,7 +166,6 @@ export const DATA_FILES_CATALOG: Record<string, DataFileMeta> = {
   "DB_Postes.csv": { category: "Référentiel comptable", cadence: "ref", dateColumn: null, delimiter: ",", description: "Codes des postes comptables" },
   "DB_Titres.csv": { category: "Référentiel comptable", cadence: "ref", dateColumn: null, delimiter: ",", description: "Référentiel des sociétés cotées" },
   "DB_Valeurs.csv": { category: "Référentiel comptable", cadence: "yearly", dateColumn: "exercice", delimiter: ",", description: "Valeurs comptables par exercice" },
-  "DB_Ratios.csv": { category: "Référentiel comptable", cadence: "yearly", dateColumn: "exercice", delimiter: ",", description: "Ratios financiers par exercice" },
 };
 
 export const CATEGORY_ORDER: string[] = [

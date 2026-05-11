@@ -1,6 +1,6 @@
 import Header from "@/components/Header";
 import Ticker from "@/components/Ticker";
-import SGPIndexView from "@/components/SGPIndexView";
+import SGOIndexView from "@/components/SGOIndexView";
 import {
   loadFunds,
   listManagers,
@@ -8,6 +8,7 @@ import {
   getReferenceQuarter,
   getLatestVLDate,
   aumAt,
+  getLatestBocDate,
 } from "@/lib/fcp";
 import {
   managerQualityScore,
@@ -17,7 +18,7 @@ import {
 
 export const dynamic = "force-static";
 
-export type SGPIndexRow = {
+export type SGOIndexRow = {
   slug: string;
   name: string;
   nbFunds: number;
@@ -32,7 +33,7 @@ export type SGPIndexRow = {
   categories: string[];
 };
 
-export default function SGPIndexPage() {
+export default function SGOIndexPage() {
   const allFunds = loadFunds();
   const managers = listManagers();
   const quarterEnds = listQuarterEnds();
@@ -44,7 +45,7 @@ export default function SGPIndexPage() {
     0
   );
 
-  const rows: SGPIndexRow[] = managers.map((m) => {
+  const rows: SGOIndexRow[] = managers.map((m) => {
     const mFunds = allFunds.filter((f) => f.gestionnaire === m.name);
     const quality = managerQualityScore(mFunds, allFunds);
     const cadenceMix = managerCadenceMix(mFunds, latestVLGlobal || refQuarter, quarterEnds);
@@ -84,11 +85,12 @@ export default function SGPIndexPage() {
     <div className="min-h-screen bg-slate-50">
       <Header />
       <Ticker />
-      <SGPIndexView
+      <SGOIndexView
         rows={rows}
         refQuarter={refQuarter}
         marketTotalAUM={marketTotalAUM}
         totalFunds={allFunds.length}
+        latestBocDate={getLatestBocDate(allFunds)}
       />
     </div>
   );

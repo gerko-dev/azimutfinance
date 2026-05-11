@@ -3,6 +3,18 @@
 
 export type AmortizationType = "IF" | "AC" | "ACD";
 
+/**
+ * Mode d'amortissement par titre, lu de la colonne "Titre/Nominal" du CSV :
+ *  - "T" (sur titre)   : la VN par titre reste a la valeur d'origine. A chaque
+ *                        amort, 1/N des titres sont rembourses au pair. Du point
+ *                        de vue d'un porteur d'1 titre : coupon constant tant
+ *                        qu'il n'est pas tire au sort, puis 0.
+ *  - "N" (sur nominal) : la VN par titre decroit lineairement (tranche = VN/N).
+ *                        Le coupon est calcule sur l'outstanding pre-amort, donc
+ *                        decroit aussi.
+ */
+export type AmortizationMode = "T" | "N";
+
 export type ListedBond = {
   isin: string;
   code: string;
@@ -12,6 +24,7 @@ export type ListedBond = {
   country: string;
   sector: string;
   currency: string;
+  /** Valeur nominale d'origine par titre (a l'emission). */
   nominalValue: number;
   totalIssued: number;
   outstanding: number;
@@ -21,6 +34,7 @@ export type ListedBond = {
   maturityDate: string;
   firstAmortizationDate: string;
   amortizationType: AmortizationType;
+  amortizationMode: AmortizationMode;
   rating: string;
   ratingAgency: string;
   callable: boolean;
@@ -42,9 +56,19 @@ export type ListedBondPrice = {
 export type ListedBondEvent = {
   isin: string;
   date: string;
-  eventType: "coupon" | "remboursement" | "call" | "adjudication";
+  /** "amortissement" = tranche intermediaire ; "remboursement" = paiement final */
+  eventType:
+    | "coupon"
+    | "amortissement"
+    | "remboursement"
+    | "call"
+    | "adjudication";
   amount: number;
   description: string;
+  /** Capital restant par titre apres ce flux. Source unique partagee avec
+   *  l'echeancier de la fiche obligation. 0 par defaut pour les flux sans
+   *  effet capital (call/adjudication non utilises pour l'instant). */
+  outstandingAfter: number;
 };
 
 export type MarketStats = {
@@ -54,6 +78,23 @@ export type MarketStats = {
   averageDuration: number;
   byCountry: Record<string, number>;
   byType: Record<string, number>;
+  /** Synthese journaliere du marche obligataire scrapee du BOC BRVM (page 1).
+   *  null si le JSON n'a pas pu etre lu / le scraper n'a pas extrait la section. */
+  boc: BocSynthese | null;
+};
+
+export type BocSynthese = {
+  /** Date du BOC source (YYYY-MM-DD). */
+  bocDate: string;
+  /** Capitalisation boursiere des obligations en FCFA. */
+  capitalisationBoursiere: number;
+  /** Volume echange du jour (nombre de titres). */
+  volumeEchange: number;
+  /** Valeur transigee du jour en FCFA. */
+  valeurTransigee: number;
+  /** Nombre d'obligations cotees = lignes du CSV d'audit obligations-cotees-vn-boc.csv.
+   *  null si le CSV est absent ou illisible. */
+  bondsCount: number | null;
 };
 
 // ==========================================
@@ -107,84 +148,309 @@ function generateCouponDates(
   return dates;
 }
 
-// ==========================================
-// CALCUL ACTUARIEL DU YTM — CONVENTION ACT/365
-// ==========================================
+/**
+ * Calcule la VN courante par titre a date, sans lire la colonne `nominalValue`
+ * du CSV (auto-derivee depuis les dates + mode + convention BRVM 10 000).
+ *
+ *  - IF ou mode T  → reste a 10 000 (face inchangee par titre survivant)
+ *  - mode N        → 10 000 × (N − past_amorts) / N
+ *  - dates invalides ou pas d'amorts → 10 000
+ */
+export function computeCurrentNominalPerTitre(args: {
+  amortizationType: AmortizationType;
+  amortizationMode: AmortizationMode;
+  issueDate: string;
+  maturityDate: string;
+  firstAmortizationDate: string;
+  couponFrequency: 1 | 2 | 4;
+  today?: Date;
+}): number {
+  const today = args.today ?? new Date();
+  const issueDate = parseISODate(args.issueDate);
+  const maturityDate = parseISODate(args.maturityDate);
+  if (isNaN(issueDate.getTime()) || isNaN(maturityDate.getTime())) {
+    return 10_000;
+  }
+  if (args.amortizationType === "IF") return 10_000;
+  if (args.amortizationMode === "T") return 10_000;
 
-function priceFromYTM(
-  bond: {
-    nominalValue: number;
-    couponRate: number;
-    couponFrequency: 1 | 2 | 4;
-    issueDate: string;
-    maturityDate: string;
-  },
-  operationDate: Date,
-  ytm: number
-): { cleanPrice: number; accruedInterest: number } {
-  const issueDate = parseISODate(bond.issueDate);
-  const maturityDate = parseISODate(bond.maturityDate);
-  const couponDates = generateCouponDates(issueDate, maturityDate, bond.couponFrequency);
+  const allCouponDates = generateCouponDates(
+    issueDate,
+    maturityDate,
+    args.couponFrequency,
+  );
+  if (allCouponDates.length === 0) return 10_000;
 
-  const couponAmount = (bond.nominalValue * bond.couponRate) / bond.couponFrequency;
-  const annualCoupon = bond.nominalValue * bond.couponRate;
-
-  const futureDates = couponDates.filter((d) => d.getTime() > operationDate.getTime());
-  const pastDates = couponDates.filter((d) => d.getTime() <= operationDate.getTime());
-  const previousCouponDate = pastDates.length > 0 ? pastDates[pastDates.length - 1] : issueDate;
-
-  const daysSinceLastCoupon = daysBetween(previousCouponDate, operationDate);
-  const accruedInterest = (annualCoupon * daysSinceLastCoupon) / 365;
-
-  let dirtyPrice = 0;
-  for (let i = 0; i < futureDates.length; i++) {
-    const date = futureDates[i];
-    const daysFromNow = daysBetween(operationDate, date);
-    const yearsFromNow = daysFromNow / 365;
-    const discountFactor = Math.pow(1 + ytm, -yearsFromNow);
-    const cashflow =
-      i === futureDates.length - 1 ? couponAmount + bond.nominalValue : couponAmount;
-    dirtyPrice += cashflow * discountFactor;
+  let firstAmortDate: Date;
+  if (args.firstAmortizationDate && args.firstAmortizationDate !== "") {
+    const parsed = parseISODate(args.firstAmortizationDate);
+    firstAmortDate = isNaN(parsed.getTime()) ? allCouponDates[0] : parsed;
+  } else {
+    firstAmortDate = allCouponDates[0];
   }
 
-  const cleanPrice = dirtyPrice - accruedInterest;
-  return { cleanPrice, accruedInterest };
+  const oneDay = 24 * 60 * 60 * 1000;
+  const allAmortDates = allCouponDates.filter(
+    (d) => d.getTime() >= firstAmortDate.getTime() - oneDay,
+  );
+  const totalNbAmortPeriods = allAmortDates.length;
+  if (totalNbAmortPeriods === 0) return 10_000;
+
+  const nbPastAmorts = allAmortDates.filter(
+    (d) => d.getTime() <= today.getTime(),
+  ).length;
+  const remaining = Math.max(0, totalNbAmortPeriods - nbPastAmorts);
+
+  return (10_000 * remaining) / totalNbAmortPeriods;
+}
+
+// ==========================================
+// CALCUL ACTUARIEL DU YTM — CONVENTION ACT/365
+// Toutes les fonctions utilisent l'echeancier reel via
+// buildBondCashflowSchedule, qui prend en charge IF / AC / ACD avec differe
+// et reconstruit le nominal initial a partir des amorts deja passes.
+// ==========================================
+
+export type BondCashflowEntry = {
+  date: Date;
+  daysFromNow: number;
+  outstandingBefore: number;
+  outstandingAfter: number;
+  coupon: number;
+  amort: number;
+  totalFlow: number;
+};
+
+export type BondCashflowSchedule = {
+  futureCashflows: BondCashflowEntry[];
+  /** Capital restant du au debut de la periode courante (= apres le dernier
+   * coupon paye). Le coupon couru est calcule sur cette base. */
+  outstandingAtPeriodStart: number;
+  /** Coupon de la periode courante = outstandingAtPeriodStart × rate / freq */
+  periodicCoupon: number;
+  /** Compte de jours pour le coupon couru (Act/Act ICMA). */
+  daysSinceLastCoupon: number;
+  daysInPeriod: number;
+  /** Reconstruction du nominal initial via les amorts passes. */
+  initialNominal: number;
+  amortPerPeriod: number;
+};
+
+export function buildBondCashflowSchedule(
+  bond: ListedBond,
+  operationDate: Date
+): BondCashflowSchedule {
+  const issueDate = parseISODate(bond.issueDate);
+  const maturityDate = parseISODate(bond.maturityDate);
+  const empty: BondCashflowSchedule = {
+    futureCashflows: [],
+    outstandingAtPeriodStart: bond.nominalValue,
+    periodicCoupon: 0,
+    daysSinceLastCoupon: 0,
+    daysInPeriod: 1,
+    initialNominal: bond.nominalValue,
+    amortPerPeriod: 0,
+  };
+  if (isNaN(issueDate.getTime()) || isNaN(maturityDate.getTime())) return empty;
+  if (operationDate.getTime() >= maturityDate.getTime()) return empty;
+
+  const allCouponDates = generateCouponDates(
+    issueDate,
+    maturityDate,
+    bond.couponFrequency
+  );
+  if (allCouponDates.length === 0) return empty;
+
+  const isIF = bond.amortizationType === "IF" || !bond.amortizationType;
+  let firstAmortDate: Date;
+  if (isIF) {
+    firstAmortDate = maturityDate;
+  } else if (bond.firstAmortizationDate && bond.firstAmortizationDate !== "") {
+    const parsed = parseISODate(bond.firstAmortizationDate);
+    firstAmortDate = isNaN(parsed.getTime()) ? allCouponDates[0] : parsed;
+  } else {
+    firstAmortDate = allCouponDates[0];
+  }
+
+  const oneDay = 24 * 60 * 60 * 1000;
+  const allAmortDates = allCouponDates.filter(
+    (d) => d.getTime() >= firstAmortDate.getTime() - oneDay
+  );
+  const totalNbAmortPeriods = allAmortDates.length;
+
+  const pastAmortDates = allAmortDates.filter(
+    (d) => d.getTime() <= operationDate.getTime()
+  );
+  const nbPastAmorts = pastAmortDates.length;
+
+  // Cascade per-surviving-titre : la valorisation part TOUJOURS de
+  // bond.nominalValue (= capital actuel par titre vivant) avec un
+  // amortPerPeriod calibre pour epuiser ce capital sur les remainingAmorts
+  // periodes futures. La formule initialNominal = nominalValue × N/R est une
+  // grandeur algebrique (sans interpretation physique en mode T) qui rend
+  // amortPerPeriod = nominalValue / R, soit exactement ce qu'il faut pour :
+  //   Σ amorts futurs = R × (nominalValue / R) = nominalValue
+  //   coupons cascadant depuis nominalValue jusqu'a 0
+  //
+  //  - Mode N : nominalValue = INITIAL × R/N (deja cascade par les amorts
+  //    passes). La formule donne amortPerPeriod = INITIAL/N (constant).
+  //  - Mode T : nominalValue = INITIAL constant (per-surviving-titre, conv
+  //    BOC). La formule donne amortPerPeriod = INITIAL/R (capital total
+  //    divise par periodes restantes), coupons sur 10 000 cascadant — vue
+  //    attendue par le marche (le BOC publie un titre survivant a la pair).
+  let initialNominal = bond.nominalValue;
+  let amortPerPeriod = 0;
+  if (!isIF && totalNbAmortPeriods > nbPastAmorts) {
+    const remainingAmorts = totalNbAmortPeriods - nbPastAmorts;
+    initialNominal =
+      (bond.nominalValue * totalNbAmortPeriods) / remainingAmorts;
+    amortPerPeriod = initialNominal / totalNbAmortPeriods;
+  }
+
+  const pastCouponDates = allCouponDates.filter(
+    (d) => d.getTime() <= operationDate.getTime()
+  );
+  const previousCouponDate =
+    pastCouponDates.length > 0
+      ? pastCouponDates[pastCouponDates.length - 1]
+      : issueDate;
+  const futureCouponDatesArr = allCouponDates.filter(
+    (d) => d.getTime() > operationDate.getTime()
+  );
+  const nextCouponDate =
+    futureCouponDatesArr.length > 0 ? futureCouponDatesArr[0] : maturityDate;
+
+  const daysSinceLastCoupon = Math.floor(
+    (operationDate.getTime() - previousCouponDate.getTime()) / oneDay
+  );
+  const daysInPeriod = Math.max(
+    1,
+    Math.round((nextCouponDate.getTime() - previousCouponDate.getTime()) / oneDay)
+  );
+
+  // bond.nominalValue dans le CSV = capital restant a la date courante
+  // (i.e. apres les amorts deja passes, avant le prochain). C'est donc la
+  // base du coupon couru affiche et le point de depart de la cascade.
+  const outstandingAtPeriodStart = bond.nominalValue;
+  const periodicCoupon =
+    (outstandingAtPeriodStart * bond.couponRate) / bond.couponFrequency;
+
+  let outstanding = bond.nominalValue;
+  const futureCashflows: BondCashflowEntry[] = [];
+  for (let i = 0; i < futureCouponDatesArr.length; i++) {
+    const d = futureCouponDatesArr[i];
+    const daysFromNow = (d.getTime() - operationDate.getTime()) / oneDay;
+    const outstandingBefore = outstanding;
+    const coupon = (outstandingBefore * bond.couponRate) / bond.couponFrequency;
+
+    const allAmortIndex = allAmortDates.findIndex(
+      (ad) => ad.getTime() === d.getTime()
+    );
+    const isAmortPeriod = allAmortIndex >= 0;
+    const isLastAmort = allAmortIndex === totalNbAmortPeriods - 1;
+
+    let amort = 0;
+    if (isAmortPeriod) {
+      if (isIF) {
+        if (i === futureCouponDatesArr.length - 1) amort = outstandingBefore;
+      } else {
+        amort = isLastAmort ? outstandingBefore : amortPerPeriod;
+      }
+    }
+
+    const outstandingAfter = Math.max(0, outstandingBefore - amort);
+    futureCashflows.push({
+      date: d,
+      daysFromNow,
+      outstandingBefore,
+      outstandingAfter,
+      coupon,
+      amort,
+      totalFlow: coupon + amort,
+    });
+    outstanding = outstandingAfter;
+  }
+
+  return {
+    futureCashflows,
+    outstandingAtPeriodStart,
+    periodicCoupon,
+    daysSinceLastCoupon,
+    daysInPeriod,
+    initialNominal,
+    amortPerPeriod,
+  };
+}
+
+export function priceFromBondSchedule(
+  schedule: BondCashflowSchedule,
+  ytm: number
+): { cleanPrice: number; dirtyPrice: number; accruedInterest: number } {
+  let dirtyPrice = 0;
+  for (const cf of schedule.futureCashflows) {
+    const years = cf.daysFromNow / 365;
+    const df = Math.pow(1 + ytm, -years);
+    dirtyPrice += cf.totalFlow * df;
+  }
+  const accruedInterest =
+    schedule.daysInPeriod > 0
+      ? (schedule.periodicCoupon * schedule.daysSinceLastCoupon) /
+        schedule.daysInPeriod
+      : 0;
+  return {
+    cleanPrice: dirtyPrice - accruedInterest,
+    dirtyPrice,
+    accruedInterest,
+  };
+}
+
+export function priceFromYtm(
+  bond: ListedBond,
+  operationDate: Date,
+  ytm: number
+): { cleanPrice: number; dirtyPrice: number; accruedInterest: number } {
+  return priceFromBondSchedule(
+    buildBondCashflowSchedule(bond, operationDate),
+    ytm
+  );
 }
 
 export function calculateActuarialYTM(
-  bond: {
-    nominalValue: number;
-    couponRate: number;
-    couponFrequency: 1 | 2 | 4;
-    issueDate: string;
-    maturityDate: string;
-  },
+  bond: ListedBond,
   operationDate: Date,
   targetCleanPrice: number
 ): number {
   if (targetCleanPrice <= 0) return 0;
-
   const maturityDate = parseISODate(bond.maturityDate);
   if (operationDate.getTime() >= maturityDate.getTime()) return 0;
 
-  let low = 0.0001;
-  let high = 0.5;
+  const sched = buildBondCashflowSchedule(bond, operationDate);
+  if (sched.futureCashflows.length === 0) return 0;
 
-  for (let i = 0; i < 50; i++) {
+  // Bornes [-50 %, +200 %] : couvrent distressed extreme et premium pricing.
+  // La fonction f(y) = priceFromBondSchedule(y).cleanPrice est strictement
+  // decroissante en y → on verifie le bracket avant de bisecter. Si la cible
+  // est hors bornes (cashflows trop faibles vs prix saisi → bug de schedule
+  // ou input absurde), on retourne NaN pour signaler explicitement plutot que
+  // de converger silencieusement vers une borne aberrante.
+  const LOW_BOUND = -0.5;
+  const HIGH_BOUND = 2.0;
+  const pAtLow = priceFromBondSchedule(sched, LOW_BOUND).cleanPrice;
+  const pAtHigh = priceFromBondSchedule(sched, HIGH_BOUND).cleanPrice;
+  const fLow = pAtLow - targetCleanPrice;
+  const fHigh = pAtHigh - targetCleanPrice;
+  if (fLow * fHigh > 0) return Number.NaN;
+
+  let low = LOW_BOUND;
+  let high = HIGH_BOUND;
+  for (let i = 0; i < 200; i++) {
     const mid = (low + high) / 2;
-    const { cleanPrice } = priceFromYTM(bond, operationDate, mid);
-
-    if (Math.abs(cleanPrice - targetCleanPrice) < 0.01) {
-      return mid;
-    }
-
-    if (cleanPrice > targetCleanPrice) {
-      low = mid;
-    } else {
-      high = mid;
-    }
+    const { cleanPrice } = priceFromBondSchedule(sched, mid);
+    const diff = cleanPrice - targetCleanPrice;
+    if (Math.abs(diff) < 1e-4) return mid;
+    if (diff > 0) low = mid;
+    else high = mid;
   }
-
   return (low + high) / 2;
 }
 
@@ -223,11 +489,18 @@ export function getBondYTMFromLatest(
     return bond.couponRate;
   }
   try {
-    return calculateActuarialYTM(
+    const ytm = calculateActuarialYTM(
       bond,
       new Date(latestPrice.date),
       latestPrice.cleanPrice
     );
+    // calculateActuarialYTM peut retourner NaN si le prix saisi est hors
+    // [low, high] (= cashflows incompatibles avec le prix). On retombe alors
+    // sur la formule simple analytique pour ne pas casser l'UI en aval.
+    if (!Number.isFinite(ytm)) {
+      return calculateSimpleYTM(bond, latestPrice.cleanPrice);
+    }
+    return ytm;
   } catch {
     return calculateSimpleYTM(bond, latestPrice.cleanPrice);
   }
@@ -238,86 +511,83 @@ export function getBondYTMFromLatest(
 // ==========================================
 
 export function calculateDuration(
-  bond: {
-    nominalValue: number;
-    couponRate: number;
-    couponFrequency: 1 | 2 | 4;
-    issueDate: string;
-    maturityDate: string;
-  },
+  bond: ListedBond,
   operationDate: Date,
   ytm: number
 ): { macaulay: number; modified: number; convexity: number } {
-  const issueDate = parseISODate(bond.issueDate);
-  const maturityDate = parseISODate(bond.maturityDate);
-  const couponDates = generateCouponDates(issueDate, maturityDate, bond.couponFrequency);
-
-  const futureDates = couponDates.filter((d) => d.getTime() > operationDate.getTime());
-  if (futureDates.length === 0) {
+  const sched = buildBondCashflowSchedule(bond, operationDate);
+  if (sched.futureCashflows.length === 0) {
     return { macaulay: 0, modified: 0, convexity: 0 };
   }
-
-  const couponAmount = (bond.nominalValue * bond.couponRate) / bond.couponFrequency;
 
   let sumPV = 0;
   let sumTimesPV = 0;
   let sumTimesSquaredPV = 0;
-
-  for (let i = 0; i < futureDates.length; i++) {
-    const daysFromNow = daysBetween(operationDate, futureDates[i]);
-    const years = daysFromNow / 365;
+  for (const cf of sched.futureCashflows) {
+    const years = cf.daysFromNow / 365;
     const df = Math.pow(1 + ytm, -years);
-
-    const cashflow =
-      i === futureDates.length - 1 ? couponAmount + bond.nominalValue : couponAmount;
-    const pv = cashflow * df;
-
+    const pv = cf.totalFlow * df;
     sumPV += pv;
     sumTimesPV += years * pv;
     sumTimesSquaredPV += years * (years + 1) * pv;
   }
-
   if (sumPV === 0) return { macaulay: 0, modified: 0, convexity: 0 };
 
   const macaulay = sumTimesPV / sumPV;
   const modified = macaulay / (1 + ytm);
   const convexity = sumTimesSquaredPV / sumPV / Math.pow(1 + ytm, 2);
-
   return { macaulay, modified, convexity };
 }
 
+/**
+ * BPV / PV01 : variation de prix pour 1 bp de YTM.
+ * Convention UMOA-Titres : PV01 = modified × DIRTY price × 0,0001.
+ * Le dirty price (= clean + accrued) est la base car la duration modifiee
+ * mesure la sensibilite du PV total des cashflows futurs au taux.
+ */
 export function calculateBPV(
-  bond: {
-    nominalValue: number;
-    couponRate: number;
-    couponFrequency: 1 | 2 | 4;
-    issueDate: string;
-    maturityDate: string;
-  },
+  bond: ListedBond,
   operationDate: Date,
   ytm: number,
-  cleanPrice: number
+  dirtyPrice: number
 ): number {
   const { modified } = calculateDuration(bond, operationDate, ytm);
-  return Math.abs(modified * cleanPrice * 0.0001);
+  return Math.abs(modified * dirtyPrice * 0.0001);
 }
 
 // ==========================================
-// ECHEANCIER DES FLUX — CONVENTION UEMOA
+// ECHEANCIER DES FLUX — CONVENTION UEMOA / BRVM
 // ==========================================
 
+/** Convention BRVM : toutes les obligations cotees ont un nominal d'origine
+ *  de 10 000 FCFA par titre. La colonne `nominalValue` du CSV donne la VN
+ *  *courante* (post amorts deja passes), pas l'initiale. */
+const INITIAL_NOMINAL_PER_TITRE = 10_000;
+
+/** Nombre exact de jours entre deux dates (ACT/365 — convention "réel/réel"). */
+function daysBetweenDates(from: Date, to: Date): number {
+  const ms = to.getTime() - from.getTime();
+  return Math.round(ms / (24 * 60 * 60 * 1000));
+}
+
 /**
- * Genere l'echeancier complet des flux futurs d'une obligation UEMOA cotee.
+ * Genere l'echeancier complet des flux FUTURS d'une obligation UEMOA cotee.
  *
- * Logique UEMOA :
- * - nominalValue dans le CSV = nominal ACTUEL (apres amorts deja passes)
- * - On ne genere que les flux FUTURS (apres aujourd'hui)
- * - Les amortissements passes sont deja pris en compte dans nominalValue
- * - Le coupon est calcule sur le capital restant du
- * - Codes d'amortissement :
- *   - IF : In Fine (remboursement total a l'echeance)
- *   - AC : Amortissement Constant (tranches egales chaque periode)
- *   - ACD : Amortissement Constant Differé (AC avec periode de differé)
+ * Conventions :
+ *  - INITIAL = 10 000 (par titre, a l'emission, fixe par convention BRVM).
+ *  - `bond.amortizationMode` ("T" / "N") :
+ *      T = sur titre   : la VN par titre reste = INITIAL. A chaque echeance,
+ *                        1/N des titres de chaque position sont rembourses au
+ *                        pair (= INITIAL/N par titre detenu).
+ *      N = sur nominal : la VN par titre decroit lineairement, tranche =
+ *                        INITIAL/N par echeance. Le capital restant courant
+ *                        d'un titre apres k amorts = INITIAL × (N−k)/N.
+ *  - Tranche par echeance (per titre) = INITIAL/N (identique en T et N).
+ *  - Coupon par titre, ACT/365 sur le capital restant du :
+ *      coupon = rate × outstanding × (jours_periode / 365)
+ *      en mode T, outstanding = INITIAL constant ; en N, outstanding cascade.
+ *  - N = nb total de dates d'amort = dates de coupon de firstAmortizationDate
+ *    a maturity inclus, ecartees de 12/freq mois.
  */
 export function getBondCashflows(bond: ListedBond): {
   date: string;
@@ -328,13 +598,20 @@ export function getBondCashflows(bond: ListedBond): {
   const issueDate = parseISODate(bond.issueDate);
   const maturityDate = parseISODate(bond.maturityDate);
   const today = new Date();
+  if (isNaN(issueDate.getTime()) || isNaN(maturityDate.getTime())) return [];
 
-  // 1. Genere toutes les dates de coupon depuis l'emission jusqu'a l'echeance
-  const allCouponDates = generateCouponDates(issueDate, maturityDate, bond.couponFrequency);
+  const allCouponDates = generateCouponDates(
+    issueDate,
+    maturityDate,
+    bond.couponFrequency,
+  );
+  if (allCouponDates.length === 0) return [];
 
-  // 2. Determine la premiere date d'amortissement
+  const isIF = bond.amortizationType === "IF" || !bond.amortizationType;
+  const isSurTitre = bond.amortizationMode === "T";
+
   let firstAmortDate: Date;
-  if (bond.amortizationType === "IF") {
+  if (isIF) {
     firstAmortDate = maturityDate;
   } else if (bond.firstAmortizationDate && bond.firstAmortizationDate !== "") {
     firstAmortDate = parseISODate(bond.firstAmortizationDate);
@@ -342,33 +619,34 @@ export function getBondCashflows(bond: ListedBond): {
     firstAmortDate = allCouponDates[0];
   }
 
-  // 3. Dates d'amortissement TOTALES (passees + futures) a partir de firstAmortDate
   const oneDay = 24 * 60 * 60 * 1000;
   const allAmortDates = allCouponDates.filter(
-    (d) => d.getTime() >= firstAmortDate.getTime() - oneDay
+    (d) => d.getTime() >= firstAmortDate.getTime() - oneDay,
   );
   const totalNbAmortPeriods = allAmortDates.length;
 
-  // 4. Nombre d'amortissements PASSES (avant aujourd'hui)
-  const pastAmortDates = allAmortDates.filter((d) => d.getTime() <= today.getTime());
-  const nbPastAmorts = pastAmortDates.length;
+  // Tranche par titre = INITIAL / N (constante, identique T et N).
+  // ATTENTION : ce moteur d'AFFICHAGE matche les publications BOC pour mode T
+  // (coupon constant 325 sur INITIAL). Le moteur de VALORISATION (Engine A
+  // dans buildBondCashflowSchedule) calcule les YTM/Duration/BPV avec une
+  // cascade per-original-titre (amort = INITIAL/R, coupons cascadants) — voir
+  // commentaires dedans pour la justification.
+  const amortPerPeriod =
+    isIF || totalNbAmortPeriods === 0
+      ? 0
+      : INITIAL_NOMINAL_PER_TITRE / totalNbAmortPeriods;
 
-  // 5. Calcul de l'amortissement par periode
-  // Reconstruction : nominal_initial = nominalValue_actuel + (nbPastAmorts * tranche)
-  // Or tranche = nominal_initial / totalNbAmortPeriods
-  // Donc : nominal_initial = nominalValue * totalNbAmortPeriods / (totalNbAmortPeriods - nbPastAmorts)
-  let amortPerPeriod = 0;
-  if (bond.amortizationType !== "IF" && totalNbAmortPeriods > nbPastAmorts) {
-    const remainingAmorts = totalNbAmortPeriods - nbPastAmorts;
-    const initialNominal =
-      bond.nominalValue + (nbPastAmorts / remainingAmorts) * bond.nominalValue;
-    amortPerPeriod = initialNominal / totalNbAmortPeriods;
-  }
-
-  // 6. On ne garde que les dates futures
-  const futureDates = allCouponDates.filter((d) => d.getTime() > today.getTime());
-  if (futureDates.length === 0) return [];
-
+  // Deux outstandings distincts :
+  //  - mathOutstanding : base de calcul du coupon. Reste a INITIAL en mode T
+  //    (le coupon est toujours assis sur 10 000 par titre survivant, conv BOC),
+  //    cascade INITIAL → 0 en mode N.
+  //  - displayOutstanding : capital restant affiche dans le tableau. Cascade
+  //    TOUJOURS, peu importe T/N — l'investisseur veut voir son exposition
+  //    cumulee diminuer au fil des amortissements (la VN du nominal initial
+  //    ramenee au prorata des amorts deja verses).
+  let mathOutstanding = INITIAL_NOMINAL_PER_TITRE;
+  let displayOutstanding = INITIAL_NOMINAL_PER_TITRE;
+  let prevDate = issueDate;
   const cashflows: {
     date: string;
     type: "coupon" | "amortissement" | "remboursement";
@@ -376,70 +654,269 @@ export function getBondCashflows(bond: ListedBond): {
     outstandingAfter: number;
   }[] = [];
 
-  // 7. Capital restant du par titre (commence au nominal actuel)
-  let outstanding = bond.nominalValue;
+  for (let i = 0; i < allCouponDates.length; i++) {
+    const d = allCouponDates[i];
+    const isFuture = d.getTime() > today.getTime();
+    const days = daysBetweenDates(prevDate, d);
 
-  // 8. Boucle sur les dates futures
-  for (let i = 0; i < futureDates.length; i++) {
-    const d = futureDates[i];
-    const dateStr = d.toISOString().substring(0, 10);
+    const amortIndex = allAmortDates.findIndex(
+      (ad) => ad.getTime() === d.getTime(),
+    );
+    const isAmortPeriod = amortIndex >= 0;
+    const isLastAmort = amortIndex === totalNbAmortPeriods - 1;
 
-    // Coupon calcule sur le capital restant AVANT amortissement
-    const couponAmount = (outstanding * bond.couponRate) / bond.couponFrequency;
+    // ACT/365 sur le capital restant du. Mode T : capital reste 10 000 par
+    // titre survivant (matche BOC). Mode N : mathOutstanding cascade.
+    const couponBase = isSurTitre ? INITIAL_NOMINAL_PER_TITRE : mathOutstanding;
+    const couponAmount = (couponBase * bond.couponRate * days) / 365;
 
-    // Cette date est-elle une date d'amortissement ?
-    const allAmortIndex = allAmortDates.findIndex((ad) => ad.getTime() === d.getTime());
-    const isAmortPeriod = allAmortIndex >= 0;
-    const isLastAmort = allAmortIndex === totalNbAmortPeriods - 1;
-
+    // Amort
     let amortAmount = 0;
     let isLastPayment = false;
-
     if (isAmortPeriod) {
-      switch (bond.amortizationType) {
-        case "IF":
-          if (i === futureDates.length - 1) {
-            amortAmount = outstanding;
-            isLastPayment = true;
-          }
-          break;
-
-        case "AC":
-        case "ACD":
-          if (isLastAmort) {
-            amortAmount = outstanding;
-            isLastPayment = true;
-          } else {
-            amortAmount = amortPerPeriod;
-          }
-          break;
+      if (isIF) {
+        if (i === allCouponDates.length - 1) {
+          amortAmount = INITIAL_NOMINAL_PER_TITRE;
+          isLastPayment = true;
+        }
+      } else if (isLastAmort) {
+        // En mode N : dernier flux solde l'arrondi (= mathOutstanding restant).
+        // En mode T : meme tranche que les autres.
+        amortAmount = isSurTitre ? amortPerPeriod : mathOutstanding;
+        isLastPayment = true;
+      } else {
+        amortAmount = amortPerPeriod;
       }
     }
 
-    // Publication des flux
+    // Publication uniquement pour les dates futures.
+    if (isFuture) {
+      // displayOutstanding est inchange par un coupon (le coupon ne reduit pas
+      // le capital), reduit par un amort.
+      const outstandingAfterAmort = Math.max(0, displayOutstanding - amortAmount);
+
+      if (couponAmount > 0.01) {
+        cashflows.push({
+          date: d.toISOString().substring(0, 10),
+          type: "coupon",
+          amount: couponAmount,
+          outstandingAfter: displayOutstanding,
+        });
+      }
+      if (amortAmount > 0.01) {
+        cashflows.push({
+          date: d.toISOString().substring(0, 10),
+          type: isLastPayment ? "remboursement" : "amortissement",
+          amount: amortAmount,
+          outstandingAfter: outstandingAfterAmort,
+        });
+      }
+    }
+
+    // Cascade : displayOutstanding toujours, mathOutstanding seulement en N.
+    displayOutstanding = Math.max(0, displayOutstanding - amortAmount);
+    if (!isSurTitre) {
+      mathOutstanding = Math.max(0, mathOutstanding - amortAmount);
+    }
+    prevDate = d;
+  }
+
+  return cashflows;
+}
+
+/**
+ * Reconstruit l'echeancier des flux PASSES depuis l'emission jusqu'a aujourd'hui.
+ * Meme conventions que `getBondCashflows` (INITIAL=10 000, ACT/365, T/N).
+ */
+export function getBondPastCashflows(bond: ListedBond): {
+  date: string;
+  type: "coupon" | "amortissement" | "remboursement";
+  amount: number;
+  outstandingAfter: number;
+}[] {
+  const issueDate = parseISODate(bond.issueDate);
+  const maturityDate = parseISODate(bond.maturityDate);
+  const today = new Date();
+  if (isNaN(issueDate.getTime()) || isNaN(maturityDate.getTime())) return [];
+
+  const allCouponDates = generateCouponDates(
+    issueDate,
+    maturityDate,
+    bond.couponFrequency,
+  );
+  if (allCouponDates.length === 0) return [];
+
+  const isIF = bond.amortizationType === "IF" || !bond.amortizationType;
+  const isSurTitre = bond.amortizationMode === "T";
+
+  let firstAmortDate: Date;
+  if (isIF) {
+    firstAmortDate = maturityDate;
+  } else if (bond.firstAmortizationDate && bond.firstAmortizationDate !== "") {
+    firstAmortDate = parseISODate(bond.firstAmortizationDate);
+  } else {
+    firstAmortDate = allCouponDates[0];
+  }
+
+  const oneDay = 24 * 60 * 60 * 1000;
+  const allAmortDates = allCouponDates.filter(
+    (d) => d.getTime() >= firstAmortDate.getTime() - oneDay,
+  );
+  const totalNbAmortPeriods = allAmortDates.length;
+
+  const amortPerPeriod =
+    isIF || totalNbAmortPeriods === 0
+      ? 0
+      : INITIAL_NOMINAL_PER_TITRE / totalNbAmortPeriods;
+
+  // Cf. getBondCashflows pour la dualite math vs display.
+  let mathOutstanding = INITIAL_NOMINAL_PER_TITRE;
+  let displayOutstanding = INITIAL_NOMINAL_PER_TITRE;
+  let prevDate = issueDate;
+  const cashflows: {
+    date: string;
+    type: "coupon" | "amortissement" | "remboursement";
+    amount: number;
+    outstandingAfter: number;
+  }[] = [];
+
+  for (let i = 0; i < allCouponDates.length; i++) {
+    const d = allCouponDates[i];
+    if (d.getTime() > today.getTime()) break; // on s'arrete au present
+    const dateStr = d.toISOString().substring(0, 10);
+    const days = daysBetweenDates(prevDate, d);
+
+    const amortIndex = allAmortDates.findIndex(
+      (ad) => ad.getTime() === d.getTime(),
+    );
+    const isAmortPeriod = amortIndex >= 0;
+    const isLastAmort = amortIndex === totalNbAmortPeriods - 1;
+
+    const couponBase = isSurTitre ? INITIAL_NOMINAL_PER_TITRE : mathOutstanding;
+    const couponAmount = (couponBase * bond.couponRate * days) / 365;
+
+    let amortAmount = 0;
+    let isLastPayment = false;
+    if (isAmortPeriod) {
+      if (isIF) {
+        if (i === allCouponDates.length - 1) {
+          amortAmount = INITIAL_NOMINAL_PER_TITRE;
+          isLastPayment = true;
+        }
+      } else if (isLastAmort) {
+        amortAmount = isSurTitre ? amortPerPeriod : mathOutstanding;
+        isLastPayment = true;
+      } else {
+        amortAmount = amortPerPeriod;
+      }
+    }
+
+    const outstandingAfterAmort = Math.max(0, displayOutstanding - amortAmount);
+
     if (couponAmount > 0.01) {
       cashflows.push({
         date: dateStr,
         type: "coupon",
         amount: couponAmount,
-        outstandingAfter: outstanding,
+        outstandingAfter: displayOutstanding,
       });
     }
-
     if (amortAmount > 0.01) {
       cashflows.push({
         date: dateStr,
         type: isLastPayment ? "remboursement" : "amortissement",
         amount: amortAmount,
-        outstandingAfter: Math.max(0, outstanding - amortAmount),
+        outstandingAfter: outstandingAfterAmort,
       });
     }
 
-    // Mise a jour du capital restant APRES cette periode
-    outstanding = Math.max(0, outstanding - amortAmount);
+    displayOutstanding = Math.max(0, displayOutstanding - amortAmount);
+    if (!isSurTitre) {
+      mathOutstanding = Math.max(0, mathOutstanding - amortAmount);
+    }
+    prevDate = d;
   }
 
   return cashflows;
+}
+
+/**
+ * Genere TOUS les evenements (coupons + amortissements + remboursement final)
+ * sur la duree de vie complete d'une obligation, derives uniquement de sa
+ * fiche dans obligations-cotees.csv.
+ *
+ * Delegation a la methode OFFICIELLE utilisee dans l'onglet "Echeancier &
+ * flux" de la fiche obligation : `getBondPastCashflows` + `getBondCashflows`.
+ * Cela garantit la coherence des montants entre la page detail et le
+ * calendrier (meme reconstruction de nominal initial via outstanding ratio,
+ * meme cascade, meme arrondi du dernier flux).
+ *
+ * `bond.amortizationMode` (T/N) n'influence que la description affichee,
+ * pas le calcul (le calcul officiel cascade dans les deux cas, en partant
+ * du nominal courant `bond.nominalValue`).
+ */
+export function generateBondLifecycleEvents(bond: ListedBond): ListedBondEvent[] {
+  const round2 = (x: number) => Math.round(x * 100) / 100;
+  const ratePctFr = (bond.couponRate * 100).toLocaleString("fr-FR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4,
+  });
+  const modeLabel = bond.amortizationMode === "T" ? "sur titre" : "sur nominal";
+  const isIF = bond.amortizationType === "IF" || !bond.amortizationType;
+
+  const past = getBondPastCashflows(bond);
+  const future = getBondCashflows(bond);
+  const allFlows = [...past, ...future];
+
+  // Index k/N pour la description de chaque amort. On compte tous les flux
+  // non-coupon (intermediates + remboursement final) — pour AC/ACD c'est
+  // egal a totalNbAmortPeriods, pour IF c'est 1.
+  const totalAmortCount = allFlows.filter((cf) => cf.type !== "coupon").length;
+
+  const events: ListedBondEvent[] = [];
+  let amortCounter = 0;
+
+  for (const cf of allFlows) {
+    let description: string;
+    if (cf.type === "coupon") {
+      description = `Coupon ${ratePctFr}% par titre`;
+    } else {
+      amortCounter++;
+      if (isIF) {
+        description = `Remboursement final (in fine)`;
+      } else if (cf.type === "remboursement") {
+        description = `Remboursement final (${amortCounter}/${totalAmortCount})`;
+      } else {
+        description = `Amortissement ${modeLabel} (${amortCounter}/${totalAmortCount})`;
+      }
+    }
+
+    events.push({
+      isin: bond.isin,
+      date: cf.date,
+      eventType: cf.type,
+      amount: round2(cf.amount),
+      description,
+      outstandingAfter: cf.outstandingAfter,
+    });
+  }
+
+  return events;
+}
+
+/**
+ * Aggrege les evenements de toutes les obligations en un flux unique trie
+ * par date. Source unique : la fiche de chaque obligation.
+ */
+export function generateAllListedBondEvents(
+  bonds: ListedBond[],
+): ListedBondEvent[] {
+  const out: ListedBondEvent[] = [];
+  for (const b of bonds) {
+    for (const e of generateBondLifecycleEvents(b)) out.push(e);
+  }
+  out.sort((a, b) => a.date.localeCompare(b.date));
+  return out;
 }
 
 /**
@@ -481,6 +958,42 @@ export type EmissionUMOA = {
   countryName: string;                        // nom complet francais ("Cote d'Ivoire")
   amountSubmitted: number;                    // "Montant soumis" — utile pour ratio de couverture
   amountIssued: number;                       // "Montant" — taille du programme (cumul prevu)
+  /** Lien vers la fiche UMOA-Titres de cette adjudication (umoatitres.org). */
+  url: string;
+};
+
+/**
+ * Emission a venir UMOA-Titres : prochaines adjudications avec details connus.
+ * Source : data/umoa-emissions-a-venir.csv (scraper UMOA quotidien).
+ */
+export type EmissionUMOAFuture = {
+  country: string;            // code 2 lettres
+  countryName: string;        // nom complet "Côte d’Ivoire"
+  titreES: string;            // ex "ES (Titre 1)" si applicable
+  instrument: string;         // BAT / OAT / ES / ""
+  precisions: string;
+  dateOperation: string;      // ISO YYYY-MM-DD
+  dateValeur: string;         // ISO ou "" si pas encore fixe
+  echeance: string;           // ISO ou ""
+  maturityMonths: number;     // 0 si non communique
+  graceYears: number;
+  amount: number;             // millions FCFA, montant prevu d'emission
+  url: string;                // lien vers la fiche UMOA-Titres
+};
+
+/**
+ * Emission planifiee UMOA-Titres : calendrier annuel agence, peu d'infos.
+ * Source : data/umoa-emissions-planifiees.csv (scraper UMOA quotidien).
+ */
+export type EmissionUMOAPlanned = {
+  country: string;
+  countryName: string;
+  titreES: string;
+  instrument: string;         // souvent vide a ce stade
+  precisions: string;
+  dateOperation: string;      // ISO YYYY-MM-DD
+  amount: number;             // millions FCFA, indicatif
+  url: string;
 };
 
 /**
@@ -508,17 +1021,28 @@ export function classifyOperation(precisions: string): SovereignOperationKind {
   return "cash_auction";
 }
 
-// Mapping pays nom complet (CSV) → code 2 lettres (utilise dans le reste du code)
+// Mapping pays nom complet (CSV) → code 2 lettres (utilise dans le reste du code).
+// Comporte les ALIAS rencontres dans les CSV scrapes (umoa-emissions-realisees /
+// -a-venir / -planifiees) :
+//  - "Burkina" sans "Faso" (forme courte UMOA-Titres) → BF
+//  - apostrophe courbe U+2019 dans "Côte d’Ivoire" → CI
+//  - "Cote d'Ivoire" sans diacritique (defensif) → CI
 export const UMOA_COUNTRY_CODE: Record<string, string> = {
   "Côte d'Ivoire": "CI",
+  "Côte d’Ivoire": "CI",
+  "Cote d'Ivoire": "CI",
   "Sénégal": "SN",
+  "Senegal": "SN",
   "Burkina Faso": "BF",
+  "Burkina": "BF",
   "Mali": "ML",
   "Bénin": "BJ",
+  "Benin": "BJ",
   "Togo": "TG",
   "Niger": "NE",
   "Guinée Bissau": "GW",
   "Guinée-Bissau": "GW",
+  "Guinee Bissau": "GW",
 };
 
 /**
@@ -647,87 +1171,7 @@ export function theoreticalCleanPrice(
   operationDate: Date,
   ytm: number
 ): number {
-  const issueDate = parseISODate(bond.issueDate);
-  const maturityDate = parseISODate(bond.maturityDate);
-
-  if (isNaN(issueDate.getTime()) || isNaN(maturityDate.getTime())) return 0;
-  if (operationDate.getTime() >= maturityDate.getTime()) return 0;
-
-  // Toutes les dates de coupon
-  const allCouponDates = generateCouponDates(issueDate, maturityDate, bond.couponFrequency);
-
-  // Dates d'amortissement
-  let firstAmortDate: Date;
-  if (bond.amortizationType === "IF") {
-    firstAmortDate = maturityDate;
-  } else if (bond.firstAmortizationDate && bond.firstAmortizationDate !== "") {
-    firstAmortDate = parseISODate(bond.firstAmortizationDate);
-  } else {
-    firstAmortDate = allCouponDates[0];
-  }
-
-  const oneDay = 24 * 60 * 60 * 1000;
-  const allAmortDates = allCouponDates.filter(
-    (d) => d.getTime() >= firstAmortDate.getTime() - oneDay
-  );
-  const totalNbAmortPeriods = allAmortDates.length;
-
-  // Nombre d'amortissements passes (pour reconstruire le nominal initial)
-  const pastAmortDates = allAmortDates.filter((d) => d.getTime() <= operationDate.getTime());
-  const nbPastAmorts = pastAmortDates.length;
-
-  let amortPerPeriod = 0;
-  if (bond.amortizationType !== "IF" && totalNbAmortPeriods > nbPastAmorts) {
-    const remainingAmorts = totalNbAmortPeriods - nbPastAmorts;
-    const initialNominal =
-      bond.nominalValue + (nbPastAmorts / remainingAmorts) * bond.nominalValue;
-    amortPerPeriod = initialNominal / totalNbAmortPeriods;
-  }
-
-  // Simulation des flux futurs
-  const futureDates = allCouponDates.filter((d) => d.getTime() > operationDate.getTime());
-  if (futureDates.length === 0) return 0;
-
-  let outstanding = bond.nominalValue;
-  let dirtyPrice = 0;
-
-  for (let i = 0; i < futureDates.length; i++) {
-    const d = futureDates[i];
-    const daysFromNow = (d.getTime() - operationDate.getTime()) / (24 * 60 * 60 * 1000);
-    const years = daysFromNow / 365;
-    const df = Math.pow(1 + ytm, -years);
-
-    const couponAmount = (outstanding * bond.couponRate) / bond.couponFrequency;
-
-    const allAmortIndex = allAmortDates.findIndex((ad) => ad.getTime() === d.getTime());
-    const isAmortPeriod = allAmortIndex >= 0;
-    const isLastAmort = allAmortIndex === totalNbAmortPeriods - 1;
-
-    let amortAmount = 0;
-    if (isAmortPeriod) {
-      if (bond.amortizationType === "IF") {
-        if (i === futureDates.length - 1) amortAmount = outstanding;
-      } else {
-        amortAmount = isLastAmort ? outstanding : amortPerPeriod;
-      }
-    }
-
-    const cashflow = couponAmount + amortAmount;
-    dirtyPrice += cashflow * df;
-
-    outstanding = Math.max(0, outstanding - amortAmount);
-  }
-
-  // Retirer le coupon couru pour obtenir le prix pied de coupon
-  const pastDates = allCouponDates.filter((d) => d.getTime() <= operationDate.getTime());
-  const previousCouponDate =
-    pastDates.length > 0 ? pastDates[pastDates.length - 1] : issueDate;
-  const daysSinceLastCoupon =
-    (operationDate.getTime() - previousCouponDate.getTime()) / (24 * 60 * 60 * 1000);
-  const annualCoupon = bond.nominalValue * bond.couponRate;
-  const accruedInterest = (annualCoupon * daysSinceLastCoupon) / 365;
-
-  return dirtyPrice - accruedInterest;
+  return priceFromYtm(bond, operationDate, ytm).cleanPrice;
 }
 
 /**
@@ -830,8 +1274,18 @@ export type SovereignBond = {
   nominalValue: number;          // 1 000 000 pour BAT, 10 000 pour OAT
   maturity: number;              // en annees
   maturityDate: string;          // ISO date d'echeance
-  firstIssueDate: string;        // date du 1er round
-  lastIssueDate: string;         // date du dernier round
+  firstIssueDate: string;        // date de valeur du 1er round
+  lastIssueDate: string;         // date de valeur du dernier round
+  /** Date de l'adjudication (date d'operation) du dernier round cash.
+   *  C'est ce que UMOA-Titres appelle "date de l'operation" — la date a
+   *  laquelle les enchères ont été tenues, distincte de la "date de valeur"
+   *  (= date de jouissance, ~2 jours après l'adjudication). C'est la date
+   *  d'adjudication que l'on affiche dans les vues "Dernières adjudications". */
+  lastTradeDate: string;
+  /** Lien UMOA-Titres (umoatitres.org) vers la fiche du dernier round cash.
+   *  Permet d'ouvrir directement la page de detail de l'adjudication depuis
+   *  les vues bonds. Chaine vide si pas de URL connue. */
+  lastUrl: string;
   nbRounds: number;              // nb d'adjudications
 
   // Caracteristiques OAT (null pour BAT)
@@ -893,7 +1347,9 @@ export type SovereignBondLite = {
   country: string;
   type: "OAT" | "BAT";
   maturity: number;
-  lastIssueDate: string;
+  lastIssueDate: string;       // date de valeur du dernier round
+  lastTradeDate: string;       // date d'adjudication du dernier round cash
+  lastUrl: string;             // lien UMOA-Titres du dernier round cash
   nbRounds: number;
   // Volume affiche dans la liste = encours circulant estime (net des rachats),
   // plus parlant que le brut. totalAmount conserve pour reference.
@@ -910,6 +1366,8 @@ export function toLite(b: SovereignBond): SovereignBondLite {
     type: b.type,
     maturity: b.maturity,
     lastIssueDate: b.lastIssueDate,
+    lastTradeDate: b.lastTradeDate,
+    lastUrl: b.lastUrl,
     nbRounds: b.nbRounds,
     totalAmount: b.totalAmount,
     outstandingEstimate: b.outstandingEstimate,
@@ -994,6 +1452,11 @@ export function aggregateSovereignBonds(emissions: EmissionUMOA[]): SovereignBon
     // Sinon (cas rare ou il n'y a aucun round cash) on retombe sur le dernier
     // round absolu pour eviter une chaine vide.
     const lastIssueDate = lastCashRound ? lastCashRound.date : last.date;
+    // lastTradeDate : date d'OPERATION (= date de l'adjudication) — distincte
+    // de la date de valeur (= date de jouissance, ~2 jours plus tard).
+    // C'est cette date qui doit etre affichee comme "date d'adjudication".
+    const lastTradeDate = lastCashRound ? lastCashRound.tradeDate : last.tradeDate;
+    const lastUrl = lastCashRound ? lastCashRound.url : last.url;
 
     const totalSubmitted = rounds.reduce((sum, r) => sum + (r.amountSubmitted || 0), 0);
     const cashSubmitted = cashRounds.reduce((sum, r) => sum + (r.amountSubmitted || 0), 0);
@@ -1009,6 +1472,8 @@ export function aggregateSovereignBonds(emissions: EmissionUMOA[]): SovereignBon
       maturityDate: first.maturityDate,
       firstIssueDate: first.date,
       lastIssueDate,
+      lastTradeDate,
+      lastUrl,
       nbRounds: rounds.length,
       couponRate: first.couponRate,
       amortizationType: first.amortizationType,
@@ -1047,45 +1512,102 @@ export function aggregateSovereignBonds(emissions: EmissionUMOA[]): SovereignBon
 }
 
 /**
- * Statistiques globales du marche souverain non cote.
+ * Statistiques du marche souverain non cote — RESTREINTES aux bonds ACTIFS
+ * (maturityDate > asOfDate). Les bonds echus sont conservés dans le tableau
+ * source `bonds` (pour le tableau historique paginé) mais retires des KPIs.
+ *
+ * Auparavant cette fonction agregait sur tous les bonds, ce qui :
+ *  - gonflait "Titres actifs" (65% etaient en realite echus)
+ *  - affichait un volume cumule historique au lieu de l'encours
+ *  - pondrait le taux moyen avec des rendements obsoletes
+ *  - utilisait la maturite ORIGINALE a l'emission (pas residuelle)
  */
-export function getSovereignMarketStats(bonds: SovereignBond[]): {
+export function getSovereignMarketStats(
+  bonds: SovereignBond[],
+  asOfDate: Date = new Date(),
+): {
+  // === Totaux marche (OAT + BAT) ===
   totalBonds: number;
   totalBAT: number;
   totalOAT: number;
   totalVolume: number;
   avgYield: number;
   avgMaturity: number;
+  // === Split par type ===
+  volumeOAT: number;
+  volumeBAT: number;
+  avgYieldOAT: number;
+  avgYieldBAT: number;
+  avgMaturityOAT: number;
+  avgMaturityBAT: number;
+  /** Conservé pour compat : count tous bonds (historique inclus). */
+  totalBondsAll: number;
   byCountry: Record<string, number>;
   volumeByCountry: Record<string, number>;
 } {
-  const totalVolume = bonds.reduce((sum, b) => sum + b.totalAmount, 0);
-  const avgYield =
-    totalVolume > 0
-      ? bonds.reduce((sum, b) => sum + b.lastYield * b.totalAmount, 0) / totalVolume
-      : 0;
-  const avgMaturity =
-    totalVolume > 0
-      ? bonds.reduce((sum, b) => sum + b.maturity * b.totalAmount, 0) / totalVolume
-      : 0;
+  const ms = asOfDate.getTime();
+  const yearMs = 365.25 * 24 * 60 * 60 * 1000;
 
-  const byCountry = bonds.reduce((acc, b) => {
-    acc[b.country] = (acc[b.country] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+  // Filtre bonds actifs : echeance strictement future.
+  const actives = bonds.filter((b) => {
+    if (!b.maturityDate) return false;
+    const matMs = new Date(b.maturityDate).getTime();
+    return Number.isFinite(matMs) && matMs > ms;
+  });
 
-  const volumeByCountry = bonds.reduce((acc, b) => {
-    acc[b.country] = (acc[b.country] || 0) + b.totalAmount;
-    return acc;
-  }, {} as Record<string, number>);
+  // Helper : statistiques pondérées par volume sur un subset.
+  const statsFor = (subset: SovereignBond[]) => {
+    const volume = subset.reduce((sum, b) => sum + b.totalAmount, 0);
+    const yieldW =
+      volume > 0
+        ? subset.reduce((sum, b) => sum + b.lastYield * b.totalAmount, 0) /
+          volume
+        : 0;
+    const maturityW =
+      volume > 0
+        ? subset.reduce((sum, b) => {
+            const matMs = new Date(b.maturityDate).getTime();
+            const residual = Math.max(0, (matMs - ms) / yearMs);
+            return sum + residual * b.totalAmount;
+          }, 0) / volume
+        : 0;
+    return { volume, yieldW, maturityW };
+  };
+
+  const all = statsFor(actives);
+  const oats = statsFor(actives.filter((b) => b.type === "OAT"));
+  const bats = statsFor(actives.filter((b) => b.type === "BAT"));
+
+  const byCountry = actives.reduce(
+    (acc, b) => {
+      acc[b.country] = (acc[b.country] || 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>,
+  );
+
+  const volumeByCountry = actives.reduce(
+    (acc, b) => {
+      acc[b.country] = (acc[b.country] || 0) + b.totalAmount;
+      return acc;
+    },
+    {} as Record<string, number>,
+  );
 
   return {
-    totalBonds: bonds.length,
-    totalBAT: bonds.filter((b) => b.type === "BAT").length,
-    totalOAT: bonds.filter((b) => b.type === "OAT").length,
-    totalVolume,
-    avgYield,
-    avgMaturity,
+    totalBonds: actives.length,
+    totalBAT: actives.filter((b) => b.type === "BAT").length,
+    totalOAT: actives.filter((b) => b.type === "OAT").length,
+    totalVolume: all.volume,
+    avgYield: all.yieldW,
+    avgMaturity: all.maturityW,
+    volumeOAT: oats.volume,
+    volumeBAT: bats.volume,
+    avgYieldOAT: oats.yieldW,
+    avgYieldBAT: bats.yieldW,
+    avgMaturityOAT: oats.maturityW,
+    avgMaturityBAT: bats.maturityW,
+    totalBondsAll: bonds.length,
     byCountry,
     volumeByCountry,
   };

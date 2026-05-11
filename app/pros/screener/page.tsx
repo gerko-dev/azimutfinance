@@ -7,7 +7,7 @@ import {
   loadAverageVolumes,
 } from "@/lib/dataLoader";
 import { computeAllQuadrants, computeReturnsMatrix } from "@/lib/stockStats";
-import { loadFundScreenerSnapshotsMulti } from "@/lib/fundamentals";
+import { computeFundScreenerSnapshotsMulti } from "@/lib/fundamentalsCalc";
 
 export const metadata = {
   title: "Screener actions — Pro Terminal",
@@ -18,7 +18,7 @@ export default function ScreenerPage() {
   const riskReturn = buildRiskReturnDataset();
   const quadrants = computeAllQuadrants(riskReturn.points);
   const volMap = new Map(riskReturn.points.map((p) => [p.code, p.volatility]));
-  const fundMultiMap = loadFundScreenerSnapshotsMulti();
+  const fundMultiMap = computeFundScreenerSnapshotsMulti();
   const avgVolume30 = loadAverageVolumes(30);
 
   const histories = loadMultipleIndicesHistory(actions.map((a) => a.code));

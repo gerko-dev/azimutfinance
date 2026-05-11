@@ -122,6 +122,12 @@ type Props = {
     categorie: string;
     categorieAtRef: string;
     firstObsDate: string | null;
+    /** Snapshot BOC (vides si le fonds n'a pas été matché côté scraper). */
+    depositaire: string;
+    frequenceCalcul: string;
+    bocDate: string;
+    bocVL: number | null;
+    bocDayChange: number | null;
   };
   refQuarter: string;
   latestVLGlobal: string;
@@ -146,6 +152,8 @@ type Props = {
   growth3Y: AumGrowth | null;
   cadence: Cadence;
   rolling: Rolling;
+  /** Date BOC la plus récente toutes valeurs confondues (ISO). */
+  latestBocDate: string;
 };
 
 // ==========================================
@@ -265,6 +273,7 @@ export default function FCPDetailView(props: Props) {
     growth3Y,
     cadence,
     rolling,
+    latestBocDate,
   } = props;
 
   const [chartPeriod, setChartPeriod] = useState<ChartPeriod>("3A");
@@ -340,6 +349,14 @@ export default function FCPDetailView(props: Props) {
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-8 space-y-8">
+      {/* === BANDEAU FRAÎCHEUR BOC === */}
+      {latestBocDate && (
+        <div className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs font-semibold text-emerald-900">
+          <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+          Données au {fmtDateFR(latestBocDate)}
+        </div>
+      )}
+
       {/* ============================================ */}
       {/* BLOCK 1 : HEADER IDENTITE */}
       {/* ============================================ */}
@@ -352,7 +369,7 @@ export default function FCPDetailView(props: Props) {
               </Link>{" "}
               ·{" "}
               <Link
-                href={`/sgp/${managerSlug(fund.gestionnaire)}`}
+                href={`/sgo/${managerSlug(fund.gestionnaire)}`}
                 className="hover:underline text-slate-700 font-medium"
               >
                 {fund.gestionnaire}
@@ -402,17 +419,47 @@ export default function FCPDetailView(props: Props) {
             <KPI
               label="Dernière VL"
               value={
-                latestVL ? Math.round(latestVL.vl).toLocaleString("fr-FR").replace(/,/g, " ") : "—"
+                fund.bocVL !== null
+                  ? fund.bocVL.toLocaleString("fr-FR", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })
+                  : latestVL
+                    ? Math.round(latestVL.vl).toLocaleString("fr-FR").replace(/,/g, " ")
+                    : "—"
               }
               sub={
-                latestVL
-                  ? fmtDateFR(latestVL.date) +
-                    (latestVL.kind === "latest" ? " · intra-trim" : "")
-                  : "—"
+                fund.bocVL !== null && fund.bocDate
+                  ? `${fmtDateFR(fund.bocDate)} (BOC)` +
+                    (fund.bocDayChange !== null
+                      ? ` · ${fmtPct(fund.bocDayChange, 2)} j`
+                      : "")
+                  : latestVL
+                    ? fmtDateFR(latestVL.date) +
+                      (latestVL.kind === "latest" ? " · intra-trim" : "")
+                    : "—"
               }
             />
           </div>
         </div>
+
+        {/* Caractéristiques OPC (issu du BOC : dépositaire + fréquence calcul) */}
+        {(fund.depositaire || fund.frequenceCalcul) && (
+          <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-1.5 border-t border-slate-100 pt-3 text-xs text-slate-600">
+            {fund.depositaire && (
+              <span>
+                <span className="text-slate-400">Dépositaire · </span>
+                <span className="font-medium text-slate-800">{fund.depositaire}</span>
+              </span>
+            )}
+            {fund.frequenceCalcul && (
+              <span>
+                <span className="text-slate-400">Fréquence VL · </span>
+                <span className="font-medium text-slate-800">{fund.frequenceCalcul}</span>
+              </span>
+            )}
+          </div>
+        )}
       </header>
 
       {/* ============================================ */}
@@ -542,7 +589,7 @@ export default function FCPDetailView(props: Props) {
         </div>
         {latestVL && latestVL.kind === "latest" && (
           <p className="text-[11px] text-slate-400 mt-1">
-            ● Dernier point ({fmtDateFR(latestVL.date)}) = VL intra-trim publiée par la SGP
+            ● Dernier point ({fmtDateFR(latestVL.date)}) = VL intra-trim publiée par la SGO
           </p>
         )}
       </section>
@@ -835,14 +882,14 @@ export default function FCPDetailView(props: Props) {
             <>
               Autres fonds{" "}
               <Link
-                href={`/sgp/${managerSlug(fund.gestionnaire)}`}
+                href={`/sgo/${managerSlug(fund.gestionnaire)}`}
                 className="hover:underline text-blue-700"
               >
                 {fund.gestionnaire}
               </Link>
             </>
           }
-          subtitle={`${managerEntries.length} fonds gérés par la même SGP`}
+          subtitle={`${managerEntries.length} fonds gérés par la même SGO`}
           rows={managerEntries.map((e) => ({
             id: e.id,
             nom: e.nom,
@@ -862,7 +909,7 @@ export default function FCPDetailView(props: Props) {
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Qualité de publication</h2>
             <p className="text-xs text-slate-500">
-              Cadence et régularité de publication des VL par la SGP
+              Cadence et régularité de publication des VL par la SGO
             </p>
           </div>
           <span
@@ -920,7 +967,7 @@ export default function FCPDetailView(props: Props) {
       </section>
 
       <p className="text-xs text-slate-400">
-        Source : publications BRVM / SGP UEMOA. Encours ponctuel à la date de publication
+        Source : publications BRVM / SGO UEMOA. Encours ponctuel à la date de publication
         trimestrielle (non cumulatif). Indicateurs de risque (volatilité, Sharpe, drawdown) non
         calculés : la fréquence de publication des VL est hétérogène entre fonds.
       </p>

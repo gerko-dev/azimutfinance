@@ -10,6 +10,10 @@ import {
   buildSovereignTheoreticalHistory,
   calculateInterCountrySpreads,
 } from "@/lib/listedBondsTypes";
+import { fetchUserRole } from "@/lib/auth/userRole";
+
+// userRole lu via cookies → rendu dynamique.
+export const dynamic = "force-dynamic";
 
 export default async function Page({
   params,
@@ -30,6 +34,7 @@ export default async function Page({
   const related = getRelatedSovereignBonds(bond, bonds, 6);
   const theoreticalHistory = buildSovereignTheoreticalHistory(bond, emissions, 24);
   const interCountrySpreads = calculateInterCountrySpreads(bond, emissions);
+  const userRole = await fetchUserRole();
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -41,6 +46,7 @@ export default async function Page({
         related={related}
         theoreticalHistory={theoreticalHistory}
         interCountrySpreads={interCountrySpreads}
+        userRole={userRole}
       />
     </div>
   );

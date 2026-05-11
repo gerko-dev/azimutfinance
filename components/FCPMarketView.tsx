@@ -111,6 +111,8 @@ type Props = {
   categoryStats: CategoryStat[];
   aumTimeline: Array<Record<string, number | string>>;
   heatmap: Array<{ date: string; categorie: string; perf: number | null }>;
+  /** Date BOC la plus récente toutes valeurs confondues (ISO). */
+  latestBocDate: string;
 };
 
 // ==========================================
@@ -215,6 +217,7 @@ export default function FCPMarketView(props: Props) {
     categoryStats,
     aumTimeline,
     heatmap,
+    latestBocDate,
   } = props;
 
   // Treemap et cartes catégories : YTD figé (snapshot global du marché)
@@ -304,13 +307,7 @@ export default function FCPMarketView(props: Props) {
         </p>
         <div className="flex flex-wrap gap-2 pt-1">
           <Link
-            href="/outils/screener-fcp"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-blue-700 text-white hover:bg-blue-800"
-          >
-            🔍 Screener FCP
-          </Link>
-          <Link
-            href="/sgp"
+            href="/sgo"
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-slate-200 bg-white text-slate-700 hover:border-slate-400"
           >
             Sociétés de gestion
@@ -323,6 +320,14 @@ export default function FCPMarketView(props: Props) {
           </Link>
         </div>
       </header>
+
+      {/* === BANDEAU FRAÎCHEUR BOC === */}
+      {latestBocDate && (
+        <div className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs font-semibold text-emerald-900">
+          <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+          Données au {fmtDateFR(latestBocDate)}
+        </div>
+      )}
 
       {/* === KPI BAR === */}
       <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -520,7 +525,7 @@ export default function FCPMarketView(props: Props) {
                   AUM
                 </th>
                 <th className="text-right px-3 py-2 text-xs font-semibold text-slate-600 hidden sm:table-cell">
-                  Dernière VL
+                  VL (BOC) · Δ jour
                 </th>
                 <th className="text-right px-3 py-2 text-xs font-semibold text-slate-600">
                   Perf {PERIOD_LABEL[rankPeriod].toLowerCase()}
@@ -549,7 +554,7 @@ export default function FCPMarketView(props: Props) {
                       </Link>
                       <div className="text-[11px] text-slate-500 md:hidden">
                         <Link
-                          href={`/sgp/${managerSlug(c.gestionnaire)}`}
+                          href={`/sgo/${managerSlug(c.gestionnaire)}`}
                           className="hover:underline"
                         >
                           {c.gestionnaire}
@@ -558,7 +563,7 @@ export default function FCPMarketView(props: Props) {
                     </td>
                     <td className="px-3 py-2 text-xs text-slate-600 hidden md:table-cell">
                       <Link
-                        href={`/sgp/${managerSlug(c.gestionnaire)}`}
+                        href={`/sgo/${managerSlug(c.gestionnaire)}`}
                         className="hover:underline"
                       >
                         {c.gestionnaire}
@@ -576,8 +581,31 @@ export default function FCPMarketView(props: Props) {
                     <td className="px-3 py-2 text-right text-xs text-slate-700 tabular-nums hidden md:table-cell">
                       {fmtBigFCFA(c.aumAtRef ?? 0)}
                     </td>
-                    <td className="px-3 py-2 text-right text-xs text-slate-500 hidden sm:table-cell">
-                      {fmtDateFR(c.latestVLDate)}
+                    <td className="px-3 py-2 text-right text-xs hidden sm:table-cell">
+                      {c.vlLatest !== null ? (
+                        <div className="flex flex-col items-end leading-tight tabular-nums">
+                          <span className="font-medium text-slate-800">
+                            {c.vlLatest.toLocaleString("fr-FR", {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            }).replace(/ /g, " ").replace(/,/g, ",")}
+                          </span>
+                          <span
+                            className={
+                              c.dayChange === null
+                                ? "text-[10px] text-slate-400"
+                                : c.dayChange >= 0
+                                  ? "text-[10px] text-emerald-700"
+                                  : "text-[10px] text-rose-700"
+                            }
+                            title={`au ${fmtDateFR(c.bocDate)}`}
+                          >
+                            {c.dayChange === null ? "—" : fmtPct(c.dayChange, 2)}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-slate-400">{fmtDateFR(c.latestVLDate)}</span>
+                      )}
                     </td>
                     <td
                       className={`px-3 py-2 text-right text-sm font-bold tabular-nums ${

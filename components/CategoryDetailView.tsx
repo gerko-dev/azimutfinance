@@ -70,6 +70,8 @@ type Props = {
   top5FundsShare: number;
   top5MgrShare: number;
   otherCategories: { slug: string; name: string }[];
+  /** Date BOC la plus récente toutes valeurs confondues (ISO). */
+  latestBocDate: string;
 };
 
 type FundSortKey = "nom" | "gestionnaire" | "aum" | "ytd" | "y1" | "y3";
@@ -90,6 +92,7 @@ export default function CategoryDetailView(props: Props) {
     top5FundsShare,
     top5MgrShare,
     otherCategories,
+    latestBocDate,
   } = props;
 
   const [search, setSearch] = useState("");
@@ -126,6 +129,14 @@ export default function CategoryDetailView(props: Props) {
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-8 space-y-8">
+      {/* === BANDEAU FRAÎCHEUR BOC === */}
+      {latestBocDate && (
+        <div className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs font-semibold text-emerald-900">
+          <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+          Données au {fmtDateFR(latestBocDate)}
+        </div>
+      )}
+
       {/* === HEADER === */}
       <header className="bg-white border border-slate-200 rounded-lg p-6">
         <div className="flex items-start justify-between flex-wrap gap-4">
@@ -146,9 +157,9 @@ export default function CategoryDetailView(props: Props) {
           </div>
           <div className="grid grid-cols-2 gap-3 min-w-[300px]">
             <KPI label="Encours" value={fmtBigFCFA(aumTotal) + " FCFA"} sub={`${fmtPctRaw(marketShare, 0)} du marché`} />
-            <KPI label="Fonds" value={String(nbFunds)} sub={`${nbManagers} SGP actives`} />
+            <KPI label="Fonds" value={String(nbFunds)} sub={`${nbManagers} SGO actives`} />
             <KPI label="Top 5 fonds" value={fmtPctRaw(top5FundsShare, 0)} sub="de l'encours cat." />
-            <KPI label="Top 5 SGP" value={fmtPctRaw(top5MgrShare, 0)} sub="de l'encours cat." />
+            <KPI label="Top 5 SGO" value={fmtPctRaw(top5MgrShare, 0)} sub="de l'encours cat." />
           </div>
         </div>
       </header>
@@ -198,7 +209,7 @@ export default function CategoryDetailView(props: Props) {
       <section className="bg-white border border-slate-200 rounded-lg p-5">
         <div className="mb-3">
           <h2 className="text-lg font-semibold text-slate-900">Évolution de l&apos;encours</h2>
-          <p className="text-xs text-slate-500">Empilement trimestriel — toutes les SGP cumulées dans la catégorie</p>
+          <p className="text-xs text-slate-500">Empilement trimestriel — toutes les SGO cumulées dans la catégorie</p>
         </div>
         <div style={{ width: "100%", height: 300 }}>
           <ResponsiveContainer>
@@ -228,7 +239,7 @@ export default function CategoryDetailView(props: Props) {
             <thead className="bg-slate-50 border-y border-slate-200">
               <tr>
                 <th className="text-left px-3 py-2 text-xs font-semibold text-slate-600 w-12">#</th>
-                <th className="text-left px-4 py-2 text-xs font-semibold text-slate-600">SGP</th>
+                <th className="text-left px-4 py-2 text-xs font-semibold text-slate-600">SGO</th>
                 <th className="text-right px-3 py-2 text-xs font-semibold text-slate-600">Fonds</th>
                 <th className="text-right px-3 py-2 text-xs font-semibold text-slate-600">AUM</th>
                 <th className="text-right px-3 py-2 text-xs font-semibold text-slate-600">Part cat.</th>
@@ -242,7 +253,7 @@ export default function CategoryDetailView(props: Props) {
                 <tr key={m.slug} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
                   <td className="px-3 py-2 text-xs font-bold text-slate-500">{i + 1}</td>
                   <td className="px-4 py-2">
-                    <Link href={`/sgp/${m.slug}`} className="text-sm font-medium text-slate-900 hover:underline">{m.name}</Link>
+                    <Link href={`/sgo/${m.slug}`} className="text-sm font-medium text-slate-900 hover:underline">{m.name}</Link>
                   </td>
                   <td className="px-3 py-2 text-right text-xs tabular-nums text-slate-700">{m.nbFunds}</td>
                   <td className="px-3 py-2 text-right text-xs tabular-nums text-slate-700">{fmtBigFCFA(m.aum)}</td>
@@ -294,7 +305,7 @@ export default function CategoryDetailView(props: Props) {
             <thead className="bg-slate-50 border-y border-slate-200">
               <tr>
                 <SortTh col="nom" label="Fonds" sortKey={sortKey} sortOrder={sortOrder} onSort={(k) => { sortKey === k ? setSortOrder(sortOrder === "asc" ? "desc" : "asc") : (setSortKey(k), setSortOrder("desc")); }} />
-                <SortTh col="gestionnaire" label="SGP" sortKey={sortKey} sortOrder={sortOrder} onSort={(k) => { sortKey === k ? setSortOrder(sortOrder === "asc" ? "desc" : "asc") : (setSortKey(k), setSortOrder("desc")); }} className="hidden md:table-cell" />
+                <SortTh col="gestionnaire" label="SGO" sortKey={sortKey} sortOrder={sortOrder} onSort={(k) => { sortKey === k ? setSortOrder(sortOrder === "asc" ? "desc" : "asc") : (setSortKey(k), setSortOrder("desc")); }} className="hidden md:table-cell" />
                 <SortTh col="aum" label="AUM" sortKey={sortKey} sortOrder={sortOrder} onSort={(k) => { sortKey === k ? setSortOrder(sortOrder === "asc" ? "desc" : "asc") : (setSortKey(k), setSortOrder("desc")); }} align="right" />
                 <SortTh col="ytd" label="YTD" sortKey={sortKey} sortOrder={sortOrder} onSort={(k) => { sortKey === k ? setSortOrder(sortOrder === "asc" ? "desc" : "asc") : (setSortKey(k), setSortOrder("desc")); }} align="right" className="hidden sm:table-cell" />
                 <SortTh col="y1" label="1 an" sortKey={sortKey} sortOrder={sortOrder} onSort={(k) => { sortKey === k ? setSortOrder(sortOrder === "asc" ? "desc" : "asc") : (setSortKey(k), setSortOrder("desc")); }} align="right" />
@@ -311,11 +322,11 @@ export default function CategoryDetailView(props: Props) {
                     <td className="px-3 py-2 min-w-0">
                       <Link href={`/fcp/${f.id}`} className="text-sm font-medium text-slate-900 hover:underline">{f.nom}</Link>
                       <div className="text-[11px] text-slate-500 md:hidden">
-                        <Link href={`/sgp/${f.managerSlug}`} className="hover:underline">{f.gestionnaire}</Link>
+                        <Link href={`/sgo/${f.managerSlug}`} className="hover:underline">{f.gestionnaire}</Link>
                       </div>
                     </td>
                     <td className="px-3 py-2 text-xs text-slate-600 hidden md:table-cell">
-                      <Link href={`/sgp/${f.managerSlug}`} className="hover:underline">{f.gestionnaire}</Link>
+                      <Link href={`/sgo/${f.managerSlug}`} className="hover:underline">{f.gestionnaire}</Link>
                     </td>
                     <td className="px-3 py-2 text-right text-xs tabular-nums text-slate-700">{fmtBigFCFA(f.aum)}</td>
                     <td className={`px-3 py-2 text-right text-xs tabular-nums font-medium hidden sm:table-cell ${f.ytd !== null && f.ytd >= 0 ? "text-emerald-700" : "text-rose-700"}`}>

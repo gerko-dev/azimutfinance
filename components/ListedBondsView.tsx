@@ -2,18 +2,6 @@
 
 import { useState, useMemo, useDeferredValue, useCallback, memo } from "react";
 import Link from "next/link";
-import {
-  Scatter,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Cell,
-  Legend,
-  Line,
-  ComposedChart,
-} from "recharts";
 import type {
   ListedBond,
   ListedBondPrice,
@@ -22,7 +10,6 @@ import type {
 } from "@/lib/listedBondsTypes";
 import { getBondYTMFromLatest } from "@/lib/listedBondsTypes";
 import type { UserRole } from "@/lib/auth/userRole";
-import MemberGateDialog from "./MemberGateDialog";
 import CountryFlag from "./CountryFlag";
 
 // === HELPERS DE FORMATAGE ===
@@ -46,6 +33,124 @@ function formatDate(date: string): string {
   });
 }
 
+// Carte KPI du hero : barre latérale colorée + icône + valeur tabular-nums.
+// L'accent transmet une catégorisation visuelle (compte / encours / rendement…)
+// sans surcharger le texte. Tous les KPI gardent la même typo et le même padding.
+type KpiAccent = "blue" | "amber" | "emerald" | "violet" | "indigo" | "rose";
+
+const KPI_ACCENT: Record<KpiAccent, { bar: string; chip: string }> = {
+  blue: { bar: "bg-blue-500", chip: "bg-blue-50 text-blue-700" },
+  amber: { bar: "bg-amber-500", chip: "bg-amber-50 text-amber-700" },
+  emerald: { bar: "bg-emerald-500", chip: "bg-emerald-50 text-emerald-700" },
+  violet: { bar: "bg-violet-500", chip: "bg-violet-50 text-violet-700" },
+  indigo: { bar: "bg-indigo-500", chip: "bg-indigo-50 text-indigo-700" },
+  rose: { bar: "bg-rose-500", chip: "bg-rose-50 text-rose-700" },
+};
+
+function KpiCard({
+  label,
+  value,
+  sub,
+  icon,
+  accent,
+}: {
+  label: string;
+  value: string | number;
+  sub: string;
+  icon: string;
+  accent: KpiAccent;
+}) {
+  const a = KPI_ACCENT[accent];
+  return (
+    <div className="relative bg-white rounded-lg border border-slate-200 p-4 overflow-hidden hover:shadow-md hover:-translate-y-0.5 transition-all">
+      <span
+        className={`absolute left-0 top-0 bottom-0 w-1 ${a.bar}`}
+        aria-hidden
+      />
+      <div className="flex items-center gap-2 mb-1">
+        <span
+          className={`flex items-center justify-center w-6 h-6 rounded-md text-sm ${a.chip}`}
+          aria-hidden
+        >
+          {icon}
+        </span>
+        <div className="text-xs text-slate-500">{label}</div>
+      </div>
+      <div className="text-2xl md:text-3xl font-semibold text-slate-900 tabular-nums">
+        {value}
+      </div>
+      <div className="text-xs text-slate-400 mt-1">{sub}</div>
+    </div>
+  );
+}
+
+// Carte teaser pour les sections Premium (courbe, surveiller, calendrier).
+// Si l'utilisateur est Premium+, on affiche un CTA d'ouverture ; sinon, un
+// cadenas bien visible et un CTA "Voir avec Premium". Le clic dans tous les
+// cas mène à la page dédiée — qui gère elle-même la paywall server-side.
+function TeaserCard({
+  href,
+  icon,
+  title,
+  description,
+  stat,
+  accent,
+  unlocked,
+}: {
+  href: string;
+  icon: string;
+  title: string;
+  description: string;
+  stat: string;
+  accent: KpiAccent;
+  unlocked: boolean;
+}) {
+  const a = KPI_ACCENT[accent];
+  return (
+    <Link
+      href={href}
+      className="group relative flex flex-col bg-white rounded-xl border border-slate-200 p-5 hover:shadow-lg hover:-translate-y-0.5 transition-all overflow-hidden"
+    >
+      <span
+        className={`absolute inset-x-0 top-0 h-1 ${a.bar}`}
+        aria-hidden
+      />
+      <div className="flex items-start justify-between mb-3">
+        <span
+          className={`flex items-center justify-center w-10 h-10 rounded-lg text-xl ${a.chip}`}
+          aria-hidden
+        >
+          {icon}
+        </span>
+        {unlocked ? (
+          <span className="text-[10px] uppercase tracking-wider font-semibold bg-emerald-50 text-emerald-700 px-2 py-1 rounded">
+            ✓ Inclus
+          </span>
+        ) : (
+          <span className="text-[10px] uppercase tracking-wider font-semibold bg-amber-50 text-amber-800 px-2 py-1 rounded inline-flex items-center gap-1">
+            🔒 Premium
+          </span>
+        )}
+      </div>
+      <h3 className="text-base md:text-lg font-semibold text-slate-900 mb-1">
+        {title}
+      </h3>
+      <p className="text-xs md:text-sm text-slate-600 mb-3 flex-1">{description}</p>
+      <div className="text-xs text-slate-500 mb-3 tabular-nums">{stat}</div>
+      <div
+        className={`text-sm font-medium inline-flex items-center gap-1.5 ${
+          unlocked
+            ? "text-blue-700 group-hover:text-blue-900"
+            : "text-amber-700 group-hover:text-amber-900"
+        }`}
+      >
+        {unlocked ? "Ouvrir" : "Voir avec Premium"}
+        <span aria-hidden>→</span>
+      </div>
+    </Link>
+  );
+}
+
 type Props = {
   bonds: ListedBond[];
   prices: ListedBondPrice[];
@@ -54,7 +159,13 @@ type Props = {
   userRole: UserRole;
 };
 
-type SortKey = "name" | "couponRate" | "maturity" | "ytm" | "outstanding";
+type SortKey =
+  | "name"
+  | "couponRate"
+  | "cleanPrice"
+  | "maturity"
+  | "ytm"
+  | "outstanding";
 type SortOrder = "asc" | "desc";
 
 type EnrichedBond = ListedBond & {
@@ -64,14 +175,6 @@ type EnrichedBond = ListedBond & {
   searchHaystack: string;
 };
 
-const TYPE_COLORS: Record<string, string> = {
-  "Obligation d'Etat": "#2563eb",
-  "Obligation privée": "#16a34a",
-  "Obligation régionale": "#9333ea",
-  "Sukuk Etat": "#ea580c",
-  Autre: "#64748b",
-};
-
 export default function ListedBondsView({
   bonds,
   prices,
@@ -79,10 +182,7 @@ export default function ListedBondsView({
   stats,
   userRole,
 }: Props) {
-  const isMember = userRole !== null;
   const isPremium = userRole === "premium" || userRole === "pro";
-  const isPro = userRole === "pro";
-  const [premiumGateOpen, setPremiumGateOpen] = useState(false);
 
   // === ETATS DE FILTRAGE (TABLEAU) ===
   const [search, setSearch] = useState("");
@@ -185,6 +285,16 @@ export default function ListedBondsView({
         case "couponRate":
           cmp = a.couponRate - b.couponRate;
           break;
+        case "cleanPrice": {
+          // Les oblig sans cote sont toujours en bas, peu importe le sens.
+          const ap = a.latestPrice?.cleanPrice;
+          const bp = b.latestPrice?.cleanPrice;
+          if (ap === undefined && bp === undefined) return 0;
+          if (ap === undefined) return 1;
+          if (bp === undefined) return -1;
+          cmp = ap - bp;
+          break;
+        }
         case "maturity":
           cmp = a.maturityTime - b.maturityTime;
           break;
@@ -200,66 +310,21 @@ export default function ListedBondsView({
     return sorted;
   }, [filteredBonds, sortKey, sortOrder]);
 
-  // === PROCHAINS EVENEMENTS ===
-  const upcomingEvents = useMemo(() => {
-    const now = new Date();
-    return events
-      .filter((e) => new Date(e.date) >= now)
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-      .slice(0, 8);
-  }, [events]);
-
-  // === DETECTION D'ANOMALIES (rigoureuse : pays + rating + duree) ===
-  const anomalies = useMemo(() => {
-    const anoms: {
-      bond: (typeof enrichedBonds)[0];
-      reason: string;
-      severity: "watch_high" | "watch_low";
-      peersCount: number;
-    }[] = [];
-
-    enrichedBonds.forEach((b) => {
-      if (!b.rating) return;
-
-      const peers = enrichedBonds.filter(
-        (p) =>
-          p.country === b.country &&
-          p.rating === b.rating &&
-          Math.abs(p.yearsToMaturity - b.yearsToMaturity) < 2 &&
-          p.isin !== b.isin &&
-          p.ytm > 0
-      );
-
-      if (peers.length < 3) return;
-
-      const peerYtms = peers.map((p) => p.ytm);
-      const peerAvg = peerYtms.reduce((s, y) => s + y, 0) / peerYtms.length;
-      const peerVariance =
-        peerYtms.reduce((s, y) => s + Math.pow(y - peerAvg, 2), 0) / peerYtms.length;
-      const peerStdDev = Math.sqrt(peerVariance);
-
-      const deviation = b.ytm - peerAvg;
-      const zScore = peerStdDev > 0 ? deviation / peerStdDev : 0;
-
-      if (zScore > 1.5) {
-        anoms.push({
-          bond: b,
-          reason: `YTM ${(b.ytm * 100).toFixed(2)}% vs ${(peerAvg * 100).toFixed(2)}% moyen (${peers.length} pairs ${b.country}/${b.rating}) · +${Math.round(deviation * 10000)} bps`,
-          severity: "watch_high",
-          peersCount: peers.length,
-        });
-      } else if (zScore < -1.5) {
-        anoms.push({
-          bond: b,
-          reason: `YTM ${(b.ytm * 100).toFixed(2)}% vs ${(peerAvg * 100).toFixed(2)}% moyen (${peers.length} pairs ${b.country}/${b.rating}) · ${Math.round(deviation * 10000)} bps`,
-          severity: "watch_low",
-          peersCount: peers.length,
-        });
-      }
-    });
-
-    return anoms.sort((a, b) => Math.abs(b.bond.ytm) - Math.abs(a.bond.ytm)).slice(0, 5);
-  }, [enrichedBonds]);
+  // === STATS POUR TEASERS PREMIUM ===
+  // Compteurs leger pour egayer les cartes teaser sans dupliquer les calculs
+  // lourds (anomalies, regression) qui vivent maintenant sur leurs pages dediees.
+  // Le filtre "upcoming" se base sur la date du serveur (events.length) plutôt
+  // qu'un Date.now() impur — la précision "à venir" n'a pas vraiment de sens
+  // ici (overhead négligeable pour un compteur teaser).
+  const teaserStats = useMemo(() => {
+    const ytmCount = enrichedBonds.filter((b) => b.ytm > 0).length;
+    const ratedCount = enrichedBonds.filter((b) => b.rating).length;
+    return {
+      ytmCount,
+      ratedCount,
+      upcomingCount: events.length,
+    };
+  }, [enrichedBonds, events]);
 
   // useCallback : référence stable tant que sortKey ne bouge pas, ce qui
   // permet à <BondsTable> (memo) de sauter le re-render sur chaque frappe
@@ -297,172 +362,111 @@ export default function ListedBondsView({
             de taux actuarielle, screener, veille des écarts et calendrier des coupons.
           </p>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mt-6">
-            <div className="bg-white rounded-lg border border-slate-200 p-4">
-              <div className="text-xs text-slate-500 mb-1">Obligations cotées</div>
-              <div className="text-2xl md:text-3xl font-semibold text-blue-900">
-                {stats.totalBonds}
+          {(() => {
+            // 6 KPIs harmonises : meme typo, meme couleur, meme structure de
+            // sous-titre. Les 4 cartes BOC affichent la date du bulletin source ;
+            // les 2 cartes calculees ("moyenne ponderee") indiquent la methode.
+            const boc = stats.boc;
+            const bocDateSub = boc ? `au ${formatDate(boc.bocDate)}` : null;
+            const encoursValue = boc?.capitalisationBoursiere ?? stats.totalOutstanding;
+            const bondsCountValue = boc?.bondsCount ?? stats.totalBonds;
+            return (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4 mt-6">
+                <KpiCard
+                  icon="📋"
+                  accent="blue"
+                  label="Obligations cotées"
+                  value={bondsCountValue}
+                  sub={boc?.bondsCount != null ? bocDateSub! : "sur la BRVM"}
+                />
+                <KpiCard
+                  icon="💼"
+                  accent="amber"
+                  label="Encours total"
+                  value={formatBigFCFA(encoursValue)}
+                  sub={bocDateSub ?? "tous émetteurs"}
+                />
+                <KpiCard
+                  icon="💰"
+                  accent="emerald"
+                  label="Coupon moyen"
+                  value={`${(stats.weightedYield * 100).toFixed(2)}%`}
+                  sub="moyenne pondérée"
+                />
+                <KpiCard
+                  icon="⏱️"
+                  accent="violet"
+                  label="Durée moyenne"
+                  value={`${stats.averageDuration.toFixed(1)} ans`}
+                  sub="moyenne pondérée"
+                />
+                <KpiCard
+                  icon="📊"
+                  accent="indigo"
+                  label="Volume échangé"
+                  value={boc ? formatFCFA(boc.volumeEchange) : "—"}
+                  sub={bocDateSub ?? "—"}
+                />
+                <KpiCard
+                  icon="💸"
+                  accent="rose"
+                  label="Valeur transigée"
+                  value={boc ? formatBigFCFA(boc.valeurTransigee) : "—"}
+                  sub={bocDateSub ?? "—"}
+                />
               </div>
-              <div className="text-xs text-slate-400 mt-1">sur la BRVM</div>
-            </div>
-            <div className="bg-white rounded-lg border border-slate-200 p-4">
-              <div className="text-xs text-slate-500 mb-1">Encours total</div>
-              <div className="text-2xl md:text-3xl font-semibold">
-                {formatBigFCFA(stats.totalOutstanding)}
-              </div>
-              <div className="text-xs text-slate-400 mt-1">tous émetteurs</div>
-            </div>
-            <div className="bg-white rounded-lg border border-slate-200 p-4">
-              <div className="text-xs text-slate-500 mb-1">Coupon moyen</div>
-              <div className="text-2xl md:text-3xl font-semibold text-green-700">
-                {(stats.weightedYield * 100).toFixed(2)}%
-              </div>
-              <div className="text-xs text-slate-400 mt-1">pondéré par encours</div>
-            </div>
-            <div className="bg-white rounded-lg border border-slate-200 p-4">
-              <div className="text-xs text-slate-500 mb-1">Durée moyenne</div>
-              <div className="text-2xl md:text-3xl font-semibold">
-                {stats.averageDuration.toFixed(1)}
-              </div>
-              <div className="text-xs text-slate-400 mt-1">années pondérées</div>
-            </div>
-          </div>
+            );
+          })()}
         </div>
       </div>
 
       <main className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8 space-y-6 md:space-y-8">
-        {/* ====== COURBE DES TAUX — Pro only ====== */}
-        {/* Isolée dans un composant memo : ne re-render plus quand on tape
-            dans la recherche (Recharts est très coûteux à reconcilier). */}
-        {isPro && (
-          <YieldCurveSection
-            enrichedBonds={enrichedBonds}
-            availableTypes={availableTypes}
-          />
-        )}
+        {/* ====== TEASERS PREMIUM ======
+            3 portes d'entree vers les sections analytiques (courbe / surveiller
+            / calendrier). Chaque carte affiche un cadenas pour les invites et
+            membres ; les Premium et Pro voient "Inclus" et atterrissent
+            directement sur le contenu. La paywall est gerée server-side sur
+            les pages dediees. */}
+        <section>
+          <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
+            <h2 className="text-lg md:text-xl font-semibold">
+              Analyses obligataires
+            </h2>
+            <span className="text-xs text-slate-500">
+              3 outils Premium · z-score, courbe actuarielle, calendrier
+            </span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
+            <TeaserCard
+              href="/marches/obligations/courbe-taux"
+              icon="📊"
+              accent="violet"
+              title="Courbe des taux BRVM"
+              description="YTM actuariel par durée résiduelle, régression sur la base de votre choix."
+              stat={`${teaserStats.ytmCount} obligations`}
+              unlocked={isPremium}
+            />
+            <TeaserCard
+              href="/marches/obligations/surveillance"
+              icon="🔎"
+              accent="indigo"
+              title="À surveiller"
+              description="Obligations dont le YTM s'écarte statistiquement de leurs pairs."
+              stat={`${teaserStats.ratedCount} obligations notées analysées`}
+              unlocked={isPremium}
+            />
+            <TeaserCard
+              href="/marches/obligations/calendrier"
+              icon="📅"
+              accent="emerald"
+              title="Calendrier obligataire"
+              description="12 mois de coupons, amortissements et remboursements à venir."
+              stat={`${teaserStats.upcomingCount} événements à venir`}
+              unlocked={isPremium}
+            />
+          </div>
+        </section>
 
-        {/* ====== A SURVEILLER — Premium, cadenas pour membre, retire pour visiteur ====== */}
-        {anomalies.length > 0 && isMember && (
-          <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6 relative">
-            <div className="flex items-start gap-2 mb-4 flex-wrap">
-              <h2 className="text-lg md:text-xl font-semibold">🔎 À surveiller</h2>
-              <span className="text-[10px] md:text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
-                PREMIUM
-              </span>
-            </div>
-            <p className="text-xs md:text-sm text-slate-600 mb-4">
-              Obligations dont le YTM s&apos;écarte statistiquement de leurs pairs (même pays,
-              même notation, durée similaire). Z-score &gt; 1,5σ. Une analyse approfondie est
-              recommandée avant toute décision.
-            </p>
-            <div
-              className={
-                isPremium ? "" : "blur-[3px] pointer-events-none select-none"
-              }
-              aria-hidden={isPremium ? undefined : true}
-            >
-              <div className="space-y-2">
-                {anomalies.map((a, i) => (
-                  <Link
-                    key={i}
-                    href={`/obligation/${a.bond.isin}`}
-                    className={`block p-3 rounded-md border text-sm hover:shadow-sm transition ${
-                      a.severity === "watch_high"
-                        ? "bg-blue-50 border-blue-200 hover:border-blue-300"
-                        : "bg-slate-50 border-slate-200 hover:border-slate-300"
-                    }`}
-                  >
-                    <div className="flex justify-between items-start gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium">
-                          {a.severity === "watch_high" ? "📈" : "📉"} {a.bond.name}
-                          {a.bond.code && (
-                            <span className="ml-2 text-xs text-slate-500 font-normal">
-                              ({a.bond.code})
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-xs text-slate-600 mt-0.5">{a.reason}</div>
-                      </div>
-                      <span className="text-xs text-slate-500 whitespace-nowrap font-mono">
-                        {a.bond.isin}
-                      </span>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-              <div className="mt-3 pt-3 border-t border-slate-100 text-xs text-slate-500">
-                <strong>Méthodologie :</strong> pour chaque obligation, calcul de la moyenne et
-                de l&apos;écart-type des YTM de ses pairs (même pays × même notation × durée ±2
-                ans). Un Z-score &gt; 1,5σ ou &lt; −1,5σ est signalé. Minimum 3 pairs requis.
-                Ceci n&apos;est pas un conseil en investissement.
-              </div>
-            </div>
-            {!isPremium && (
-              <div className="absolute inset-0 flex items-center justify-center p-4 pointer-events-none">
-                <button
-                  type="button"
-                  onClick={() => setPremiumGateOpen(true)}
-                  className="bg-white rounded-lg shadow-xl border border-amber-200 max-w-md w-full p-4 md:p-5 pointer-events-auto text-left hover:border-amber-300 transition"
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="text-2xl shrink-0">⭐</div>
-                    <div className="min-w-0">
-                      <h4 className="text-base font-semibold text-slate-900">
-                        À surveiller — réservé Premium
-                      </h4>
-                      <p className="text-sm text-slate-600 mt-1">
-                        Détection automatique des obligations dont le YTM
-                        s&apos;écarte de leurs pairs. Disponible avec Premium.
-                      </p>
-                    </div>
-                  </div>
-                </button>
-              </div>
-            )}
-          </section>
-        )}
-
-        {/* ====== EVENEMENTS ====== */}
-        {upcomingEvents.length > 0 && (
-          <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
-            <h2 className="text-lg md:text-xl font-semibold mb-4">📅 Prochains événements</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {upcomingEvents.map((e, i) => {
-                const bond = bonds.find((b) => b.isin === e.isin);
-                const eventIcons: Record<string, string> = {
-                  coupon: "💰",
-                  remboursement: "🏁",
-                  call: "📞",
-                  adjudication: "🔨",
-                };
-                return (
-                  <Link
-                    key={i}
-                    href={`/obligation/${e.isin}`}
-                    className="flex items-start gap-3 p-3 rounded-md bg-slate-50 hover:bg-blue-50 transition"
-                  >
-                    <div className="text-xl">{eventIcons[e.eventType] || "📌"}</div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium truncate">
-                        {bond?.name || e.isin}
-                        {bond?.code && (
-                          <span className="ml-2 text-xs text-slate-500 font-normal">
-                            ({bond.code})
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-xs text-slate-600">{e.description}</div>
-                      <div className="text-xs text-slate-400 mt-0.5">
-                        {formatDate(e.date)} · {formatFCFA(e.amount)} FCFA
-                      </div>
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
-          </section>
-        )}
 
         {/* ====== TABLEAU ====== */}
         <section className="bg-white rounded-lg border border-slate-200 overflow-hidden">
@@ -472,8 +476,11 @@ export default function ListedBondsView({
                 Liste des obligations cotées
               </h2>
               <span className="text-xs text-slate-500">
-                {sortedBonds.length} résultat{sortedBonds.length > 1 ? "s" : ""} sur{" "}
-                {bonds.length}
+                {sortedBonds.length === bonds.length
+                  ? `${bonds.length} obligation${bonds.length > 1 ? "s" : ""}`
+                  : `${sortedBonds.length} résultat${
+                      sortedBonds.length > 1 ? "s" : ""
+                    } sur ${bonds.length}`}
               </span>
             </div>
 
@@ -568,310 +575,18 @@ export default function ListedBondsView({
         </section>
       </main>
 
-      <MemberGateDialog
-        open={premiumGateOpen}
-        onClose={() => setPremiumGateOpen(false)}
-        tier="premium"
-        title="Détection d'anomalies réservée Premium"
-        description="L'analyse automatique des obligations dont le YTM s'écarte de leurs pairs est réservée à l'abonnement Premium."
-      />
     </>
   );
 }
 
 // ============================================================
-// SOUS-COMPOSANTS MEMOISES
+// SOUS-COMPOSANT MEMOISE : TABLE
 // ============================================================
-// L'objectif : isoler les blocs lourds (chart Recharts, tableau ~50 lignes)
-// du re-render synchrone provoqué par chaque frappe dans la barre de recherche.
-// Sans cela, useDeferredValue ne suffit pas — il diffère la *valeur*, pas le
-// re-render parent. React.memo + props stables = le sous-composant skip.
+// La table est isolée derrière React.memo pour skip le re-render synchrone
+// provoqué par chaque frappe dans la barre de recherche. useDeferredValue
+// diffère la *valeur* mais pas le re-render parent — il faut donc bien le
+// memo + props stables (toggleSort en useCallback) pour que ça marche.
 
-// === COURBE DES TAUX ===
-type YieldCurveSectionProps = {
-  enrichedBonds: EnrichedBond[];
-  availableTypes: string[];
-};
-
-const YieldCurveSection = memo(function YieldCurveSection({
-  enrichedBonds,
-  availableTypes,
-}: YieldCurveSectionProps) {
-  const [curveFilterCountry, setCurveFilterCountry] = useState<string>("all");
-  const [curveFilterType, setCurveFilterType] = useState<string>("all");
-  const [curveAverageBasis, setCurveAverageBasis] = useState<string>("all-etat");
-
-  const availableCountriesForCurve = useMemo(() => {
-    const countries = new Set(enrichedBonds.map((b) => b.country));
-    return Array.from(countries).sort();
-  }, [enrichedBonds]);
-
-  const yieldCurveData = useMemo(() => {
-    return enrichedBonds
-      .filter((b) => b.yearsToMaturity > 0 && b.ytm > 0)
-      .filter((b) => curveFilterCountry === "all" || b.country === curveFilterCountry)
-      .filter((b) => curveFilterType === "all" || b.issuerType === curveFilterType)
-      .map((b) => ({
-        x: b.yearsToMaturity,
-        y: b.ytm * 100,
-        name: b.name,
-        isin: b.isin,
-        type: b.issuerType,
-        country: b.country,
-      }));
-  }, [enrichedBonds, curveFilterCountry, curveFilterType]);
-
-  const averageCurveInfo = useMemo(() => {
-    let basis = enrichedBonds.filter((b) => b.yearsToMaturity > 0 && b.ytm > 0);
-    let label = "";
-
-    switch (curveAverageBasis) {
-      case "all":
-        label = `Marché global (${basis.length} oblig.)`;
-        break;
-      case "all-etat":
-        basis = basis.filter((b) => b.issuerType === "Obligation d'Etat");
-        label = `États UEMOA (${basis.length} oblig.)`;
-        break;
-      case "view":
-        basis = basis.filter(
-          (b) =>
-            (curveFilterCountry === "all" || b.country === curveFilterCountry) &&
-            (curveFilterType === "all" || b.issuerType === curveFilterType)
-        );
-        label = `Sélection en cours (${basis.length} oblig.)`;
-        break;
-      default:
-        if (curveAverageBasis.startsWith("country:")) {
-          const c = curveAverageBasis.substring(8);
-          basis = basis.filter((b) => b.country === c);
-          label = `Pays ${c} (${basis.length} oblig.)`;
-        } else if (curveAverageBasis.startsWith("type:")) {
-          const t = curveAverageBasis.substring(5);
-          basis = basis.filter((b) => b.issuerType === t);
-          label = `Type "${t}" (${basis.length} oblig.)`;
-        }
-    }
-
-    if (basis.length < 3) {
-      return { points: [] as { x: number; y: number }[], label: `${label} · trop peu de données` };
-    }
-
-    const n = basis.length;
-    const sumX = basis.reduce((s, b) => s + b.yearsToMaturity, 0);
-    const sumY = basis.reduce((s, b) => s + b.ytm * 100, 0);
-    const sumXY = basis.reduce((s, b) => s + b.yearsToMaturity * b.ytm * 100, 0);
-    const sumXX = basis.reduce((s, b) => s + b.yearsToMaturity * b.yearsToMaturity, 0);
-
-    const denom = n * sumXX - sumX * sumX;
-    if (denom === 0) {
-      return { points: [] as { x: number; y: number }[], label: `${label} · calcul impossible` };
-    }
-
-    const slope = (n * sumXY - sumX * sumY) / denom;
-    const intercept = (sumY - slope * sumX) / n;
-
-    const minX = Math.min(...basis.map((b) => b.yearsToMaturity));
-    const maxX = Math.max(...basis.map((b) => b.yearsToMaturity));
-
-    return {
-      points: [
-        { x: minX, y: slope * minX + intercept },
-        { x: maxX, y: slope * maxX + intercept },
-      ],
-      label,
-    };
-  }, [enrichedBonds, curveAverageBasis, curveFilterCountry, curveFilterType]);
-
-  const averageCurve = averageCurveInfo.points;
-
-  return (
-    <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
-      <div className="flex justify-between items-start flex-wrap gap-2 mb-3">
-        <div>
-          <h2 className="text-lg md:text-xl font-semibold">📊 Courbe des taux BRVM</h2>
-          <p className="text-xs md:text-sm text-slate-600 mt-1">
-            YTM actuariel (convention Act/365). La ligne pointillée est la droite de
-            régression calculée sur la base sélectionnée.
-          </p>
-        </div>
-        <span className="text-[10px] md:text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
-          EXCLUSIVITÉ AZIMUT
-        </span>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-2 md:gap-3 mb-4 p-3 bg-slate-50 rounded-md">
-        <div>
-          <label className="block text-[10px] uppercase tracking-wide text-slate-500 mb-1 font-medium">
-            Afficher les points · Pays
-          </label>
-          <select
-            value={curveFilterCountry}
-            onChange={(e) => setCurveFilterCountry(e.target.value)}
-            className="w-full px-2.5 py-1.5 text-sm border border-slate-300 rounded-md bg-white focus:outline-none focus:border-blue-500"
-          >
-            <option value="all">Tous pays</option>
-            {availableCountriesForCurve.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-[10px] uppercase tracking-wide text-slate-500 mb-1 font-medium">
-            Afficher les points · Type
-          </label>
-          <select
-            value={curveFilterType}
-            onChange={(e) => setCurveFilterType(e.target.value)}
-            className="w-full px-2.5 py-1.5 text-sm border border-slate-300 rounded-md bg-white focus:outline-none focus:border-blue-500"
-          >
-            <option value="all">Tous types</option>
-            {availableTypes.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-[10px] uppercase tracking-wide text-slate-500 mb-1 font-medium">
-            Calibrer la moyenne sur
-          </label>
-          <select
-            value={curveAverageBasis}
-            onChange={(e) => setCurveAverageBasis(e.target.value)}
-            className="w-full px-2.5 py-1.5 text-sm border border-slate-300 rounded-md bg-white focus:outline-none focus:border-blue-500"
-          >
-            <option value="all-etat">États UEMOA (défaut)</option>
-            <option value="all">Marché global</option>
-            <option value="view">Sélection affichée</option>
-            <optgroup label="Par pays">
-              {availableCountriesForCurve.map((c) => (
-                <option key={`country:${c}`} value={`country:${c}`}>
-                  Pays {c}
-                </option>
-              ))}
-            </optgroup>
-            <optgroup label="Par type">
-              {availableTypes.map((t) => (
-                <option key={`type:${t}`} value={`type:${t}`}>
-                  Type {t}
-                </option>
-              ))}
-            </optgroup>
-          </select>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap gap-3 text-xs text-slate-500 mb-3">
-        <span>
-          <b className="text-slate-900">{yieldCurveData.length}</b> obligation
-          {yieldCurveData.length > 1 ? "s" : ""} affichée
-          {yieldCurveData.length > 1 ? "s" : ""}
-        </span>
-        <span>·</span>
-        <span>
-          Moyenne : <b className="text-slate-900">{averageCurveInfo.label}</b>
-        </span>
-      </div>
-
-      <div className="h-72 md:h-80">
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart margin={{ top: 10, right: 20, bottom: 30, left: 10 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-            <XAxis
-              type="number"
-              dataKey="x"
-              name="Durée"
-              unit=" ans"
-              stroke="#94a3b8"
-              fontSize={11}
-              domain={["dataMin", "dataMax"]}
-              tickFormatter={(value) => Number(value).toFixed(1)}
-              label={{
-                value: "Durée résiduelle (années)",
-                position: "bottom",
-                offset: 15,
-                style: { fontSize: 12, fill: "#64748b" },
-              }}
-            />
-            <YAxis
-              type="number"
-              dataKey="y"
-              name="YTM"
-              unit="%"
-              stroke="#94a3b8"
-              fontSize={11}
-              label={{
-                value: "YTM (%)",
-                angle: -90,
-                position: "insideLeft",
-                style: { fontSize: 12, fill: "#64748b" },
-              }}
-            />
-            <Tooltip
-              cursor={{ strokeDasharray: "3 3" }}
-              content={({ active, payload }) => {
-                if (!active || !payload || !payload.length) return null;
-                const d = payload[0].payload;
-                if (!d.name) return null;
-                return (
-                  <div className="bg-white border border-slate-200 rounded-md shadow-md p-3 text-xs">
-                    <div className="font-medium mb-1">{d.name}</div>
-                    <div className="text-slate-500">{d.isin}</div>
-                    <div className="mt-1 flex gap-3">
-                      <span>
-                        Durée : <b>{d.x.toFixed(1)} ans</b>
-                      </span>
-                      <span>
-                        YTM : <b>{d.y.toFixed(2)}%</b>
-                      </span>
-                    </div>
-                    <div className="text-slate-400 mt-1">
-                      {d.type} · {d.country}
-                    </div>
-                  </div>
-                );
-              }}
-            />
-            <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: "11px" }} />
-
-            {averageCurve.length >= 2 && (
-              <Line
-                type="linear"
-                dataKey="y"
-                data={averageCurve}
-                stroke="#64748b"
-                strokeWidth={2}
-                strokeDasharray="5 5"
-                dot={false}
-                legendType="plainline"
-                name={`Moyenne · ${averageCurveInfo.label}`}
-                isAnimationActive={false}
-              />
-            )}
-
-            {Object.keys(TYPE_COLORS).map((type) => {
-              const data = yieldCurveData.filter((d) => d.type === type);
-              if (data.length === 0) return null;
-              return (
-                <Scatter key={type} name={type} data={data} fill={TYPE_COLORS[type]}>
-                  {data.map((_, i) => (
-                    <Cell key={i} fill={TYPE_COLORS[type]} />
-                  ))}
-                </Scatter>
-              );
-            })}
-          </ComposedChart>
-        </ResponsiveContainer>
-      </div>
-    </section>
-  );
-});
 
 // === TABLEAU DES OBLIGATIONS ===
 type BondsTableProps = {
@@ -917,7 +632,14 @@ const BondsTable = memo(function BondsTable({
                 Coupon {sortIcon("couponRate")}
               </button>
             </th>
-            <th className="text-right px-3 md:px-4 py-3 font-medium">Cours</th>
+            <th className="text-right px-3 md:px-4 py-3 font-medium">
+              <button
+                onClick={() => onToggleSort("cleanPrice")}
+                className="flex items-center gap-1 hover:text-slate-900 ml-auto"
+              >
+                Cours {sortIcon("cleanPrice")}
+              </button>
+            </th>
             <th className="text-right px-3 md:px-4 py-3 font-medium">
               <button
                 onClick={() => onToggleSort("ytm")}
@@ -950,7 +672,7 @@ const BondsTable = memo(function BondsTable({
         <tbody>
           {sortedBonds.map((b) => (
             <tr
-              key={b.isin}
+              key={b.code || b.isin}
               className="border-b border-slate-100 hover:bg-blue-50/30 transition"
             >
               <td className="px-3 md:px-4 py-3">

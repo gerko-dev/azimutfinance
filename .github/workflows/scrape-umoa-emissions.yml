@@ -1,0 +1,90 @@
+# Scrape les 3 tableaux d'emissions UMOA-Titres :
+#   - data/umoa-emissions-realisees.csv  (historique complet, adjudications)
+#   - data/umoa-emissions-a-venir.csv    (prochaines emissions)
+#   - data/umoa-emissions-planifiees.csv (calendrier annuel)
+#
+# Cron : tous les jours a 19h GMT (apres cloture des adjudications UMOA).
+# Egalement declenchable manuellement depuis l'UI GitHub Actions.
+
+name: Scrape UMOA-Titres emissions
+
+on:
+  schedule:
+    - cron: "0 19 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: scrape-umoa-emissions
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install requests beautifulsoup4 lxml
+
+      - name: Scrape UMOA-Titres
+        run: python scripts/scrape_umoa_emissions.py
+
+      - name: Show diff stats
+        run: |
+          echo "=== Files modified ==="
+          git status --short \
+            data/umoa-emissions-realisees.csv \
+            data/umoa-emissions-a-venir.csv \
+            data/umoa-emissions-planifiees.csv || true
+          echo ""
+          echo "=== Diff summary ==="
+          git diff --stat \
+            data/umoa-emissions-realisees.csv \
+            data/umoa-emissions-a-venir.csv \
+            data/umoa-emissions-planifiees.csv || true
+
+      - name: Commit & push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            data/umoa-emissions-realisees.csv \
+            data/umoa-emissions-a-venir.csv \
+            data/umoa-emissions-planifiees.csv
+          if git diff --staged --quiet; then
+            echo "Aucun changement a commiter."
+            exit 0
+          fi
+          DATE_TAG=$(date -u +%Y-%m-%d)
+          git commit \
+            -m "chore(data): refresh UMOA-Titres emissions ${DATE_TAG}" \
+            -m "Mise a jour automatique via GitHub Actions (workflow scrape-umoa-emissions)." \
+            -m "Source : umoatitres.org, page emissions-professionnels-3."
+          # Retry pour gerer les pushs concurrents avec d'autres workflows
+          # (scrape-boc, scrape-sika...) sur main.
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main && git push && {
+              echo "Push effectue avec succes (essai $i)."
+              exit 0
+            }
+            echo "Essai $i echoue, nouvelle tentative dans 10s..."
+            sleep 10
+          done
+          echo "Push definitivement echoue apres 5 essais."
+          exit 1

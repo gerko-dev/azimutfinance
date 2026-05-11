@@ -15,7 +15,7 @@ import {
 } from "@/lib/dataLoader";
 import { getBrvmSnapshot } from "@/lib/brvm/liveQuotes";
 import { getBrvmIndicesSnapshot } from "@/lib/brvm/liveIndices";
-import { getLatestRatios } from "@/lib/fundamentals";
+import { computeLatestRatios } from "@/lib/fundamentalsCalc";
 import { fetchUserRole } from "@/lib/auth/userRole";
 
 export const dynamic = "force-dynamic";
@@ -45,17 +45,18 @@ export default async function Page() {
 
   // === FUSION CSV + LIVE + FONDAMENTAUX ===
   // Override price/changePercent/volume par le live BRVM, et recalcule
-  // capi/PER/yield depuis DB_Ratios (BPA, DPA, Nb_Titres) :
-  //   - capi   = nbTitres × prix_live              (source : DB_Ratios)
-  //   - PER    = prix_live / BPA(dernier exercice) (source : DB_Ratios)
-  //   - yield  = DPA(dernier exercice) / prix_live (source : DB_Ratios)
-  // Si DB_Ratios n'a pas de BPA/DPA pour un ticker (ou BPA<=0 = pertes),
-  // PER/yield sont marques absents. Si pas de ratios du tout, on retombe sur
-  // la valeur titres.csv scalee par le ratio de prix.
+  // capi/PER/yield depuis le calculateur (BPA, DPA, Nb_Titres calculés à la
+  // volée depuis DB_Valeurs + DB_Titres + historique_sika) :
+  //   - capi   = nbTitres × prix_live
+  //   - PER    = prix_live / BPA(dernier exercice)
+  //   - yield  = DPA(dernier exercice) / prix_live
+  // Si pas de BPA/DPA disponible (ou BPA<=0 = pertes), PER/yield sont marques
+  // absents. Si pas de ratios du tout, on retombe sur titres.csv scale par le
+  // ratio de prix.
   const liveByCode = new Map(liveSnapshot.quotes.map((q) => [q.code, q]));
   const mergedActions: ActionRow[] = actions.map((a) => {
     const lv = liveByCode.get(a.code);
-    const ratios = getLatestRatios(a.code);
+    const ratios = computeLatestRatios(a.code);
 
     const newPrice = lv && lv.currentPrice > 0 ? lv.currentPrice : a.price;
     const newChange =

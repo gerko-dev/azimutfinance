@@ -45,6 +45,7 @@ import type {
   BrvmLiveIndex,
   BrvmIndexCategory,
 } from "@/lib/brvm/liveIndices";
+import type { SectorComponent } from "@/lib/dataLoader";
 import {
   sma,
   ema,
@@ -227,6 +228,8 @@ type Props = {
   high52w: number | null;
   low52w: number | null;
   volatility52w: number | null;
+  /** Vide pour les indices non sectoriels */
+  sectorComponents: SectorComponent[];
   session: {
     fetchedAt: string;
     sessionLabel: string | null;
@@ -245,6 +248,7 @@ export default function IndexDetailView({
   high52w,
   low52w,
   volatility52w,
+  sectorComponents,
   session,
 }: Props) {
   const [period, setPeriod] = useState<Period>("1A");
@@ -382,6 +386,10 @@ export default function IndexDetailView({
     if (activeTool === "text") return "Cliquez où placer l'annotation";
     return undefined;
   }, [activeTool, pendingPoint]);
+
+  // Les indices sectoriels affichent un graphique d'évolution simplifié,
+  // sans outils d'analyse technique (peu pertinents pour des indices d'attribution).
+  const isSectoral = category === "sectoriel";
 
   const value = live?.value ?? (history[history.length - 1]?.value ?? 0);
   const variationPct = live?.variationPct ?? 0;
@@ -560,22 +568,6 @@ export default function IndexDetailView({
       </div>
 
       <main className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8 space-y-6 md:space-y-8">
-        {/* GRAPHIQUE PRO (KLineChart) — chandeliers + indicateurs + outils dessin */}
-        {ohlcHistory.length > 0 && (
-          <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
-            <div className="mb-3">
-              <h2 className="text-lg md:text-xl font-semibold">
-                📊 Graphique avancé
-              </h2>
-              <p className="text-xs text-slate-500 mt-1">
-                Chandeliers · 50+ indicateurs · outils de dessin (Fibonacci,
-                Elliott, patterns…) · zoom &amp; plein écran
-              </p>
-            </div>
-            <KlineChart data={ohlcHistory} code={code} name={name} height={560} />
-          </section>
-        )}
-
         {/* GRAPHIQUE HISTORIQUE (Recharts simple, pour signaux techniques calcules) */}
         <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
           <div className="flex justify-between items-center flex-wrap gap-2 mb-4">
@@ -607,52 +599,55 @@ export default function IndexDetailView({
             </div>
           </div>
 
-          {/* Outils de dessin */}
-          <ChartDrawingToolbar
-            activeTool={activeTool}
-            setActiveTool={setActiveTool}
-            activeColor={activeColor}
-            setActiveColor={setActiveColor}
-            onUndo={undoLastDrawing}
-            onClearAll={clearAllDrawings}
-            drawingsCount={drawings.length}
-            pendingHint={pendingHint}
-          />
+          {/* Outils de dessin + indicateurs techniques (cachés sur les indices sectoriels) */}
+          {!isSectoral && (
+            <>
+              <ChartDrawingToolbar
+                activeTool={activeTool}
+                setActiveTool={setActiveTool}
+                activeColor={activeColor}
+                setActiveColor={setActiveColor}
+                onUndo={undoLastDrawing}
+                onClearAll={clearAllDrawings}
+                drawingsCount={drawings.length}
+                pendingHint={pendingHint}
+              />
 
-          {/* Panneau d'indicateurs techniques : checkboxes activables */}
-          <div className="mb-4 flex flex-wrap gap-1.5">
-            {INDICATORS.map((ind) => {
-              const isActive = activeIndicators.has(ind.key);
-              return (
-                <button
-                  key={ind.key}
-                  type="button"
-                  onClick={() => toggleIndicator(ind.key)}
-                  title={ind.description}
-                  className={`text-[11px] px-2.5 py-1 rounded-md border transition ${
-                    isActive
-                      ? "border-slate-300 shadow-sm"
-                      : "border-slate-200 text-slate-500 bg-slate-50 hover:bg-white"
-                  }`}
-                  style={
-                    isActive
-                      ? {
-                          backgroundColor: ind.color + "12",
-                          color: ind.color,
-                          borderColor: ind.color + "40",
-                        }
-                      : {}
-                  }
-                >
-                  <span
-                    className="inline-block w-2 h-2 rounded-full mr-1.5 align-middle"
-                    style={{ backgroundColor: isActive ? ind.color : "#cbd5e1" }}
-                  />
-                  {ind.shortLabel}
-                </button>
-              );
-            })}
-          </div>
+              <div className="mb-4 flex flex-wrap gap-1.5">
+                {INDICATORS.map((ind) => {
+                  const isActive = activeIndicators.has(ind.key);
+                  return (
+                    <button
+                      key={ind.key}
+                      type="button"
+                      onClick={() => toggleIndicator(ind.key)}
+                      title={ind.description}
+                      className={`text-[11px] px-2.5 py-1 rounded-md border transition ${
+                        isActive
+                          ? "border-slate-300 shadow-sm"
+                          : "border-slate-200 text-slate-500 bg-slate-50 hover:bg-white"
+                      }`}
+                      style={
+                        isActive
+                          ? {
+                              backgroundColor: ind.color + "12",
+                              color: ind.color,
+                              borderColor: ind.color + "40",
+                            }
+                          : {}
+                      }
+                    >
+                      <span
+                        className="inline-block w-2 h-2 rounded-full mr-1.5 align-middle"
+                        style={{ backgroundColor: isActive ? ind.color : "#cbd5e1" }}
+                      />
+                      {ind.shortLabel}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
 
           {/* Graphique principal : prix + overlays SMA/EMA/Bollinger + dessins */}
           <div
@@ -709,7 +704,7 @@ export default function IndexDetailView({
                     }}
                   />
                   {/* Bollinger : zone d'incertitude grise */}
-                  {activeIndicators.has("bollinger") && (
+                  {!isSectoral && activeIndicators.has("bollinger") && (
                     <>
                       <Area
                         type="monotone"
@@ -742,33 +737,36 @@ export default function IndexDetailView({
                     strokeWidth={2}
                     fill="url(#colorIdx)"
                   />
-                  {/* Overlays SMA/EMA */}
-                  {INDICATORS.filter(
-                    (ind) => ind.panel === "main" && ind.key !== "bollinger",
-                  ).map((ind) =>
-                    activeIndicators.has(ind.key) ? (
-                      <Line
-                        key={ind.key}
-                        type="monotone"
-                        dataKey={ind.key}
-                        stroke={ind.color}
-                        strokeWidth={1.5}
-                        dot={false}
-                        connectNulls
-                        name={ind.key}
-                      />
-                    ) : null,
-                  )}
+                  {/* Overlays SMA/EMA (cachés sur les indices sectoriels) */}
+                  {!isSectoral &&
+                    INDICATORS.filter(
+                      (ind) => ind.panel === "main" && ind.key !== "bollinger",
+                    ).map((ind) =>
+                      activeIndicators.has(ind.key) ? (
+                        <Line
+                          key={ind.key}
+                          type="monotone"
+                          dataKey={ind.key}
+                          stroke={ind.color}
+                          strokeWidth={1.5}
+                          dot={false}
+                          connectNulls
+                          name={ind.key}
+                        />
+                      ) : null,
+                    )}
                   {/* Layer SVG des dessins manuels (toujours rendu en dernier
                       pour etre au-dessus des autres elements) */}
-                  <Customized
-                    component={
-                      <ChartDrawingsLayer
-                        drawings={drawings}
-                        onDeleteDrawing={deleteDrawing}
-                      />
-                    }
-                  />
+                  {!isSectoral && (
+                    <Customized
+                      component={
+                        <ChartDrawingsLayer
+                          drawings={drawings}
+                          onDeleteDrawing={deleteDrawing}
+                        />
+                      }
+                    />
+                  )}
                 </ComposedChart>
               </ResponsiveContainer>
             ) : (
@@ -779,7 +777,7 @@ export default function IndexDetailView({
           </div>
 
           {/* Sous-graphe RSI */}
-          {activeIndicators.has("rsi") && enrichedChart.length > 0 && (
+          {!isSectoral && activeIndicators.has("rsi") && enrichedChart.length > 0 && (
             <div className="mt-6">
               <div className="text-xs font-medium text-slate-600 mb-1 flex items-center gap-2">
                 <span>RSI 14</span>
@@ -858,7 +856,7 @@ export default function IndexDetailView({
           )}
 
           {/* Sous-graphe MACD */}
-          {activeIndicators.has("macd") && enrichedChart.length > 0 && (
+          {!isSectoral && activeIndicators.has("macd") && enrichedChart.length > 0 && (
             <div className="mt-6">
               <div className="text-xs font-medium text-slate-600 mb-1 flex items-center gap-2">
                 <span>MACD 12/26/9</span>
@@ -944,57 +942,64 @@ export default function IndexDetailView({
           )}
         </section>
 
-        {/* PANNEAU SIGNAUX SYNTHESE */}
-        <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
-          <h2 className="text-lg md:text-xl font-semibold mb-4">
-            🎯 Signaux techniques
-          </h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <SignalCard
-              label="vs SMA 50"
-              signal={signals.sma50}
-              hint="Tendance moyen terme"
-            />
-            <SignalCard
-              label="vs SMA 200"
-              signal={signals.sma200}
-              hint="Tendance long terme"
-            />
-            <SignalCard
-              label="RSI 14"
-              signal={signals.rsi}
-              hint="Surachat/survente"
-            />
-            <SignalCard
-              label="MACD"
-              signal={signals.macd}
-              hint="Croisement signal"
-            />
-          </div>
-          <p className="text-xs text-slate-500 mt-4 leading-relaxed">
-            <strong>Avertissement :</strong> ces signaux sont des indicateurs
-            statistiques calculés sur l&apos;historique des cours, pas des
-            recommandations d&apos;investissement. Les performances passées ne
-            préjugent pas des performances futures.
-          </p>
-        </section>
-
-        {/* DESCRIPTION */}
-        {description && (
+        {/* PANNEAU SIGNAUX SYNTHESE (caché sur les indices sectoriels) */}
+        {!isSectoral && (
           <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
-            <h2 className="text-lg md:text-xl font-semibold mb-3">À propos</h2>
-            <p className="text-sm text-slate-700 leading-relaxed">{description}</p>
-            <p className="text-xs text-slate-500 mt-4">
-              Source officielle :{" "}
-              <a
-                href="https://www.brvm.org/fr/indices"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-700 hover:underline"
-              >
-                brvm.org/fr/indices
-              </a>
+            <h2 className="text-lg md:text-xl font-semibold mb-4">
+              🎯 Signaux techniques
+            </h2>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <SignalCard
+                label="vs SMA 50"
+                signal={signals.sma50}
+                hint="Tendance moyen terme"
+              />
+              <SignalCard
+                label="vs SMA 200"
+                signal={signals.sma200}
+                hint="Tendance long terme"
+              />
+              <SignalCard
+                label="RSI 14"
+                signal={signals.rsi}
+                hint="Surachat/survente"
+              />
+              <SignalCard
+                label="MACD"
+                signal={signals.macd}
+                hint="Croisement signal"
+              />
+            </div>
+            <p className="text-xs text-slate-500 mt-4 leading-relaxed">
+              <strong>Avertissement :</strong> ces signaux sont des indicateurs
+              statistiques calculés sur l&apos;historique des cours, pas des
+              recommandations d&apos;investissement. Les performances passées ne
+              préjugent pas des performances futures.
             </p>
+          </section>
+        )}
+
+        {/* COMPOSITION SECTORIELLE — contribution YTD */}
+        {sectorComponents.length > 0 && (
+          <SectorComponentsSection
+            components={sectorComponents}
+            indexYtd={ytdEffective}
+          />
+        )}
+
+        {/* GRAPHIQUE PRO (KLineChart) — chandeliers + indicateurs + outils dessin */}
+        {ohlcHistory.length > 0 && (
+          <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
+            <div className="mb-3">
+              <h2 className="text-lg md:text-xl font-semibold">
+                📊 Graphique avancé
+              </h2>
+              <p className="text-xs text-slate-500 mt-1">
+                Chandeliers · 50+ indicateurs · outils de dessin (Fibonacci,
+                Elliott, patterns…) · zoom &amp; plein écran
+              </p>
+            </div>
+            <KlineChart data={ohlcHistory} code={code} name={name} height={560} />
           </section>
         )}
 
@@ -1022,6 +1027,25 @@ export default function IndexDetailView({
                 </div>
               </div>
             </div>
+          </section>
+        )}
+
+        {/* DESCRIPTION */}
+        {description && (
+          <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
+            <h2 className="text-lg md:text-xl font-semibold mb-3">À propos</h2>
+            <p className="text-sm text-slate-700 leading-relaxed">{description}</p>
+            <p className="text-xs text-slate-500 mt-4">
+              Source officielle :{" "}
+              <a
+                href="https://www.brvm.org/fr/indices"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-700 hover:underline"
+              >
+                brvm.org/fr/indices
+              </a>
+            </p>
           </section>
         )}
 
@@ -1053,6 +1077,164 @@ function KpiCard({
       <div className="text-2xl md:text-3xl font-semibold tabular-nums">{value}</div>
       {hint && <div className="text-xs text-slate-400 mt-1">{hint}</div>}
     </div>
+  );
+}
+
+function SectorComponentsSection({
+  components,
+  indexYtd,
+}: {
+  components: SectorComponent[];
+  indexYtd: number;
+}) {
+  const sumContrib = components.reduce(
+    (s, c) => s + (c.contributionPct ?? 0),
+    0,
+  );
+  // Résiduel : écart entre la somme des contributions reconstituées et le
+  // YTD officiel de l'indice. Cause principale : méthodologie BRVM en
+  // capitalisation flottante (vs. capitalisation totale ici), et opérations
+  // sur capital ajustées dans l'indice. La somme des deux = YTD officiel.
+  const residual = indexYtd - sumContrib;
+  const ranked = components;
+
+  return (
+    <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
+      <div className="mb-4">
+        <h2 className="text-lg md:text-xl font-semibold">
+          🧮 Composition du secteur — Contribution YTD
+        </h2>
+        <p className="text-xs text-slate-500 mt-1">
+          {ranked.length} titre{ranked.length > 1 ? "s" : ""} · classés par
+          contribution décroissante à la performance YTD de l&apos;indice.
+        </p>
+      </div>
+
+      <div className="overflow-x-auto -mx-4 md:mx-0">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-xs text-slate-500 border-b border-slate-200">
+              <th className="px-2 md:px-3 py-2 font-medium w-10">#</th>
+              <th className="px-2 md:px-3 py-2 font-medium">Titre</th>
+              <th className="px-2 md:px-3 py-2 font-medium text-right tabular-nums">
+                Cours
+              </th>
+              <th className="px-2 md:px-3 py-2 font-medium text-right tabular-nums">
+                YTD
+              </th>
+              <th className="px-2 md:px-3 py-2 font-medium text-right tabular-nums">
+                Poids
+              </th>
+              <th className="px-2 md:px-3 py-2 font-medium text-right tabular-nums">
+                Contribution
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {ranked.map((c, i) => (
+              <tr
+                key={c.code}
+                className="border-b border-slate-100 hover:bg-slate-50"
+              >
+                <td className="px-2 md:px-3 py-2 text-slate-400 tabular-nums">
+                  {i + 1}
+                </td>
+                <td className="px-2 md:px-3 py-2">
+                  <Link
+                    href={`/titre/${c.code}`}
+                    className="text-blue-700 hover:underline"
+                  >
+                    <span className="font-mono text-xs text-slate-500 mr-2">
+                      {c.code}
+                    </span>
+                    <span>{c.name}</span>
+                  </Link>
+                </td>
+                <td className="px-2 md:px-3 py-2 text-right tabular-nums">
+                  {c.currentPrice > 0 ? formatNumber(c.currentPrice, 0) : "—"}
+                </td>
+                <td
+                  className={`px-2 md:px-3 py-2 text-right tabular-nums font-medium ${
+                    c.ytdPct !== null ? pctClass(c.ytdPct) : "text-slate-400"
+                  }`}
+                >
+                  {c.ytdPct !== null ? formatPctSigned(c.ytdPct) : "—"}
+                </td>
+                <td className="px-2 md:px-3 py-2 text-right tabular-nums text-slate-600">
+                  {c.weightPct > 0
+                    ? `${c.weightPct.toFixed(1).replace(".", ",")}%`
+                    : "—"}
+                </td>
+                <td
+                  className={`px-2 md:px-3 py-2 text-right tabular-nums font-semibold ${
+                    c.contributionPct !== null
+                      ? pctClass(c.contributionPct)
+                      : "text-slate-400"
+                  }`}
+                >
+                  {c.contributionPct !== null
+                    ? formatPctSigned(c.contributionPct)
+                    : "—"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            {/* Sous-total titres identifiés */}
+            <tr className="text-xs border-t-2 border-slate-300">
+              <td
+                colSpan={4}
+                className="px-2 md:px-3 py-2 text-slate-500 text-right"
+              >
+                Σ contributions identifiées
+              </td>
+              <td className="px-2 md:px-3 py-2 text-right tabular-nums text-slate-500">
+                100,0%
+              </td>
+              <td className="px-2 md:px-3 py-2 text-right tabular-nums">
+                <span className={`font-medium ${pctClass(sumContrib)}`}>
+                  {formatPctSigned(sumContrib)}
+                </span>
+              </td>
+            </tr>
+            {/* Résiduel d'attribution */}
+            <tr className="text-xs">
+              <td
+                colSpan={4}
+                className="px-2 md:px-3 py-2 text-slate-500 text-right"
+              >
+                <span title="Écart d'attribution : différence entre notre reconstitution (capitalisation totale) et le YTD officiel BRVM (capitalisation flottante + ajustements opérations sur capital).">
+                  Ajustement méthodologique BRVM
+                </span>
+              </td>
+              <td className="px-2 md:px-3 py-2 text-right tabular-nums text-slate-400">
+                —
+              </td>
+              <td className="px-2 md:px-3 py-2 text-right tabular-nums">
+                <span className={`font-medium ${pctClass(residual)}`}>
+                  {formatPctSigned(residual)}
+                </span>
+              </td>
+            </tr>
+            {/* Total = YTD officiel */}
+            <tr className="text-sm border-t border-slate-300 bg-slate-50">
+              <td
+                colSpan={5}
+                className="px-2 md:px-3 py-2 text-slate-700 text-right font-medium"
+              >
+                YTD indice ({formatPctSigned(indexYtd)})
+              </td>
+              <td className="px-2 md:px-3 py-2 text-right tabular-nums">
+                <span className={`font-semibold ${pctClass(indexYtd)}`}>
+                  {formatPctSigned(indexYtd)}
+                </span>
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+    </section>
   );
 }
 

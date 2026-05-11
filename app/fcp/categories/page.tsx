@@ -8,6 +8,7 @@ import {
   aumAt,
   categoryAt,
   categorySlug,
+  getLatestBocDate,
   FCP_CATEGORIES,
 } from "@/lib/fcp";
 import { perfWindow, perfYTD } from "@/lib/fcpMath";
@@ -87,6 +88,7 @@ export default function CategoriesIndexPage() {
         refQuarter={refQuarter}
         marketTotalAUM={totalMarketAUM}
         totalFunds={funds.length}
+        latestBocDate={getLatestBocDate(funds)}
       />
     </div>
   );

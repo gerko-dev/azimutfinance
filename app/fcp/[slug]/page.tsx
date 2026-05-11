@@ -2,6 +2,8 @@ import { notFound } from "next/navigation";
 import Header from "@/components/Header";
 import Ticker from "@/components/Ticker";
 import FCPDetailView from "@/components/FCPDetailView";
+import PremiumPaywall from "@/components/PremiumPaywall";
+import { fetchUserRole } from "@/lib/auth/userRole";
 import {
   loadFunds,
   listQuarterEnds,
@@ -10,6 +12,7 @@ import {
   subtractCalendarDays,
   aumAt,
   categoryAt,
+  getLatestBocDate,
 } from "@/lib/fcp";
 import {
   perfWindow,
@@ -30,7 +33,8 @@ import {
   aumDecomposition,
 } from "@/lib/fcpMath";
 
-export const dynamic = "force-static";
+// userRole lu via cookies → rendu dynamique requis pour le gating premium.
+export const dynamic = "force-dynamic";
 
 export default async function FCPDetailPage({
   params,
@@ -41,6 +45,37 @@ export default async function FCPDetailPage({
   const funds = loadFunds();
   const fund = funds.find((f) => f.id === slug);
   if (!fund) notFound();
+
+  // === GATING PREMIUM : fiche fonds reservee aux abonnes Premium ===
+  const userRole = await fetchUserRole();
+  const isMember = userRole !== null;
+  const isPremium = userRole === "premium" || userRole === "pro";
+  if (!isPremium) {
+    return (
+      <div className="min-h-screen bg-slate-50">
+        <Header />
+        <Ticker />
+        <PremiumPaywall
+          breadcrumb={[
+            { label: "Marchés", href: "/" },
+            { label: "FCP / OPCVM", href: "/marches/fcp" },
+            { label: fund.nom },
+          ]}
+          title={`Fiche détaillée — ${fund.nom}`}
+          description="Analyse complète d'un fonds OPCVM réservée aux abonnés Premium : performance vs catégorie, quartiles, décomposition AUM, peers, cadence de publication."
+          features={[
+            "Performance 3M / 6M / YTD / 1Y / 3Y vs médiane catégorie",
+            "Quartiles historiques et persistance",
+            "Décomposition de croissance d'encours (effet perf vs flux nets)",
+            "Comparatif fonds peers + autres fonds du gestionnaire",
+            "Cadence de publication et fraîcheur de la VL",
+          ]}
+          isMember={isMember}
+          back={{ label: "Retour aux FCP", href: "/marches/fcp" }}
+        />
+      </div>
+    );
+  }
 
   const quarterEnds = listQuarterEnds();
   const refQuarter = getReferenceQuarter(funds);
@@ -209,6 +244,11 @@ export default async function FCPDetailPage({
           categorie: fund.categorie,
           categorieAtRef: catAtRef,
           firstObsDate: fund.firstObsDate,
+          depositaire: fund.bocSnapshot?.depositaire ?? "",
+          frequenceCalcul: fund.bocSnapshot?.frequenceCalcul ?? "",
+          bocDate: fund.bocSnapshot?.bocDate ?? "",
+          bocVL: fund.bocSnapshot?.vlActuelle ?? null,
+          bocDayChange: fund.bocSnapshot?.dayChange ?? null,
         }}
         refQuarter={refQuarter}
         latestVLGlobal={latestVLGlobal}
@@ -244,6 +284,8 @@ export default async function FCPDetailPage({
         cadence={cadence}
         // rolling
         rolling={rolling}
+        // BOC banner
+        latestBocDate={getLatestBocDate(funds)}
       />
     </div>
   );

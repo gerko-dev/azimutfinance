@@ -7,7 +7,6 @@ import {
   Line,
   LineChart,
   ComposedChart,
-  Scatter,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -20,6 +19,8 @@ import {
   getSovereignCashflows,
   calculateSovereignActuarialMetrics,
 } from "@/lib/listedBondsTypes";
+import type { UserRole } from "@/lib/auth/userRole";
+import MemberGateDialog from "./MemberGateDialog";
 import CountryFlag from "./CountryFlag";
 
 // === HELPERS DE FORMATAGE ===
@@ -88,6 +89,7 @@ type Props = {
     spread: number;
     isTarget: boolean;
   }>;
+  userRole: UserRole;
 };
 
 type Tab =
@@ -104,8 +106,21 @@ export default function SovereignDetailView({
   related,
   theoreticalHistory,
   interCountrySpreads,
+  userRole,
 }: Props) {
+  const isMember = userRole !== null;
+  const isPremium = userRole === "premium" || userRole === "pro";
   const [activeTab, setActiveTab] = useState<Tab>("overview");
+  // Gate dialog : tier "member" (CTA inscription) ou "premium" (CTA upgrade)
+  // selon l'onglet verrouille clique.
+  const [gateOpen, setGateOpen] = useState(false);
+  const [gateMsg, setGateMsg] = useState<string>("");
+  const [gateTier, setGateTier] = useState<"member" | "premium">("premium");
+  function openGate(msg: string, tier: "member" | "premium") {
+    setGateMsg(msg);
+    setGateTier(tier);
+    setGateOpen(true);
+  }
 
   const last = bond.adjudications[bond.adjudications.length - 1];
   const first = bond.adjudications[0];
@@ -125,6 +140,253 @@ export default function SovereignDetailView({
   );
   const pastCashflowsCount = cashflows.length - futureCashflows.length;
   const nextCashflow = futureCashflows[0];
+
+  // Export Excel du tableau d'amortissement complet (souverain non cote).
+  // Meme modele que BondDetailView : bandeau Azimut, metadonnees, lignes
+  // de detail avec alternance de fond, ligne totaux, footer methodologie.
+  // exceljs lazy-loade au clic pour ne pas alourdir le bundle initial.
+  const exportCashflowsXLSX = async () => {
+    type Row = {
+      date: string;
+      capitalDebut: number;
+      coupon: number;
+      amortissement: number;
+      capitalFin: number;
+    };
+    const rowsByDate = new Map<string, Row>();
+    // Reverse-trick : outstandingDebut du 1er flux = outstandingAfter + amort
+    // (si non-coupon). Pour les coupons l'outstanding ne bouge pas, donc on
+    // remonte directement au nominal du 1er coupon.
+    let prevOutstanding =
+      cashflows.length > 0
+        ? cashflows[0].outstandingAfter +
+          (cashflows[0].type !== "coupon" ? cashflows[0].amount : 0)
+        : bond.nominalValue;
+    for (const cf of cashflows) {
+      let row = rowsByDate.get(cf.date);
+      if (!row) {
+        row = {
+          date: cf.date,
+          capitalDebut: prevOutstanding,
+          coupon: 0,
+          amortissement: 0,
+          capitalFin: cf.outstandingAfter,
+        };
+        rowsByDate.set(cf.date, row);
+      }
+      if (cf.type === "coupon") row.coupon += cf.amount;
+      else row.amortissement += cf.amount;
+      row.capitalFin = cf.outstandingAfter;
+      prevOutstanding = cf.outstandingAfter;
+    }
+    const rows = Array.from(rowsByDate.values()).sort((a, b) =>
+      a.date.localeCompare(b.date),
+    );
+    const totalCoupon = rows.reduce((s, r) => s + r.coupon, 0);
+    const totalAmort = rows.reduce((s, r) => s + r.amortissement, 0);
+
+    const ExcelJSMod = await import("exceljs");
+    const ExcelJS = ExcelJSMod.default ?? ExcelJSMod;
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "Azimut Finance";
+    wb.created = new Date();
+    const ws = wb.addWorksheet("Tableau d'amortissement", {
+      views: [{ state: "frozen", ySplit: 9 }],
+    });
+
+    ws.columns = [
+      { width: 8 },   // N°
+      { width: 14 },  // Date
+      { width: 12 },  // Statut
+      { width: 22 },  // Capital début
+      { width: 22 },  // Coupon
+      { width: 24 },  // Amortissement
+      { width: 22 },  // Annuité totale
+      { width: 22 },  // Capital fin
+    ];
+
+    // === BANDEAU LOGO AZIMUT ===
+    ws.mergeCells("A1:H2");
+    const logoCell = ws.getCell("A1");
+    logoCell.value = {
+      richText: [
+        { text: "Azimut", font: { name: "Calibri", size: 22, bold: true, color: { argb: "FF1D4ED8" } } },
+        { text: "Finance", font: { name: "Calibri", size: 22, bold: true, color: { argb: "FF0F172A" } } },
+      ],
+    };
+    logoCell.alignment = { vertical: "middle", horizontal: "left", indent: 1 };
+    logoCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF8FAFC" } };
+    ws.getRow(1).height = 24;
+    ws.getRow(2).height = 24;
+
+    // === TITRE ===
+    ws.mergeCells("A3:H3");
+    const titleCell = ws.getCell("A3");
+    titleCell.value = "Tableau d'amortissement";
+    titleCell.font = { name: "Calibri", size: 14, bold: true, color: { argb: "FF0F172A" } };
+    titleCell.alignment = { vertical: "middle", horizontal: "left", indent: 1 };
+    ws.getRow(3).height = 22;
+
+    // === METADONNEES SOUVERAIN ===
+    // Pas de "name"/"code" cote SovereignBond : on construit un libelle depuis
+    // le type + pays + dates. Couponrate null pour les BAT (zero-coupon).
+    const couponPct =
+      bond.couponRate != null && bond.couponRate > 0
+        ? `${(bond.couponRate * 100).toFixed(2).replace(".", ",")} %`
+        : "zéro-coupon";
+    const yearStart = bond.firstIssueDate.slice(0, 4);
+    const yearEnd = bond.maturityDate.slice(0, 4);
+    const amortLabel =
+      bond.amortizationType === "Linéaire"
+        ? "linéaire"
+        : bond.amortizationType === "In Fine"
+          ? "in fine"
+          : bond.type === "BAT"
+            ? "zéro-coupon (bullet)"
+            : "—";
+    const meta: [string, string][] = [
+      ["Titre", `${bond.type} ${bond.country} ${couponPct} ${yearStart}-${yearEnd}`],
+      ["ISIN", bond.isin || "—"],
+      ["Émetteur", `${bond.countryName} (${bond.country})`],
+      [
+        "Nominal / Coupon / Fréq.",
+        `${bond.nominalValue.toLocaleString("fr-FR")} FCFA · ${couponPct} · annuel`,
+      ],
+      [
+        "Émission → Maturité",
+        `${bond.firstIssueDate} → ${bond.maturityDate} · Amort. ${amortLabel}${
+          bond.graceYears > 0
+            ? ` · différé ${bond.graceYears} an${bond.graceYears > 1 ? "s" : ""}`
+            : ""
+        }`,
+      ],
+    ];
+    meta.forEach(([k, v], i) => {
+      const r = 4 + i;
+      ws.getCell(`A${r}`).value = k;
+      ws.getCell(`A${r}`).font = { bold: true, color: { argb: "FF475569" }, size: 10 };
+      ws.mergeCells(`B${r}:H${r}`);
+      ws.getCell(`B${r}`).value = v;
+      ws.getCell(`B${r}`).font = { color: { argb: "FF0F172A" }, size: 10 };
+    });
+
+    // === EN-TETES TABLEAU (ligne 9) ===
+    const headerRow = ws.getRow(9);
+    const headers = [
+      "N°",
+      "Date",
+      "Statut",
+      "Capital début",
+      "Coupon — intérêts",
+      "Amortissement — capital",
+      "Annuité totale",
+      "Capital fin",
+    ];
+    headers.forEach((h, i) => {
+      const c = headerRow.getCell(i + 1);
+      c.value = h;
+      c.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+      c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1D4ED8" } };
+      c.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+      c.border = {
+        top: { style: "thin", color: { argb: "FFCBD5E1" } },
+        bottom: { style: "thin", color: { argb: "FFCBD5E1" } },
+        left: { style: "thin", color: { argb: "FFCBD5E1" } },
+        right: { style: "thin", color: { argb: "FFCBD5E1" } },
+      };
+    });
+    headerRow.height = 28;
+
+    // === LIGNES DE DONNEES ===
+    const FCFA_FMT = "#,##0.00 \"FCFA\";[Red]-#,##0.00 \"FCFA\"";
+    const startRow = 10;
+    rows.forEach((r, i) => {
+      const isPast = new Date(r.date).getTime() <= todayMs;
+      const xlRow = ws.getRow(startRow + i);
+      xlRow.getCell(1).value = i + 1;
+      xlRow.getCell(2).value = r.date;
+      xlRow.getCell(3).value = isPast ? "Versé" : "À venir";
+      xlRow.getCell(4).value = r.capitalDebut;
+      xlRow.getCell(5).value = r.coupon;
+      xlRow.getCell(6).value = r.amortissement;
+      xlRow.getCell(7).value = r.coupon + r.amortissement;
+      xlRow.getCell(8).value = r.capitalFin;
+      [4, 5, 6, 7, 8].forEach((col) => {
+        xlRow.getCell(col).numFmt = FCFA_FMT;
+      });
+      xlRow.getCell(1).alignment = { horizontal: "center" };
+      xlRow.getCell(2).alignment = { horizontal: "center" };
+      xlRow.getCell(3).alignment = { horizontal: "center" };
+      xlRow.getCell(3).font = isPast
+        ? { color: { argb: "FF94A3B8" }, italic: true }
+        : { color: { argb: "FF1D4ED8" }, bold: true };
+      if (i % 2 === 1) {
+        for (let col = 1; col <= 8; col++) {
+          xlRow.getCell(col).fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: "FFF8FAFC" },
+          };
+        }
+      }
+      for (let col = 1; col <= 8; col++) {
+        xlRow.getCell(col).border = {
+          bottom: { style: "thin", color: { argb: "FFE2E8F0" } },
+        };
+      }
+    });
+
+    // === LIGNE TOTAUX ===
+    const totalRow = ws.getRow(startRow + rows.length);
+    totalRow.getCell(1).value = "TOTAL";
+    totalRow.getCell(5).value = totalCoupon;
+    totalRow.getCell(6).value = totalAmort;
+    totalRow.getCell(7).value = totalCoupon + totalAmort;
+    [5, 6, 7].forEach((col) => {
+      totalRow.getCell(col).numFmt = FCFA_FMT;
+    });
+    for (let col = 1; col <= 8; col++) {
+      totalRow.getCell(col).font = { bold: true, color: { argb: "FF0F172A" } };
+      totalRow.getCell(col).fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFE0E7FF" },
+      };
+      totalRow.getCell(col).border = {
+        top: { style: "medium", color: { argb: "FF1D4ED8" } },
+        bottom: { style: "medium", color: { argb: "FF1D4ED8" } },
+      };
+    }
+    totalRow.getCell(1).alignment = { horizontal: "center" };
+
+    // === FOOTER METHODO ===
+    const footerRow = startRow + rows.length + 2;
+    ws.mergeCells(`A${footerRow}:H${footerRow}`);
+    const footerCell = ws.getCell(`A${footerRow}`);
+    footerCell.value = `Convention UMOA-Titres · coupon annuel sur capital restant dû · amortissement ${amortLabel}${
+      bond.graceYears > 0 ? ` · différé ${bond.graceYears} an${bond.graceYears > 1 ? "s" : ""}` : ""
+    } · valeurs par titre (nominal ${bond.nominalValue.toLocaleString("fr-FR")} FCFA).`;
+    footerCell.font = { italic: true, color: { argb: "FF64748B" }, size: 9 };
+    footerCell.alignment = { wrapText: true };
+
+    // === DOWNLOAD ===
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    // bond.id = ISIN pour OAT, cle composite pour BAT — on sanitize pour le filename.
+    const safeId = (bond.isin || bond.id).replace(/[^A-Za-z0-9-]/g, "_");
+    a.download = `tableau-amortissement-${safeId}-${new Date()
+      .toISOString()
+      .slice(0, 10)}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   // Metriques pour le YTM "marche" = lastYield (rendement du dernier round cash)
   const marketMetrics = useMemo(() => {
@@ -155,34 +417,15 @@ export default function SovereignDetailView({
   }, [marketMetrics, bond.lastYield]);
 
   // === DONNEES POUR L'ONGLET PRICING ===
-  // Series : prix theorique continu + points d'adjudication (prix moyen pondere
-  // converti a partir du yield si pas de prix observe).
+  // Série hebdomadaire de prix théorique pied de coupon (calibration UMOA-Titres).
+  // Les points d'adjudication ne sont plus superposes — la courbe theorique
+  // suffit a la lecture et les valeurs observees sont accessibles dans
+  // l'onglet "Adjudications".
   const pricingSeries = useMemo(() => {
-    type Point = {
-      date: string;
-      theoretical: number | null;
-      adjudicated: number | null;
-    };
-    const map = new Map<string, Point>();
-    for (const t of theoreticalHistory) {
-      map.set(t.date, { date: t.date, theoretical: t.theoreticalPrice, adjudicated: null });
-    }
-    for (const a of bond.adjudications) {
-      // Prix moyen pondere si dispo, sinon prix marginal.
-      const adjudicatedPrice =
-        a.weightedAvgPrice ?? a.marginalPrice ?? null;
-      if (adjudicatedPrice == null) continue;
-      const existing = map.get(a.valueDate);
-      if (existing) existing.adjudicated = adjudicatedPrice;
-      else
-        map.set(a.valueDate, {
-          date: a.valueDate,
-          theoretical: null,
-          adjudicated: adjudicatedPrice,
-        });
-    }
-    return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date));
-  }, [theoreticalHistory, bond.adjudications]);
+    return theoreticalHistory
+      .map((t) => ({ date: t.date, theoretical: t.theoreticalPrice }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }, [theoreticalHistory]);
 
   // Adjudications triees chronologiquement, avec un index humain (Round 1, 2, ...)
   const orderedAdjudications = useMemo(() => {
@@ -299,28 +542,65 @@ export default function SovereignDetailView({
             </div>
           </div>
 
-          {/* Onglets */}
+          {/* Onglets — gating 3 niveaux :
+              · Vue d'ensemble              : guest (toujours ouvert)
+              · Adjudications / Échéancier
+                / Simulateur / Caracté.     : member (cadenas pour invité)
+              · Pricing / Risque & analyt.  : premium (cadenas pour invité+membre) */}
           <div className="flex gap-0 text-sm overflow-x-auto border-b border-slate-200 -mb-px">
-            {[
-              { id: "overview", label: "Vue d'ensemble" },
-              { id: "pricing", label: "Pricing" },
-              { id: "adjudications", label: `Adjudications (${bond.nbRounds})` },
-              { id: "cashflow", label: "Échéancier & flux" },
-              { id: "risk", label: "Risque & analytics" },
-              { id: "characteristics", label: "Caractéristiques" },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as Tab)}
-                className={`px-3 md:px-4 py-3 whitespace-nowrap border-b-2 transition ${
-                  activeTab === tab.id
-                    ? "border-blue-700 text-blue-700 font-medium"
-                    : "border-transparent text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+            {(
+              [
+                { id: "overview", label: "Vue d'ensemble", tier: "guest" },
+                { id: "pricing", label: "Pricing", tier: "premium" },
+                { id: "adjudications", label: `Adjudications (${bond.nbRounds})`, tier: "member" },
+                { id: "cashflow", label: "Échéancier & flux", tier: "member" },
+                { id: "risk", label: "Risque & analytics", tier: "premium" },
+                { id: "characteristics", label: "Caractéristiques", tier: "member" },
+              ] as Array<{
+                id: Tab;
+                label: string;
+                tier: "guest" | "member" | "premium";
+              }>
+            ).map((tab) => {
+              const locked =
+                (tab.tier === "member" && !isMember) ||
+                (tab.tier === "premium" && !isPremium);
+              const gateTierForTab: "member" | "premium" =
+                tab.tier === "premium" ? "premium" : "member";
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => {
+                    if (locked) {
+                      openGate(
+                        gateTierForTab === "premium"
+                          ? `L'onglet « ${tab.label} » est réservé à l'abonnement Premium.`
+                          : `L'onglet « ${tab.label} » est réservé aux membres inscrits.`,
+                        gateTierForTab,
+                      );
+                      return;
+                    }
+                    setActiveTab(tab.id);
+                  }}
+                  aria-haspopup={locked ? "dialog" : undefined}
+                  title={
+                    locked
+                      ? `${tab.label} — réservé ${gateTierForTab === "premium" ? "Premium" : "aux membres"}`
+                      : undefined
+                  }
+                  className={`px-3 md:px-4 py-3 whitespace-nowrap border-b-2 transition inline-flex items-center gap-1 ${
+                    activeTab === tab.id
+                      ? "border-blue-700 text-blue-700 font-medium"
+                      : "border-transparent text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  {tab.label}
+                  {locked && (
+                    <span aria-hidden className="text-[10px]">🔒</span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -596,8 +876,6 @@ export default function SovereignDetailView({
                           if (!isFinite(v) || v === 0) return ["—", String(name ?? "")];
                           if (name === "theoretical")
                             return [formatFCFA(v) + " FCFA", "Prix théorique"];
-                          if (name === "adjudicated")
-                            return [formatFCFA(v) + " FCFA", "Prix adjudication"];
                           return [String(value ?? "—"), String(name ?? "")];
                         }}
                         labelFormatter={(d) => formatDate(d as string)}
@@ -622,12 +900,6 @@ export default function SovereignDetailView({
                         connectNulls
                         isAnimationActive={false}
                       />
-                      <Scatter
-                        dataKey="adjudicated"
-                        fill="#0f172a"
-                        shape="circle"
-                        isAnimationActive={false}
-                      />
                     </ComposedChart>
                   </ResponsiveContainer>
                 </div>
@@ -640,10 +912,10 @@ export default function SovereignDetailView({
                 <strong>Méthodologie :</strong> à chaque date hebdomadaire, le prix
                 théorique pied de coupon est calculé en actualisant les flux futurs au
                 YTM moyen pondéré des adjudications cash UMOA-Titres du même pays sur
-                les 3 derniers mois, interpolé sur la maturité résiduelle. Les points
-                noirs sont les prix moyens pondérés effectivement enregistrés à chaque
-                round d&apos;adjudication. Pas de cotation secondaire pour ce titre :
-                il n&apos;est pas listé sur la BRVM.
+                les 3 derniers mois, interpolé sur la maturité résiduelle. Pas de
+                cotation secondaire pour ce titre : il n&apos;est pas listé sur la
+                BRVM. Voir l&apos;onglet « Adjudications » pour les prix moyens
+                pondérés observés à chaque round.
               </div>
             </section>
 
@@ -957,10 +1229,29 @@ export default function SovereignDetailView({
               <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
                 <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
                   <h3 className="text-base font-medium">📅 Échéancier complet des flux</h3>
-                  <div className="text-xs text-slate-500 flex gap-3">
-                    <span>{pastCashflowsCount} versés</span>
-                    <span>·</span>
-                    <span>{futureCashflows.length} à venir</span>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <div className="text-xs text-slate-500 flex gap-3">
+                      <span>{pastCashflowsCount} versés</span>
+                      <span>·</span>
+                      <span>{futureCashflows.length} à venir</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={exportCashflowsXLSX}
+                      className="text-xs px-3 py-1.5 rounded-md bg-emerald-600 text-white hover:bg-emerald-700 transition flex items-center gap-1.5"
+                      title="Télécharger le tableau d'amortissement au format Excel (.xlsx)"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                        className="w-3.5 h-3.5"
+                      >
+                        <path d="M10.75 2.75a.75.75 0 0 0-1.5 0v8.614L6.295 8.235a.75.75 0 1 0-1.09 1.03l4.25 4.5a.75.75 0 0 0 1.09 0l4.25-4.5a.75.75 0 0 0-1.09-1.03l-2.955 3.129V2.75Z" />
+                        <path d="M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z" />
+                      </svg>
+                      Exporter Excel
+                    </button>
                   </div>
                 </div>
                 <div className="overflow-x-auto">
@@ -1429,6 +1720,23 @@ export default function SovereignDetailView({
           </Link>
         </div>
       </main>
+
+      <MemberGateDialog
+        open={gateOpen}
+        onClose={() => setGateOpen(false)}
+        tier={gateTier}
+        title={
+          gateTier === "premium"
+            ? "Onglet réservé Premium"
+            : "Onglet réservé aux membres"
+        }
+        description={
+          gateMsg ||
+          (gateTier === "premium"
+            ? "Cet onglet de la fiche souveraine est réservé à l'abonnement Premium."
+            : "Cet onglet de la fiche souveraine est réservé aux membres inscrits.")
+        }
+      />
     </>
   );
 }
