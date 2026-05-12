@@ -1,0 +1,78 @@
+# Scrape l'historique des prix du caoutchouc naturel APROMAC depuis
+# eagrici.com (page d'accueil — tableau JS embarqué, 13 mois affichés).
+#
+# Cron : chaque jour à 19h00 GMT.
+#   - Le site publie le nouveau prix APROMAC dans la première quinzaine
+#     de chaque mois ; un run quotidien capture la maj dès qu'elle paraît.
+#   - 19h GMT = ~20h en heure d'Abidjan (après publication probable).
+#
+# Le script merge avec data/apromac.csv existant pour préserver l'historique
+# au-delà de la fenêtre 13 mois affichée par le site.
+#
+# Egalement déclenchable manuellement depuis l'UI GitHub Actions.
+
+name: Scrape APROMAC Hévéa CI
+
+on:
+  schedule:
+    - cron: "0 19 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: scrape-apromac
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Scrape APROMAC
+        run: python scripts/scrape_apromac.py
+
+      - name: Show diff stats
+        run: |
+          echo "=== File modified ==="
+          git status --short data/apromac.csv || true
+          echo ""
+          echo "=== Diff summary ==="
+          git diff --stat data/apromac.csv || true
+
+      - name: Commit & push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/apromac.csv
+          if git diff --staged --quiet; then
+            echo "Aucun changement a commiter."
+            exit 0
+          fi
+          DATE_TAG=$(date -u +%Y-%m-%d)
+          git commit \
+            -m "chore(data): refresh prix APROMAC hevea ${DATE_TAG}" \
+            -m "Mise a jour automatique via GitHub Actions (workflow scrape-apromac)." \
+            -m "Source : eagrici.com (donnees APROMAC officielles)."
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main && git push && {
+              echo "Push effectue avec succes (essai $i)."
+              exit 0
+            }
+            echo "Essai $i echoue, nouvelle tentative dans 10s..."
+            sleep 10
+          done
+          echo "Push definitivement echoue apres 5 essais."
+          exit 1
