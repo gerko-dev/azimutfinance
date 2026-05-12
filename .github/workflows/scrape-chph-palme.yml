@@ -1,0 +1,104 @@
+# Découverte, OCR et extraction des prix CHPH palmier à huile depuis
+# conseilheveapalmier.ci. Bout en bout automatisé : aucune action manuelle.
+#
+# Cron : chaque jour à 19h00 GMT (~20h Abidjan).
+#   - Le CHPH publie des "Avis aux planteurs" trimestriels fixant les prix
+#     d'achat de l'huile de palme brute et du régime de palme bord-champ.
+#   - Le run quotidien capture les nouvelles publications dès qu'elles paraissent.
+#
+# Pipeline :
+#   1. apt install tesseract-ocr (avec pack fr) + poppler-utils
+#   2. pip install pdf2image + pytesseract + Pillow
+#   3. python scripts/scrape_chph_palme.py
+#      - Découvre tous les articles "fixation des prix"
+#      - Télécharge les nouveaux PDFs
+#      - OCR chaque nouveau PDF (Tesseract fr)
+#      - Parse texte → période + 2 prix
+#      - Met à jour data/chph-palme.csv (une ligne par mois)
+#   4. Commit + push PDFs + CSV si diff
+#
+# Également déclenchable manuellement.
+
+name: Scrape CHPH Palmier à Huile
+
+on:
+  schedule:
+    - cron: "0 19 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Forcer le re-OCR de tous les PDFs (écrase le CSV)"
+        required: false
+        default: "false"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: scrape-chph-palme
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install OCR system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-fra poppler-utils
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python OCR packages
+        run: pip install pdf2image pytesseract Pillow
+
+      - name: Scrape + OCR + extract prix CHPH
+        run: |
+          ARGS=""
+          if [ "${{ inputs.force }}" = "true" ]; then
+            ARGS="--force"
+          fi
+          python scripts/scrape_chph_palme.py $ARGS
+
+      - name: Show diff stats
+        run: |
+          echo "=== Files modified ==="
+          git status --short data/chph-palme/ data/chph-palme.csv || true
+          echo ""
+          echo "=== Diff CSV ==="
+          git diff --stat data/chph-palme.csv || true
+
+      - name: Commit & push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/chph-palme/ data/chph-palme.csv
+          if git diff --staged --quiet; then
+            echo "Aucun changement a commiter."
+            exit 0
+          fi
+          DATE_TAG=$(date -u +%Y-%m-%d)
+          git commit \
+            -m "chore(data): refresh prix CHPH palmier a huile ${DATE_TAG}" \
+            -m "Mise a jour automatique via GitHub Actions (workflow scrape-chph-palme)." \
+            -m "Source : conseilheveapalmier.ci. PDFs scannes parses via Tesseract OCR fr."
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main && git push && {
+              echo "Push effectue avec succes (essai $i)."
+              exit 0
+            }
+            echo "Essai $i echoue, nouvelle tentative dans 10s..."
+            sleep 10
+          done
+          echo "Push definitivement echoue apres 5 essais."
+          exit 1
