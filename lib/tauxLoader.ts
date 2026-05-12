@@ -1,10 +1,15 @@
-// Loader pour data/bddtaux.csv (BCEAO - Bulletin mensuel des statistiques)
-// Format long : section, indicator, country, period, value, unit, source
-// Délimiteur virgule (différent de la convention `;` du projet).
+// Loader pour les taux BCEAO & UEMOA.
+//
+// Source primaire : data/marche-monetaire/Bul_stat.pdf (parsé par tauxPdfParser).
+// Fallback : data/bddtaux.csv (utilisé si le PDF est absent).
+//
+// Le cache est invalidé par la mtime du PDF — il suffit de remplacer le fichier
+// pour que la page se mette à jour au prochain rendu.
 
-import { readFileSync } from "fs";
+import { readFileSync, statSync, existsSync } from "fs";
 import { join } from "path";
 import Papa from "papaparse";
+import { parseBceaoBulletinPdf, type ParsedBulletin } from "./tauxPdfParser";
 import type {
   NormalizedPeriod,
   PeriodKind,
@@ -17,6 +22,7 @@ import type {
 
 const DATA_DIR = join(process.cwd(), "data");
 const FILE = "bddtaux.csv";
+const PDF_PATH = join(DATA_DIR, "marche-monetaire", "Bul_stat.pdf");
 
 type RawRow = {
   section: string;
@@ -29,6 +35,8 @@ type RawRow = {
 };
 
 let _cache: TauxRow[] | null = null;
+let _cachePdfMtimeMs = 0;
+let _bulletinLabel = ""; // "Mars 2026" — détecté depuis le PDF
 
 const MONTH_FR: Record<string, number> = {
   janv: 1, jan: 1,
@@ -206,9 +214,7 @@ function parseValue(v: string): number {
   return isNaN(n) ? NaN : n;
 }
 
-function loadRaw(): TauxRow[] {
-  if (_cache !== null) return _cache;
-
+function loadFromCsv(): TauxRow[] {
   const filePath = join(DATA_DIR, FILE);
   let content = readFileSync(filePath, "utf-8");
   if (content.charCodeAt(0) === 0xfeff) content = content.slice(1);
@@ -234,19 +240,56 @@ function loadRaw(): TauxRow[] {
     if (!section || !indicator || !country || !periodRaw) continue;
     if (!isFinite(value)) continue;
 
-    rows.push({
-      section,
-      indicator,
-      country,
-      period: normalizePeriod(periodRaw),
-      value,
-      unit,
-      source,
+    rows.push({ section, indicator, country, period: normalizePeriod(periodRaw), value, unit, source });
+  }
+  return rows;
+}
+
+function rowsFromBulletin(b: ParsedBulletin): TauxRow[] {
+  const out: TauxRow[] = [];
+  for (const r of b.rows) {
+    if (!isFinite(r.value)) continue;
+    out.push({
+      section: r.section,
+      indicator: r.indicator,
+      country: r.country,
+      period: normalizePeriod(r.period),
+      value: r.value,
+      unit: r.unit,
+      source: r.source,
     });
   }
+  return out;
+}
 
-  _cache = rows;
-  return rows;
+function loadRaw(): TauxRow[] {
+  if (_cache !== null) return _cache;
+  // The PDF preload may not have been awaited (synchronous render path). Fall
+  // back to CSV in that case.
+  _cache = loadFromCsv();
+  return _cache;
+}
+
+/**
+ * Reparses the BCEAO PDF if it has changed since the last call. Sync-fast on
+ * subsequent calls (mtime check is the only I/O). The page is expected to await
+ * this before any getSeries/getSnapshot calls.
+ *
+ * If the PDF is absent, no-op (the CSV fallback kicks in via loadRaw).
+ */
+export async function preloadTauxData(): Promise<void> {
+  if (!existsSync(PDF_PATH)) return;
+  const mtime = statSync(PDF_PATH).mtimeMs;
+  if (_cache !== null && mtime === _cachePdfMtimeMs) return;
+  try {
+    const bulletin = await parseBceaoBulletinPdf(PDF_PATH);
+    _cache = rowsFromBulletin(bulletin);
+    _cachePdfMtimeMs = mtime;
+    _bulletinLabel = bulletin.bulletinLabel;
+  } catch (err) {
+    console.warn("[tauxLoader] PDF parse failed, falling back to CSV:", err);
+    // Leave _cache as-is — loadRaw will load CSV.
+  }
 }
 
 // ===========================================================================
@@ -402,6 +445,21 @@ export function getSectionLatestLabel(section: TauxSection): string {
 export function getSourceLabel(): string {
   const rows = loadRaw();
   return rows[0]?.source || "BCEAO – Bulletin mensuel des statistiques";
+}
+
+/** "Mars 2026" — détecté depuis la page 1 du PDF (ou déduit du label source en fallback). */
+export function getBulletinMonthLabel(): string {
+  if (_bulletinLabel) return _bulletinLabel;
+  const src = getSourceLabel();
+  const m = src.match(/-\s+([A-Za-zéèêû]+\s+\d{4})\s*$/);
+  return m ? m[1] : "";
+}
+
+/** "Mars 2026" — version courte affichée en hint (réutilise la même source). */
+export function getBulletinShortHint(): string {
+  const label = getBulletinMonthLabel();
+  if (!label) return "Bulletin mensuel";
+  return `Bulletin mensuel · ${label.toLowerCase()}`;
 }
 
 /**

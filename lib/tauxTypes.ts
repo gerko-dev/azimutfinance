@@ -11,7 +11,10 @@ export type TauxSection =
   | "8_Interbancaire_UMOA"
   | "9_Reserves_const_vs_req"
   | "10a_Conditions_banque_categorie"
-  | "10b_Conditions_banque_objet";
+  | "10b_Conditions_banque_objet"
+  | "11_Inflation_composante"
+  | "12_Activite_economique"
+  | "13_Climat_affaires";
 
 export type TauxUnit = "pct" | "Mds_FCFA" | "M_FCFA" | "rate" | "x";
 

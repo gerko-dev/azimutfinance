@@ -8,8 +8,12 @@ import {
   getDelta,
   getSnapshot,
   listAllSeriesDescriptors,
+  listIndicators,
   detectBceaoRateChanges,
   getSourceLabel,
+  preloadTauxData,
+  getBulletinMonthLabel,
+  getSectionLatestLabel,
 } from "@/lib/tauxLoader";
 import { fmtPct, fmtBp, fmtMdsFCFA, fmtRate } from "@/lib/tauxFormat";
 
@@ -96,8 +100,10 @@ const PARTENAIRES = [
   "Japon",
 ];
 
-export default function MarcheMonetairePage() {
-  // Charge tout
+export default async function MarcheMonetairePage() {
+  // Reparse le PDF BCEAO si sa mtime a changé, puis amorce le cache mémoire
+  // utilisé par tous les getters synchrones ci-dessous.
+  await preloadTauxData();
   loadTauxRaw();
 
   // ---- KPIs ----
@@ -182,11 +188,21 @@ export default function MarcheMonetairePage() {
       value: eurUsdSpot ? fmtRate(eurUsdSpot.value, 4) : "—",
       hint: eurUsdSpot?.label,
     },
-    {
-      label: "Source",
-      value: "BCEAO",
-      hint: "Bulletin mensuel · fév. 2026",
-    },
+    (() => {
+      const s = getSeries("13_Climat_affaires", "Indicateur climat des affaires", "Union");
+      const last = s?.points.at(-1);
+      const prev = s?.points.at(-2);
+      const delta = last && prev ? last.value - prev.value : null;
+      return {
+        label: "Climat des affaires UEMOA",
+        value: last ? last.value.toFixed(1).replace(".", ",") : "—",
+        delta: delta !== null ? {
+          text: `${delta >= 0 ? "+" : ""}${delta.toFixed(1).replace(".", ",")} pt vs ${prev?.label ?? ""}`,
+          positive: delta > 0 ? true : delta < 0 ? false : null,
+        } : undefined,
+        hint: last ? `${last.label} · base 100` : "—",
+      };
+    })(),
   ];
 
   // ---- Politique BCEAO : changements de taux ----
@@ -207,6 +223,20 @@ export default function MarcheMonetairePage() {
     getSeries("4_Inflation_pays_UEMOA", "IPC glissement annuel", c)
   ).filter((s): s is NonNullable<typeof s> => s !== null);
 
+  // ---- Inflation par composante (contributions à l'inflation, points de %) ----
+  const inflationComposante = listIndicators("11_Inflation_composante")
+    .map((ind) => getSeries("11_Inflation_composante", ind, "UEMOA"))
+    .filter((s): s is NonNullable<typeof s> => s !== null);
+
+  // ---- Activité économique UEMOA + climat des affaires par pays ----
+  const activiteSeries = listIndicators("12_Activite_economique")
+    .map((ind) => getSeries("12_Activite_economique", ind, "UEMOA"))
+    .filter((s): s is NonNullable<typeof s> => s !== null);
+  const CLIMAT_COUNTRIES = ["Benin", "Burkina Faso", "Cote d'Ivoire", "Guinee-Bissau", "Mali", "Niger", "Senegal", "Togo", "Union"];
+  const climatSeries = CLIMAT_COUNTRIES.map((c) =>
+    getSeries("13_Climat_affaires", "Indicateur climat des affaires", c)
+  ).filter((s): s is NonNullable<typeof s> => s !== null);
+
   // ---- Conditions de banque : heatmaps ----
   function buildConditionsHeatmap(
     section: "10a_Conditions_banque_categorie" | "10b_Conditions_banque_objet",
@@ -224,7 +254,7 @@ export default function MarcheMonetairePage() {
   }
   const conditionsCat = buildConditionsHeatmap("10a_Conditions_banque_categorie", COND_CAT_ORDER);
   const conditionsObj = buildConditionsHeatmap("10b_Conditions_banque_objet", COND_OBJ_ORDER);
-  const conditionsPeriod = "Février 2026";
+  const conditionsPeriod = getSectionLatestLabel("10a_Conditions_banque_categorie") || getBulletinMonthLabel();
 
   // ---- Crédits & dépôts ----
   const credits = getSeries("3_Credits_Depots_UEMOA", "Taux moyen credits", "UEMOA")!;
@@ -240,7 +270,7 @@ export default function MarcheMonetairePage() {
     const ratio = getSnapshot("9_Reserves_const_vs_req", "Ratio constituees sur requises").find((x) => x.country === c)?.value ?? 0;
     return { country: c, req, cons, net, ratio };
   });
-  const reservesPeriod = "16 janv → 15 fév 2026";
+  const reservesPeriod = getSectionLatestLabel("9_Reserves_const_vs_req");
 
   // ---- Agrégats monétaires ----
   const agregats = AGREGATS_COUNTRIES.map((c) => ({
@@ -299,6 +329,8 @@ export default function MarcheMonetairePage() {
               ["#marche-monetaire", "Marché monétaire"],
               ["#interbancaire", "Interbancaire"],
               ["#inflation", "Inflation"],
+              ["#inflation-composante", "Décomposition inflation"],
+              ["#activite", "Activité & climat"],
               ["#conditions", "Conditions banque"],
               ["#credits-depots", "Crédits / dépôts"],
               ["#reserves", "Réserves"],
@@ -332,6 +364,9 @@ export default function MarcheMonetairePage() {
           interbancaireTaux={interbancaireTaux}
           interbancaireVolumes={interbancaireVolumes}
           inflationSeries={inflationSeries}
+          inflationComposante={inflationComposante}
+          activiteSeries={activiteSeries}
+          climatSeries={climatSeries}
           conditionsCat={conditionsCat}
           conditionsObj={conditionsObj}
           conditionsPeriod={conditionsPeriod}
