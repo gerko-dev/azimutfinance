@@ -125,7 +125,7 @@ export const COMMODITIES: CommodityMeta[] = [
     exchange: "Bursa Malaysia",
     file: "palmoil.csv",
     brvmRelevance:
-      "Filière clé en Côte d'Ivoire ; influence directement les marges de PALMCI, SOGB, SAPH (oléagineux & caoutchouc).",
+      "Filière clé en Côte d'Ivoire.",
     brvmTickers: ["PALC", "SOGC", "SPHC"],
     exposedCountries: ["CI"],
     color: "#65a30d",
@@ -138,7 +138,7 @@ export const COMMODITIES: CommodityMeta[] = [
     exchange: "ICE Futures (Londres) #5",
     file: "sugar.csv",
     brvmRelevance:
-      "Pivot de SUCRIVOIRE (Sifca). Driver des marges des sucreries ouest-africaines et des prix à la consommation.",
+      "Driver des marges des sucreries ouest-africaines et des prix à la consommation.",
     brvmTickers: ["SCRC"],
     exposedCountries: ["CI"],
     color: "#e0e7ff",
@@ -151,7 +151,7 @@ export const COMMODITIES: CommodityMeta[] = [
     exchange: "SGX (Singapour)",
     file: "tsr.csv",
     brvmRelevance:
-      "Référence mondiale pour le caoutchouc naturel. La Côte d'Ivoire est le 1ᵉʳ producteur africain ; SAPH et SOGB sont directement corrélés.",
+      "Référence mondiale pour le caoutchouc naturel. La Côte d'Ivoire est le 1ᵉʳ producteur africain.",
     brvmTickers: ["SPHC", "SOGC"],
     exposedCountries: ["CI"],
     color: "#475569",
@@ -619,16 +619,28 @@ export function computeCorrelationMatrix(
 // IMPACT BRVM (synthese pour la page d'accueil de l'outil)
 // =============================================================================
 
+export type ExposureDirection = "positive" | "negative" | "mixte";
+
+export type BrvmTickerExposure = {
+  /** Code BRVM (ex "TTLC") */
+  code: string;
+  /** Sens d'impact d'une HAUSSE de la MP sur ce ticker */
+  direction: ExposureDirection;
+  /** Justification courte (optionnel) */
+  rationale?: string;
+};
+
 export type CommodityImpact = {
   slug: CommoditySlug;
   name: string;
   category: CommodityCategory;
   /** Importance pour l'UEMOA (0..100), pondere par poids dans les exports/imports */
   uemoaImportance: number;
-  /** Sens d'impact d'une hausse de la MP sur la BRVM */
-  rvmDirection: "positive" | "negative" | "mixte";
+  /** Sens d'impact macro d'une hausse de la MP sur la BRVM */
+  rvmDirection: ExposureDirection;
   brvmRationale: string;
-  brvmTickers: string[];
+  /** Liste des actions BRVM avec direction propre par ticker */
+  brvmTickers: BrvmTickerExposure[];
   exposedCountries: string[];
 };
 
@@ -638,10 +650,16 @@ export const COMMODITY_IMPACTS: CommodityImpact[] = [
     name: "Cacao",
     category: "agri",
     uemoaImportance: 95,
-    rvmDirection: "positive",
+    rvmDirection: "mixte",
     brvmRationale:
-      "Hausse = + recettes export Côte d'Ivoire + budget Etat + consommation interne. Soutient indirectement les services financiers (SGBC, NSBC) et la grande conso (NTLC, BICC).",
-    brvmTickers: ["NTLC", "PALC", "SGBC", "NSBC"],
+      "Pas de pure-player strict coté. Filtisac seule via cacao+cajou agrégé.",
+    brvmTickers: [
+      {
+        code: "FTSC",
+        direction: "positive",
+        rationale: "Sacs jute cacao+cajou ~70-80 % CA. Transmission par volume.",
+      },
+    ],
     exposedCountries: ["CI"],
   },
   {
@@ -651,7 +669,7 @@ export const COMMODITY_IMPACTS: CommodityImpact[] = [
     uemoaImportance: 85,
     rvmDirection: "positive",
     brvmRationale:
-      "Hausse = + recettes minières Mali, Burkina, Sénégal. Pas de minière cotée à la BRVM mais effet macro positif (reserves de change, budget).",
+      "Pas de pure-player coté (majors miniers cotés TSX/LSE/ASX). Impact via fiscalité minière.",
     brvmTickers: [],
     exposedCountries: ["ML", "BF", "SN", "CI", "NE"],
   },
@@ -662,8 +680,29 @@ export const COMMODITY_IMPACTS: CommodityImpact[] = [
     uemoaImportance: 80,
     rvmDirection: "mixte",
     brvmRationale:
-      "Hausse = + marges distributeurs (TTLC, TTLS, SHEC) MAIS - inflation importée et coût du transport. Net négatif pour les pays importateurs (CI, BF, ML).",
-    brvmTickers: ["TTLC", "TTLS", "SHEC"],
+      "Distributeurs et producteur bitume cotés à ~100 % CA pétrolier, mais transmission filtrée par prix administrés.",
+    brvmTickers: [
+      {
+        code: "TTLC",
+        direction: "mixte",
+        rationale: "Distribution carburants CI ~100 % CA, prix à la pompe administrés.",
+      },
+      {
+        code: "TTLS",
+        direction: "mixte",
+        rationale: "Distribution carburants SN ~100 % CA, prix administrés.",
+      },
+      {
+        code: "SHEC",
+        direction: "mixte",
+        rationale: "Vivo Energy / Shell CI ~100 % CA carburants, marges encadrées.",
+      },
+      {
+        code: "SMBC",
+        direction: "mixte",
+        rationale: "Raffineur bitume (brut lourd) ~90 % CA. P&L = spread raffinage × volumes BTP régionaux, pas niveau Brent direct.",
+      },
+    ],
     exposedCountries: ["CI", "BF", "ML", "SN", "NE"],
   },
   {
@@ -673,8 +712,14 @@ export const COMMODITY_IMPACTS: CommodityImpact[] = [
     uemoaImportance: 70,
     rvmDirection: "positive",
     brvmRationale:
-      "Driver direct des marges PALMCI, SOGB, SAPH. Hausse = expansion EBITDA pour le complexe oléagineux Sifca.",
-    brvmTickers: ["PALC", "SOGC", "SPHC"],
+      "Palmci, pure-player coté du complexe Sifca.",
+    brvmTickers: [
+      {
+        code: "PALC",
+        direction: "positive",
+        rationale: "Pure-player huile de palme ~80-90 % CA.",
+      },
+    ],
     exposedCountries: ["CI"],
   },
   {
@@ -684,8 +729,19 @@ export const COMMODITY_IMPACTS: CommodityImpact[] = [
     uemoaImportance: 65,
     rvmDirection: "positive",
     brvmRationale:
-      "Le TSR20 fixe le revenu des planteurs et les marges de SAPH et SOGB. Une hausse soutient également la trésorerie de toute la filière.",
-    brvmTickers: ["SPHC", "SOGC"],
+      "SAPH et SOGB, pure-players caoutchouc CI.",
+    brvmTickers: [
+      {
+        code: "SPHC",
+        direction: "positive",
+        rationale: "1ᵉʳ producteur caoutchouc CI ~80-90 % CA.",
+      },
+      {
+        code: "SOGC",
+        direction: "positive",
+        rationale: "Producteur caoutchouc CI ~75-85 % CA.",
+      },
+    ],
     exposedCountries: ["CI"],
   },
   {
@@ -695,7 +751,7 @@ export const COMMODITY_IMPACTS: CommodityImpact[] = [
     uemoaImportance: 50,
     rvmDirection: "positive",
     brvmRationale:
-      "Variable d'ajustement du revenu rural ivoirien et togolais. Pas de pure player coté ; effet macro indirect sur la consommation.",
+      "Pas de pure-player coté. Effet macro via revenu rural.",
     brvmTickers: [],
     exposedCountries: ["CI", "TG"],
   },
@@ -706,8 +762,14 @@ export const COMMODITY_IMPACTS: CommodityImpact[] = [
     uemoaImportance: 45,
     rvmDirection: "mixte",
     brvmRationale:
-      "Hausse = + marges SUCRIVOIRE (Sifca) MAIS + prix conso. Effet net positif sur l'action Sucrivoire si l'Etat n'encadre pas les prix.",
-    brvmTickers: ["SCRC"],
+      "Sucrivoire mi-producteur, mi-importateur (~38 % volumes). Prix vente encadré, ajustement État avec délai.",
+    brvmTickers: [
+      {
+        code: "SCRC",
+        direction: "negative",
+        rationale: "38 % CA en sucre importé revendu à prix encadré → hausse cours mondial = compression marge import (effet ciseau 2025 confirmé).",
+      },
+    ],
     exposedCountries: ["CI"],
   },
   {
@@ -717,11 +779,178 @@ export const COMMODITY_IMPACTS: CommodityImpact[] = [
     uemoaImportance: 35,
     rvmDirection: "mixte",
     brvmRationale:
-      "Référence US ; utile surtout via le spread Brent-WTI (prime géopolitique). Effet macro identique au Brent en intensité moindre.",
+      "Référence US, effet macro identique au Brent en moindre intensité.",
     brvmTickers: [],
     exposedCountries: ["SN", "NE"],
   },
 ];
+
+// =============================================================================
+// TENDANCE & FAVORABILITE (analyse dynamique)
+// =============================================================================
+
+export type Favorability =
+  | "favorable"
+  | "defavorable"
+  | "neutre"
+  | "a_surveiller"
+  | "indisponible";
+
+/**
+ * Combine la tendance 3M d'une matière première avec la direction d'exposition
+ * d'une action pour en déduire si la situation actuelle est favorable ou non
+ * pour ce ticker.
+ *
+ * Seuil ±5 % sur 3M : en deça, on considère que la tendance n'est pas suffisamment
+ * marquée pour conclure → "neutre".
+ *
+ * Direction "mixte" → "à surveiller" : le sens n'est pas tranché par construction.
+ */
+export function computeFavorability(
+  trend3M: number | null,
+  direction: ExposureDirection,
+): Favorability {
+  if (direction === "mixte") return "a_surveiller";
+  if (trend3M === null || !isFinite(trend3M)) return "indisponible";
+  const threshold = 5;
+  if (Math.abs(trend3M) < threshold) return "neutre";
+  const up = trend3M > 0;
+  if (direction === "positive") return up ? "favorable" : "defavorable";
+  return up ? "defavorable" : "favorable";
+}
+
+// =============================================================================
+// SANITY-CHECK : direction structurelle vs corrélation observée
+// =============================================================================
+//
+// La direction est hardcodée à partir d'une analyse fondamentale (cost
+// structure, régulation, imports vs production). Pour détecter quand cette
+// hypothèse devient obsolète, on calcule la corrélation Pearson observée sur
+// les rendements mensuels du ticker BRVM vs la matière première (fenêtre 3A).
+//
+// Verdict :
+//   - aligned : la corrélation observée est cohérente avec la direction codée
+//   - divergent : contradiction nette → flag de revue manuelle
+//   - insufficient_data : trop peu de mois communs pour conclure
+
+export type DirectionConsistency = {
+  /** Corrélation Pearson sur rendements mensuels, null si non calculable */
+  observedCorrelation: number | null;
+  /** Nombre de paires de rendements mensuels utilisées */
+  sampleSize: number;
+  status: "aligned" | "divergent" | "insufficient_data";
+};
+
+/** Dernier close de chaque mois sur les `monthsBack` derniers mois. */
+function monthlyCloses(
+  rows: { date: string; value: number }[],
+  monthsBack: number,
+): { ym: string; close: number }[] {
+  if (rows.length === 0) return [];
+  const sorted = [...rows].sort((a, b) => a.date.localeCompare(b.date));
+  const last = sorted[sorted.length - 1];
+  const lastDate = new Date(last.date + "T00:00:00Z");
+  const cutoff = new Date(lastDate);
+  cutoff.setUTCMonth(cutoff.getUTCMonth() - monthsBack);
+  const cutoffIso = cutoff.toISOString().slice(0, 10);
+
+  const byMonth = new Map<string, { date: string; value: number }>();
+  for (const r of sorted) {
+    if (r.date < cutoffIso) continue;
+    const ym = r.date.slice(0, 7);
+    const cur = byMonth.get(ym);
+    if (!cur || r.date > cur.date) byMonth.set(ym, r);
+  }
+  return Array.from(byMonth.entries())
+    .map(([ym, r]) => ({ ym, close: r.value }))
+    .sort((a, b) => a.ym.localeCompare(b.ym));
+}
+
+function pearson(a: number[], b: number[]): number | null {
+  if (a.length !== b.length || a.length < 12) return null;
+  const n = a.length;
+  const ma = a.reduce((s, v) => s + v, 0) / n;
+  const mb = b.reduce((s, v) => s + v, 0) / n;
+  let num = 0;
+  let da = 0;
+  let db = 0;
+  for (let i = 0; i < n; i++) {
+    const dx = a[i] - ma;
+    const dy = b[i] - mb;
+    num += dx * dy;
+    da += dx * dx;
+    db += dy * dy;
+  }
+  const denom = Math.sqrt(da * db);
+  return denom > 0 ? num / denom : null;
+}
+
+export function computeDirectionConsistency(
+  commoditySlug: CommoditySlug,
+  expectedDirection: ExposureDirection,
+  tickerHistory: { date: string; value: number }[],
+): DirectionConsistency {
+  const commodityHistory = loadCommodityHistory(commoditySlug);
+  const commodityDV = commodityHistory.map((p) => ({ date: p.date, value: p.close }));
+
+  const monthsBack = 36;
+  const commodityM = monthlyCloses(commodityDV, monthsBack);
+  const tickerM = monthlyCloses(tickerHistory, monthsBack);
+
+  // Alignement par mois commun
+  const tickerByYM = new Map(tickerM.map((m) => [m.ym, m.close]));
+  const commodityReturns: number[] = [];
+  const tickerReturns: number[] = [];
+  for (let i = 1; i < commodityM.length; i++) {
+    const cmPrev = commodityM[i - 1];
+    const cmCurr = commodityM[i];
+    const tcPrev = tickerByYM.get(cmPrev.ym);
+    const tcCurr = tickerByYM.get(cmCurr.ym);
+    if (
+      tcPrev !== undefined &&
+      tcCurr !== undefined &&
+      cmPrev.close > 0 &&
+      cmCurr.close > 0 &&
+      tcPrev > 0 &&
+      tcCurr > 0
+    ) {
+      commodityReturns.push(Math.log(cmCurr.close / cmPrev.close));
+      tickerReturns.push(Math.log(tcCurr / tcPrev));
+    }
+  }
+
+  const corr = pearson(commodityReturns, tickerReturns);
+
+  if (corr === null || commodityReturns.length < 18) {
+    return {
+      observedCorrelation: corr,
+      sampleSize: commodityReturns.length,
+      status: "insufficient_data",
+    };
+  }
+
+  // Seuils tolérants (trading mince BRVM + confounders nombreux)
+  const POS_NEG_THRESHOLD = 0.2;
+  const MIXTE_DIVERGENT_THRESHOLD = 0.45;
+
+  let status: "aligned" | "divergent" = "aligned";
+  if (expectedDirection === "positive" && corr < -POS_NEG_THRESHOLD) {
+    status = "divergent";
+  } else if (expectedDirection === "negative" && corr > POS_NEG_THRESHOLD) {
+    status = "divergent";
+  } else if (
+    expectedDirection === "mixte" &&
+    Math.abs(corr) > MIXTE_DIVERGENT_THRESHOLD
+  ) {
+    status = "divergent";
+  }
+
+  return {
+    observedCorrelation: corr,
+    sampleSize: commodityReturns.length,
+    status,
+  };
+}
 
 // =============================================================================
 // INDICE COMPOSITE UEMOA
