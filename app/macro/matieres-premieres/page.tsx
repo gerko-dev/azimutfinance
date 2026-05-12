@@ -8,11 +8,19 @@ import {
   buildUemoaPressureIndex,
   computeCommodityStats,
   computeCorrelationMatrix,
+  computeDirectionConsistency,
+  computeFavorability,
   getLatestCommodityDate,
   loadCommodityHistory,
   periodToFromDate,
+  type BrvmTickerExposure,
   type CommoditySlug,
+  type DirectionConsistency,
+  type ExposureDirection,
+  type Favorability,
 } from "@/lib/commodities";
+import { loadPriceHistory, loadStocks } from "@/lib/dataLoader";
+import { fetchUserRole } from "@/lib/auth/userRole";
 
 export const metadata = {
   title: "Matières premières — AzimutFinance",
@@ -20,7 +28,7 @@ export const metadata = {
     "Cours, performances et impact sur la BRVM des 8 matières premières structurantes pour l'UEMOA : cacao, café, brent, WTI, or, huile de palme, sucre, caoutchouc. Comparateur, corrélations et indice de pression macro.",
 };
 
-export const dynamic = "force-static";
+export const dynamic = "force-dynamic";
 
 const ALL_PERIODS = ["1M", "3M", "6M", "YTD", "1A", "3A", "5A", "MAX"] as const;
 type Period = (typeof ALL_PERIODS)[number];
@@ -40,10 +48,34 @@ function fmtDateFr(iso: string): string {
 }
 
 export default async function Page() {
+  // ---- Gating Premium pour la section Impact BRVM ----
+  const userRole = await fetchUserRole();
+  const isPremium = userRole === "premium" || userRole === "pro";
+
   // ---- Stats ----
   const stats = COMMODITIES.map((c) => computeCommodityStats(c.slug)).filter(
     (s): s is NonNullable<ReturnType<typeof computeCommodityStats>> => s !== null,
   );
+
+  // ---- Map code BRVM -> nom long (pour les tickers pure-players dans le bloc Impact) ----
+  const tickerNames = new Map<string, string>();
+  for (const s of loadStocks()) {
+    if (s.code) tickerNames.set(s.code, s.name || s.code);
+  }
+
+  // ---- Sanity-check direction : corrélation observée vs direction structurelle ----
+  // Pré-charge les historiques de cours des tickers exposés, calcule la consistency.
+  const consistencyByPair = new Map<string, DirectionConsistency>();
+  for (const c of COMMODITY_IMPACTS) {
+    for (const t of c.brvmTickers) {
+      const key = `${c.slug}:${t.code}`;
+      const history = loadPriceHistory(t.code);
+      consistencyByPair.set(
+        key,
+        computeDirectionConsistency(c.slug, t.direction, history),
+      );
+    }
+  }
 
   const latestDate = getLatestCommodityDate();
   const allSlugs = stats.map((s) => s.slug);
@@ -123,9 +155,6 @@ export default async function Page() {
                 Cours, performances et impact sur l&apos;économie UEMOA des 8 sous-jacents
                 structurants pour la BRVM. Mise à jour au {fmtDateFr(latestDate)}.
               </p>
-            </div>
-            <div className="text-right text-[11px] text-slate-500">
-              Sources : <span className="font-medium text-slate-700">ICE · NYMEX · COMEX · Bursa Malaysia · SGX</span>
             </div>
           </div>
 
@@ -235,7 +264,7 @@ export default async function Page() {
           />
         </section>
 
-        {/* Impact BRVM */}
+        {/* Impact BRVM — gated Premium (titre toujours visible, contenu flouté) */}
         <section>
           <div className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
             <div className="mb-3">
@@ -243,17 +272,18 @@ export default async function Page() {
                 Impact BRVM &amp; UEMOA
               </h2>
               <p className="text-[11px] text-slate-500 mt-0.5">
-                Sens d&apos;impact d&apos;une hausse de la matière première sur la BRVM, valeurs cotées
-                directement exposées et pays dont les recettes d&apos;exportation dépendent
-                significativement du sous-jacent.
+                Pure-players ≥70 % d&apos;exposition CA uniquement.
               </p>
             </div>
+            <div className="relative">
+              <div
+                className={isPremium ? "" : "blur-[4px] pointer-events-none select-none"}
+                aria-hidden={isPremium ? undefined : true}
+              >
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {COMMODITY_IMPACTS.map((c) => {
                 const stat = stats.find((s) => s.slug === c.slug);
-                const tickerLabels = c.brvmTickers.length
-                  ? c.brvmTickers
-                  : ["aucune valeur cotée pure-player"];
+                const trend3M = stat?.returns["3M"] ?? null;
                 return (
                   <div
                     key={c.slug}
@@ -265,89 +295,93 @@ export default async function Page() {
                         <DirectionBadge direction={c.rvmDirection} />
                       </div>
                       <span className="text-[10px] text-slate-500">
-                        Importance UEMOA : <span className="font-medium text-slate-800">{c.uemoaImportance}/100</span>
+                        Importance UEMOA :{" "}
+                        <span className="font-medium text-slate-800">{c.uemoaImportance}/100</span>
                       </span>
                     </div>
-                    <p className="text-[11px] text-slate-600 mt-1.5 leading-snug">{c.brvmRationale}</p>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {tickerLabels.map((t) => (
-                        <span
-                          key={t}
-                          className={`text-[10px] px-1.5 py-0.5 rounded ${
-                            c.brvmTickers.length
-                              ? "bg-slate-100 text-slate-700 font-medium"
-                              : "bg-slate-50 text-slate-400 italic"
-                          }`}
-                        >
-                          {t}
-                        </span>
-                      ))}
-                      <span className="text-slate-300">·</span>
-                      {c.exposedCountries.map((cc) => (
-                        <span
-                          key={cc}
-                          className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 font-medium"
-                        >
-                          {cc}
-                        </span>
-                      ))}
+                    <p className="text-[11px] text-slate-600 mt-1.5 leading-snug">
+                      {c.brvmRationale}
+                    </p>
+
+                    {/* Tendance 3M */}
+                    <div className="mt-2 flex items-baseline gap-2 text-[11px]">
+                      <span className="text-slate-500">Tendance 3 mois :</span>
+                      <TrendChip value={trend3M} />
+                      {stat?.volatility1Y !== null && stat?.volatility1Y !== undefined && (
+                        <>
+                          <span className="text-slate-300">·</span>
+                          <span className="text-slate-500">vol :</span>
+                          <span className="tabular-nums text-slate-700">
+                            {stat.volatility1Y.toFixed(0)} %
+                          </span>
+                        </>
+                      )}
                     </div>
-                    {stat && stat.returns.YTD !== null && (
-                      <div className="mt-2 flex items-baseline gap-2 text-[11px]">
-                        <span className="text-slate-500">YTD :</span>
-                        <span
-                          className={`tabular-nums font-medium ${
-                            (stat.returns.YTD ?? 0) >= 0 ? "text-emerald-700" : "text-rose-700"
-                          }`}
-                        >
-                          {fmtPct(stat.returns.YTD, 1)}
-                        </span>
-                        <span className="text-slate-300">·</span>
-                        <span className="text-slate-500">vol :</span>
-                        <span className="tabular-nums text-slate-700">
-                          {stat.volatility1Y === null
-                            ? "—"
-                            : `${stat.volatility1Y.toFixed(0)} %`}
-                        </span>
+
+                    {c.brvmTickers.length > 0 && (
+                      <ul className="mt-2.5 border-t border-slate-100 pt-2 space-y-1">
+                        {c.brvmTickers.map((t) => (
+                          <TickerImpactRow
+                            key={t.code}
+                            ticker={t}
+                            name={tickerNames.get(t.code) ?? t.code}
+                            favorability={computeFavorability(trend3M, t.direction)}
+                            consistency={consistencyByPair.get(`${c.slug}:${t.code}`) ?? null}
+                          />
+                        ))}
+                      </ul>
+                    )}
+
+                    {/* Pays exposés */}
+                    {c.exposedCountries.length > 0 && (
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        <span className="text-[10px] text-slate-500">Pays exposés :</span>
+                        {c.exposedCountries.map((cc) => (
+                          <span
+                            key={cc}
+                            className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 font-medium"
+                          >
+                            {cc}
+                          </span>
+                        ))}
                       </div>
                     )}
                   </div>
                 );
               })}
             </div>
+              </div>
+              {!isPremium && (
+                <div className="absolute inset-0 flex items-center justify-center p-4">
+                  <div className="bg-white/95 backdrop-blur-sm rounded-lg shadow-xl border border-amber-200 max-w-md w-full p-5 md:p-6">
+                    <div className="flex items-start gap-3 mb-3">
+                      <div className="text-2xl shrink-0">🔒</div>
+                      <div className="min-w-0">
+                        <h4 className="text-base md:text-lg font-semibold text-slate-900">
+                          Analyse Impact BRVM Premium
+                        </h4>
+                        <p className="text-sm text-slate-600 mt-1">
+                          Pure-players cotés exposés (≥70 % CA) avec favorabilité dynamique calculée
+                          sur la tendance 3 mois et sanity-check de corrélation 3 ans. Disponible
+                          avec l&apos;abonnement Premium.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 mt-4">
+                      <Link
+                        href="/abonnements"
+                        className="px-4 py-2 bg-amber-500 text-white text-sm rounded hover:bg-amber-600 transition font-medium"
+                      >
+                        Passer Premium
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </section>
 
-        {/* Methodo */}
-        <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
-          <h3 className="text-sm font-semibold mb-2">Méthodologie</h3>
-          <div className="text-xs text-slate-600 space-y-1.5">
-            <p>
-              <strong>Données :</strong> historiques quotidiens de clôture par contrat à terme
-              de référence (cacao Londres, café robusta, Brent, WTI, or COMEX, palme Bursa
-              Malaysia, sucre #5, caoutchouc TSR20 SGX). Mise à jour manuelle.
-            </p>
-            <p>
-              <strong>Performances :</strong> calculées à partir du dernier cours coté ; pour
-              chaque horizon, on prend le dernier cours antérieur ou égal à la date de référence
-              (Date_max − N jours calendaires). YTD = depuis le 1ᵉʳ janvier.
-            </p>
-            <p>
-              <strong>Volatilité :</strong> écart-type des log-rendements quotidiens sur 1 an,
-              annualisé par √252. Filtrage des aberrations |r| ≥ 40 %.
-            </p>
-            <p>
-              <strong>Corrélations :</strong> Pearson sur log-rendements quotidiens, intersection
-              des dates communes aux séries sélectionnées (≥ 30 observations).
-            </p>
-            <p>
-              <strong>Indice de pression UEMOA :</strong> moyenne pondérée des séries normalisées
-              base 100, où chaque MP entre avec un signe (+ pour exports clés, − pour énergie
-              importée) et un poids 0–100 reflétant son importance pour l&apos;économie UEMOA. Une
-              valeur &gt; 100 = environnement plus favorable qu&apos;à la date de départ.
-            </p>
-          </div>
-        </section>
       </main>
     </div>
   );
@@ -481,23 +515,153 @@ function KpiList({
   );
 }
 
+function TrendChip({ value }: { value: number | null }) {
+  if (value === null || !isFinite(value)) {
+    return <span className="text-[11px] text-slate-400">—</span>;
+  }
+  const abs = Math.abs(value);
+  const flat = abs < 5;
+  const up = value > 0;
+  const cls = flat
+    ? "text-slate-500"
+    : up
+    ? "text-emerald-700"
+    : "text-rose-700";
+  const arrow = flat ? "→" : up ? "↑" : "↓";
+  return (
+    <span className={`tabular-nums font-medium ${cls}`}>
+      {arrow} {fmtPct(value, 1)}
+    </span>
+  );
+}
+
+function ExposureIcon({ direction }: { direction: ExposureDirection }) {
+  if (direction === "positive") {
+    return (
+      <span
+        className="text-[10px] text-emerald-700 font-medium"
+        title="Bénéficie d'une hausse de la matière première"
+      >
+        ↑ pos
+      </span>
+    );
+  }
+  if (direction === "negative") {
+    return (
+      <span
+        className="text-[10px] text-rose-700 font-medium"
+        title="Pénalisé par une hausse de la matière première"
+      >
+        ↓ neg
+      </span>
+    );
+  }
+  return (
+    <span
+      className="text-[10px] text-amber-700 font-medium"
+      title="Sens d'impact non tranché"
+    >
+      ↕ mixte
+    </span>
+  );
+}
+
+const FAVORABILITY_STYLE: Record<
+  Favorability,
+  { label: string; cls: string }
+> = {
+  favorable: { label: "favorable", cls: "bg-emerald-100 text-emerald-800" },
+  defavorable: { label: "défavorable", cls: "bg-rose-100 text-rose-800" },
+  neutre: { label: "neutre", cls: "bg-slate-100 text-slate-700" },
+  a_surveiller: { label: "à surveiller", cls: "bg-amber-100 text-amber-800" },
+  indisponible: { label: "—", cls: "bg-slate-50 text-slate-400" },
+};
+
+function FavorabilityBadge({ value }: { value: Favorability }) {
+  const s = FAVORABILITY_STYLE[value];
+  return (
+    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${s.cls}`}>
+      {s.label}
+    </span>
+  );
+}
+
+function TickerImpactRow({
+  ticker,
+  name,
+  favorability,
+  consistency,
+}: {
+  ticker: BrvmTickerExposure;
+  name: string;
+  favorability: Favorability;
+  consistency: DirectionConsistency | null;
+}) {
+  return (
+    <li className="flex items-center gap-2 text-[11px]">
+      <Link
+        href={`/titre/${ticker.code}`}
+        className="font-mono font-semibold text-slate-900 hover:underline shrink-0"
+        style={{ minWidth: 48 }}
+      >
+        {ticker.code}
+      </Link>
+      <span className="text-slate-600 truncate flex-1" title={ticker.rationale ?? name}>
+        {name}
+      </span>
+      <ExposureIcon direction={ticker.direction} />
+      <FavorabilityBadge value={favorability} />
+      <DivergenceWarning consistency={consistency} expected={ticker.direction} />
+    </li>
+  );
+}
+
+function DivergenceWarning({
+  consistency,
+  expected,
+}: {
+  consistency: DirectionConsistency | null;
+  expected: ExposureDirection;
+}) {
+  if (!consistency || consistency.status !== "divergent") return null;
+  const corr = consistency.observedCorrelation;
+  const corrFmt = corr === null ? "—" : corr.toFixed(2).replace(".", ",");
+  return (
+    <span
+      className="text-[10px] text-amber-700 cursor-help"
+      title={`Corrélation observée 3A : ${corrFmt} (n=${consistency.sampleSize}). Contredit la direction structurelle '${expected}'. Le business model a pu évoluer — à revoir.`}
+    >
+      ⚠
+    </span>
+  );
+}
+
 function DirectionBadge({ direction }: { direction: "positive" | "negative" | "mixte" }) {
   if (direction === "positive") {
     return (
-      <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-medium">
+      <span
+        title="Direction macro UEMOA : hausse de la MP = favorable pour l'économie globale (recettes fiscales, balance courante, refinancement souverain). Voir la favorabilité par ticker pour l'impact spécifique entreprise."
+        className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-medium cursor-help"
+      >
         ↑ favorable
       </span>
     );
   }
   if (direction === "negative") {
     return (
-      <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 font-medium">
+      <span
+        title="Direction macro UEMOA : hausse de la MP = défavorable pour l'économie globale (inflation importée, déficit énergétique). Voir la favorabilité par ticker pour l'impact spécifique entreprise."
+        className="text-[10px] px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 font-medium cursor-help"
+      >
         ↓ défavorable
       </span>
     );
   }
   return (
-    <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 font-medium">
+    <span
+      title="Direction macro UEMOA : effet net ambigu sur l'économie globale (canaux favorables et défavorables qui se compensent). La favorabilité par ticker reflète l'impact spécifique entreprise et peut diverger."
+      className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 font-medium cursor-help"
+    >
       ↕ mixte
     </span>
   );
