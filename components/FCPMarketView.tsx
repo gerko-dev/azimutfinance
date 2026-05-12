@@ -679,10 +679,7 @@ export default function FCPMarketView(props: Props) {
       </section>
 
       <p className="text-xs text-slate-400">
-        Source : publications BRVM / sociétés de gestion UEMOA. Encours ponctuel à la date de
-        publication trimestrielle (non cumulatif). Les indicateurs de risque (volatilité, Sharpe,
-        drawdown) ne sont volontairement pas calculés : la fréquence de publication des VL est
-        hétérogène entre fonds, ces métriques ne refléteraient pas la réalité.
+        Source : <span className="font-medium text-slate-600">BRVM</span>.
       </p>
     </main>
   );

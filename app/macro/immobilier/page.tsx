@@ -173,7 +173,6 @@ export default async function Page() {
             </h2>
             <p className="text-[11px] text-slate-500 mt-0.5">
               Médianes sur l&apos;ensemble des annonces de chaque localité, tous types confondus.
-              Le rendement brut est calculé là où achat et location coexistent.
             </p>
           </div>
           <div className="overflow-x-auto">
@@ -316,43 +315,6 @@ export default async function Page() {
           />
         </section>
 
-        {/* Methodologie */}
-        <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
-          <h3 className="text-sm font-semibold mb-2">Méthodologie</h3>
-          <div className="text-xs text-slate-600 space-y-1.5">
-            <p>
-              <strong>Périmètre :</strong> annonces actives sur le marché abidjanais, segmentées en
-              <em> achat</em> (vente) et <em>location</em>. Les annonces dont le titre n&apos;est en
-              fait qu&apos;un prix (artefact de collecte) sont écartées, ainsi que les terrains classés
-              en location (presque toujours des erreurs : un terrain se vend, ne se loue pas).
-            </p>
-            <p>
-              <strong>Bornes de plausibilité :</strong> 1 M – 5 Md FCFA pour l&apos;achat, 30 k – 20 M
-              FCFA / mois pour la location. Au-delà, l&apos;annonce est considérée aberrante.
-            </p>
-            <p>
-              <strong>Statistiques :</strong> on utilise systématiquement la <em>médiane</em>, pas la
-              moyenne — bien plus robuste aux annonces extrêmes typiques des marketplaces. Les P25/P75
-              délimitent l&apos;intervalle interquartile (50 % central des prix).
-            </p>
-            <p>
-              <strong>Rendement locatif brut :</strong> calculé par groupe (localité × type [×
-              chambres]) où on dispose d&apos;au moins 2 annonces de chaque côté. Formule :
-              <span className="font-mono mx-1 text-[11px] bg-slate-100 px-1 rounded">(loyer moyen × 12) ÷ prix achat médian × 100</span>.
-              <strong> Brut</strong> = avant charges, taxes, vacance, impayés. Compter 30–40 % de marge entre brut et net.
-            </p>
-            <p>
-              <strong>Prix au m² :</strong> calculé uniquement quand la surface est renseignée dans
-              l&apos;annonce (cas minoritaire). Les terrains sont exclus de cet agrégat car leur m²
-              n&apos;est pas comparable au m² habitable d&apos;un bien bâti.
-            </p>
-            <p>
-              <strong>Top deals :</strong> annonces dont le prix est nettement sous la médiane de
-              leur groupe (localité × type × chambres, ≥ 5 annonces). Les écarts &gt; –50 % sont
-              souvent du bruit ou des erreurs de classification — vérifier avant de cliquer.
-            </p>
-          </div>
-        </section>
       </main>
     </div>
   );

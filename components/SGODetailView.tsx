@@ -739,9 +739,7 @@ export default function SGODetailView(props: Props) {
       </section>
 
       <p className="text-xs text-slate-400">
-        Source : publications BRVM / SGO UEMOA. Encours ponctuel à la date trimestrielle. Quartiles
-        et scores qualité calculés sur la cohorte de chaque catégorie. Indicateurs de risque non
-        affichés (fréquence de publication des VL hétérogène entre fonds).
+        Source : <span className="font-medium text-slate-600">BRVM</span>.
       </p>
     </main>
   );

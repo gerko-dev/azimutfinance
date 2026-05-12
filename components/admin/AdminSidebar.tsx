@@ -31,6 +31,7 @@ const NAV: NavItem[] = [
   { href: "/admin/saisons", label: "Saisons Ligue Azimut", minLevel: 2, icon: "🎮" },
   { href: "/admin/compte-titre", label: "Suivi compte titre", minLevel: 2, icon: "💼" },
   { href: "/admin/data", label: "Fichiers de données", minLevel: 1, icon: "📁" },
+  { href: "/admin/sources", label: "Sources & méthodologie", minLevel: 1, icon: "📚" },
   { href: "/admin/audit", label: "Journal d'audit", minLevel: 2, icon: "📜" },
 ];
 

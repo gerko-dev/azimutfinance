@@ -949,10 +949,6 @@ export default function ActionsBRVMView({
                   insuffisant).
                 </span>
               )}
-              <div className="mt-1">
-                <em>Méthodologie :</em> volatilité = écart-type des rendements log
-                quotidiens × √252, sur 12 mois glissants. Outliers (jumps {">"} 30% en 1 jour) filtrés.
-              </div>
             </div>
 
             {/* Flou partiel pour invites : on laisse voir la forme du scatter

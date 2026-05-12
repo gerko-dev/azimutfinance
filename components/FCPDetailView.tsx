@@ -967,9 +967,7 @@ export default function FCPDetailView(props: Props) {
       </section>
 
       <p className="text-xs text-slate-400">
-        Source : publications BRVM / SGO UEMOA. Encours ponctuel à la date de publication
-        trimestrielle (non cumulatif). Indicateurs de risque (volatilité, Sharpe, drawdown) non
-        calculés : la fréquence de publication des VL est hétérogène entre fonds.
+        Source : <span className="font-medium text-slate-600">BRVM</span>.
       </p>
     </main>
   );

@@ -634,7 +634,7 @@ export default async function Page({
               title="Top 5 produits d'exportation"
               subtitle={`Concentration des exportations${
                 exportsTop.period ? ` à fin ${exportsTop.period}` : ""
-              }. Source : Balance des paiements (BP VI).`}
+              }. Source : BCEAO.`}
             >
               <MacroTopExports
                 top={exportsTop.top}
@@ -726,33 +726,6 @@ export default async function Page({
           compare={xCompare}
         />
 
-        {/* Méthodologie */}
-        <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
-          <h3 className="text-sm font-semibold mb-2">Méthodologie & sources</h3>
-          <div className="text-xs text-slate-600 space-y-1.5">
-            <p>
-              <strong>Source :</strong> Banque Centrale des États de l&apos;Afrique de l&apos;Ouest
-              (BCEAO), agrégats statistiques pays + ensemble UMOA.
-            </p>
-            <p>
-              <strong>Approche :</strong> page pays au format <em>Article IV</em> (FMI),
-              structurée en 5 blocs — indicateurs clés, économie réelle, finances publiques,
-              secteur extérieur, monnaie &amp; finance.
-            </p>
-            <p>
-              <strong>Critères de convergence UEMOA</strong> retenus pour les badges :
-              inflation ≤ 3 %, solde budgétaire global avec dons ≥ −3 % du PIB,
-              encours de la dette publique ≤ 70 % du PIB.
-            </p>
-            <p>
-              <strong>Écarté du dashboard, accessible via le studio :</strong> SAID
-              (situation des autres institutions de dépôts), Situation BCEAO, PEG (position
-              extérieure globale), BP V (balance des paiements ancien format), crédit sectoriel
-              détaillé, taux de change FCFA hors euro, IPC par fonction, et toutes les séries
-              annexes du fichier source.
-            </p>
-          </div>
-        </section>
       </main>
     </div>
   );

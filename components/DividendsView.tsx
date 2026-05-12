@@ -898,17 +898,6 @@ export default function DividendsView({
             </ResponsiveContainer>
           </div>
 
-          <p
-            className={`text-[11px] text-slate-400 mt-3 leading-relaxed ${
-              isPremium ? "" : "blur-[3px] pointer-events-none select-none"
-            }`}
-            aria-hidden={isPremium ? undefined : true}
-          >
-            <strong>Méthodologie :</strong> Historique = CAGR 5 ans observé.
-            Optimiste = CAGR × 1,3 (ou |CAGR|/2 si CAGR négatif). Pessimiste =
-            CAGR × 0,5 (ou CAGR × 1,3 si négatif). À titre indicatif — la
-            performance passée ne préjuge pas de la performance future.
-          </p>
           {!isPremium && (
             <div className="absolute inset-0 flex items-center justify-center p-4 pointer-events-none">
               <button

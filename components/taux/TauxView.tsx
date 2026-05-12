@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import {
   LineChart,
   Line,
@@ -11,6 +12,7 @@ import {
   Legend,
   BarChart,
   Bar,
+  Cell,
   ComposedChart,
   ReferenceLine,
 } from "recharts";
@@ -21,6 +23,65 @@ import type { SeriesDescriptor } from "@/lib/tauxLoader";
 import { fmtMdsFCFA, fmtMFCFA, fmtRate, fmtRatio } from "@/lib/tauxFormat";
 import TauxStudio from "./TauxStudio";
 import TauxComparator from "./TauxComparator";
+
+// ---------- Filtre pills (toggle visibilité des courbes d'un chart) ----------
+
+function SeriesTogglePills({
+  items,
+  active,
+  onToggle,
+  onAll,
+  onNone,
+}: {
+  items: { key: string; label: string; color: string }[];
+  active: Set<string>;
+  onToggle: (key: string) => void;
+  onAll: () => void;
+  onNone: () => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 mb-3">
+      {items.map((it) => {
+        const isOn = active.has(it.key);
+        return (
+          <button
+            key={it.key}
+            type="button"
+            onClick={() => onToggle(it.key)}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border transition ${
+              isOn
+                ? "bg-slate-900 text-white border-slate-900"
+                : "bg-white text-slate-500 border-slate-200 hover:border-slate-400"
+            }`}
+          >
+            <span
+              className="inline-block w-2 h-2 rounded-full"
+              style={{ background: isOn ? it.color : "#cbd5e1" }}
+            />
+            {it.label}
+          </button>
+        );
+      })}
+      <div className="ml-2 flex items-center gap-1 text-xs">
+        <button
+          type="button"
+          onClick={onAll}
+          className="px-2 py-0.5 text-slate-500 hover:text-slate-900 underline-offset-2 hover:underline"
+        >
+          Tout
+        </button>
+        <span className="text-slate-300">·</span>
+        <button
+          type="button"
+          onClick={onNone}
+          className="px-2 py-0.5 text-slate-500 hover:text-slate-900 underline-offset-2 hover:underline"
+        >
+          Aucun
+        </button>
+      </div>
+    </div>
+  );
+}
 
 // ---------- KPI strip ----------
 
@@ -294,7 +355,6 @@ function InterbancaireSection({
 // ---------- Section : Inflation par pays ----------
 
 function InflationSection({ series }: { series: TauxSeries[] }) {
-  const data = combineSeries(series.map((s) => ({ key: s.country, points: s.points })));
   const colors: Record<string, string> = {
     Benin: "#0ea5e9",
     "Burkina Faso": "#f97316",
@@ -308,12 +368,32 @@ function InflationSection({ series }: { series: TauxSeries[] }) {
     "Mediane UEMOA": "#64748b",
   };
 
+  const [active, setActive] = useState<Set<string>>(() => new Set(series.map((s) => s.country)));
+  const visibleSeries = useMemo(() => series.filter((s) => active.has(s.country)), [series, active]);
+  const data = useMemo(
+    () => combineSeries(visibleSeries.map((s) => ({ key: s.country, points: s.points }))),
+    [visibleSeries],
+  );
+
+  const toggle = (k: string) => setActive((prev) => {
+    const next = new Set(prev);
+    if (next.has(k)) next.delete(k); else next.add(k);
+    return next;
+  });
+
   return (
     <Card
       id="inflation"
       title="Inflation IPC par pays UEMOA"
       subtitle="Glissement annuel — par pays + agrégat UEMOA + médiane"
     >
+      <SeriesTogglePills
+        items={series.map((s) => ({ key: s.country, label: s.country, color: colors[s.country] ?? "#64748b" }))}
+        active={active}
+        onToggle={toggle}
+        onAll={() => setActive(new Set(series.map((s) => s.country)))}
+        onNone={() => setActive(new Set())}
+      />
       <div className="h-80">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data}>
@@ -323,7 +403,7 @@ function InflationSection({ series }: { series: TauxSeries[] }) {
             <Tooltip contentStyle={tooltipStyle()} formatter={(v) => (Number(v) * 100).toFixed(2) + "%"} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
             <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="2 2" />
-            {series.map((s) => {
+            {visibleSeries.map((s) => {
               const isHighlight = s.country === "UEMOA" || s.country === "Mediane UEMOA";
               return (
                 <Line
@@ -640,19 +720,39 @@ function AgregatsSection({
 // ---------- Section : Taux directeurs partenaires ----------
 
 function PartenairesSection({ series }: { series: TauxSeries[] }) {
-  const data = combineSeries(series.map((s) => ({ key: s.country, points: s.points })));
   const colors: Record<string, string> = {
     "Zone euro (BCE)": "#0ea5e9",
     "USA (Fed funds)": "#dc2626",
     "Royaume-Uni (Bank Rate)": "#7c3aed",
     Japon: "#16a34a",
   };
+
+  const [active, setActive] = useState<Set<string>>(() => new Set(series.map((s) => s.country)));
+  const visibleSeries = useMemo(() => series.filter((s) => active.has(s.country)), [series, active]);
+  const data = useMemo(
+    () => combineSeries(visibleSeries.map((s) => ({ key: s.country, points: s.points }))),
+    [visibleSeries],
+  );
+
+  const toggle = (k: string) => setActive((prev) => {
+    const next = new Set(prev);
+    if (next.has(k)) next.delete(k); else next.add(k);
+    return next;
+  });
+
   return (
     <Card
       id="partenaires"
       title="Taux directeurs partenaires"
       subtitle="BCE, Fed, BoE, BoJ — pour comparaison avec la BCEAO"
     >
+      <SeriesTogglePills
+        items={series.map((s) => ({ key: s.country, label: s.country, color: colors[s.country] ?? "#64748b" }))}
+        active={active}
+        onToggle={toggle}
+        onAll={() => setActive(new Set(series.map((s) => s.country)))}
+        onNone={() => setActive(new Set())}
+      />
       <div className="h-72">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data}>
@@ -661,7 +761,7 @@ function PartenairesSection({ series }: { series: TauxSeries[] }) {
             <YAxis stroke="#94a3b8" fontSize={11} tickFormatter={pctTickFormatter} />
             <Tooltip contentStyle={tooltipStyle()} formatter={(v) => (Number(v) * 100).toFixed(2) + "%"} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
-            {series.map((s) => (
+            {visibleSeries.map((s) => (
               <Line
                 key={s.country}
                 type="stepAfter"
@@ -676,6 +776,255 @@ function PartenairesSection({ series }: { series: TauxSeries[] }) {
       </div>
     </Card>
   );
+}
+
+// ---------- Section : Inflation par composante (contributions, en pdp) ----------
+
+function InflationComposanteSection({ series }: { series: TauxSeries[] }) {
+  const data = useMemo(
+    () => combineSeries(series.map((s) => ({ key: s.indicator, points: s.points }))),
+    [series],
+  );
+  const colorPalette = useMemo(
+    () => ["#0ea5e9", "#f97316", "#16a34a", "#a855f7", "#eab308", "#dc2626", "#0891b2", "#7c3aed", "#0f172a", "#64748b", "#ec4899", "#14b8a6", "#f59e0b"],
+    [],
+  );
+  const colorFor = useMemo(() => (i: number) => colorPalette[i % colorPalette.length], [colorPalette]);
+
+  // Only meaningful composantes: drop "Ensemble" since it's the sum (= same as
+  // UEMOA inflation already shown in section 4) and any flat-zero series.
+  const filtered = useMemo(() => series.filter((s) => {
+    if (s.indicator === "Ensemble") return false;
+    const max = Math.max(...s.points.map((p) => Math.abs(p.value)));
+    return max > 0.001; // > 0.1 pdp anywhere
+  }), [series]);
+
+  const [active, setActive] = useState<Set<string>>(() => new Set(filtered.map((s) => s.indicator)));
+  const visibleSeries = useMemo(() => filtered.filter((s) => active.has(s.indicator)), [filtered, active]);
+  const visibleData = useMemo(() => combineSeries(visibleSeries.map((s) => ({ key: s.indicator, points: s.points }))), [visibleSeries]);
+  void data;
+
+  const toggle = (k: string) => setActive((prev) => {
+    const next = new Set(prev);
+    if (next.has(k)) next.delete(k); else next.add(k);
+    return next;
+  });
+
+  // Snapshot bar chart for the most recent period — contributions sorted.
+  const latestPeriod = useMemo(() => {
+    const all = filtered.flatMap((s) => s.points.map((p) => ({ label: p.label, sortKey: p.sortKey })));
+    if (all.length === 0) return null;
+    return all.reduce((m, x) => (x.sortKey > m.sortKey ? x : m));
+  }, [filtered]);
+
+  const snapshot = useMemo(() => {
+    if (!latestPeriod) return [];
+    return filtered
+      .map((s, i) => {
+        const p = s.points.find((pt) => pt.label === latestPeriod.label);
+        return { indicator: s.indicator, value: p?.value ?? 0, color: colorFor(i) };
+      })
+      .filter((r) => r.value !== 0)
+      .sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
+  }, [filtered, latestPeriod, colorFor]);
+
+  return (
+    <Card
+      id="inflation-composante"
+      title="Inflation UEMOA — contributions par poste"
+      subtitle="Décomposition de l'inflation totale en glissement annuel (points de pourcentage)"
+    >
+      {snapshot.length > 0 && latestPeriod && (
+        <div className="mb-4">
+          <div className="text-xs text-slate-500 mb-2">
+            Contributions à l&apos;inflation — {latestPeriod.label} (point de %)
+          </div>
+          <div className="h-56">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={snapshot} layout="vertical" margin={{ left: 80 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis type="number" stroke="#94a3b8" fontSize={11} tickFormatter={(v) => (v * 100).toFixed(1) + " pdp"} />
+                <YAxis type="category" dataKey="indicator" stroke="#94a3b8" fontSize={11} width={140} />
+                <Tooltip contentStyle={tooltipStyle()} formatter={(v) => (Number(v) * 100).toFixed(2) + " pdp"} />
+                <ReferenceLine x={0} stroke="#94a3b8" />
+                <Bar dataKey="value">
+                  {snapshot.map((s, i) => (
+                    <Cell key={i} fill={s.value >= 0 ? "#0891b2" : "#dc2626"} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      <div className="text-xs text-slate-500 mb-2">Évolution dans le temps</div>
+      <SeriesTogglePills
+        items={filtered.map((s, i) => ({ key: s.indicator, label: s.indicator, color: colorFor(i) }))}
+        active={active}
+        onToggle={toggle}
+        onAll={() => setActive(new Set(filtered.map((s) => s.indicator)))}
+        onNone={() => setActive(new Set())}
+      />
+      <div className="h-72">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={visibleData}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+            <XAxis dataKey="label" stroke="#94a3b8" fontSize={11} />
+            <YAxis stroke="#94a3b8" fontSize={11} tickFormatter={(v) => (v * 100).toFixed(1) + " pdp"} />
+            <Tooltip contentStyle={tooltipStyle()} formatter={(v) => (Number(v) * 100).toFixed(2) + " pdp"} />
+            <Legend wrapperStyle={{ fontSize: 10 }} />
+            <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="2 2" />
+            {visibleSeries.map((s, i) => {
+              const idx = filtered.findIndex((f) => f.indicator === s.indicator);
+              return (
+                <Line
+                  key={s.indicator}
+                  type="monotone"
+                  dataKey={s.indicator}
+                  stroke={colorFor(idx >= 0 ? idx : i)}
+                  strokeWidth={1.5}
+                  dot={false}
+                />
+              );
+            })}
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </Card>
+  );
+}
+
+// ---------- Section : Activité économique + Climat des affaires ----------
+
+function ActiviteSection({
+  activite,
+  climat,
+}: {
+  activite: TauxSeries[];
+  climat: TauxSeries[];
+}) {
+  const actColors: Record<string, string> = {
+    "Indice Production Industrielle": "#0ea5e9",
+    "Indice Chiffre Affaires Commerce": "#f97316",
+    "Indice Chiffre Affaires Services Marchands": "#7c3aed",
+    "Indice Services Financiers": "#16a34a",
+  };
+  const climColors: Record<string, string> = {
+    Benin: "#0ea5e9",
+    "Burkina Faso": "#f97316",
+    "Cote d'Ivoire": "#16a34a",
+    "Guinee-Bissau": "#a855f7",
+    Mali: "#eab308",
+    Niger: "#dc2626",
+    Senegal: "#0891b2",
+    Togo: "#7c3aed",
+    Union: "#0f172a",
+  };
+
+  const [actActive, setActActive] = useState<Set<string>>(() => new Set(activite.map((s) => s.indicator)));
+  const [climActive, setClimActive] = useState<Set<string>>(() => new Set(climat.map((s) => s.country)));
+  const actVisible = useMemo(() => activite.filter((s) => actActive.has(s.indicator)), [activite, actActive]);
+  const climVisible = useMemo(() => climat.filter((s) => climActive.has(s.country)), [climat, climActive]);
+  const actData = useMemo(() => combineSeries(actVisible.map((s) => ({ key: s.indicator, points: s.points }))), [actVisible]);
+  const climData = useMemo(() => combineSeries(climVisible.map((s) => ({ key: s.country, points: s.points }))), [climVisible]);
+
+  const toggleAct = (k: string) => setActActive((prev) => {
+    const next = new Set(prev);
+    if (next.has(k)) next.delete(k); else next.add(k);
+    return next;
+  });
+  const toggleClim = (k: string) => setClimActive((prev) => {
+    const next = new Set(prev);
+    if (next.has(k)) next.delete(k); else next.add(k);
+    return next;
+  });
+
+  return (
+    <Card
+      id="activite"
+      title="Activité économique & climat des affaires"
+      subtitle="Indicateurs sectoriels UEMOA (glissement annuel %) + indicateur du climat des affaires par pays (base 100)"
+    >
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div>
+          <div className="text-sm font-medium text-slate-700 mb-2">Indicateurs sectoriels UEMOA</div>
+          <SeriesTogglePills
+            items={activite.map((s) => ({ key: s.indicator, label: shortenIndicatorLabel(s.indicator), color: actColors[s.indicator] ?? "#64748b" }))}
+            active={actActive}
+            onToggle={toggleAct}
+            onAll={() => setActActive(new Set(activite.map((s) => s.indicator)))}
+            onNone={() => setActActive(new Set())}
+          />
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={actData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis dataKey="label" stroke="#94a3b8" fontSize={11} />
+                <YAxis stroke="#94a3b8" fontSize={11} tickFormatter={pctTickFormatter} />
+                <Tooltip contentStyle={tooltipStyle()} formatter={(v) => (Number(v) * 100).toFixed(1) + "%"} />
+                <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="2 2" />
+                {actVisible.map((s) => (
+                  <Line
+                    key={s.indicator}
+                    type="monotone"
+                    dataKey={s.indicator}
+                    name={shortenIndicatorLabel(s.indicator)}
+                    stroke={actColors[s.indicator] ?? "#64748b"}
+                    strokeWidth={1.8}
+                    dot={false}
+                  />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div>
+          <div className="text-sm font-medium text-slate-700 mb-2">Indicateur du climat des affaires (base 100)</div>
+          <SeriesTogglePills
+            items={climat.map((s) => ({ key: s.country, label: s.country, color: climColors[s.country] ?? "#64748b" }))}
+            active={climActive}
+            onToggle={toggleClim}
+            onAll={() => setClimActive(new Set(climat.map((s) => s.country)))}
+            onNone={() => setClimActive(new Set())}
+          />
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={climData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis dataKey="label" stroke="#94a3b8" fontSize={11} />
+                <YAxis stroke="#94a3b8" fontSize={11} domain={["dataMin - 1", "dataMax + 1"]} />
+                <Tooltip contentStyle={tooltipStyle()} formatter={(v) => Number(v).toFixed(1)} />
+                <ReferenceLine y={100} stroke="#94a3b8" strokeDasharray="2 2" />
+                {climVisible.map((s) => (
+                  <Line
+                    key={s.country}
+                    type="monotone"
+                    dataKey={s.country}
+                    stroke={climColors[s.country] ?? "#64748b"}
+                    strokeWidth={s.country === "Union" ? 2.5 : 1.5}
+                    dot={false}
+                  />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+      <div className="mt-3 text-xs text-slate-500">
+        Indicateur du climat des affaires : valeurs &gt; 100 = conjoncture meilleure que la moyenne historique du pays, &lt; 100 = moins favorable.
+      </div>
+    </Card>
+  );
+}
+
+function shortenIndicatorLabel(s: string): string {
+  return s
+    .replace("Indice Production Industrielle", "IPI")
+    .replace("Indice Chiffre Affaires Commerce", "CA Commerce")
+    .replace("Indice Chiffre Affaires Services Marchands", "CA Services")
+    .replace("Indice Services Financiers", "Services Financiers");
 }
 
 // ---------- Section : Change EUR / devises ----------
@@ -746,6 +1095,9 @@ export type TauxViewProps = {
   interbancaireTaux: { maturity: string; series: TauxSeries }[];
   interbancaireVolumes: { maturity: string; series: TauxSeries }[];
   inflationSeries: TauxSeries[];
+  inflationComposante: TauxSeries[];
+  activiteSeries: TauxSeries[];
+  climatSeries: TauxSeries[];
   conditionsCat: { rows: string[]; cols: string[]; values: [string, number][] };
   conditionsObj: { rows: string[]; cols: string[]; values: [string, number][] };
   conditionsPeriod: string;
@@ -792,6 +1144,10 @@ export default function TauxView(props: TauxViewProps) {
       />
 
       <InflationSection series={props.inflationSeries} />
+
+      <InflationComposanteSection series={props.inflationComposante} />
+
+      <ActiviteSection activite={props.activiteSeries} climat={props.climatSeries} />
 
       <ConditionsSection
         cat={props.conditionsCat}

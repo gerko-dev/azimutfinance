@@ -194,9 +194,6 @@ export default function FundamentalsView({
               <strong>{lastRatio.exercice}</strong>
             </p>
           </div>
-          <div className="text-xs text-slate-400">
-            Source : états annuels publiés
-          </div>
         </div>
       </div>
 

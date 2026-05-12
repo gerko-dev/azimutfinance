@@ -14,7 +14,7 @@ export default function YTMPage() {
     <div className="space-y-4">
       <ProPageHeader
         title="Simulateur YTM & Pricing obligataire"
-        subtitle={`Pricing, YTM, duration et intérêts courus · ${bonds.length} obligations UEMOA · Convention Act/365`}
+        subtitle={`Pricing, YTM, duration et intérêts courus · ${bonds.length} obligations UEMOA`}
         breadcrumb={[
           { label: "Pro Terminal", href: "/pros" },
           { label: "Simulateur YTM" },

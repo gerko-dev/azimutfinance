@@ -908,15 +908,6 @@ export default function SovereignDetailView({
                   Pas de série de prix disponible (titre échu ou pas de calibration).
                 </div>
               )}
-              <div className="mt-3 pt-3 border-t border-slate-100 text-xs text-slate-500 leading-relaxed">
-                <strong>Méthodologie :</strong> à chaque date hebdomadaire, le prix
-                théorique pied de coupon est calculé en actualisant les flux futurs au
-                YTM moyen pondéré des adjudications cash UMOA-Titres du même pays sur
-                les 3 derniers mois, interpolé sur la maturité résiduelle. Pas de
-                cotation secondaire pour ce titre : il n&apos;est pas listé sur la
-                BRVM. Voir l&apos;onglet « Adjudications » pour les prix moyens
-                pondérés observés à chaque round.
-              </div>
             </section>
 
             {marketMetrics && (
@@ -924,10 +915,6 @@ export default function SovereignDetailView({
                 <h3 className="text-base font-medium mb-3">
                   💰 Prix actuariel au YTM marché
                 </h3>
-                <p className="text-xs text-slate-500 mb-4">
-                  Prix calculé en actualisant l&apos;échéancier complet au taux du
-                  dernier round cash ({(bond.lastYield * 100).toFixed(2).replace(".", ",")}%).
-                </p>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
                   <div>
                     <div className="text-xs text-slate-500 mb-0.5">Prix pied de coupon</div>
@@ -1318,22 +1305,6 @@ export default function SovereignDetailView({
                     </tbody>
                   </table>
                 </div>
-                <div className="mt-3 pt-3 border-t border-slate-100 text-xs text-slate-500">
-                  <strong>Convention UMOA-Titres :</strong> coupon annuel sur capital
-                  restant dû ·{" "}
-                  {bond.amortizationType === "Linéaire"
-                    ? "amortissement linéaire constant"
-                    : bond.amortizationType === "In Fine"
-                    ? "remboursement bullet à l'échéance (in fine)"
-                    : "BAT zéro-coupon — remboursement au pair à l'échéance"}
-                  {bond.graceYears > 0
-                    ? ` · différé d'amortissement de ${bond.graceYears} an${
-                        bond.graceYears > 1 ? "s" : ""
-                      }`
-                    : ""}
-                  . Échéancier généré sur la base du nominal de référence{" "}
-                  {formatFCFA(bond.nominalValue)} FCFA.
-                </div>
               </section>
             ) : (
               <div className="bg-white rounded-lg border border-slate-200 p-10 text-center text-slate-500">
@@ -1468,11 +1439,6 @@ export default function SovereignDetailView({
                         })}
                       </tbody>
                     </table>
-                  </div>
-                  <div className="mt-3 pt-3 border-t border-slate-100 text-xs text-slate-500 leading-relaxed">
-                    <strong>Méthodologie :</strong> ΔP ≈ −ModDur × Δy × P + ½ × Convexité
-                    × Δy² × P. Approximation valide pour des chocs modérés. Au-delà de
-                    ±200 bps, recalculer le prix actuariel exact.
                   </div>
                 </section>
 
@@ -1706,9 +1672,7 @@ export default function SovereignDetailView({
         )}
 
         <div className="text-xs text-slate-400 leading-relaxed pt-2">
-          Données issues des adjudications UMOA-Titres. Les souverains non cotés ne
-          font pas l&apos;objet d&apos;une cotation secondaire — le YTM affiché est
-          celui du dernier round primaire.
+          Source : <span className="font-medium text-slate-600">UMOA-Titres</span>.
         </div>
 
         <div className="pt-2">

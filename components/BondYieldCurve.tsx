@@ -204,7 +204,7 @@ export default memo(function BondYieldCurve({
         <div>
           <h2 className="text-lg md:text-xl font-semibold">📊 Courbe des taux BRVM</h2>
           <p className="text-xs md:text-sm text-slate-600 mt-1">
-            YTM actuariel (convention Act/365). La ligne pointillée est la droite de
+            YTM actuariel par maturité résiduelle. La ligne pointillée est la droite de
             régression calculée sur la base sélectionnée.
           </p>
         </div>

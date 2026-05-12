@@ -367,7 +367,7 @@ export default function CommodityDetailView({
           {chartType === "price"
             ? "Cours quotidiens de clôture. La MM 200j (moyenne mobile 200 jours, pointillé) sert de filtre de tendance long terme."
             : chartType === "volume"
-            ? "Volume échangé sur le contrat de référence (estimation Investing.com)."
+            ? "Volume échangé sur le contrat de référence."
             : "Drawdown = recul cumulé depuis le dernier plus haut atteint dans la fenêtre. Sert à visualiser la profondeur des corrections."}
         </p>
       </div>

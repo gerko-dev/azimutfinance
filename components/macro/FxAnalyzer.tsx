@@ -516,20 +516,17 @@ export default function FxAnalyzer({
       <div className="px-4 md:px-6 py-4">
         <div className="flex items-baseline justify-between gap-2 mb-2">
           <h3 className="text-sm font-semibold text-slate-900">Matrice de corrélation</h3>
-          <span className="text-[10px] text-slate-400">
-            Pearson sur log-rendements quotidiens · fenêtre {PERIODS.find((p) => p.id === period)?.label.toLowerCase()}
-          </span>
         </div>
         {filteredCorrelation && filteredCorrelation.matrix.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="text-[11px] border-collapse">
               <thead>
                 <tr>
-                  <th className="p-1"></th>
+                  <th className="p-1" style={{ height: 96 }}></th>
                   {filteredCorrelation.labels.map((l) => (
-                    <th key={l} className="p-1 text-slate-500 font-medium text-center align-bottom"
-                      style={{ minWidth: 64 }}>
-                      <div className="rotate-[-30deg] origin-bottom-left whitespace-nowrap pl-2">{l}</div>
+                    <th key={l} className="p-1 pb-1 text-slate-500 font-medium align-bottom"
+                      style={{ minWidth: 64, height: 96 }}>
+                      <div className="rotate-[-30deg] origin-bottom-left whitespace-nowrap">{l}</div>
                     </th>
                   ))}
                 </tr>

@@ -27,7 +27,7 @@ export default async function Page() {
           title="Courbe des taux BRVM"
           description="YTM actuariel par durée résiduelle, droite de régression calibrée sur la base de votre choix : États UEMOA, marché global, par pays ou par type d'émetteur."
           features={[
-            "YTM actuariel pour chaque obligation cotée (convention Act/365)",
+            "YTM actuariel pour chaque obligation cotée",
             "Régression calibrable : États UEMOA, marché global, par pays ou type",
             "Filtrage par pays et type pour comparer signatures",
             "Mise à jour automatique avec les cours BRVM scrapés à la clôture",

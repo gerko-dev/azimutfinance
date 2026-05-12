@@ -904,7 +904,6 @@ export default function BondDetailView({
                     <div className="text-2xl md:text-3xl font-semibold text-blue-900">
                       {(marketMetrics.ytm * 100).toFixed(2).replace(".", ",")}%
                     </div>
-                    <div className="text-xs text-slate-500 mt-1">Convention Act/365</div>
                   </div>
                   <div className="bg-white rounded-lg border border-slate-200 p-4">
                     <div className="text-xs text-slate-500 mb-1">Duration modifiée</div>
@@ -961,7 +960,6 @@ export default function BondDetailView({
                       <span>Avancement</span>
                       <span>
                         {marketMetrics.daysSinceLastCoupon}/{marketMetrics.daysInPeriod} j
-                        · Act/Act
                       </span>
                     </div>
                   </div>
@@ -1274,16 +1272,6 @@ export default function BondDetailView({
                     </tbody>
                   </table>
                 </div>
-                <div className="mt-3 pt-3 border-t border-slate-100 text-xs text-slate-500">
-                  <strong>Convention UEMOA :</strong> coupon sur capital restant dû ·
-                  Act/Act ICMA pour le coupon couru · amortissement{" "}
-                  {bond.amortizationType === "IF"
-                    ? "in fine"
-                    : bond.amortizationType === "ACD"
-                    ? "constant différé"
-                    : "constant"}
-                  .
-                </div>
               </section>
             )}
           </>
@@ -1410,11 +1398,6 @@ export default function BondDetailView({
                         })}
                       </tbody>
                     </table>
-                  </div>
-                  <div className="mt-3 pt-3 border-t border-slate-100 text-xs text-slate-500 leading-relaxed">
-                    <strong>Méthodologie :</strong> ΔP ≈ −ModDur × Δy × P + ½ × Convexité
-                    × Δy² × P. Approximation valide pour des chocs modérés. Au-delà de ±200
-                    bps, recalculer le prix actuariel exact.
                   </div>
                 </section>
 
@@ -1704,11 +1687,6 @@ export default function BondDetailView({
                       </div>
                     </div>
 
-                    <p className="text-[11px] text-slate-400 mt-3 leading-relaxed">
-                      Convention Act/365 · cascade d&apos;amortissement (IF / AC / ACD) prise en
-                      compte. Les frais sont appliqués au dirty price ; TPS = TVA sur la
-                      commission SGI uniquement (convention place UEMOA).
-                    </p>
                   </>
                 );
               })()}
@@ -1834,8 +1812,7 @@ export default function BondDetailView({
 
         <div className="text-xs text-slate-400 leading-relaxed pt-2">
           Les informations affichées sont indicatives et ne constituent pas un conseil en
-          investissement. Les calculs utilisent Act/365 pour le YTM et Act/Act ICMA pour
-          le coupon couru (convention UEMOA).
+          investissement.
         </div>
 
         <div className="pt-2">

@@ -329,7 +329,7 @@ export default function YTMCalculator({ bonds, issuances }: Props) {
                 {formatFCFA2(data.accruedInterest)}
               </div>
               <div className="text-xs text-slate-500 mt-1">
-                {data.daysSinceLastCoupon} jours · Act/365
+                {data.daysSinceLastCoupon} jours
               </div>
             </div>
 
