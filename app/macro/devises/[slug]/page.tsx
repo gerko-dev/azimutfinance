@@ -2,6 +2,9 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import Header from "@/components/Header";
 import CommodityDetailView from "@/components/macro/CommodityDetailView";
+import CommodityAdvancedChart from "@/components/macro/CommodityAdvancedChart";
+import { fetchUserRole } from "@/lib/auth/userRole";
+import type { OhlcPoint } from "@/components/charting/KlineChart";
 import {
   EUR_XOF_PEG,
   FX_BY_SLUG,
@@ -82,7 +85,65 @@ export default async function FxPairPage({
   const stats = computeFxStats(meta.slug);
   if (!stats) notFound();
 
+  const userRole = await fetchUserRole();
+  const isMember = userRole !== null;
+  const isPremium = userRole === "premium" || userRole === "pro";
+
+  // Gating page entière : visible uniquement pour membres et au-dessus
+  if (!isMember) {
+    return (
+      <div className="min-h-screen bg-slate-50">
+        <Header />
+        <div className="max-w-3xl mx-auto px-4 md:px-6 py-12">
+          <div className="text-xs text-slate-500 mb-4 flex items-center gap-1.5 flex-wrap">
+            <Link href="/" className="hover:text-slate-700">Accueil</Link>
+            <span>›</span>
+            <Link href="/macro/devises" className="hover:text-slate-700">Devises</Link>
+            <span>›</span>
+            <span className="text-slate-700">{meta.pair}</span>
+          </div>
+          <div className="bg-white rounded-lg border border-slate-200 p-8 md:p-12 text-center">
+            <div className="text-4xl mb-3">🔒</div>
+            <h1 className="text-2xl md:text-3xl font-semibold text-slate-900">
+              Fiche {meta.pair} réservée aux membres
+            </h1>
+            <p className="text-sm md:text-base text-slate-600 mt-3 max-w-xl mx-auto">
+              Cours quotidiens sur 20 ans, performances multi-horizons, volatilité, drawdown,
+              saisonnalité, graphique avancé avec indicateurs et outils de dessin. Accès
+              gratuit avec un compte AzimutFinance.
+            </p>
+            <div className="mt-6 flex gap-2 justify-center flex-wrap">
+              <Link
+                href="/auth/login"
+                className="px-5 py-2.5 bg-slate-900 text-white text-sm rounded hover:bg-slate-700 transition font-medium"
+              >
+                Se connecter
+              </Link>
+              <Link
+                href="/auth/signup"
+                className="px-5 py-2.5 border border-slate-300 text-slate-700 text-sm rounded hover:bg-slate-50 transition font-medium"
+              >
+                S&apos;inscrire gratuitement
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const history = loadFxHistory(meta.slug);
+  // OHLC pour KlineChart (timestamps ms)
+  const ohlcHistory: OhlcPoint[] = history
+    .filter((h) => isFinite(h.open) && isFinite(h.high) && isFinite(h.low) && isFinite(h.close))
+    .map((h) => ({
+      timestamp: new Date(h.date + "T00:00:00Z").getTime(),
+      open: h.open,
+      high: h.high,
+      low: h.low,
+      close: h.close,
+      volume: h.volume ?? undefined,
+    }));
   const firstDate = history[0]?.date ?? "";
   const lastDate = stats.lastDate;
 
@@ -242,6 +303,14 @@ export default async function FxPairPage({
               seasonality={seasonality}
             />
 
+            {/* Graphique avancé : chandeliers OHLC + 50+ indicateurs + outils dessin */}
+            <CommodityAdvancedChart
+              ohlcHistory={ohlcHistory}
+              code={meta.pair}
+              name={meta.name}
+              userRole={userRole}
+            />
+
             {/* Bloc peg pour les paires XOF */}
             {isXofPair && (
               <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-5">
@@ -264,54 +333,55 @@ export default async function FxPairPage({
               </section>
             )}
 
-            {/* Impact UEMOA */}
+            {/* Impact UEMOA — gated Premium (titre toujours visible, contenu flouté) */}
             <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-5">
               <div className="flex items-baseline justify-between gap-2 mb-2 flex-wrap">
                 <h2 className="text-sm font-semibold text-slate-900">Impact UEMOA &amp; BRVM</h2>
                 <DirectionBadge direction={meta.rvmDirection} />
               </div>
-              <p className="text-xs text-slate-700 leading-relaxed">{meta.uemoaRelevance}</p>
-              <div className="mt-3 text-[11px] text-slate-500">
-                Sens d&apos;impact d&apos;une hausse de la paire :{" "}
-                <span className="font-medium text-slate-700">
-                  {meta.rvmDirection === "positive"
-                    ? "favorable BRVM / UEMOA"
-                    : meta.rvmDirection === "negative"
-                    ? "défavorable BRVM / UEMOA"
-                    : "mixte selon le canal de transmission"}
-                </span>
+              <div className="relative">
+                <div className={isPremium ? "" : "blur-[4px] pointer-events-none select-none"} aria-hidden={isPremium ? undefined : true}>
+                  <p className="text-xs text-slate-700 leading-relaxed">{meta.uemoaRelevance}</p>
+                  <div className="mt-3 text-[11px] text-slate-500">
+                    Sens d&apos;impact d&apos;une hausse de la paire :{" "}
+                    <span className="font-medium text-slate-700">
+                      {meta.rvmDirection === "positive"
+                        ? "favorable BRVM / UEMOA"
+                        : meta.rvmDirection === "negative"
+                        ? "défavorable BRVM / UEMOA"
+                        : "mixte selon le canal de transmission"}
+                    </span>
+                  </div>
+                </div>
+                {!isPremium && (
+                  <div className="absolute inset-0 flex items-center justify-center p-4">
+                    <div className="bg-white/95 backdrop-blur-sm rounded-lg shadow-xl border border-amber-200 max-w-md w-full p-5 md:p-6">
+                      <div className="flex items-start gap-3 mb-3">
+                        <div className="text-2xl shrink-0">🔒</div>
+                        <div className="min-w-0">
+                          <h4 className="text-base md:text-lg font-semibold text-slate-900">
+                            Analyse Impact UEMOA Premium
+                          </h4>
+                          <p className="text-sm text-slate-600 mt-1">
+                            Décryptage du canal de transmission de la paire {meta.pair} sur
+                            l&apos;économie UEMOA et la BRVM. Disponible avec l&apos;abonnement Premium.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2 mt-4">
+                        <Link
+                          href="/abonnements"
+                          className="px-4 py-2 bg-amber-500 text-white text-sm rounded hover:bg-amber-600 transition font-medium"
+                        >
+                          Passer Premium
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </section>
 
-            {/* Methodologie */}
-            <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-5">
-              <h3 className="text-sm font-semibold mb-2">À propos de cette paire</h3>
-              <div className="text-xs text-slate-600 space-y-1.5">
-                <p>
-                  <strong>Paire :</strong> {meta.pair} — cours quotidien de clôture depuis Investing.com.
-                  Convention : {meta.unitSuffix} pour 1 {meta.base}.
-                </p>
-                <p>
-                  <strong>Performance :</strong> calculée du dernier cours (date_max − N jours
-                  calendaires). YTD = depuis le 1ᵉʳ janvier de l&apos;année du dernier cours.
-                </p>
-                <p>
-                  <strong>Volatilité 1A :</strong> écart-type des log-rendements quotidiens sur 1 an,
-                  annualisé par √252.
-                </p>
-                <p>
-                  <strong>Drawdown :</strong> recul depuis le dernier plus haut atteint sur la fenêtre.
-                </p>
-                <p>
-                  <strong>z-score :</strong> écart entre le cours actuel et la moyenne 1 an, exprimé en
-                  écarts-types. |z| &gt; 2 = niveau extrême statistiquement.
-                </p>
-                <p>
-                  <strong>Saisonnalité :</strong> rendement mensuel close-to-close sur les 10 dernières
-                  années, agrégé en moyenne et hit rate par mois calendaire.
-                </p>
-              </div>
-            </section>
           </div>
 
           {/* Side : autres paires */}

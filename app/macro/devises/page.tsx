@@ -1,9 +1,9 @@
 import Link from "next/link";
 import Header from "@/components/Header";
 import FxAnalyzer from "@/components/macro/FxAnalyzer";
+import { fetchUserRole } from "@/lib/auth/userRole";
 import {
   EUR_XOF_PEG,
-  FCFA_BASKET,
   FX_PAIRS,
   buildFcfaTradeWeightedIndex,
   buildNormalizedSeries,
@@ -21,7 +21,7 @@ export const metadata = {
     "Cours, performances et analyses des 13 paires FX clés pour la zone UEMOA : USD/XOF, EUR/USD, DXY, NGN/XOF, GBP/XOF, JPY/XOF, ZAR/XOF, CAD/XOF, AED/XOF, TRY/XOF, BRL/XOF, USD/CNY. Indice de force du FCFA, comparateur, corrélations et cross-rates synthétiques.",
 };
 
-export const dynamic = "force-static";
+export const dynamic = "force-dynamic";
 
 const ALL_PERIODS = ["1M", "3M", "6M", "YTD", "1A", "3A", "5A", "MAX"] as const;
 type Period = (typeof ALL_PERIODS)[number];
@@ -48,6 +48,10 @@ const CATEGORY_LABEL: Record<string, string> = {
 };
 
 export default async function Page() {
+  // Gating Premium pour la section Impact UEMOA
+  const userRole = await fetchUserRole();
+  const isPremium = userRole === "premium" || userRole === "pro";
+
   const stats = FX_PAIRS.map((p) => computeFxStats(p.slug)).filter(
     (s): s is NonNullable<ReturnType<typeof computeFxStats>> => s !== null,
   );
@@ -179,10 +183,7 @@ export default async function Page() {
               </p>
             </div>
             <div className="text-right text-[11px] text-slate-500">
-              Sources :{" "}
-              <span className="font-medium text-slate-700">
-                BCEAO · Investing.com · ICE
-              </span>
+              Source : <span className="font-medium text-slate-700">BCEAO</span>
             </div>
           </div>
 
@@ -341,6 +342,7 @@ export default async function Page() {
         </section>
 
         {/* Impact UEMOA */}
+        {/* Impact UEMOA — gated Premium (titre toujours visible, contenu flouté) */}
         <section>
           <div className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
             <div className="mb-3">
@@ -352,6 +354,11 @@ export default async function Page() {
                 pertinence pour les flux commerciaux et financiers.
               </p>
             </div>
+            <div className="relative">
+              <div
+                className={isPremium ? "" : "blur-[4px] pointer-events-none select-none"}
+                aria-hidden={isPremium ? undefined : true}
+              >
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {FX_PAIRS.map((meta) => {
                 const stat = stats.find((s) => s.slug === meta.slug);
@@ -396,56 +403,37 @@ export default async function Page() {
                 );
               })}
             </div>
+              </div>
+              {!isPremium && (
+                <div className="absolute inset-0 flex items-center justify-center p-4">
+                  <div className="bg-white/95 backdrop-blur-sm rounded-lg shadow-xl border border-amber-200 max-w-md w-full p-5 md:p-6">
+                    <div className="flex items-start gap-3 mb-3">
+                      <div className="text-2xl shrink-0">🔒</div>
+                      <div className="min-w-0">
+                        <h4 className="text-base md:text-lg font-semibold text-slate-900">
+                          Analyse Impact UEMOA Premium
+                        </h4>
+                        <p className="text-sm text-slate-600 mt-1">
+                          Décryptage du canal de transmission de chaque paire FX sur
+                          l&apos;économie UEMOA et la BRVM. Disponible avec l&apos;abonnement Premium.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 mt-4">
+                      <Link
+                        href="/abonnements"
+                        className="px-4 py-2 bg-amber-500 text-white text-sm rounded hover:bg-amber-600 transition font-medium"
+                      >
+                        Passer Premium
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </section>
 
-        {/* Methodologie + composition TWI */}
-        <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
-          <h3 className="text-sm font-semibold mb-2">Méthodologie</h3>
-          <div className="text-xs text-slate-600 space-y-1.5">
-            <p>
-              <strong>Données :</strong> historiques quotidiens de clôture diffusés par
-              Investing.com pour chaque paire. Mise à jour manuelle.
-            </p>
-            <p>
-              <strong>Peg EUR/XOF :</strong> le FCFA est arrimé à l&apos;euro à 655,957 XOF pour 1 EUR
-              depuis le 1ᵉʳ janvier 1999. Cette parité est constante par construction et
-              n&apos;apparaît donc pas dans le tableau ; en revanche, USD/XOF dépend mécaniquement
-              de EUR/USD via la relation USD/XOF ≈ 655,957 / EUR/USD.
-            </p>
-            <p>
-              <strong>Indice trade-weighted FCFA :</strong> moyenne géométrique pondérée des
-              variations de la valeur du FCFA face à un panier de partenaires hors zone euro,
-              base 100 au début de la fenêtre. Une valeur supérieure à 100 = FCFA apprécié.
-              Composition (poids relatifs) :
-            </p>
-            <ul className="text-xs text-slate-600 ml-5 list-disc space-y-0.5">
-              {FCFA_BASKET.map((b) => (
-                <li key={b.slug}>
-                  <span className="font-medium text-slate-800">
-                    {FX_PAIRS.find((p) => p.slug === b.slug)?.pair ?? b.slug}
-                  </span>{" "}
-                  · {Math.round(b.weight * 100)} % · {b.rationale}
-                </li>
-              ))}
-            </ul>
-            <p>
-              <strong>Volatilité 1A :</strong> écart-type des log-rendements quotidiens sur 1 an,
-              annualisé par √252.
-            </p>
-            <p>
-              <strong>Drawdown 5A :</strong> recul depuis le plus haut de la fenêtre 5 ans glissants.
-            </p>
-            <p>
-              <strong>Corrélations :</strong> Pearson sur log-rendements quotidiens, intersection des
-              dates communes aux séries sélectionnées (≥ 30 observations).
-            </p>
-            <p>
-              <strong>Cross synthétique :</strong> toute paire X/Y dérivée comme (X/XOF) ÷ (Y/XOF).
-              Permet de calculer GBP/JPY, NGN/ZAR, etc., sans charger de données supplémentaires.
-            </p>
-          </div>
-        </section>
       </main>
     </div>
   );
