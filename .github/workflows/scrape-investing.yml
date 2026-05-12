@@ -1,0 +1,110 @@
+# Scrape Investing.com pour rafraichir les cours des 8 matieres premieres
+# suivies par /macro/matieres-premieres ET des 13 paires FX suivies par
+# /macro/devises, puis commit + push.
+#
+# Cron : 2 fois par jour, 8h00 et 19h00 GMT.
+#   - 8h GMT  = ~9h en heure d'Abidjan (debut de journee)
+#   - 19h GMT = ~20h en heure d'Abidjan (apres cloture US, donnees du jour J disponibles)
+# Egalement declenchable manuellement depuis l'UI GitHub Actions.
+#
+# Source : API publique api.investing.com/api/financialdata/historical/<id>.
+# Pas d'auth, pas de session — juste le bon Referer + User-Agent.
+#
+# Sortie : data/{Cacao,Cafe,brent,wti,or,palmoil,sugar,tsr}.csv (commodities) et
+# data/{EUR_USD,GBP_USD,USD_CNY,US_Dollar_Index,USD_XOF,GBP_XOF,JPY_XOF,CAD_XOF,
+# AED_XOF,TRY_XOF,BRL_XOF,ZAR_XOF,NGN_XOF}.csv (FX) — 20 ans d'historique par
+# defaut, fetch par chunks de 4 ans pour contourner le cap API a 5000 lignes.
+
+name: Scrape Investing.com Commodities &amp; FX
+
+on:
+  schedule:
+    - cron: "0 8,19 * * *"
+  workflow_dispatch:
+    inputs:
+      years:
+        description: "Historique en annees (defaut 20)"
+        required: false
+        default: "20"
+      slug:
+        description: "Restreindre commodities a un slug (cacao, cafe, brent, wti, or, palmoil, sugar, tsr). Vide = tous."
+        required: false
+        default: ""
+      fx_slug:
+        description: "Restreindre FX a un slug (USD_XOF, EUR_USD, DXY, ...). Vide = tous."
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: scrape-investing
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Scrape Investing.com - Commodities
+        run: |
+          ARGS="--years ${{ inputs.years || '20' }}"
+          if [ -n "${{ inputs.slug }}" ]; then
+            ARGS="$ARGS --slug ${{ inputs.slug }}"
+          fi
+          python scripts/scrape_investing_commodities.py $ARGS
+
+      - name: Scrape Investing.com - FX
+        run: |
+          ARGS="--years ${{ inputs.years || '20' }}"
+          if [ -n "${{ inputs.fx_slug }}" ]; then
+            ARGS="$ARGS --slug ${{ inputs.fx_slug }}"
+          fi
+          python scripts/scrape_investing_fx.py $ARGS
+
+      - name: Show diff stats
+        run: |
+          FILES="data/Cacao.csv data/Cafe.csv data/brent.csv data/wti.csv data/or.csv data/palmoil.csv data/sugar.csv data/tsr.csv data/EUR_USD.csv data/GBP_USD.csv data/USD_CNY.csv data/US_Dollar_Index.csv data/USD_XOF.csv data/GBP_XOF.csv data/JPY_XOF.csv data/CAD_XOF.csv data/AED_XOF.csv data/TRY_XOF.csv data/BRL_XOF.csv data/ZAR_XOF.csv data/NGN_XOF.csv"
+          echo "=== Files modified ==="
+          git status --short $FILES || true
+          echo ""
+          echo "=== Diff summary ==="
+          git diff --stat $FILES || true
+
+      - name: Commit & push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          FILES="data/Cacao.csv data/Cafe.csv data/brent.csv data/wti.csv data/or.csv data/palmoil.csv data/sugar.csv data/tsr.csv data/EUR_USD.csv data/GBP_USD.csv data/USD_CNY.csv data/US_Dollar_Index.csv data/USD_XOF.csv data/GBP_XOF.csv data/JPY_XOF.csv data/CAD_XOF.csv data/AED_XOF.csv data/TRY_XOF.csv data/BRL_XOF.csv data/ZAR_XOF.csv data/NGN_XOF.csv"
+          git add $FILES
+          if git diff --staged --quiet; then
+            echo "Aucun changement a commiter."
+            exit 0
+          fi
+          DATE_TAG=$(date -u +%Y-%m-%d_%Hh)
+          git commit \
+            -m "chore(data): refresh cours commodities + FX ${DATE_TAG}" \
+            -m "Mise a jour automatique via GitHub Actions (workflow scrape-investing)." \
+            -m "Source : Investing.com (api.investing.com/api/financialdata/historical)."
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main && git push && {
+              echo "Push effectue avec succes (essai $i)."
+              exit 0
+            }
+            echo "Essai $i echoue, nouvelle tentative dans 10s..."
+            sleep 10
+          done
+          echo "Push definitivement echoue apres 5 essais."
+          exit 1
