@@ -15,10 +15,18 @@ import {
   INSCRIPTION_STATUS_LABEL,
   PAYMENT_METHOD_LABEL,
 } from "@/lib/formations";
+import { getPremiumStatus, daysUntil } from "@/lib/auth/premium";
+import { PLANS } from "@/lib/premium/plans";
+import { listTopics, listUserReplies } from "@/lib/forum/queries";
+import { listMyWatchlists } from "@/lib/watchlists/queries";
+import { listMyAlerts } from "@/lib/alerts/queries";
+import CancelPremiumButton from "./CancelPremiumButton";
 
 export const metadata = {
   title: "Mon compte — AzimutFinance",
 };
+
+export const dynamic = "force-dynamic";
 
 const ROLE_LABELS: Record<string, { label: string; tone: string }> = {
   member: { label: "Membre", tone: "bg-blue-100 text-blue-700" },
@@ -60,6 +68,16 @@ export default async function ComptePage() {
   const interests: string[] = profile?.interests ?? [];
 
   const inscriptions = await getMyInscriptions();
+  const premium = await getPremiumStatus();
+  const [myTopics, myReplies, myWatchlists, myAlerts] = await Promise.all([
+    listTopics({ authorId: user.id, limit: 5 }),
+    listUserReplies(user.id, 5),
+    listMyWatchlists(),
+    listMyAlerts(),
+  ]);
+  const activeAlerts = myAlerts.filter((a) => a.active).length;
+  const showPremiumSection = !(role === "pro" || role.startsWith("adminlevel"));
+  const daysLeft = premium.isPremium ? daysUntil(premium.premiumUntil) : 0;
 
   // Bandeau "Complétez votre profil" : on regarde les champs réellement
   // manquants plutôt qu'onboarded_at, pour rattraper les utilisateurs qui
@@ -131,6 +149,15 @@ export default async function ComptePage() {
             />
           </div>
         </div>
+
+        {showPremiumSection && (
+          <PremiumStatusCard
+            isPremium={premium.isPremium}
+            premiumUntil={premium.premiumUntil}
+            plan={premium.plan}
+            daysLeft={daysLeft}
+          />
+        )}
 
         <div className="bg-white border border-slate-200 rounded-lg p-6 space-y-4">
           <div className="flex items-center justify-between">
@@ -255,13 +282,170 @@ export default async function ComptePage() {
           )}
         </div>
 
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-5 text-sm text-blue-900">
-          <p className="font-medium mb-1">Bientôt disponible</p>
-          <p className="text-blue-800">
-            Portefeuille personnel, alertes, watchlists, accès aux outils Pro… On
-            ajoute les fonctionnalités au fur et à mesure.
-          </p>
+        {/* Mes outils : watchlists + alertes */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="bg-white border border-slate-200 rounded-lg p-5">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-sm font-medium text-slate-900">
+                Mes watchlists
+              </h2>
+              <Link
+                href="/outils/watchlist"
+                className="text-xs text-blue-700 hover:underline"
+              >
+                Gérer →
+              </Link>
+            </div>
+            {myWatchlists.length === 0 ? (
+              <div className="text-xs text-slate-500">
+                Aucune liste pour le moment.{" "}
+                <Link
+                  href="/outils/watchlist"
+                  className="text-blue-700 hover:underline"
+                >
+                  Créer la première
+                </Link>
+              </div>
+            ) : (
+              <ul className="space-y-1.5">
+                {myWatchlists.slice(0, 4).map((w) => (
+                  <li
+                    key={w.id}
+                    className="flex items-center justify-between text-sm"
+                  >
+                    <Link
+                      href={`/outils/watchlist?id=${w.id}`}
+                      className="text-slate-900 hover:text-blue-700 truncate"
+                    >
+                      {w.name}
+                    </Link>
+                    <span className="text-[11px] tabular-nums text-slate-500 shrink-0 ml-2">
+                      {w.item_count}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-lg p-5">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-sm font-medium text-slate-900">Mes alertes</h2>
+              <Link
+                href="/outils/alertes"
+                className="text-xs text-blue-700 hover:underline"
+              >
+                Gérer →
+              </Link>
+            </div>
+            {myAlerts.length === 0 ? (
+              <div className="text-xs text-slate-500">
+                Aucune alerte configurée. Réservées aux membres Premium.
+              </div>
+            ) : (
+              <div>
+                <div className="text-2xl font-semibold tabular-nums text-slate-900">
+                  {activeAlerts}
+                  <span className="text-sm font-normal text-slate-500 ml-1">
+                    actives
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-400">
+                  sur {myAlerts.length} configurée
+                  {myAlerts.length > 1 ? "s" : ""}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
+
+        {/* Mon activité forum */}
+        <div className="bg-white border border-slate-200 rounded-lg p-6 space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-medium text-slate-900">
+              Mon activité forum
+            </h2>
+            <Link
+              href="/communaute/forum"
+              className="text-xs text-blue-700 hover:underline"
+            >
+              Aller au forum
+            </Link>
+          </div>
+
+          <div className="pt-2 border-t border-slate-100">
+            <div className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold mb-2">
+              Mes discussions ({myTopics.length})
+            </div>
+            {myTopics.length === 0 ? (
+              <div className="text-xs text-slate-500">
+                Vous n&apos;avez pas encore créé de discussion.{" "}
+                <Link
+                  href="/communaute/forum/nouveau"
+                  className="text-blue-700 hover:underline"
+                >
+                  Démarrer une discussion →
+                </Link>
+              </div>
+            ) : (
+              <ul className="divide-y divide-slate-100 -mx-1">
+                {myTopics.map((t) => (
+                  <li key={t.id} className="px-1 py-2">
+                    <Link
+                      href={`/communaute/forum/t/${t.id}`}
+                      className="text-sm text-slate-900 hover:text-blue-700 font-medium line-clamp-1"
+                    >
+                      {t.title}
+                    </Link>
+                    <div className="text-[11px] text-slate-500 mt-0.5 flex flex-wrap items-center gap-x-2">
+                      <span>{t.category_name}</span>
+                      <span className="text-slate-300">·</span>
+                      <span className="tabular-nums">
+                        {t.reply_count} rép.
+                      </span>
+                      <span className="text-slate-300">·</span>
+                      <span className="tabular-nums">
+                        {t.vote_score >= 0 ? "+" : ""}
+                        {t.vote_score} votes
+                      </span>
+                      <span className="text-slate-300">·</span>
+                      <span>
+                        {new Date(t.created_at).toLocaleDateString("fr-FR")}
+                      </span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {myReplies.length > 0 && (
+            <div className="pt-3 border-t border-slate-100">
+              <div className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold mb-2">
+                Mes dernières réponses ({myReplies.length})
+              </div>
+              <ul className="divide-y divide-slate-100 -mx-1">
+                {myReplies.map((r) => (
+                  <li key={r.reply_id} className="px-1 py-2">
+                    <Link
+                      href={`/communaute/forum/t/${r.topic_id}`}
+                      className="text-sm text-slate-900 hover:text-blue-700 font-medium line-clamp-1"
+                    >
+                      ↳ {r.topic_title}
+                    </Link>
+                    <div className="text-[11px] text-slate-600 line-clamp-2 mt-0.5">
+                      {r.body_preview}
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">
+                      {new Date(r.created_at).toLocaleDateString("fr-FR")}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+
       </main>
     </div>
   );
@@ -274,6 +458,87 @@ function Field({ label, value }: { label: string; value: string }) {
         {label}
       </div>
       <div className="text-sm text-slate-900">{value}</div>
+    </div>
+  );
+}
+
+function PremiumStatusCard({
+  isPremium,
+  premiumUntil,
+  plan,
+  daysLeft,
+}: {
+  isPremium: boolean;
+  premiumUntil: Date | null;
+  plan: keyof typeof PLANS | null;
+  daysLeft: number;
+}) {
+  if (!isPremium || !premiumUntil) {
+    return (
+      <div className="bg-gradient-to-br from-blue-50 to-amber-50 border border-amber-200 rounded-lg p-5 md:p-6 flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <div className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+            <span>⭐</span> Passe à Premium
+          </div>
+          <div className="text-xs text-slate-700 mt-1 max-w-md">
+            Débloque les analyses macro UEMOA, outils Pro et données
+            historiques étendues. À partir de 9 999 FCFA / mois.
+          </div>
+        </div>
+        <Link
+          href="/premium"
+          className="px-4 py-2 text-xs font-medium bg-amber-500 text-white rounded-md hover:bg-amber-600 whitespace-nowrap"
+        >
+          Découvrir
+        </Link>
+      </div>
+    );
+  }
+
+  const expiringSoon = daysLeft <= 30;
+  const planLabel = plan ? PLANS[plan].label : "Premium";
+
+  return (
+    <div className="bg-white border border-emerald-200 rounded-lg p-5 md:p-6">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <div className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+            <span>⭐</span> Abonnement {planLabel} actif
+          </div>
+          <div className="text-xs text-slate-600 mt-1">
+            Accès valide jusqu&apos;au{" "}
+            <span className="font-medium text-slate-900">
+              {premiumUntil.toLocaleDateString("fr-FR", {
+                day: "2-digit",
+                month: "long",
+                year: "numeric",
+              })}
+            </span>{" "}
+            <span
+              className={
+                expiringSoon
+                  ? "text-amber-700 font-medium"
+                  : "text-slate-500"
+              }
+            >
+              ({daysLeft} jour{daysLeft > 1 ? "s" : ""} restant{daysLeft > 1 ? "s" : ""})
+            </span>
+          </div>
+        </div>
+        <Link
+          href="/premium"
+          className={`px-4 py-2 text-xs font-medium rounded-md whitespace-nowrap ${
+            expiringSoon
+              ? "bg-amber-500 text-white hover:bg-amber-600"
+              : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+          }`}
+        >
+          {expiringSoon ? "Renouveler maintenant" : "Gérer mon abonnement"}
+        </Link>
+      </div>
+      <div className="border-t border-slate-100 mt-4 pt-3">
+        <CancelPremiumButton />
+      </div>
     </div>
   );
 }

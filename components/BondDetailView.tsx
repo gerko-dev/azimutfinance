@@ -30,6 +30,7 @@ import type { UserRole } from "@/lib/auth/userRole";
 import CountryFlag from "./CountryFlag";
 import LivePriceBadge from "./LivePriceBadge";
 import MemberGateDialog from "./MemberGateDialog";
+import AddToWatchlistButton from "./watchlist/AddToWatchlistButton";
 
 // === HELPERS DE FORMATAGE ===
 function formatFCFA(value: number): string {
@@ -735,26 +736,25 @@ export default function BondDetailView({
             </div>
 
             <div className="flex gap-2 flex-wrap">
-              <button
-                type="button"
-                onClick={() => {
-                  if (!isMember) {
-                    setGateFor("watchlist");
-                    return;
-                  }
-                  // TODO: brancher la watchlist obligataire (cf. fiche action).
-                }}
-                aria-haspopup={isMember ? undefined : "dialog"}
-                title={
-                  isMember ? undefined : "Watchlist — réservée aux membres"
-                }
-                className="px-3 py-1.5 text-xs md:text-sm border border-slate-300 rounded-md hover:bg-slate-50 inline-flex items-center gap-1"
-              >
-                + Watchlist
-                {!isMember && (
+              {isMember ? (
+                <AddToWatchlistButton
+                  targetType="bond"
+                  targetCode={bond.isin}
+                  targetLabel={bond.issuer}
+                  isAuthenticated={true}
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setGateFor("watchlist")}
+                  aria-haspopup="dialog"
+                  title="Watchlist — réservée aux membres"
+                  className="px-3 py-1.5 text-xs md:text-sm border border-slate-300 rounded-md hover:bg-slate-50 inline-flex items-center gap-1"
+                >
+                  ★ Watchlist
                   <span aria-hidden className="text-[10px]">🔒</span>
-                )}
-              </button>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => {
@@ -801,7 +801,6 @@ export default function BondDetailView({
             </div>
             {livePrice ? (
               <LivePriceBadge
-                fetchedAt={livePrice.fetchedAt}
                 sessionLabel={livePrice.sessionLabel}
                 isClosed={livePrice.isClosed}
               />

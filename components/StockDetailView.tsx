@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 
@@ -41,6 +41,7 @@ import DividendsView from "./DividendsView";
 import NewsView from "./NewsView";
 import AdvancedStatsView from "./AdvancedStatsView";
 import LivePriceBadge from "./LivePriceBadge";
+import AddToWatchlistButton from "./watchlist/AddToWatchlistButton";
 import TechnicalAnalysisView from "./TechnicalAnalysisView";
 import MemberGateDialog from "./MemberGateDialog";
 import type { UserRole } from "@/lib/auth/userRole";
@@ -281,39 +282,8 @@ export default function StockDetailView({
   const [klPeriod, setKlPeriod] = useState<Period>("1A");
   const [showBrvmc, setShowBrvmc] = useState(false);
   const [showSector, setShowSector] = useState(false);
-  const [inWatchlist, setInWatchlist] = useState(false);
   // Gate « Membre » declenche par les actions reservees (watchlist, alerte).
   const [gateFor, setGateFor] = useState<"watchlist" | "alerte" | null>(null);
-
-  // Sync watchlist depuis localStorage au montage (SSR-safe).
-  // Le setState dans l'effet est volontaire : on initialise à false côté
-  // serveur (pas de localStorage) puis on hydrate au mount côté client.
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem("azimut.watchlist");
-      if (stored) {
-        const list: string[] = JSON.parse(stored);
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setInWatchlist(list.includes(stock.code));
-      }
-    } catch {
-      // localStorage indisponible (mode privé strict)
-    }
-  }, [stock.code]);
-
-  function toggleWatchlist() {
-    try {
-      const stored = localStorage.getItem("azimut.watchlist");
-      const list: string[] = stored ? JSON.parse(stored) : [];
-      const next = list.includes(stock.code)
-        ? list.filter((c) => c !== stock.code)
-        : [...list, stock.code];
-      localStorage.setItem("azimut.watchlist", JSON.stringify(next));
-      setInWatchlist(next.includes(stock.code));
-    } catch {
-      // ignore
-    }
-  }
 
   const filteredHistory = useMemo(
     () => filterByPeriod(priceHistory, period),
@@ -456,33 +426,25 @@ export default function StockDetailView({
               </div>
             </div>
             <div className="flex gap-2 flex-wrap">
-              <button
-                type="button"
-                onClick={() => {
-                  if (!isMember) {
-                    setGateFor("watchlist");
-                    return;
-                  }
-                  toggleWatchlist();
-                }}
-                aria-pressed={isMember ? inWatchlist : undefined}
-                aria-haspopup={isMember ? undefined : "dialog"}
-                title={isMember ? undefined : "Watchlist — réservée aux membres"}
-                className={`px-3 py-1.5 text-xs md:text-sm border rounded-md transition inline-flex items-center gap-1 ${
-                  isMember && inWatchlist
-                    ? "border-blue-300 bg-blue-50 text-blue-800 hover:bg-blue-100"
-                    : "border-slate-300 hover:bg-slate-50"
-                }`}
-              >
-                {isMember ? (
-                  inWatchlist ? "✓ Dans la watchlist" : "+ Watchlist"
-                ) : (
-                  <>
-                    + Watchlist
-                    <span aria-hidden className="text-[10px]">🔒</span>
-                  </>
-                )}
-              </button>
+              {isMember ? (
+                <AddToWatchlistButton
+                  targetType="stock"
+                  targetCode={stock.code}
+                  targetLabel={stock.name}
+                  isAuthenticated={true}
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setGateFor("watchlist")}
+                  aria-haspopup="dialog"
+                  title="Watchlist — réservée aux membres"
+                  className="px-3 py-1.5 text-xs md:text-sm border border-slate-300 rounded-md hover:bg-slate-50 inline-flex items-center gap-1"
+                >
+                  ★ Watchlist
+                  <span aria-hidden className="text-[10px]">🔒</span>
+                </button>
+              )}
               {isMember ? (
                 <Link
                   href="/outils/alertes"
@@ -521,7 +483,6 @@ export default function StockDetailView({
             </div>
             {livePrice?.hasLive ? (
               <LivePriceBadge
-                fetchedAt={livePrice.fetchedAt}
                 sessionLabel={livePrice.sessionLabel}
                 isClosed={livePrice.isClosed}
               />

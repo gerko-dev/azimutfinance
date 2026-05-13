@@ -6,6 +6,8 @@ import type { User } from "@supabase/supabase-js";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { signOutAction } from "@/lib/auth/actions";
 import MessagerieIconBadge from "@/components/messagerie/MessagerieIconBadge";
+import ForumIconBadge from "@/components/forum/ForumIconBadge";
+import AlertsIconBadge from "@/components/alerts/AlertsIconBadge";
 import HeartbeatPinger from "@/components/HeartbeatPinger";
 
 type MenuItem = {
@@ -65,7 +67,7 @@ const menuSections: MenuSection[] = [
   {
     label: "Communauté",
     items: [
-      { label: "Forum investisseurs", href: "/communaute/forum", badge: "Bientôt" },
+      { label: "Forum investisseurs", href: "/communaute/forum" },
       { label: "Classements", href: "/communaute/classements", badge: "Bientôt" },
       { label: "Magazine digital", href: "/academie/magazine" },
       { label: "Newsletter", href: "/communaute/newsletter" },
@@ -103,9 +105,11 @@ export default function Header() {
   const [activeMobileFlyout, setActiveMobileFlyout] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [authLoaded, setAuthLoaded] = useState(false);
+  const [profileLoaded, setProfileLoaded] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [adminLevel, setAdminLevel] = useState<number | null>(null);
   const [userRole, setUserRole] = useState<"member" | "premium" | "pro" | null>(null);
+  const [hasActiveSub, setHasActiveSub] = useState(false);
   const headerRef = useRef<HTMLElement>(null);
 
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
@@ -119,9 +123,17 @@ export default function Header() {
       setUser(data.user);
       setAuthLoaded(true);
       if (data.user) {
-        const [{ data: lvl }, { data: profile }] = await Promise.all([
+        const [{ data: lvl }, { data: profile }, { data: sub }] = await Promise.all([
           supabase.rpc("my_admin_level"),
           supabase.from("profiles").select("role").eq("id", data.user.id).maybeSingle(),
+          supabase
+            .from("subscriptions")
+            .select("current_period_end")
+            .eq("user_id", data.user.id)
+            .eq("status", "active")
+            .order("current_period_end", { ascending: false })
+            .limit(1)
+            .maybeSingle(),
         ]);
         if (!cancelled) {
           setAdminLevel(typeof lvl === "number" ? lvl : null);
@@ -129,10 +141,17 @@ export default function Header() {
           setUserRole(
             role === "pro" || role === "premium" || role === "member" ? role : null,
           );
+          const periodEnd = (sub as { current_period_end?: string } | null)?.current_period_end;
+          setHasActiveSub(
+            !!periodEnd && new Date(periodEnd).getTime() > Date.now(),
+          );
+          setProfileLoaded(true);
         }
       } else {
         setAdminLevel(null);
         setUserRole(null);
+        setHasActiveSub(false);
+        setProfileLoaded(true);
       }
     }
     loadUserAndAdmin();
@@ -142,6 +161,8 @@ export default function Header() {
       if (!session?.user) {
         setAdminLevel(null);
         setUserRole(null);
+        setHasActiveSub(false);
+        setProfileLoaded(true);
       }
     });
     return () => {
@@ -151,6 +172,18 @@ export default function Header() {
   }, [supabase]);
 
   const showProButton = userRole === "pro" || adminLevel !== null;
+  // Le menu "Communaute" n'est visible que pour les utilisateurs connectes
+  // (membre+). Les visiteurs anonymes ne le voient pas.
+  const visibleMenuSections = useMemo(
+    () => (user ? menuSections : menuSections.filter((s) => s.label !== "Communauté")),
+    [user],
+  );
+  // CTA "Passer a Premium" : reserve aux comptes Membres connectes uniquement.
+  // - userRole === "member" exclut implicitement guests (null), pro, premium, admins
+  // - !hasActiveSub double-securise contre un userRole perime
+  // - profileLoaded gate evite le flash entre auth resolve et profil resolve
+  const showPremiumCta =
+    authLoaded && profileLoaded && userRole === "member" && !hasActiveSub;
 
   // Fermer les menus au clic exterieur
   useEffect(() => {
@@ -177,7 +210,7 @@ export default function Header() {
 
           {/* Menu desktop */}
           <nav className="hidden lg:flex gap-1 text-sm">
-            {menuSections.map((section) => (
+            {visibleMenuSections.map((section) => (
               <div key={section.label} className="relative">
                 <button
                   onClick={() =>
@@ -273,6 +306,15 @@ export default function Header() {
 
         {/* Boutons desktop : auth-aware */}
         <div className="hidden md:flex items-center gap-2">
+          {showPremiumCta && (
+            <Link
+              href="/premium"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-semibold bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-sm hover:shadow transition"
+            >
+              <span aria-hidden>⭐</span>
+              <span>Passer à Premium</span>
+            </Link>
+          )}
           {!authLoaded ? (
             <div className="h-9 w-24 bg-slate-100 rounded-md animate-pulse" />
           ) : user ? (
@@ -297,6 +339,8 @@ export default function Header() {
                   Espace Pro
                 </Link>
               )}
+              <AlertsIconBadge user={user} />
+              <ForumIconBadge user={user} />
               <MessagerieIconBadge user={user} />
             <div className="relative">
               <button
@@ -372,9 +416,15 @@ export default function Header() {
           )}
         </div>
 
-        {/* Mobile : icone messagerie + hamburger */}
+        {/* Mobile : icones forum + messagerie + hamburger */}
         <div className="flex items-center gap-1 md:hidden">
-          {authLoaded && user && <MessagerieIconBadge user={user} />}
+          {authLoaded && user && (
+            <>
+              <AlertsIconBadge user={user} />
+              <ForumIconBadge user={user} />
+              <MessagerieIconBadge user={user} />
+            </>
+          )}
         </div>
 
         {/* Bouton hamburger mobile */}
@@ -421,7 +471,7 @@ export default function Header() {
                 Espace Pro
               </Link>
             )}
-            {menuSections.map((section) => (
+            {visibleMenuSections.map((section) => (
               <div key={section.label}>
                 <button
                   onClick={() =>
