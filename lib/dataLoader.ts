@@ -1092,6 +1092,32 @@ export function computeYtdPct(
   return ((currentValue - referenceValue) / referenceValue) * 100;
 }
 
+/**
+ * Performance Year-To-Date d'une action : variation entre `currentValue`
+ * (typiquement le cours live BRVM) et la derniere valeur observee dans
+ * l'historique CSV au plus tard le 31/12 de l'annee precedente.
+ * Renvoie une valeur en %, ex 12.5 = +12,5 %. Null si pas d'historique
+ * suffisant pour la reference.
+ */
+export function computeStockYtdPct(
+  code: string,
+  currentValue: number,
+  asOfYear?: number,
+): number | null {
+  if (!Number.isFinite(currentValue) || currentValue <= 0) return null;
+  const year = asOfYear ?? new Date().getUTCFullYear();
+  const cutoff = `${year - 1}-12-31`;
+  const history = loadPriceHistory(code);
+  if (history.length === 0) return null;
+  let referenceValue: number | null = null;
+  for (const p of history) {
+    if (p.date <= cutoff) referenceValue = p.value;
+    else break;
+  }
+  if (referenceValue === null || referenceValue <= 0) return null;
+  return ((currentValue - referenceValue) / referenceValue) * 100;
+}
+
 /** Statistiques d'un indice : derniere valeur + variation %  */
 export function getIndexStats(
   code: string

@@ -1,409 +1,443 @@
+import Link from "next/link";
 import Header from "@/components/Header";
-import ImmobilierAnalyzer from "@/components/macro/ImmobilierAnalyzer";
 import {
-  buildHeatmap,
-  buildQuartierSummaries,
-  computeCatalogStats,
-  computePriceM2ByQuartier,
-  computeYields,
-  findTopDeals,
+  BIEN_CATEGORIES,
+  BIEN_CATEGORIE_LABEL,
+  UEMOA_COUNTRY_LABEL,
+  UEMOA_COUNTRIES,
+  computePriceM2ByQuartierAndCategorie,
+  filterListings,
   formatFCFA,
-  formatPct,
+  listAvailableCountries,
+  listAvailableYears,
   loadAllListings,
+  median,
+  type BienCategorie,
+  type CountryCode,
+  type ListingFilters,
+  type PriceM2CategoryRow,
+  type Transaction,
 } from "@/lib/immobilier";
 
 export const metadata = {
-  title: "Immobilier Abidjan — AzimutFinance",
+  title: "Immobilier UEMOA — Prix au m² par localité — AzimutFinance",
   description:
-    "Prix médian par localité d'Abidjan : achat et location, par type de bien et nombre de chambres. Heatmap, rendements locatifs bruts, prix au m² et top deals.",
+    "Prix médian au m² par localité et par pays UEMOA, par catégorie : bureaux, logements, magasins, terrains. Achat et location.",
 };
 
-export const dynamic = "force-static";
+export const dynamic = "force-dynamic";
 
-function fmtDateFr(iso: string): string {
-  if (!iso || iso.length < 10) return iso || "—";
-  const [y, m, d] = iso.slice(0, 10).split("-");
-  return `${d}/${m}/${y}`;
-}
+type SearchParams = Promise<{
+  country?: string;
+  year?: string;
+  transaction?: string;
+}>;
 
-export default async function Page() {
+export default async function Page({ searchParams }: { searchParams: SearchParams }) {
+  const sp = await searchParams;
+
   const allListings = loadAllListings();
-  const stats = computeCatalogStats(allListings);
+  const countriesWithData = new Set(listAvailableCountries(allListings));
+  const availableYears = listAvailableYears(allListings);
 
-  if (allListings.length === 0) {
-    return (
-      <div className="min-h-screen bg-slate-50">
-        <Header />
-        <main className="max-w-3xl mx-auto px-4 py-16 text-center">
-          <h1 className="text-2xl font-semibold text-slate-900">Immobilier Abidjan</h1>
-          <p className="text-sm text-slate-600 mt-3">
-            Aucune annonce dans la base. Lancer la collecte pour générer les données.
-          </p>
-        </main>
-      </div>
-    );
-  }
+  // Toujours afficher les 7 pays UEMOA. Ceux sans donnée sont marqués.
+  const defaultCountry: CountryCode = countriesWithData.has("CI") ? "CI" : "CI";
 
-  const heatmapAchat = buildHeatmap(allListings, "achat");
-  const heatmapLocation = buildHeatmap(allListings, "location");
+  const selectedCountry: CountryCode = UEMOA_COUNTRIES.includes(
+    (sp.country ?? "").toUpperCase() as CountryCode,
+  )
+    ? ((sp.country ?? "").toUpperCase() as CountryCode)
+    : defaultCountry;
 
-  const yieldsType = computeYields(allListings, {
-    minSamples: 2,
-    groupBy: "quartier_type",
-  });
-  const yieldsRoom = computeYields(allListings, {
-    minSamples: 2,
-    groupBy: "quartier_type_chambres",
-  });
+  const selectedYear: number | undefined = sp.year
+    ? Number(sp.year)
+    : undefined;
+  const selectedTransaction: Transaction | undefined =
+    sp.transaction === "achat" || sp.transaction === "location"
+      ? sp.transaction
+      : undefined;
 
-  const topDealsAchat = findTopDeals(allListings, "achat", { minGroupSize: 5, limit: 12 });
-  const topDealsLocation = findTopDeals(allListings, "location", { minGroupSize: 5, limit: 12 });
+  const filters: ListingFilters = {
+    country: selectedCountry,
+    year: selectedYear,
+    transaction: selectedTransaction,
+  };
 
-  const priceM2Rows = computePriceM2ByQuartier(allListings, { minSamples: 3 });
+  const filtered = filterListings(allListings, filters);
+  const rows = computePriceM2ByQuartierAndCategorie(filtered, { minSamples: 2 });
 
-  const quartierSummaries = buildQuartierSummaries(allListings);
+  const heroAchat = computeHeroMedians(rows, "achat");
+  const heroLocation = computeHeroMedians(rows, "location");
 
-  // KPIs hero
-  const allAchat = allListings.filter((l) => l.transaction === "achat" && l.prix_fcfa !== null);
-  const allLoc = allListings.filter((l) => l.transaction === "location" && l.prix_fcfa !== null);
-  const medianAchat = (() => {
-    const arr = allAchat.map((l) => l.prix_fcfa as number).sort((a, b) => a - b);
-    return arr.length ? arr[Math.floor(arr.length / 2)] : null;
-  })();
-  const meanLoc = (() => {
-    const arr = allLoc.map((l) => l.prix_fcfa as number);
-    return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
-  })();
-  const medianRendement = (() => {
-    const ys = yieldsType.map((y) => y.rendement_brut_pct).sort((a, b) => a - b);
-    return ys.length ? ys[Math.floor(ys.length / 2)] : null;
-  })();
+  const showAchatTable = !selectedTransaction || selectedTransaction === "achat";
+  const showLocationTable =
+    !selectedTransaction || selectedTransaction === "location";
 
-  const topQuartiers = quartierSummaries.slice(0, 8);
-
-  const allQuartiers = Array.from(new Set(allListings.map((l) => l.quartier).filter(Boolean)))
-    .sort((a, b) => {
-      const ca = allListings.filter((l) => l.quartier === a).length;
-      const cb = allListings.filter((l) => l.quartier === b).length;
-      return cb - ca;
-    });
-  const allTypes = Array.from(new Set(allListings.map((l) => l.type_bien).filter(Boolean))).sort();
-
-  const listingsLight = allListings.map((l) => ({
-    source: l.source,
-    transaction: l.transaction,
-    type_bien: l.type_bien,
-    titre: l.titre,
-    prix_fcfa: l.prix_fcfa,
-    surface_m2: l.surface_m2,
-    prix_m2_fcfa: l.prix_m2_fcfa,
-    chambres: l.chambres,
-    quartier: l.quartier,
-    sous_quartier: l.sous_quartier,
-    standing: l.standing,
-    url: l.url,
-  }));
+  // Build base query string for filter links (preserves other filters)
+  const qsBase = (overrides: Partial<{ country: string; year: string; transaction: string }>) => {
+    const params = new URLSearchParams();
+    const country = overrides.country ?? selectedCountry;
+    if (country) params.set("country", country);
+    const year = "year" in overrides ? overrides.year : sp.year;
+    if (year) params.set("year", year);
+    const tx = "transaction" in overrides ? overrides.transaction : selectedTransaction;
+    if (tx) params.set("transaction", tx);
+    return `?${params.toString()}`;
+  };
 
   return (
     <div className="min-h-screen bg-slate-50">
       <Header />
 
       {/* HERO */}
-      <div className="bg-white border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8">
-          <div className="text-xs text-slate-500 mb-2">
+      <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-b border-slate-800">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10">
+          <div className="text-xs text-slate-400 mb-2">
             Accueil &rsaquo; Macro &rsaquo; Immobilier
           </div>
-          <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
-            <div>
-              <h1 className="text-2xl md:text-3xl font-semibold text-slate-900">
-                Immobilier Abidjan
-              </h1>
-              <p className="text-xs md:text-sm text-slate-500 mt-1 max-w-3xl">
-                Prix médian par localité, à l&apos;achat et à la location, par type de bien et
-                nombre de chambres. {stats.totalListings.toLocaleString("fr-FR")} annonces actives ·
-                {stats.uniqueQuartiers} localités · {stats.uniqueTypes} types de biens. Mise à jour au {fmtDateFr(stats.scrapedAt)}.
-              </p>
-            </div>
+          <div className="mb-4">
+            <h1 className="text-2xl md:text-3xl font-semibold text-white">
+              Immobilier UEMOA — Prix au m²
+            </h1>
+            <p className="text-xs md:text-sm text-slate-300 mt-1 max-w-3xl">
+              Prix médian au m² par localité, à l&apos;achat et à la location, pour quatre
+              catégories de biens : bureaux, logements, magasins, terrains.
+              Filtrer par pays, année et type de transaction.
+            </p>
           </div>
 
+          {/* FILTRES */}
+          <div className="space-y-2 mb-5">
+            <FilterRow label="Pays">
+              {UEMOA_COUNTRIES.map((c) => (
+                <FilterPill
+                  key={c}
+                  href={qsBase({ country: c })}
+                  label={UEMOA_COUNTRY_LABEL[c]}
+                  active={c === selectedCountry}
+                  muted={!countriesWithData.has(c)}
+                />
+              ))}
+            </FilterRow>
+            {availableYears.length > 1 && (
+              <FilterRow label="Année">
+                <FilterPill
+                  href={qsBase({ year: "" })}
+                  label="Toutes"
+                  active={selectedYear === undefined}
+                />
+                {availableYears.map((y) => (
+                  <FilterPill
+                    key={y}
+                    href={qsBase({ year: String(y) })}
+                    label={String(y)}
+                    active={selectedYear === y}
+                  />
+                ))}
+              </FilterRow>
+            )}
+            <FilterRow label="Transaction">
+              <FilterPill
+                href={qsBase({ transaction: "" })}
+                label="Toutes"
+                active={selectedTransaction === undefined}
+              />
+              <FilterPill
+                href={qsBase({ transaction: "achat" })}
+                label="Achat"
+                active={selectedTransaction === "achat"}
+              />
+              <FilterPill
+                href={qsBase({ transaction: "location" })}
+                label="Location"
+                active={selectedTransaction === "location"}
+              />
+            </FilterRow>
+          </div>
+
+          {/* KPIs */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <HeroKpi
-              label="Prix médian achat"
-              value={formatFCFA(medianAchat)}
-              suffix="FCFA"
-              accent="text-slate-900"
-              sub={`${stats.byTransaction.achat.toLocaleString("fr-FR")} annonces`}
-            />
-            <HeroKpi
-              label="Loyer moyen / mois"
-              value={formatFCFA(meanLoc)}
-              suffix="FCFA"
-              accent="text-slate-900"
-              sub={`${stats.byTransaction.location.toLocaleString("fr-FR")} annonces`}
-            />
-            <HeroKpi
-              label="Rendement brut médian"
-              value={formatPct(medianRendement, 1)}
-              accent={
-                (medianRendement ?? 0) >= 8
-                  ? "text-emerald-700"
-                  : (medianRendement ?? 0) >= 5
-                  ? "text-blue-700"
-                  : "text-slate-900"
-              }
-              sub={`sur ${yieldsType.length} segments`}
-            />
-            <HeroKpi
-              label="Localités couvertes"
-              value={String(stats.uniqueQuartiers)}
-              accent="text-slate-900"
-              sub={`${stats.uniqueTypes} types de biens`}
-            />
+            {BIEN_CATEGORIES.map((c) => (
+              <HeroKpi
+                key={c}
+                label={BIEN_CATEGORIE_LABEL[c]}
+                achat={heroAchat[c]}
+                location={heroLocation[c]}
+                showAchat={showAchatTable}
+                showLocation={showLocationTable}
+              />
+            ))}
           </div>
         </div>
       </div>
 
       <main className="max-w-7xl mx-auto px-4 md:px-6 py-6 space-y-6">
-        {/* Tableau central : prix par localité */}
-        <section className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-          <div className="px-4 md:px-6 py-3 border-b border-slate-200 bg-slate-50">
-            <h2 className="text-base md:text-lg font-semibold text-slate-900">
-              Prix par localité — vue d&apos;ensemble
-            </h2>
-            <p className="text-[11px] text-slate-500 mt-0.5">
-              Médianes sur l&apos;ensemble des annonces de chaque localité, tous types confondus.
+        {rows.length === 0 ? (
+          <section className="bg-white rounded-lg border border-slate-200 p-8 text-center">
+            <p className="text-sm text-slate-500">
+              Aucune donnée disponible pour le filtre sélectionné ({UEMOA_COUNTRY_LABEL[selectedCountry]}
+              {selectedYear !== undefined ? ` · ${selectedYear}` : ""}
+              {selectedTransaction !== undefined ? ` · ${selectedTransaction}` : ""}).
+              Élargir le filtre ou relancer le scrape multi-pays.
             </p>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs border-separate border-spacing-0">
-              <thead>
-                <tr className="text-slate-500 text-[10px] uppercase bg-slate-50/50">
-                  <th className="text-left font-medium py-2 px-4">Localité</th>
-                  <th className="text-left font-medium py-2 px-2">Type dominant</th>
-                  <th className="text-right font-medium py-2 px-2">Achat médian</th>
-                  <th className="text-right font-medium py-2 px-2">Loyer moyen / mois</th>
-                  <th className="text-right font-medium py-2 px-2">Rendement brut</th>
-                  <th className="text-right font-medium py-2 px-4">Annonces</th>
-                </tr>
-              </thead>
-              <tbody>
-                {quartierSummaries.map((q) => (
-                  <tr key={q.quartier} className="border-t border-slate-100 hover:bg-slate-50">
-                    <td className="py-2 px-4 font-medium text-slate-900">{q.quartier}</td>
-                    <td className="py-2 px-2 text-slate-700 capitalize">{q.type_dominant || "—"}</td>
-                    <td className="py-2 px-2 text-right tabular-nums">
-                      {q.prix_achat_median !== null ? (
-                        <span className="text-slate-900 font-medium">
-                          {formatFCFA(q.prix_achat_median)}
-                        </span>
-                      ) : (
-                        <span className="text-slate-300">—</span>
-                      )}
-                    </td>
-                    <td className="py-2 px-2 text-right tabular-nums">
-                      {q.loyer_mean !== null ? (
-                        <span className="text-slate-900 font-medium">
-                          {formatFCFA(q.loyer_mean)}
-                        </span>
-                      ) : (
-                        <span className="text-slate-300">—</span>
-                      )}
-                    </td>
-                    <td className="py-2 px-2 text-right tabular-nums">
-                      {q.rendement_brut_pct !== null ? (
-                        <span
-                          className={`font-semibold ${
-                            q.rendement_brut_pct >= 8
-                              ? "text-emerald-700"
-                              : q.rendement_brut_pct >= 5
-                              ? "text-blue-700"
-                              : "text-slate-700"
-                          }`}
-                        >
-                          {formatPct(q.rendement_brut_pct, 1)}
-                        </span>
-                      ) : (
-                        <span className="text-slate-300">—</span>
-                      )}
-                    </td>
-                    <td className="py-2 px-4 text-right tabular-nums text-slate-500">
-                      {q.countAchat}A · {q.countLocation}L
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        {/* Top quartiers cards */}
-        <section>
-          <div className="flex items-baseline justify-between mb-3">
-            <h2 className="text-base md:text-lg font-semibold text-slate-900">
-              Localités les plus actives
-            </h2>
-            <span className="text-[11px] text-slate-400">
-              Triées par volume d&apos;annonces · médianes en FCFA
-            </span>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {topQuartiers.map((q) => (
-              <QuartierCard
-                key={q.quartier}
-                quartier={q.quartier}
-                countAchat={q.countAchat}
-                countLocation={q.countLocation}
-                medianAchat={q.prix_achat_median}
-                meanLoyer={q.loyer_mean}
-                rendement={q.rendement_brut_pct}
-                typeDominant={q.type_dominant}
+          </section>
+        ) : (
+          <>
+            {showAchatTable && (
+              <PriceM2Table
+                title={`Prix d'achat médian au m² — ${UEMOA_COUNTRY_LABEL[selectedCountry]}`}
+                subtitle="Médianes par localité. Minimum 3 annonces par cellule sinon vide. Unité : FCFA/m²."
+                rows={rows}
+                transaction="achat"
               />
-            ))}
-          </div>
-        </section>
-
-        {/* Studio analyse interactif */}
-        <section>
-          <ImmobilierAnalyzer
-            listings={listingsLight}
-            heatmapAchat={heatmapAchat}
-            heatmapLocation={heatmapLocation}
-            yieldsRoom={yieldsRoom}
-            yieldsType={yieldsType}
-            topDealsAchat={topDealsAchat.map((d) => ({
-              listing: {
-                source: d.listing.source,
-                transaction: d.listing.transaction,
-                type_bien: d.listing.type_bien,
-                titre: d.listing.titre,
-                prix_fcfa: d.listing.prix_fcfa,
-                surface_m2: d.listing.surface_m2,
-                prix_m2_fcfa: d.listing.prix_m2_fcfa,
-                chambres: d.listing.chambres,
-                quartier: d.listing.quartier,
-                sous_quartier: d.listing.sous_quartier,
-                standing: d.listing.standing,
-                url: d.listing.url,
-              },
-              reference_median: d.reference_median,
-              spread_pct: d.spread_pct,
-              groupSize: d.groupSize,
-            }))}
-            topDealsLocation={topDealsLocation.map((d) => ({
-              listing: {
-                source: d.listing.source,
-                transaction: d.listing.transaction,
-                type_bien: d.listing.type_bien,
-                titre: d.listing.titre,
-                prix_fcfa: d.listing.prix_fcfa,
-                surface_m2: d.listing.surface_m2,
-                prix_m2_fcfa: d.listing.prix_m2_fcfa,
-                chambres: d.listing.chambres,
-                quartier: d.listing.quartier,
-                sous_quartier: d.listing.sous_quartier,
-                standing: d.listing.standing,
-                url: d.listing.url,
-              },
-              reference_median: d.reference_median,
-              spread_pct: d.spread_pct,
-              groupSize: d.groupSize,
-            }))}
-            priceM2Rows={priceM2Rows}
-            allQuartiers={allQuartiers}
-            allTypes={allTypes}
-          />
-        </section>
-
+            )}
+            {showLocationTable && (
+              <PriceM2Table
+                title={`Loyer médian au m² / mois — ${UEMOA_COUNTRY_LABEL[selectedCountry]}`}
+                subtitle="Médianes des loyers mensuels par localité, ramenés au mètre carré. Unité : FCFA/m²/mois."
+                rows={rows}
+                transaction="location"
+              />
+            )}
+          </>
+        )}
       </main>
     </div>
   );
 }
 
 // =============================================================================
+// HELPERS
+// =============================================================================
+
+function computeHeroMedians(
+  rows: PriceM2CategoryRow[],
+  transaction: Transaction,
+): Record<BienCategorie, number | null> {
+  const out: Record<BienCategorie, number | null> = {
+    bureaux: null,
+    logements: null,
+    magasins: null,
+    terrains: null,
+  };
+  for (const c of BIEN_CATEGORIES) {
+    const values = rows
+      .map((r) => r[transaction][c])
+      .filter((v): v is number => v !== null);
+    out[c] = median(values);
+  }
+  return out;
+}
+
+// =============================================================================
 // SUB-COMPONENTS
 // =============================================================================
 
-function HeroKpi({
+function FilterRow({
   label,
-  value,
-  sub,
-  accent,
-  suffix,
+  children,
 }: {
   label: string;
-  value: string;
-  sub?: string;
-  accent?: string;
-  suffix?: string;
+  children: React.ReactNode;
 }) {
   return (
-    <div className="border border-slate-200 rounded-lg p-3 bg-gradient-to-br from-white to-slate-50">
-      <div className="text-[11px] text-slate-500">{label}</div>
-      <div className={`text-xl md:text-2xl font-semibold tabular-nums mt-0.5 ${accent ?? "text-slate-900"}`}>
-        {value}
-        {suffix && <span className="text-[11px] text-slate-400 font-normal ml-1">{suffix}</span>}
-      </div>
-      {sub && <div className="text-[10px] text-slate-400 mt-0.5">{sub}</div>}
+    <div className="flex items-center gap-2 flex-wrap">
+      <span className="text-[10px] text-slate-500 uppercase tracking-wide font-medium min-w-[80px]">
+        {label}
+      </span>
+      <div className="flex items-center gap-1.5 flex-wrap">{children}</div>
     </div>
   );
 }
 
-function QuartierCard({
-  quartier,
-  countAchat,
-  countLocation,
-  medianAchat,
-  meanLoyer,
-  rendement,
-  typeDominant,
+function FilterPill({
+  href,
+  label,
+  active,
+  muted,
 }: {
-  quartier: string;
-  countAchat: number;
-  countLocation: number;
-  medianAchat: number | null;
-  meanLoyer: number | null;
-  rendement: number | null;
-  typeDominant: string;
+  href: string;
+  label: string;
+  active: boolean;
+  muted?: boolean;
 }) {
   return (
-    <div className="border border-slate-200 rounded-lg p-3 bg-white hover:shadow-sm hover:border-slate-300 transition">
-      <div className="flex items-baseline justify-between gap-2">
-        <div className="text-sm font-semibold text-slate-900">{quartier}</div>
-        <span className="text-[10px] text-slate-400 capitalize">{typeDominant}</span>
+    <Link
+      href={href}
+      title={muted ? "Pas encore de données dans la base — sélectionne pour voir" : undefined}
+      className={`text-[11px] px-2.5 py-1 rounded-md border transition ${
+        active
+          ? "bg-slate-900 text-white border-slate-900"
+          : muted
+          ? "bg-white text-slate-400 border-slate-200 hover:bg-slate-50 italic"
+          : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+      }`}
+    >
+      {label}
+      {muted && !active && <span className="ml-1 text-slate-300">·</span>}
+    </Link>
+  );
+}
+
+function HeroKpi({
+  label,
+  achat,
+  location,
+  showAchat,
+  showLocation,
+}: {
+  label: string;
+  achat: number | null;
+  location: number | null;
+  showAchat: boolean;
+  showLocation: boolean;
+}) {
+  return (
+    <div className="border border-slate-200 rounded-lg p-3 bg-gradient-to-br from-white to-slate-50">
+      <div className="text-[11px] text-slate-500 uppercase tracking-wide font-medium">
+        {label}
       </div>
-      <div className="mt-2 grid grid-cols-2 gap-2">
-        <div>
-          <div className="text-[10px] text-slate-500">Achat médian</div>
-          <div className="text-sm font-semibold tabular-nums text-slate-900">
-            {formatFCFA(medianAchat)}
+      <div className="mt-2 space-y-1">
+        {showAchat && (
+          <div>
+            <div className="text-[10px] text-slate-400">Achat médian</div>
+            <div className="text-base md:text-lg font-semibold tabular-nums text-slate-900">
+              {achat !== null ? (
+                <>
+                  {formatFCFA(achat)}
+                  <span className="text-[10px] text-slate-400 font-normal ml-1">F/m²</span>
+                </>
+              ) : (
+                <span className="text-slate-300">—</span>
+              )}
+            </div>
           </div>
-          <div className="text-[10px] text-slate-400">{countAchat} annonces</div>
-        </div>
-        <div>
-          <div className="text-[10px] text-slate-500">Loyer moyen</div>
-          <div className="text-sm font-semibold tabular-nums text-slate-900">
-            {formatFCFA(meanLoyer)}
+        )}
+        {showLocation && (
+          <div>
+            <div className="text-[10px] text-slate-400">Loyer médian</div>
+            <div className="text-sm font-semibold tabular-nums text-slate-700">
+              {location !== null ? (
+                <>
+                  {formatFCFA(location)}
+                  <span className="text-[10px] text-slate-400 font-normal ml-1">F/m²/mois</span>
+                </>
+              ) : (
+                <span className="text-slate-300">—</span>
+              )}
+            </div>
           </div>
-          <div className="text-[10px] text-slate-400">{countLocation} annonces</div>
-        </div>
+        )}
       </div>
-      {rendement !== null && (
-        <div className="mt-2 pt-2 border-t border-slate-100 flex items-baseline justify-between">
-          <span className="text-[11px] text-slate-500">Rendement brut</span>
-          <span
-            className={`text-sm font-semibold tabular-nums ${
-              rendement >= 8
-                ? "text-emerald-700"
-                : rendement >= 5
-                ? "text-blue-700"
-                : "text-slate-700"
-            }`}
-          >
-            {formatPct(rendement, 1)}
-          </span>
+    </div>
+  );
+}
+
+function PriceM2Table({
+  title,
+  subtitle,
+  rows,
+  transaction,
+}: {
+  title: string;
+  subtitle: string;
+  rows: PriceM2CategoryRow[];
+  transaction: Transaction;
+}) {
+  const filtered = rows.filter((r) =>
+    BIEN_CATEGORIES.some((c) => r[transaction][c] !== null),
+  );
+
+  const refMedians: Record<BienCategorie, number | null> = {
+    bureaux: null,
+    logements: null,
+    magasins: null,
+    terrains: null,
+  };
+  for (const c of BIEN_CATEGORIES) {
+    const values = filtered
+      .map((r) => r[transaction][c])
+      .filter((v): v is number => v !== null);
+    refMedians[c] = median(values);
+  }
+
+  return (
+    <section className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+      <div className="px-4 md:px-6 py-3 border-b border-slate-200 bg-slate-50">
+        <h2 className="text-base md:text-lg font-semibold text-slate-900">{title}</h2>
+        <p className="text-[11px] text-slate-500 mt-0.5">{subtitle}</p>
+      </div>
+      {filtered.length === 0 ? (
+        <div className="p-6 text-center text-sm text-slate-400">
+          Aucune donnée disponible pour cette transaction.
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs border-separate border-spacing-0">
+            <thead>
+              <tr className="text-slate-500 text-[10px] uppercase bg-slate-50/50">
+                <th className="text-left font-medium py-2 px-4">Localité</th>
+                {BIEN_CATEGORIES.map((c) => (
+                  <th key={c} className="text-right font-medium py-2 px-3">
+                    {BIEN_CATEGORIE_LABEL[c]}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((r) => (
+                <tr key={r.quartier} className="border-t border-slate-100 hover:bg-slate-50">
+                  <td className="py-2 px-4 font-medium text-slate-900">{r.quartier}</td>
+                  {BIEN_CATEGORIES.map((c) => {
+                    const v = r[transaction][c];
+                    const ref = refMedians[c];
+                    return (
+                      <td key={c} className="py-2 px-3 text-right tabular-nums">
+                        {v !== null ? (
+                          <span
+                            className={`font-medium ${
+                              ref !== null && v >= ref * 1.3
+                                ? "text-rose-700"
+                                : ref !== null && v <= ref * 0.7
+                                ? "text-emerald-700"
+                                : "text-slate-900"
+                            }`}
+                          >
+                            {formatFCFA(v)}
+                          </span>
+                        ) : (
+                          <span className="text-slate-300">—</span>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t-2 border-slate-200 bg-slate-50/70">
+                <td className="py-2 px-4 text-[11px] font-semibold text-slate-700">
+                  Médiane globale
+                </td>
+                {BIEN_CATEGORIES.map((c) => (
+                  <td key={c} className="py-2 px-3 text-right tabular-nums">
+                    {refMedians[c] !== null ? (
+                      <span className="text-[11px] font-semibold text-slate-700">
+                        {formatFCFA(refMedians[c])}
+                      </span>
+                    ) : (
+                      <span className="text-slate-300">—</span>
+                    )}
+                  </td>
+                ))}
+              </tr>
+            </tfoot>
+          </table>
         </div>
       )}
-    </div>
+      <div className="px-4 md:px-6 py-2 text-[10px] text-slate-400 border-t border-slate-100">
+        Vert = ≥30 % sous la médiane globale. Rouge = ≥30 % au-dessus.
+      </div>
+    </section>
   );
 }

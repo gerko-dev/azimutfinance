@@ -93,25 +93,25 @@ export default function IndicesView({
   return (
     <>
       {/* HERO */}
-      <div className="bg-gradient-to-br from-blue-50 via-white to-blue-50 border-b border-slate-200">
+      <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-b border-slate-800">
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10">
-          <div className="text-xs md:text-sm text-slate-500 mb-2">
-            <Link href="/" className="hover:text-slate-900">
+          <div className="text-xs md:text-sm text-slate-400 mb-2">
+            <Link href="/" className="hover:text-white transition">
               Marchés
             </Link>
-            <span className="mx-2">›</span>
-            <span>Indices BRVM</span>
+            <span className="mx-2 text-slate-500">›</span>
+            <span className="text-slate-200">Indices BRVM</span>
           </div>
 
           <div className="flex items-baseline justify-between flex-wrap gap-3 mb-2">
-            <h1 className="text-2xl md:text-3xl font-semibold">Indices BRVM</h1>
+            <h1 className="text-2xl md:text-3xl font-semibold text-white">Indices BRVM</h1>
             <LivePriceBadge
-              fetchedAt={session.fetchedAt}
               sessionLabel={session.sessionLabel}
               isClosed={session.isClosed}
+              variant="dark"
             />
           </div>
-          <p className="text-sm md:text-base text-slate-600 max-w-3xl">
+          <p className="text-sm md:text-base text-slate-300 max-w-3xl">
             {indices.length > 0
               ? `${indices.length} indices suivis : ${principal.length} principaux, ${sectoriel.length} sectoriels${totalReturn.length ? `, ${totalReturn.length} Total Return` : ""}.`
               : "Indices indisponibles temporairement."}

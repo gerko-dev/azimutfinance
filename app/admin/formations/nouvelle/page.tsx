@@ -3,7 +3,7 @@ import FormationForm from "@/components/admin/FormationForm";
 import { requireAdmin } from "@/lib/admin/auth";
 
 export default async function NewFormationPage() {
-  await requireAdmin(2);
+  await requireAdmin(3);
 
   return (
     <div className="space-y-4">

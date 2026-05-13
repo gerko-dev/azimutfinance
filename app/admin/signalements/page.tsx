@@ -10,7 +10,7 @@ export default async function ReportsAdminPage({
 }: {
   searchParams: Promise<{ status?: string }>;
 }) {
-  const { level } = await requireAdmin(3);
+  const { level } = await requireAdmin(2);
   const sp = await searchParams;
   const requested = (sp.status ?? "open") as ReportStatusFilter;
   const status: ReportStatusFilter = VALID_STATUSES.includes(requested)

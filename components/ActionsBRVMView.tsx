@@ -436,25 +436,25 @@ export default function ActionsBRVMView({
   return (
     <>
       {/* ====== HERO + KPIs ====== */}
-      <div className="bg-gradient-to-br from-blue-50 via-white to-blue-50 border-b border-slate-200">
+      <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-b border-slate-800">
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10">
-          <div className="text-xs md:text-sm text-slate-500 mb-2">
-            <Link href="/" className="hover:text-slate-900">Marchés</Link>
-            <span className="mx-2">›</span>
-            <span>Actions BRVM</span>
+          <div className="text-xs md:text-sm text-slate-400 mb-2">
+            <Link href="/" className="hover:text-white transition">Marchés</Link>
+            <span className="mx-2 text-slate-500">›</span>
+            <span className="text-slate-200">Actions BRVM</span>
           </div>
 
           <div className="flex items-baseline justify-between flex-wrap gap-3 mb-2">
-            <h1 className="text-2xl md:text-3xl font-semibold">
+            <h1 className="text-2xl md:text-3xl font-semibold text-white">
               Actions BRVM UEMOA
             </h1>
             <LivePriceBadge
-              fetchedAt={liveSession.fetchedAt}
               sessionLabel={liveSession.sessionLabel}
               isClosed={liveSession.isClosed}
+              variant="dark"
             />
           </div>
-          <p className="text-sm md:text-base text-slate-600 max-w-3xl">
+          <p className="text-sm md:text-base text-slate-300 max-w-3xl">
             {liveListedCount > 0 ? liveListedCount : marketStats.totalActions} sociétés
             cotées sur la Bourse Régionale des Valeurs Mobilières. Indices, valorisation
             et analyses sectorielles.

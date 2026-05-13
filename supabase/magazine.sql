@@ -164,8 +164,8 @@ drop policy if exists "magazine_authors_write_admin" on public.magazine_authors;
 create policy "magazine_authors_write_admin"
   on public.magazine_authors for all
   to authenticated
-  using (public.is_admin_at_least(2))
-  with check (public.is_admin_at_least(2));
+  using (public.is_admin_at_least(3))
+  with check (public.is_admin_at_least(3));
 
 -- Issues : SELECT public si publie, drafts admin L2+, ecriture admin L2+
 drop policy if exists "magazine_issues_select_published" on public.magazine_issues;
@@ -178,14 +178,14 @@ drop policy if exists "magazine_issues_select_drafts_admin" on public.magazine_i
 create policy "magazine_issues_select_drafts_admin"
   on public.magazine_issues for select
   to authenticated
-  using (public.is_admin_at_least(2));
+  using (public.is_admin_at_least(3));
 
 drop policy if exists "magazine_issues_write_admin" on public.magazine_issues;
 create policy "magazine_issues_write_admin"
   on public.magazine_issues for all
   to authenticated
-  using (public.is_admin_at_least(2))
-  with check (public.is_admin_at_least(2));
+  using (public.is_admin_at_least(3))
+  with check (public.is_admin_at_least(3));
 
 -- Articles : meme logique
 drop policy if exists "magazine_articles_select_published" on public.magazine_articles;
@@ -198,14 +198,14 @@ drop policy if exists "magazine_articles_select_drafts_admin" on public.magazine
 create policy "magazine_articles_select_drafts_admin"
   on public.magazine_articles for select
   to authenticated
-  using (public.is_admin_at_least(2));
+  using (public.is_admin_at_least(3));
 
 drop policy if exists "magazine_articles_write_admin" on public.magazine_articles;
 create policy "magazine_articles_write_admin"
   on public.magazine_articles for all
   to authenticated
-  using (public.is_admin_at_least(2))
-  with check (public.is_admin_at_least(2));
+  using (public.is_admin_at_least(3))
+  with check (public.is_admin_at_least(3));
 
 -- ============================================================
 -- 7) RLS — newsletter_subscribers
@@ -236,14 +236,14 @@ drop policy if exists "newsletter_update_admin" on public.newsletter_subscribers
 create policy "newsletter_update_admin"
   on public.newsletter_subscribers for update
   to authenticated
-  using (public.is_admin_at_least(2))
-  with check (public.is_admin_at_least(2));
+  using (public.is_admin_at_least(3))
+  with check (public.is_admin_at_least(3));
 
 drop policy if exists "newsletter_delete_admin" on public.newsletter_subscribers;
 create policy "newsletter_delete_admin"
   on public.newsletter_subscribers for delete
   to authenticated
-  using (public.is_admin_at_least(2));
+  using (public.is_admin_at_least(3));
 
 -- ============================================================
 -- 8) RPC admin : LIST ISSUES (incluant brouillons)
@@ -260,7 +260,7 @@ security definer
 set search_path = public
 as $$
 begin
-  if not public.is_admin_at_least(2) then
+  if not public.is_admin_at_least(3) then
     raise exception 'NOT_AUTHORIZED';
   end if;
   return query
@@ -293,7 +293,7 @@ security definer
 set search_path = public
 as $$
 begin
-  if not public.is_admin_at_least(2) then
+  if not public.is_admin_at_least(3) then
     raise exception 'NOT_AUTHORIZED';
   end if;
   return query
@@ -359,7 +359,7 @@ security definer
 set search_path = public
 as $$
 begin
-  if not public.is_admin_at_least(2) then
+  if not public.is_admin_at_least(3) then
     raise exception 'NOT_AUTHORIZED';
   end if;
   update public.newsletter_subscribers

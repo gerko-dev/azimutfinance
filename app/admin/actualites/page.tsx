@@ -10,7 +10,7 @@ export default async function ActualitesAdminPage({
 }: {
   searchParams: Promise<{ q?: string }>;
 }) {
-  await requireAdmin(2);
+  await requireAdmin(3);
   const sp = await searchParams;
   const search = (sp.q ?? "").trim();
   const items = await listAllActualites({ search: search || undefined, limit: 100 });

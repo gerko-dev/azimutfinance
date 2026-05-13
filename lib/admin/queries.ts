@@ -189,3 +189,9 @@ export async function getOpenReportsCount(): Promise<number> {
   const { data } = await supabase.rpc("admin_open_reports_count");
   return typeof data === "number" ? data : 0;
 }
+
+export async function getOpenForumReportsCount(): Promise<number> {
+  const supabase = await createSupabaseServerClient();
+  const { data } = await supabase.rpc("admin_open_forum_reports_count");
+  return typeof data === "number" ? data : 0;
+}

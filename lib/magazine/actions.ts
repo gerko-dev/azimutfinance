@@ -14,10 +14,13 @@ const CATEGORIES: ArticleCategory[] = [
   "macro", "marches", "obligations", "valeurs", "interview", "outils", "edito",
 ];
 
+// Garde des actions magazine : Editeur (N3+) — page placee dans groupe
+// Editeur de la sidebar. Nom de la fonction conserve pour eviter de toucher
+// tous les call sites locaux.
 async function ensureAdmin2(): Promise<{ ok: true } | { ok: false; error: string }> {
   const level = await getMyAdminLevel();
   if (level === null) return { ok: false, error: "Réservé aux administrateurs." };
-  if (level > 2) return { ok: false, error: "Niveau d'administration insuffisant (L2+ requis)." };
+  if (level > 3) return { ok: false, error: "Niveau d'administration insuffisant (L3+ requis)." };
   return { ok: true };
 }
 

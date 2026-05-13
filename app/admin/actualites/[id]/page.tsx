@@ -12,7 +12,7 @@ export default async function EditActualitePage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireAdmin(2);
+  await requireAdmin(3);
   const { id } = await params;
   const actualite = await getActualite(id);
   if (!actualite) notFound();

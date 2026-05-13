@@ -1,27 +1,35 @@
 // === IMMOBILIER : loader CSV + moteur d'analyse ===
 //
-// Donnees scrapees par scripts/scrape_immo.py vers data/<source>-<transaction>.csv :
-//   - jiji-achat.csv         (Jiji.co.ci, biens a vendre)
-//   - jiji-location.csv      (Jiji.co.ci, biens a louer)
-//   - coinafrique-achat.csv  (CoinAfrique CI, biens a vendre)
-//   - coinafrique-location.csv (CoinAfrique CI, biens a louer)
+// Sources de données :
+//   1) Anciens CSV CI-only (scripts/scrape_immo.py)
+//      - jiji-achat.csv          (Jiji.co.ci, biens à vendre)
+//      - jiji-location.csv       (Jiji.co.ci, biens à louer)
 //
-// Format CSV : delimiteur ; encoding utf-8, colonnes :
-//   source ; transaction ; type_bien ; titre ; prix_fcfa ; surface_m2 ;
-//   prix_m2_fcfa ; chambres ; quartier ; sous_quartier ; standing ; url ;
-//   scraped_at
+//   2) CSV harmonisé multi-pays UEMOA (16 colonnes incluant `country`)
+//      - coinafrique-uemoa.csv   (scrape_coinafrique_uemoa.py — 7 pays)
+//      - selogeraumali.csv       (scrape_selogeraumali.py — Mali)
+//      - expat-dakar.csv         (scrape_expatdakar.py — Sénégal)
+//      - annoncesimmo-ci.csv     (scrape_annoncesimmoci.py — Côte d'Ivoire)
+//      - clefsdufaso.csv         (scrape_clefsdufaso.py — Burkina Faso)
+//      - beninagence.csv         (scrape_beninagence.py — Bénin)
 //
-// Realite des donnees :
-//   - prix_fcfa quasiment toujours rempli
-//   - surface_m2 et prix_m2_fcfa souvent vides (Jiji ne les expose pas en card)
+// Format CSV harmonisé (délimiteur ;, UTF-8) :
+//   country ; country_label ; source ; transaction ; type_bien ; subcategory ;
+//   titre ; prix_fcfa ; surface_m2 ; prix_m2_fcfa ; chambres ; quartier ;
+//   sous_quartier ; standing ; url ; scraped_at
+//
+// Réalité des données :
+//   - prix_fcfa quasiment toujours rempli (annonces sans prix → drop au scraping)
+//   - surface_m2 et prix_m2_fcfa sparse (sites de cards ne les exposent pas)
 //   - chambres souvent rempli, type_bien et quartier presque toujours
-//   - duplicats par URL chez CoinAfrique : on dedoublonne au chargement
-//   - rows bruit : titre = "75 000 CFA" (le scraper a parse le prix comme titre)
+//   - dédup par URL au chargement (annonces sponsorisées répétées)
+//   - rows bruit possibles : titre = "75 000 CFA" (le scraper a parsé le prix
+//     comme titre) → filtrés par isPriceLikeTitle
 //
-// Comme la surface est sparse, la cle de matching pour les rendements est
-// (quartier, type_bien, chambres). Les medianes sont calculees sur ce groupe.
+// Comme la surface est sparse, la clé de matching pour les rendements est
+// (quartier, type_bien, chambres). Les médianes sont calculées sur ce groupe.
 
-import { readFileSync } from "fs";
+import { readFileSync, statSync, existsSync } from "fs";
 import { join } from "path";
 import Papa from "papaparse";
 
@@ -31,12 +39,46 @@ const DATA_DIR = join(process.cwd(), "data");
 // TYPES
 // =============================================================================
 
-export type Source = "jiji" | "coinafrique";
+export type Source =
+  | "jiji"
+  | "coinafrique"
+  | "selogeraumali"
+  | "expat-dakar"
+  | "annoncesimmo-ci"
+  | "clefsdufaso"
+  | "beninagence";
 export type Transaction = "achat" | "location";
+
+export const ALL_SOURCES: Source[] = [
+  "jiji",
+  "coinafrique",
+  "selogeraumali",
+  "expat-dakar",
+  "annoncesimmo-ci",
+  "clefsdufaso",
+  "beninagence",
+];
+
+/** Codes pays UEMOA (ISO 2 lettres en majuscules) */
+export type CountryCode = "BJ" | "BF" | "CI" | "ML" | "NE" | "SN" | "TG";
+
+export const UEMOA_COUNTRY_LABEL: Record<CountryCode, string> = {
+  BJ: "Bénin",
+  BF: "Burkina Faso",
+  CI: "Côte d'Ivoire",
+  ML: "Mali",
+  NE: "Niger",
+  SN: "Sénégal",
+  TG: "Togo",
+};
+
+export const UEMOA_COUNTRIES: CountryCode[] = ["BJ", "BF", "CI", "ML", "NE", "SN", "TG"];
 
 export type Listing = {
   source: Source;
   transaction: Transaction;
+  /** Pays UEMOA (par défaut "CI" pour les anciennes données Jiji/CoinAfrique CI) */
+  country: CountryCode;
   type_bien: string;
   titre: string;
   prix_fcfa: number | null;
@@ -55,6 +97,20 @@ const FILE_MAP: { source: Source; transaction: Transaction; file: string }[] = [
   { source: "jiji", transaction: "location", file: "jiji-location.csv" },
   { source: "coinafrique", transaction: "achat", file: "coinafrique-achat.csv" },
   { source: "coinafrique", transaction: "location", file: "coinafrique-location.csv" },
+];
+
+/**
+ * CSV harmonisés multi-pays (format 16 colonnes incluant `country`).
+ * Tous parsés par `parseHarmonizedCsv` — le label de source est celui stocké
+ * en colonne `source` du CSV.
+ */
+const HARMONIZED_CSVS: { file: string; source: Source }[] = [
+  { file: "coinafrique-uemoa.csv", source: "coinafrique" },
+  { file: "selogeraumali.csv", source: "selogeraumali" },
+  { file: "expat-dakar.csv", source: "expat-dakar" },
+  { file: "annoncesimmo-ci.csv", source: "annoncesimmo-ci" },
+  { file: "clefsdufaso.csv", source: "clefsdufaso" },
+  { file: "beninagence.csv", source: "beninagence" },
 ];
 
 // =============================================================================
@@ -134,6 +190,7 @@ function parseCSVFile(
     out.push({
       source,
       transaction,
+      country: "CI", // les anciens CSV jiji/coinafrique-achat/location sont CI-only
       type_bien: (r.type_bien ?? "").trim(),
       titre,
       prix_fcfa: prix,
@@ -155,19 +212,194 @@ function parseCSVFile(
 // =============================================================================
 
 let _cache: Listing[] | null = null;
+let _cacheKey = "";
+
+/** Construit une clé basée sur les mtimes des CSV. Si un CSV change, le cache est invalidé. */
+function buildCacheKey(): string {
+  const files = [
+    ...FILE_MAP.map((f) => f.file),
+    ...HARMONIZED_CSVS.map((h) => h.file),
+  ];
+  return files
+    .map((f) => {
+      const p = join(DATA_DIR, f);
+      if (!existsSync(p)) return `${f}:0`;
+      try {
+        return `${f}:${statSync(p).mtimeMs}`;
+      } catch {
+        return `${f}:0`;
+      }
+    })
+    .join("|");
+}
+
+/**
+ * Liste de quartiers/villes par pays, utilisée en fallback quand le scraper
+ * n'a pas pu extraire le `quartier` depuis le DOM CoinAfrique (DOM différent
+ * selon le pays). On cherche le 1er match (insensible à la casse) dans le
+ * titre de l'annonce.
+ */
+const FALLBACK_QUARTIERS: Record<CountryCode, string[]> = {
+  CI: [], // géré par le détecteur Abidjan dans le scraper
+  SN: [
+    // Région Dakar
+    "Plateau", "Almadies", "Mermoz", "Ouakam", "Sacré-Cœur", "Sacre Coeur",
+    "Yoff", "Ngor", "Liberté", "Liberte", "Point E", "Fann", "Médina", "Medina",
+    "VDN", "Hann", "Sicap", "HLM", "Parcelles Assainies", "Pikine", "Guédiawaye",
+    "Guediawaye", "Keur Massar", "Rufisque", "Bargny", "Bambilor", "Niague",
+    "Niaga", "Diamniadio", "Sangalkam", "Yenne",
+    // Régions
+    "Saly", "Mbour", "Saint-Louis", "Saint Louis", "Thiès", "Thies", "Touba",
+    "Kaolack", "Ziguinchor", "Kahone", "Gandigal", "Virage",
+  ],
+  BF: [
+    "Ouagadougou", "Ouaga 2000", "Ouaga2000", "Ouaga", "Bobo-Dioulasso",
+    "Bobo Dioulasso", "Bobo", "Banfora", "Koudougou",
+    "Gounghin", "Tampouy", "Patte d'Oie", "Patte d Oie", "Pissy", "Tanghin",
+    "Cissin", "Wemtenga", "Karpala", "Koulouba", "Zone du Bois", "Zone 1", "Zogona",
+    "Tabtenga", "Saaba", "Kouritenga", "Rayongo", "Wayalghin", "Dassasgho",
+    "Kalgondin", "Cité An III", "Cité An II", "Bonheur Ville",
+  ],
+  ML: [
+    "Bamako", "Sikasso", "Ségou", "Segou", "Mopti", "Kayes", "Koulikoro",
+    "ACI 2000", "ACI2000", "Hamdallaye", "Faladie", "Faladié", "Niamakoro",
+    "Magnambougou", "Yirimadio", "Sotuba", "Lafiabougou", "Badalabougou",
+    "Niarela", "Sogoniko", "Kalaban Coro", "Kalabancoro", "Kati", "Banankabougou",
+    "Diatoula", "Sabalibougou", "Daoudabougou", "Mountougoula",
+  ],
+  NE: [
+    "Niamey", "Maradi", "Zinder", "Tahoua", "Agadez", "Dosso",
+    "Yantala", "Kouara Kano", "Lazaret", "Riad", "Plateau", "Recasement",
+    "Talladje", "Bobiel", "Karssamba", "Bangoula", "Fenifoot",
+  ],
+  TG: [
+    "Lomé", "Lome", "Sokodé", "Sokode", "Kara", "Kpalimé", "Kpalime",
+    "Atakpamé", "Atakpame", "Tsévié", "Tsevie", "Aného", "Aneho", "Dapaong",
+    "Adidogome", "Adidogomé", "Agoe", "Agoè", "Agoé", "Tokoin", "Bè", "Be",
+    "Cacaveli", "Hedzranawoe", "Hédzranawoé", "Baguida", "Légbassito",
+    "Legbassito", "Avedji", "Amadahomé", "Noépé", "Noepé", "Apessito",
+    "Apéssito", "Vakpossito", "Wuiti",
+  ],
+  BJ: [
+    "Cotonou", "Porto-Novo", "Porto Novo", "Parakou", "Abomey", "Bohicon",
+    "Calavi", "Abomey-Calavi", "Abomey Calavi", "Akpakpa", "Fidjrossè",
+    "Fidjrosse", "Fidjrossé", "Cadjèhoun", "Cadjehoun", "Godomey", "Houénoussou",
+    "Ganhi", "Ste Rita", "Sainte Rita", "St Rita", "Sénadé", "Mènontin",
+    "Kouhounou", "Hêvié", "Hevie", "Hevié", "Sikecodji", "Houéto", "Houeto",
+    "Zopa", "Malanville", "Denou",
+  ],
+};
+
+/** Cherche une localité connue dans un titre. Renvoie le premier match exact. */
+function extractFallbackQuartier(country: CountryCode, titre: string): string {
+  const list = FALLBACK_QUARTIERS[country];
+  if (!list || list.length === 0) return "";
+  const t = titre.toLowerCase();
+  for (const q of list) {
+    if (t.includes(q.toLowerCase())) return q;
+  }
+  return "";
+}
+
+/**
+ * Parser pour les CSV harmonisés multi-pays (16 colonnes, `country` inclus).
+ * Utilisé pour coinafrique-uemoa, selogeraumali, expat-dakar, annoncesimmo-ci,
+ * clefsdufaso, beninagence.
+ *
+ * Le paramètre `defaultSource` est utilisé comme fallback quand la colonne
+ * `source` du CSV est absente — sinon on respecte la valeur du fichier.
+ */
+function parseHarmonizedCsv(file: string, defaultSource: Source): Listing[] {
+  let content: string;
+  try {
+    content = readFileSync(join(DATA_DIR, file), "utf-8");
+  } catch {
+    return [];
+  }
+  if (!content.trim()) return [];
+  if (content.charCodeAt(0) === 0xfeff) content = content.slice(1);
+
+  const result = Papa.parse<RawRow>(content, {
+    header: true,
+    delimiter: ";",
+    skipEmptyLines: true,
+    dynamicTyping: false,
+    transformHeader: (h) => h.replace(/^﻿/, "").trim(),
+  });
+
+  const out: Listing[] = [];
+  for (const r of result.data) {
+    const titre = (r.titre ?? "").trim();
+    if (!titre || isPriceLikeTitle(titre)) continue;
+
+    const rawCountry = (r.country ?? "").trim().toUpperCase() as CountryCode;
+    if (!UEMOA_COUNTRIES.includes(rawCountry)) continue;
+
+    let transaction = (r.transaction ?? "").trim().toLowerCase() as Transaction;
+    if (transaction !== "achat" && transaction !== "location") continue;
+
+    const typeBien = (r.type_bien ?? "").trim().toLowerCase();
+    // Les terrains sont par convention en vente. Le scraper peut détecter
+    // "location" à tort si "/mois" apparaît ailleurs dans le DOM → on force.
+    if (typeBien === "terrain" && transaction === "location") {
+      transaction = "achat";
+    }
+
+    const prix = toNumOrNull(r.prix_fcfa);
+    if (prix !== null && !isPriceSane(prix, transaction)) continue;
+
+    const surface = toNumOrNull(r.surface_m2);
+    let prixM2 = toNumOrNull(r.prix_m2_fcfa);
+    if (prixM2 === null && prix !== null && surface !== null && surface > 0) {
+      prixM2 = Math.round(prix / surface);
+    }
+
+    let quartier = (r.quartier ?? "").trim();
+    if (!quartier) {
+      quartier = extractFallbackQuartier(rawCountry, titre);
+    }
+
+    // Source : valeur du CSV si présente et reconnue, sinon fallback du chargeur
+    const csvSource = (r.source ?? "").trim() as Source;
+    const source: Source = ALL_SOURCES.includes(csvSource) ? csvSource : defaultSource;
+
+    out.push({
+      source,
+      transaction,
+      country: rawCountry,
+      type_bien: (r.type_bien ?? "").trim(),
+      titre,
+      prix_fcfa: prix,
+      surface_m2: surface !== null && surface > 4 && surface < 100000 ? surface : null,
+      prix_m2_fcfa: prixM2,
+      chambres: toNumOrNull(r.chambres),
+      quartier,
+      sous_quartier: (r.sous_quartier ?? "").trim(),
+      standing: (r.standing ?? "").trim(),
+      url: (r.url ?? "").trim(),
+      scraped_at: (r.scraped_at ?? "").trim(),
+    });
+  }
+  return out;
+}
 
 export function loadAllListings(): Listing[] {
-  if (_cache) return _cache;
+  const key = buildCacheKey();
+  if (_cache && key === _cacheKey) return _cache;
+  _cacheKey = key;
   const all: Listing[] = [];
   for (const { source, transaction, file } of FILE_MAP) {
     all.push(...parseCSVFile(file, source, transaction));
   }
-  // Dedup par (url || titre+source+transaction). Une URL peut apparaitre 2x
-  // chez Coinafrique car les pages se chevauchent ; on garde la 1ere occurrence.
+  for (const { file, source } of HARMONIZED_CSVS) {
+    all.push(...parseHarmonizedCsv(file, source));
+  }
+  // Dedup par (url || source+transaction+country+titre). Annonces sponsorisées
+  // peuvent réapparaître entre pages ; on garde la 1ère occurrence.
   const seen = new Set<string>();
   const deduped: Listing[] = [];
   for (const l of all) {
-    const key = l.url || `${l.source}|${l.transaction}|${l.titre}`;
+    const key = l.url || `${l.source}|${l.transaction}|${l.country}|${l.titre}`;
     if (seen.has(key)) continue;
     seen.add(key);
     deduped.push(l);
@@ -217,7 +449,15 @@ export type CatalogStats = {
 
 export function computeCatalogStats(listings: Listing[]): CatalogStats {
   const byTx: Record<Transaction, number> = { achat: 0, location: 0 };
-  const bySrc: Record<Source, number> = { jiji: 0, coinafrique: 0 };
+  const bySrc: Record<Source, number> = {
+    jiji: 0,
+    coinafrique: 0,
+    selogeraumali: 0,
+    "expat-dakar": 0,
+    "annoncesimmo-ci": 0,
+    clefsdufaso: 0,
+    beninagence: 0,
+  };
   const quartiers = new Set<string>();
   const types = new Set<string>();
   let latestScrape = "";
@@ -476,6 +716,216 @@ export type PriceM2Row = {
   prix_m2_p75: number | null;
   prix_m2_mean: number | null;
 };
+
+// =============================================================================
+// CATEGORIES UTILISATEUR : bureaux / logements / magasins / terrains
+// =============================================================================
+
+export type BienCategorie = "bureaux" | "logements" | "magasins" | "terrains";
+
+export const BIEN_CATEGORIES: BienCategorie[] = [
+  "bureaux",
+  "logements",
+  "magasins",
+  "terrains",
+];
+
+export const BIEN_CATEGORIE_LABEL: Record<BienCategorie, string> = {
+  bureaux: "Bureaux",
+  logements: "Logements",
+  magasins: "Magasins",
+  terrains: "Terrains",
+};
+
+/**
+ * Classifie une annonce dans l'une des 4 catégories métier.
+ * Le champ `type_bien` ne distingue pas bureau/magasin (regroupés en "commercial"),
+ * d'où l'utilisation du titre pour départager.
+ */
+export function classifyBien(listing: Listing): BienCategorie | null {
+  const t = (listing.type_bien || "").toLowerCase().trim();
+  const titre = (listing.titre || "").toLowerCase();
+
+  if (t === "terrain") return "terrains";
+
+  if (
+    t === "appartement" ||
+    t === "maison" ||
+    t === "villa" ||
+    t === "studio" ||
+    t === "immeuble"
+  ) {
+    return "logements";
+  }
+
+  // type_bien = "commercial" ou type_bien non renseigné → départage par titre
+  const isBureau = /\bbureau/.test(titre);
+  const isMagasin = /\b(magasin|boutique|local\s+commercial|entrepot|entrepôt)/.test(titre);
+
+  if (t === "commercial") {
+    if (isBureau && !isMagasin) return "bureaux";
+    if (isMagasin && !isBureau) return "magasins";
+    // "bureaux & commerces" / ambigu → on classe en bureaux (usage le plus courant
+    // dans les annonces ivoiriennes labellisées commercial)
+    return "bureaux";
+  }
+
+  // Fallback : type_bien vide/inconnu, on tente via le titre
+  if (isBureau) return "bureaux";
+  if (isMagasin) return "magasins";
+  if (/\b(appartement|villa|maison|studio|duplex|logement)/.test(titre)) {
+    return "logements";
+  }
+  if (/\bterrain/.test(titre)) return "terrains";
+  return null;
+}
+
+// =============================================================================
+// AGREGAT : prix médian/m² par (catégorie, localité, transaction)
+// =============================================================================
+
+export type PriceM2CategoryRow = {
+  quartier: string;
+  /** Médiane prix/m² achat, FCFA — null si pas assez d'échantillons */
+  achat: Record<BienCategorie, number | null>;
+  /** Médiane prix/m² location (loyer/m² mensuel), FCFA */
+  location: Record<BienCategorie, number | null>;
+};
+
+const EMPTY_CAT_RECORD = (): Record<BienCategorie, number | null> => ({
+  bureaux: null,
+  logements: null,
+  magasins: null,
+  terrains: null,
+});
+
+/**
+ * Calcule la médiane du prix/m² par (quartier, catégorie, transaction).
+ * - Pour terrains : on utilise prix_fcfa / surface_m2 (le m² de terrain est le seul
+ *   indicateur pertinent même si pas "habitable").
+ * - Pour les autres : on garde prix_m2_fcfa déjà calculé dans le CSV.
+ */
+/** Filtres applicables avant agrégation (utilisés depuis la page via search params). */
+export type ListingFilters = {
+  /** Code pays UEMOA. Si défini, filtre les listings de ce pays. */
+  country?: CountryCode;
+  /** Année (issue de scraped_at). Filtre les listings scrapés cette année. */
+  year?: number;
+  /** Transaction. Si défini, filtre achat ou location. */
+  transaction?: Transaction;
+};
+
+export function filterListings(listings: Listing[], filters: ListingFilters): Listing[] {
+  return listings.filter((l) => {
+    if (filters.country && l.country !== filters.country) return false;
+    if (filters.transaction && l.transaction !== filters.transaction) return false;
+    if (filters.year !== undefined) {
+      const yr = Number(l.scraped_at.slice(0, 4));
+      if (yr !== filters.year) return false;
+    }
+    return true;
+  });
+}
+
+/** Années distinctes présentes dans les listings (utile pour le sélecteur). */
+export function listAvailableYears(listings: Listing[]): number[] {
+  const years = new Set<number>();
+  for (const l of listings) {
+    const yr = Number(l.scraped_at.slice(0, 4));
+    if (isFinite(yr) && yr > 2000) years.add(yr);
+  }
+  return Array.from(years).sort((a, b) => b - a);
+}
+
+/** Codes pays distincts présents dans les listings (utile pour le sélecteur). */
+export function listAvailableCountries(listings: Listing[]): CountryCode[] {
+  const set = new Set<CountryCode>();
+  for (const l of listings) set.add(l.country);
+  return UEMOA_COUNTRIES.filter((c) => set.has(c));
+}
+
+export function computePriceM2ByQuartierAndCategorie(
+  listings: Listing[],
+  opts: { minSamples?: number } = {},
+): PriceM2CategoryRow[] {
+  const minSamples = opts.minSamples ?? 3;
+
+  // groupes : quartier -> transaction -> catégorie -> valeurs
+  const groups = new Map<
+    string,
+    Record<Transaction, Record<BienCategorie, number[]>>
+  >();
+
+  for (const l of listings) {
+    if (!l.quartier) continue;
+    const cat = classifyBien(l);
+    if (cat === null) continue;
+
+    // Calcul du prix/m² pour cette annonce
+    let prixM2: number | null = l.prix_m2_fcfa;
+    if (prixM2 === null && l.prix_fcfa && l.surface_m2 && l.surface_m2 > 0) {
+      prixM2 = l.prix_fcfa / l.surface_m2;
+    }
+    if (prixM2 === null || !isFinite(prixM2) || prixM2 <= 0) continue;
+
+    // Filtres de plausibilité par catégorie (FCFA/m²)
+    if (cat === "terrains") {
+      // Terrains : 5 000 à 5 000 000 FCFA/m² (achat) ; loyer terrain rare
+      if (prixM2 < 5_000 || prixM2 > 5_000_000) continue;
+    } else if (l.transaction === "achat") {
+      // Achat habitable / commercial : 50 000 à 5 000 000 FCFA/m²
+      if (prixM2 < 50_000 || prixM2 > 5_000_000) continue;
+    } else {
+      // Location : 1 000 à 50 000 FCFA/m²/mois
+      if (prixM2 < 1_000 || prixM2 > 50_000) continue;
+    }
+
+    let q = groups.get(l.quartier);
+    if (!q) {
+      q = {
+        achat: EMPTY_CAT_RECORD() as unknown as Record<BienCategorie, number[]>,
+        location: EMPTY_CAT_RECORD() as unknown as Record<BienCategorie, number[]>,
+      };
+      // Remplace les null par []
+      for (const c of BIEN_CATEGORIES) {
+        q.achat[c] = [];
+        q.location[c] = [];
+      }
+      groups.set(l.quartier, q);
+    }
+    (q[l.transaction][cat] as number[]).push(prixM2);
+  }
+
+  const rows: PriceM2CategoryRow[] = [];
+  for (const [quartier, byTrans] of groups) {
+    const achat = EMPTY_CAT_RECORD();
+    const location = EMPTY_CAT_RECORD();
+    for (const c of BIEN_CATEGORIES) {
+      const aValues = byTrans.achat[c] as unknown as number[];
+      const lValues = byTrans.location[c] as unknown as number[];
+      if (aValues.length >= minSamples) achat[c] = median(aValues);
+      if (lValues.length >= minSamples) location[c] = median(lValues);
+    }
+    // On garde le quartier si au moins une catégorie a une valeur
+    const hasAny = BIEN_CATEGORIES.some(
+      (c) => achat[c] !== null || location[c] !== null,
+    );
+    if (hasAny) rows.push({ quartier, achat, location });
+  }
+
+  // Tri par "richesse globale" approximée : somme des médianes achat des catégories
+  return rows.sort((a, b) => {
+    const sumA = BIEN_CATEGORIES.reduce(
+      (s, c) => s + (a.achat[c] ?? 0),
+      0,
+    );
+    const sumB = BIEN_CATEGORIES.reduce(
+      (s, c) => s + (b.achat[c] ?? 0),
+      0,
+    );
+    return sumB - sumA;
+  });
+}
 
 export function computePriceM2ByQuartier(
   listings: Listing[],

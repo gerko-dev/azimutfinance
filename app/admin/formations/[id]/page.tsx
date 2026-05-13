@@ -15,7 +15,7 @@ export default async function EditFormationPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireAdmin(2);
+  await requireAdmin(3);
   const { id } = await params;
   const [formation, inscriptions] = await Promise.all([
     getFormationById(id),

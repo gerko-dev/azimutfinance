@@ -38,6 +38,9 @@ function rowToFormation(r: FormationRow): Formation {
         : undefined,
     featured: r.featured,
     publishedAt: r.published_at,
+    registrationDeadline: r.registration_deadline,
+    startsAt: r.starts_at,
+    endsAt: r.ends_at,
     updatedAt: r.updated_at,
   };
 }

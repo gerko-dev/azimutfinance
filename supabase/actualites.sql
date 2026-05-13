@@ -55,27 +55,27 @@ drop policy if exists "actualites_select_drafts_admin" on public.actualites;
 create policy "actualites_select_drafts_admin"
   on public.actualites for select
   to authenticated
-  using (public.is_admin_at_least(2));
+  using (public.is_admin_at_least(3));
 
 -- INSERT / UPDATE / DELETE : admin L2+
 drop policy if exists "actualites_insert_admin" on public.actualites;
 create policy "actualites_insert_admin"
   on public.actualites for insert
   to authenticated
-  with check (public.is_admin_at_least(2));
+  with check (public.is_admin_at_least(3));
 
 drop policy if exists "actualites_update_admin" on public.actualites;
 create policy "actualites_update_admin"
   on public.actualites for update
   to authenticated
-  using (public.is_admin_at_least(2))
-  with check (public.is_admin_at_least(2));
+  using (public.is_admin_at_least(3))
+  with check (public.is_admin_at_least(3));
 
 drop policy if exists "actualites_delete_admin" on public.actualites;
 create policy "actualites_delete_admin"
   on public.actualites for delete
   to authenticated
-  using (public.is_admin_at_least(2));
+  using (public.is_admin_at_least(3));
 
 -- ============================================================
 -- Bucket Storage : actualites-attachments
@@ -120,7 +120,7 @@ create policy "actualites_storage_insert_admin"
   to authenticated
   with check (
     bucket_id = 'actualites-attachments'
-    and public.is_admin_at_least(2)
+    and public.is_admin_at_least(3)
   );
 
 drop policy if exists "actualites_storage_delete_admin" on storage.objects;
@@ -129,7 +129,7 @@ create policy "actualites_storage_delete_admin"
   to authenticated
   using (
     bucket_id = 'actualites-attachments'
-    and public.is_admin_at_least(2)
+    and public.is_admin_at_least(3)
   );
 
 -- ============================================================
@@ -147,7 +147,7 @@ security definer
 set search_path = public
 as $$
 begin
-  if not public.is_admin_at_least(2) then
+  if not public.is_admin_at_least(3) then
     raise exception 'NOT_AUTHORIZED';
   end if;
   return query

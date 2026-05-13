@@ -141,17 +141,17 @@ export default async function Page() {
       <Header />
 
       {/* HERO */}
-      <div className="bg-white border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8">
-          <div className="text-xs text-slate-500 mb-2">
+      <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-b border-slate-800">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10">
+          <div className="text-xs text-slate-400 mb-2">
             Accueil &rsaquo; Macro &rsaquo; Matières premières
           </div>
           <div className="flex flex-wrap items-end justify-between gap-3 mb-3">
             <div>
-              <h1 className="text-2xl md:text-3xl font-semibold text-slate-900">
+              <h1 className="text-2xl md:text-3xl font-semibold text-white">
                 Matières premières
               </h1>
-              <p className="text-xs md:text-sm text-slate-500 mt-1 max-w-3xl">
+              <p className="text-xs md:text-sm text-slate-300 mt-1 max-w-3xl">
                 Cours, performances et impact sur l&apos;économie UEMOA des 8 sous-jacents
                 structurants pour la BRVM. Mise à jour au {fmtDateFr(latestDate)}.
               </p>

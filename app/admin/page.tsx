@@ -1,8 +1,19 @@
+import { redirect } from "next/navigation";
+import { getMyAdminLevel } from "@/lib/admin/auth";
 import { getDashboardStats, getOpenReportsCount, listAudit } from "@/lib/admin/queries";
 import { fmtDateTime, fmtNumber } from "@/components/admin/format";
 import { ROLE_COLOR, ROLE_LABEL } from "@/lib/admin/types";
 
 export default async function AdminDashboardPage() {
+  // Le dashboard est reserve aux super-admin (N1). Les autres niveaux sont
+  // rediriges vers une page reellement accessible selon les gardes back-end
+  // actuelles (requireAdmin sur chaque page).
+  // On n'utilise PAS requireAdmin(1) ici car son fallback est /admin -> boucle.
+  // Le layout admin a deja garanti level in {1,2,3} via requireAdmin(3).
+  const level = await getMyAdminLevel();
+  if (level === 2) redirect("/admin/abonnements"); // requireAdmin(2) — OK pour N2+
+  if (level === 3) redirect("/admin/actualites");  // requireAdmin(3) — OK pour N3+
+
   const stats = await getDashboardStats();
   const recentAudit = await listAudit({ limit: 8 });
   const openReports = await getOpenReportsCount();
@@ -128,7 +139,7 @@ export default async function AdminDashboardPage() {
             >
               Niveau 3
             </span>
-            Modérateur : lecture des membres et messages, suppression d&apos;un message
+            Éditeur : lecture des membres et messages, suppression d&apos;un message
             individuel.
           </li>
         </ul>

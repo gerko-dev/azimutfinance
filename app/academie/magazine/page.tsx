@@ -76,44 +76,45 @@ export default async function Page() {
         </main>
       ) : (
         <>
-          <div className="bg-white border-b border-slate-200">
-            <div className="max-w-7xl mx-auto px-4 md:px-6 py-8">
+          <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-b border-slate-800">
+            <div className="max-w-7xl mx-auto px-4 md:px-6 py-8 md:py-10">
               <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-8 items-center">
                 {heroArticle && (
                   <article className="min-w-0">
                     <Link href={`/academie/magazine/article/${heroArticle.slug}`} className="group block">
                       <div className="flex items-center gap-2 mb-3">
                         <span
-                          className="text-[10px] uppercase tracking-wide font-semibold px-2 py-0.5 rounded"
+                          className="text-[10px] uppercase tracking-wide font-semibold px-2 py-0.5 rounded border"
                           style={{
-                            background: ARTICLE_CATEGORY_META[heroArticle.category].color + "15",
+                            background: ARTICLE_CATEGORY_META[heroArticle.category].color + "30",
                             color: ARTICLE_CATEGORY_META[heroArticle.category].color,
+                            borderColor: ARTICLE_CATEGORY_META[heroArticle.category].color + "55",
                           }}
                         >
                           {ARTICLE_CATEGORY_META[heroArticle.category].label}
                         </span>
-                        <span className="text-[10px] text-slate-500 uppercase tracking-wide">
+                        <span className="text-[10px] text-slate-400 uppercase tracking-wide">
                           À la une — {latestIssue.monthLabel}
                         </span>
                       </div>
                       <h1
-                        className="text-3xl md:text-5xl font-bold text-slate-900 leading-[1.1] group-hover:text-slate-700 transition"
+                        className="text-3xl md:text-5xl font-bold text-white leading-[1.1] group-hover:text-slate-200 transition"
                         style={{ fontFamily: "Georgia, serif" }}
                       >
                         {heroArticle.title}
                       </h1>
-                      <p className="text-base md:text-lg text-slate-600 mt-4 leading-relaxed max-w-2xl">
+                      <p className="text-base md:text-lg text-slate-300 mt-4 leading-relaxed max-w-2xl">
                         {heroArticle.dek}
                       </p>
-                      <div className="mt-5 flex items-center gap-3 text-[11px] text-slate-500">
+                      <div className="mt-5 flex items-center gap-3 text-[11px] text-slate-400">
                         <AuthorAvatar initials={heroArticle.authorInitials} />
                         <span>
-                          <span className="font-medium text-slate-700">
+                          <span className="font-medium text-slate-200">
                             {heroArticle.authorName ?? "La rédaction"}
                           </span>
-                          <span className="mx-2 text-slate-300">·</span>
+                          <span className="mx-2 text-slate-500">·</span>
                           {fmtArticleDate(heroArticle.publishedAt ?? "")}
-                          <span className="mx-2 text-slate-300">·</span>
+                          <span className="mx-2 text-slate-500">·</span>
                           {heroArticle.readingTimeMinutes} min de lecture
                         </span>
                       </div>
@@ -139,11 +140,11 @@ export default async function Page() {
                     />
                   </div>
                   <div className="mt-3 text-center">
-                    <div className="text-xs text-slate-500">Numéro en cours</div>
-                    <div className="text-sm font-semibold text-slate-900">
+                    <div className="text-xs text-slate-400">Numéro en cours</div>
+                    <div className="text-sm font-semibold text-white">
                       {latestIssueArticles.length} articles · {latestIssue.theme}
                     </div>
-                    <span className="text-[11px] text-blue-700 group-hover:underline mt-1 inline-block">
+                    <span className="text-[11px] text-blue-300 group-hover:underline mt-1 inline-block">
                       Lire le sommaire →
                     </span>
                   </div>

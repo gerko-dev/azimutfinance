@@ -179,21 +179,21 @@ export default async function CountryMTPPage({ params }: { params: Params }) {
       <Header />
       <Ticker />
 
-      <div className="bg-white border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8">
-          <div className="text-xs md:text-sm text-slate-500 mb-2">
-            <Link href="/" className="hover:underline">
+      <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-b border-slate-800">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10">
+          <div className="text-xs md:text-sm text-slate-400 mb-2">
+            <Link href="/" className="hover:text-white hover:underline">
               Accueil
             </Link>{" "}
             ›{" "}
-            <Link href="/marche-monetaire" className="hover:underline">
+            <Link href="/marche-monetaire" className="hover:text-white hover:underline">
               Marché monétaire
             </Link>{" "}
             ›{" "}
-            <Link href="/marche-monetaire/mtp" className="hover:underline">
+            <Link href="/marche-monetaire/mtp" className="hover:text-white hover:underline">
               Récapitulatif MTP
             </Link>{" "}
-            › {meta.label}
+            › <span className="text-slate-200">{meta.label}</span>
           </div>
           <div className="flex items-end gap-4 flex-wrap">
             <div>
@@ -201,19 +201,19 @@ export default async function CountryMTPPage({ params }: { params: Params }) {
                 <Flag
                   code={meta.code}
                   size="xl"
-                  className="rounded-sm shadow-sm border border-slate-200"
+                  className="rounded-sm shadow-sm border border-slate-700"
                 />
                 <div>
-                  <h1 className="text-2xl md:text-3xl font-semibold text-slate-900">
+                  <h1 className="text-2xl md:text-3xl font-semibold text-white">
                     {meta.label}
                   </h1>
-                  <div className="text-xs text-slate-500 mt-0.5">
+                  <div className="text-xs text-slate-400 mt-0.5">
                     Capitale : {meta.capital} · Code émetteur :{" "}
                     <span className="font-mono">{meta.code}</span>
                   </div>
                 </div>
               </div>
-              <p className="text-sm md:text-base text-slate-600 mt-3 max-w-2xl">
+              <p className="text-sm md:text-base text-slate-300 mt-3 max-w-2xl">
                 Activité d&apos;émission sur le Marché des Titres Publics UEMOA
                 (UMOA-Titres). Vue agrégée 12 mois et historique pluriannuel.
               </p>

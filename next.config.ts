@@ -8,6 +8,11 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/*": ["./certs/**/*"],
   },
+  // pdfjs-dist spawns a worker that resolves its sibling pdf.worker.mjs by
+  // relative path. Turbopack/webpack hoist the bundle into .next/, which
+  // breaks that resolution. Keep pdfjs-dist external so it loads directly
+  // from node_modules at runtime.
+  serverExternalPackages: ["pdfjs-dist"],
 };
 
 export default nextConfig;

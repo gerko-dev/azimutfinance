@@ -23,24 +23,24 @@ export default function PremiumPaywall({
 }: Props) {
   return (
     <>
-      <div className="bg-gradient-to-br from-blue-50 via-white to-blue-50 border-b border-slate-200">
+      <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-b border-slate-800">
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10">
-          <div className="text-xs md:text-sm text-slate-500 mb-2">
+          <div className="text-xs md:text-sm text-slate-400 mb-2">
             {breadcrumb.map((step, i) => (
               <span key={i}>
                 {step.href ? (
-                  <Link href={step.href} className="hover:text-slate-900">
+                  <Link href={step.href} className="hover:text-white transition">
                     {step.label}
                   </Link>
                 ) : (
-                  <span>{step.label}</span>
+                  <span className="text-slate-200">{step.label}</span>
                 )}
-                {i < breadcrumb.length - 1 && <span className="mx-2">›</span>}
+                {i < breadcrumb.length - 1 && <span className="mx-2 text-slate-500">›</span>}
               </span>
             ))}
           </div>
-          <h1 className="text-2xl md:text-3xl font-semibold mb-2">{title}</h1>
-          <p className="text-sm md:text-base text-slate-600 max-w-3xl">
+          <h1 className="text-2xl md:text-3xl font-semibold mb-2 text-white">{title}</h1>
+          <p className="text-sm md:text-base text-slate-300 max-w-3xl">
             {description}
           </p>
         </div>
@@ -71,7 +71,7 @@ export default function PremiumPaywall({
           <div className="flex flex-wrap items-center justify-center gap-3">
             {isMember ? (
               <Link
-                href="/compte"
+                href="/premium"
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md bg-amber-500 text-white font-medium hover:bg-amber-600 transition"
               >
                 ⭐ Passer à Premium

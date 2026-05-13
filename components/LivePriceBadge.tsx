@@ -1,40 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 type Props = {
-  fetchedAt: string;
   sessionLabel: string | null;
   isClosed: boolean | null;
   /** Intervalle de rafraichissement en ms. Par defaut 5 min. */
   refreshIntervalMs?: number;
+  /** "light" (defaut) pour fond clair ; "dark" pour fond sombre (hero slate-900). */
+  variant?: "light" | "dark";
 };
 
-function formatAgo(iso: string, now: number): string {
-  const then = new Date(iso).getTime();
-  const diffSec = Math.max(0, Math.round((now - then) / 1000));
-  if (diffSec < 60) return `${diffSec} s`;
-  const min = Math.round(diffSec / 60);
-  if (min < 60) return `${min} min`;
-  const h = Math.round(min / 60);
-  return `${h} h`;
-}
-
 export default function LivePriceBadge({
-  fetchedAt,
   sessionLabel,
   isClosed,
   refreshIntervalMs = 5 * 60 * 1000,
+  variant = "light",
 }: Props) {
   const router = useRouter();
-  const [now, setNow] = useState<number>(() => Date.now());
-
-  // Tick affichage "il y a X" toutes les 30s
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 30_000);
-    return () => clearInterval(id);
-  }, []);
 
   // Rafraichissement automatique des donnees (router.refresh) toutes les 5 min
   // — sauf si la seance est fermee : on met une cadence plus lente.
@@ -46,19 +30,29 @@ export default function LivePriceBadge({
     return () => clearInterval(id);
   }, [router, refreshIntervalMs, isClosed]);
 
+  const isDark = variant === "dark";
+  const rootClass = isDark
+    ? "inline-flex items-center gap-2 text-[11px] text-slate-300"
+    : "inline-flex items-center gap-2 text-[11px] text-slate-500";
+  const labelClass = isDark
+    ? "font-medium text-slate-200"
+    : "font-medium text-slate-600";
+  const dotIdleClass = isDark ? "bg-slate-500" : "bg-slate-400";
+  const sepClass = isDark ? "text-slate-500" : "text-slate-400";
+
   return (
-    <div className="inline-flex items-center gap-2 text-[11px] text-slate-500">
+    <div className={rootClass}>
       <span className="inline-flex items-center gap-1">
         <span
           className={`relative inline-flex w-2 h-2 rounded-full ${
-            isClosed === false ? "bg-emerald-500" : "bg-slate-400"
+            isClosed === false ? "bg-emerald-500" : dotIdleClass
           }`}
         >
           {isClosed === false && (
             <span className="absolute inset-0 rounded-full bg-emerald-500 animate-ping opacity-75" />
           )}
         </span>
-        <span className="font-medium text-slate-600">
+        <span className={labelClass}>
           {isClosed === false
             ? "Cotation en cours"
             : isClosed === true
@@ -66,11 +60,9 @@ export default function LivePriceBadge({
               : "Cours BRVM"}
         </span>
       </span>
-      <span className="text-slate-400">·</span>
-      <span>maj il y a {formatAgo(fetchedAt, now)}</span>
       {sessionLabel && (
         <>
-          <span className="text-slate-400">·</span>
+          <span className={sepClass}>·</span>
           <span className="hidden md:inline tabular-nums">{sessionLabel}</span>
         </>
       )}

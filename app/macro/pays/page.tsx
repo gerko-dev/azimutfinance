@@ -443,9 +443,9 @@ export default async function Page({
       <Header />
 
       {/* HERO */}
-      <div className="bg-white border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8">
-          <div className="text-xs md:text-sm text-slate-500 mb-2">
+      <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-b border-slate-800">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10">
+          <div className="text-xs md:text-sm text-slate-400 mb-2">
             Accueil &rsaquo; Macro &rsaquo; Indicateurs pays UEMOA
           </div>
           <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
@@ -455,17 +455,17 @@ export default async function Page({
                 size={36}
               />
               <div>
-                <h1 className="text-2xl md:text-3xl font-semibold leading-tight">
+                <h1 className="text-2xl md:text-3xl font-semibold leading-tight text-white">
                   {country.shortName}
                 </h1>
-                <p className="text-xs md:text-sm text-slate-500 mt-0.5">
+                <p className="text-xs md:text-sm text-slate-400 mt-0.5">
                   {country.longName}
                   {country.capital ? ` · capitale ${country.capital}` : ""}
                 </p>
               </div>
             </div>
-            <div className="text-right text-xs text-slate-500">
-              Source : <span className="font-medium text-slate-700">BCEAO</span>
+            <div className="text-right text-xs text-slate-400">
+              Source : <span className="font-medium text-slate-200">BCEAO</span>
             </div>
           </div>
 

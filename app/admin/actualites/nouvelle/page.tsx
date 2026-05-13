@@ -3,7 +3,7 @@ import ActualiteForm from "@/components/admin/ActualiteForm";
 import { requireAdmin } from "@/lib/admin/auth";
 
 export default async function NewActualitePage() {
-  await requireAdmin(2);
+  await requireAdmin(3);
 
   return (
     <div className="space-y-4">

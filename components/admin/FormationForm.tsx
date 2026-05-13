@@ -66,6 +66,11 @@ export default function FormationForm({
   const [modules, setModules] = useState<FormationModule[]>(
     initial?.modules ?? [{ title: "", durationMinutes: 30 }],
   );
+  const [registrationDeadline, setRegistrationDeadline] = useState(
+    initial?.registrationDeadline?.slice(0, 10) ?? "",
+  );
+  const [startsAt, setStartsAt] = useState(initial?.startsAt?.slice(0, 10) ?? "");
+  const [endsAt, setEndsAt] = useState(initial?.endsAt?.slice(0, 10) ?? "");
 
   const [isPending, startTransition] = useTransition();
   const [feedback, setFeedback] = useState<{ ok: boolean; msg: string } | null>(null);
@@ -106,6 +111,9 @@ export default function FormationForm({
     fd.append("instructorTitle", instructorTitle.trim());
     if (featured) fd.append("featured", "1");
     if (publish) fd.append("publish", "1");
+    fd.append("registrationDeadline", registrationDeadline);
+    fd.append("startsAt", startsAt);
+    fd.append("endsAt", endsAt);
     for (const m of modules) {
       fd.append("module_title", m.title);
       fd.append("module_duration", String(m.durationMinutes));
@@ -390,6 +398,52 @@ export default function FormationForm({
               </button>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Session : dates */}
+      <div className="border border-slate-200 rounded-lg p-4">
+        <div className="mb-3">
+          <h3 className="text-sm font-semibold text-slate-900">Session</h3>
+          <p className="text-[11px] text-slate-500">
+            Dates optionnelles (pour les ateliers/certifiants avec session datée).
+            Laisser vide pour un cours toujours accessible.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label className="block text-[11px] font-medium text-slate-700 uppercase mb-1">
+              Date limite d&apos;inscription
+            </label>
+            <input
+              type="date"
+              value={registrationDeadline}
+              onChange={(e) => setRegistrationDeadline(e.target.value)}
+              className="w-full text-sm border border-slate-300 rounded px-2 py-1.5 tabular-nums"
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] font-medium text-slate-700 uppercase mb-1">
+              Date de début
+            </label>
+            <input
+              type="date"
+              value={startsAt}
+              onChange={(e) => setStartsAt(e.target.value)}
+              className="w-full text-sm border border-slate-300 rounded px-2 py-1.5 tabular-nums"
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] font-medium text-slate-700 uppercase mb-1">
+              Date de fin
+            </label>
+            <input
+              type="date"
+              value={endsAt}
+              onChange={(e) => setEndsAt(e.target.value)}
+              className="w-full text-sm border border-slate-300 rounded px-2 py-1.5 tabular-nums"
+            />
+          </div>
         </div>
       </div>
 

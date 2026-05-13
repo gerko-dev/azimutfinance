@@ -42,27 +42,30 @@ end$$;
 -- ============================================================
 
 create table if not exists public.formations (
-  id                  uuid primary key default gen_random_uuid(),
-  slug                text not null unique,
-  title               text not null,
-  short_description   text not null,
-  long_description    text not null,
-  level               public.formation_level not null,
-  format              public.formation_format not null,
-  category            public.formation_category not null,
-  modules             jsonb not null default '[]'::jsonb,
-  prerequisites       text[] not null default '{}',
-  outcomes            text[] not null default '{}',
-  pricing_type        public.formation_pricing_type not null,
-  price_fcfa          bigint not null default 0,
-  tags                text[] not null default '{}',
-  accent_color        text,
-  instructor_name     text,
-  instructor_title    text,
-  featured            boolean not null default false,
-  published_at        timestamptz,
-  created_at          timestamptz not null default now(),
-  updated_at          timestamptz not null default now(),
+  id                    uuid primary key default gen_random_uuid(),
+  slug                  text not null unique,
+  title                 text not null,
+  short_description     text not null,
+  long_description      text not null,
+  level                 public.formation_level not null,
+  format                public.formation_format not null,
+  category              public.formation_category not null,
+  modules               jsonb not null default '[]'::jsonb,
+  prerequisites         text[] not null default '{}',
+  outcomes              text[] not null default '{}',
+  pricing_type          public.formation_pricing_type not null,
+  price_fcfa            bigint not null default 0,
+  tags                  text[] not null default '{}',
+  accent_color          text,
+  instructor_name       text,
+  instructor_title      text,
+  featured              boolean not null default false,
+  published_at          timestamptz,
+  registration_deadline date,
+  starts_at             date,
+  ends_at               date,
+  created_at            timestamptz not null default now(),
+  updated_at            timestamptz not null default now(),
   constraint formations_slug_format check (slug ~ '^[a-z0-9-]+$'),
   constraint formations_price_consistent
     check (
@@ -70,6 +73,12 @@ create table if not exists public.formations (
       or (pricing_type <> 'gratuit' and price_fcfa > 0)
     )
 );
+
+-- Ajout idempotent des colonnes session pour les bases existantes
+alter table public.formations
+  add column if not exists registration_deadline date,
+  add column if not exists starts_at             date,
+  add column if not exists ends_at               date;
 
 create index if not exists formations_published_idx
   on public.formations (published_at desc) where published_at is not null;
@@ -131,26 +140,26 @@ drop policy if exists "formations_select_drafts_admin" on public.formations;
 create policy "formations_select_drafts_admin"
   on public.formations for select
   to authenticated
-  using (public.is_admin_at_least(2));
+  using (public.is_admin_at_least(3));
 
 drop policy if exists "formations_insert_admin" on public.formations;
 create policy "formations_insert_admin"
   on public.formations for insert
   to authenticated
-  with check (public.is_admin_at_least(2));
+  with check (public.is_admin_at_least(3));
 
 drop policy if exists "formations_update_admin" on public.formations;
 create policy "formations_update_admin"
   on public.formations for update
   to authenticated
-  using (public.is_admin_at_least(2))
-  with check (public.is_admin_at_least(2));
+  using (public.is_admin_at_least(3))
+  with check (public.is_admin_at_least(3));
 
 drop policy if exists "formations_delete_admin" on public.formations;
 create policy "formations_delete_admin"
   on public.formations for delete
   to authenticated
-  using (public.is_admin_at_least(2));
+  using (public.is_admin_at_least(3));
 
 -- ============================================================
 -- 5) RLS — formation_inscriptions
@@ -208,7 +217,7 @@ security definer
 set search_path = public
 as $$
 begin
-  if not public.is_admin_at_least(2) then
+  if not public.is_admin_at_least(3) then
     raise exception 'NOT_AUTHORIZED';
   end if;
   return query

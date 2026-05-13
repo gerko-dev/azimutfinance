@@ -1,0 +1,26 @@
+country;country_label;source;transaction;type_bien;subcategory;titre;prix_fcfa;surface_m2;prix_m2_fcfa;chambres;quartier;sous_quartier;standing;url;scraped_at
+BJ;Bénin;beninagence;location;studio;saisonnier;Chambres d’hôtel à louer;10000;;;;Bénin;;;https://beninagence.com/property/chambres-dhotel-a-louer/;2026-05-12T18:48:14+00:00
+BJ;Bénin;beninagence;location;appartement;saisonnier;Location Appartement Meublé 3 Pièces – Agla, Cotonou;50000;;;3;Agla;Cotonou;;https://beninagence.com/property/location-appartement-meuble-3-pieces-agla-cotonou/;2026-05-12T18:48:14+00:00
+BJ;Bénin;beninagence;location;villa;saisonnier;Belle villa meublée de 3 chambre à louer à Fridjrossê;65000;;;3;Bénin;;;https://beninagence.com/property/belle-villa-meublee-de-3-chambre-a-louer-a-fridjrosse/;2026-05-12T18:48:14+00:00
+BJ;Bénin;beninagence;location;appartement;saisonnier;Appartement en location saisonnière à Fidjrossê;30000;;;1;Fidjrosse;;;https://beninagence.com/property/appartement-en-location-saisonniere-a-fidjrosse/;2026-05-12T18:48:14+00:00
+BJ;Bénin;beninagence;location;appartement;saisonnier;Appartement en location à Cotonou;30000;;;1;Cotonou;;;https://beninagence.com/property/appartement-en-location-saisonniere-a-cotonou/;2026-05-12T18:48:14+00:00
+BJ;Bénin;beninagence;location;studio;;Chambre á louer á Womey;30000;;;1;Womey;;;https://beninagence.com/property/chambre-a-louer-a-womey/;2026-05-12T18:48:14+00:00
+BJ;Bénin;beninagence;location;appartement;saisonnier;Appartement de 3 chambres à louer à Sainte Rita;45000;;;3;Sainte Rita;;;https://beninagence.com/property/11342-2/;2026-05-12T18:48:14+00:00
+BJ;Bénin;beninagence;location;appartement;saisonnier;Appartement de 3 chambres salon à louer à Fidjrossè;50000;;;3;Fidjrosse;;;https://beninagence.com/property/appartement-de-3-chambres-salon-a-louer-a-fidjrosse/;2026-05-12T18:48:14+00:00
+BJ;Bénin;beninagence;location;appartement;;Appartement à louer à Godomey;58000;;;1;Godomey;;;https://beninagence.com/property/appartement-a-louer-a-godomey/;2026-05-12T18:48:14+00:00
+BJ;Bénin;beninagence;location;appartement;saisonnier;Appartement duplex à louer à Fidjrossê Cotonou;60000;;;3;Cotonou;Fidjrosse;;https://beninagence.com/property/appartement-duplex-a-louer-a-fidjrosse-cotonou/;2026-05-12T18:48:14+00:00
+BJ;Bénin;beninagence;location;appartement;;Appartement espacé á louer á Agla;70000;;;2;Agla;;;https://beninagence.com/property/appartement-espace-a-louer-a-agla/;2026-05-12T18:48:14+00:00
+BJ;Bénin;beninagence;achat;villa;;Villa á vendre á Agla;25000000;;;4;Agla;;;https://beninagence.com/property/villa-a-vendre-a-agla/;2026-05-12T18:48:14+00:00
+BJ;Bénin;beninagence;location;appartement;;Appartement à louer Agla;155000;;;4;Agla;;;https://beninagence.com/property/appartement-a-louer-agla/;2026-05-12T18:48:14+00:00
+BJ;Bénin;beninagence;location;maison;;Maison à louer à Sèmè Kpodji ( 15mins de Cotonou);200000;;;3;Cotonou;;;https://beninagence.com/property/maison-a-louer-a-seme-kpodji-15mins-de-cotonou/;2026-05-12T18:48:14+00:00
+BJ;Bénin;beninagence;location;;;Rez-de-chaussée d’une résidence á louer á Aïbatin;700000;;;5;Aibatin;;;https://beninagence.com/property/rez-de-chaussee-dune-residence-a-louer-a-aibatin/;2026-05-12T18:48:14+00:00
+BJ;Bénin;beninagence;achat;terrain;;Terrain à vendre à Paouignan;800000;;;;Paouignan;;;https://beninagence.com/property/terrain-a-vendre-a-paouignan/;2026-05-12T18:48:14+00:00
+BJ;Bénin;beninagence;location;commercial;;Bureau équipé à louer à Agontinkon;1000000;;;5;Bénin;;;https://beninagence.com/property/bureau-equipe-a-louer-a-agontinkon/;2026-05-12T18:48:14+00:00
+BJ;Bénin;beninagence;achat;terrain;;Parcelle à vendre à Akassato;5500000;;;;Akassato;;;https://beninagence.com/property/parcelle-a-vendre-a-akassato/;2026-05-12T18:48:14+00:00
+BJ;Bénin;beninagence;achat;maison;;Maison à vendre à Goua’ko Proto-Novo;8000000;;;2;Bénin;;;https://beninagence.com/property/maison-a-vendre-a-gouako-proto-novo/;2026-05-12T18:48:14+00:00
+BJ;Bénin;beninagence;achat;terrain;;PARCELLE LOTIE À VENDRE À SÈMÉ KRAKÉ 2ÈME POSITION DU GOUDRON;10000000;;;;Seme Krake;;;https://beninagence.com/property/parcelle-lotie-a-vendre-a-seme-krake-2eme-position-du-goudron/;2026-05-12T18:48:14+00:00
+BJ;Bénin;beninagence;achat;terrain;;Deux parcelles jumellé, recasées à vendre à Togbin Plage;22000000;;;;Togbin;;;https://beninagence.com/property/deux-parcelles-jumelle-recasees-a-vendre-a-togbin-plage/;2026-05-12T18:48:14+00:00
+BJ;Bénin;beninagence;achat;terrain;;Terrain à vendre à Cocotomey;30000000;;;;Cocotomey;;;https://beninagence.com/property/terrain-a-vendre-a-cocotomey/;2026-05-12T18:48:14+00:00
+BJ;Bénin;beninagence;achat;villa;;Superbe « Villa » à vendre à Calavi R+1 extensible;45000000;;;6;Calavi;;;https://beninagence.com/property/superbe-villa-a-vendre-a-calavi-r1-extensible/;2026-05-12T18:48:14+00:00
+BJ;Bénin;beninagence;achat;terrain;;Terrain de 500 m² à vendre Akpakpa PK6;100000000;500;200000;;Akpakpa;;;https://beninagence.com/property/terrain-de-500-m%c2%b2-a-vendre-pk6/;2026-05-12T18:48:14+00:00
+BJ;Bénin;beninagence;achat;terrain;;Des parcelles á vendre á: Jonkey | Saint Michel | Tokpa Hoho |;400000000;;;;Saint Michel;Jonkey, Tokpa Hoho;;https://beninagence.com/property/des-parcelles-a-vendre-a-jonkey-saint-michel-tokpa-hoho/;2026-05-12T18:48:14+00:00

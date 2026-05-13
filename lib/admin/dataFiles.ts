@@ -25,8 +25,8 @@ export async function listDataFiles(): Promise<ActionResult<DataFileInfo[]>> {
   if (level === null) {
     return { ok: false, error: "Réservé aux administrateurs." };
   }
-  if (level > 1) {
-    return { ok: false, error: "Réservé au super-admin (niveau 1)." };
+  if (level > 3) {
+    return { ok: false, error: "Niveau d'administration insuffisant (L3+ requis)." };
   }
   try {
     const entries = await fs.readdir(DATA_DIR);
@@ -69,8 +69,8 @@ export async function uploadDataFile(
   if (level === null) {
     return { ok: false, error: "Réservé aux administrateurs." };
   }
-  if (level > 1) {
-    return { ok: false, error: "Réservé au super-admin (niveau 1)." };
+  if (level > 3) {
+    return { ok: false, error: "Niveau d'administration insuffisant (L3+ requis)." };
   }
 
   const file = formData.get("file");

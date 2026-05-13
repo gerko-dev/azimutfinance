@@ -48,20 +48,20 @@ export default async function GlossTermPage({
       <Header />
 
       {/* HERO */}
-      <div className="bg-white border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-4 md:px-6 py-6">
-          <div className="text-xs text-slate-500 mb-2 flex items-center gap-1.5 flex-wrap">
-            <Link href="/" className="hover:text-slate-700">Accueil</Link>
+      <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-b border-slate-800">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10">
+          <div className="text-xs text-slate-400 mb-2 flex items-center gap-1.5 flex-wrap">
+            <Link href="/" className="hover:text-white">Accueil</Link>
             <span>›</span>
-            <Link href="/academie/glossaire" className="hover:text-slate-700">Glossaire</Link>
+            <Link href="/academie/glossaire" className="hover:text-white">Glossaire</Link>
             <span>›</span>
-            <span className="text-slate-700">{term.term}</span>
+            <span className="text-slate-200">{term.term}</span>
           </div>
 
           <div className="flex items-center gap-2 mb-2 mt-4">
             <span
-              className="text-[11px] px-2 py-0.5 rounded font-medium flex items-center gap-1.5"
-              style={{ background: categoryMeta.color + "15", color: categoryMeta.color }}
+              className="text-[11px] px-2 py-0.5 rounded font-medium flex items-center gap-1.5 border"
+              style={{ background: categoryMeta.color + "30", color: categoryMeta.color, borderColor: categoryMeta.color + "55" }}
             >
               <span
                 className="inline-block w-1.5 h-1.5 rounded-full"
@@ -71,16 +71,16 @@ export default async function GlossTermPage({
             </span>
           </div>
 
-          <h1 className="text-2xl md:text-3xl font-semibold text-slate-900 leading-tight">
+          <h1 className="text-2xl md:text-3xl font-semibold text-white leading-tight">
             {term.term}
             {term.acronym && (
-              <span className="text-base md:text-lg text-slate-500 font-normal ml-2">
+              <span className="text-base md:text-lg text-slate-400 font-normal ml-2">
                 ({term.acronym})
               </span>
             )}
           </h1>
 
-          <p className="text-base text-slate-700 mt-3 leading-relaxed max-w-3xl">
+          <p className="text-base text-slate-300 mt-3 leading-relaxed max-w-3xl">
             {term.short}
           </p>
         </div>

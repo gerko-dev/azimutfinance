@@ -174,14 +174,14 @@ export default async function FxPairPage({
       <Header />
 
       {/* HERO */}
-      <div className="bg-white border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-4 md:px-6 py-6">
-          <div className="text-xs text-slate-500 mb-2 flex items-center gap-1.5 flex-wrap">
-            <Link href="/" className="hover:text-slate-700">Accueil</Link>
+      <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-b border-slate-800">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10">
+          <div className="text-xs text-slate-400 mb-2 flex items-center gap-1.5 flex-wrap">
+            <Link href="/" className="hover:text-white">Accueil</Link>
             <span>›</span>
-            <Link href="/macro/devises" className="hover:text-slate-700">Devises &amp; FX</Link>
+            <Link href="/macro/devises" className="hover:text-white">Devises &amp; FX</Link>
             <span>›</span>
-            <span className="text-slate-700">{meta.pair}</span>
+            <span className="text-slate-200">{meta.pair}</span>
           </div>
 
           <div className="flex flex-wrap items-end justify-between gap-4">
@@ -189,34 +189,34 @@ export default async function FxPairPage({
               <div className="flex items-center gap-2 mb-1.5">
                 <span className="inline-block w-3 h-3 rounded-full"
                   style={{ background: meta.color }} />
-                <span className="text-[11px] text-slate-500 uppercase tracking-wide">
+                <span className="text-[11px] text-slate-300 uppercase tracking-wide">
                   {CATEGORY_LABEL[meta.category]} · {meta.base} / {meta.quote}
                 </span>
               </div>
-              <h1 className="text-2xl md:text-3xl font-semibold text-slate-900">
+              <h1 className="text-2xl md:text-3xl font-semibold text-white">
                 {meta.pair}{" "}
-                <span className="text-base font-normal text-slate-500">— {meta.name}</span>
+                <span className="text-base font-normal text-slate-400">— {meta.name}</span>
               </h1>
-              <p className="text-xs md:text-sm text-slate-500 mt-1.5 max-w-2xl">
+              <p className="text-xs md:text-sm text-slate-300 mt-1.5 max-w-2xl">
                 {meta.uemoaRelevance}
               </p>
             </div>
 
             <div className="text-right">
-              <div className="text-[11px] text-slate-500">
+              <div className="text-[11px] text-slate-400">
                 {fmtDateFr(stats.lastDate)}{" "}
                 {meta.unitSuffix ? `· ${meta.unitSuffix} pour 1 ${meta.base}` : ""}
               </div>
-              <div className="text-3xl md:text-4xl font-semibold tabular-nums text-slate-900 mt-0.5">
+              <div className="text-3xl md:text-4xl font-semibold tabular-nums text-white mt-0.5">
                 {fmtNum(stats.last, meta.decimals)}
               </div>
               <div className="flex items-center gap-2 justify-end mt-0.5">
                 <span className={`text-sm tabular-nums font-medium ${
-                  (stats.changeDayPct ?? 0) >= 0 ? "text-emerald-700" : "text-rose-700"
+                  (stats.changeDayPct ?? 0) >= 0 ? "text-emerald-400" : "text-rose-400"
                 }`}>
                   {fmtPct(stats.changeDayPct, 2)}
                 </span>
-                <span className="text-[11px] text-slate-500">jour</span>
+                <span className="text-[11px] text-slate-400">jour</span>
               </div>
             </div>
           </div>

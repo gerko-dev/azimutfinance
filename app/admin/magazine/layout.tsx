@@ -9,7 +9,7 @@ export default async function MagazineAdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  await requireAdmin(2);
+  await requireAdmin(3);
 
   return (
     <div className="space-y-4">

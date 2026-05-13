@@ -483,34 +483,34 @@ export default function IndexDetailView({
   return (
     <>
       {/* HERO */}
-      <div className="bg-gradient-to-br from-blue-50 via-white to-blue-50 border-b border-slate-200">
+      <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-b border-slate-800">
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10">
-          <div className="text-xs md:text-sm text-slate-500 mb-2">
-            <Link href="/" className="hover:text-slate-900">
+          <div className="text-xs md:text-sm text-slate-400 mb-2">
+            <Link href="/" className="hover:text-white transition">
               Marchés
             </Link>
-            <span className="mx-2">›</span>
-            <Link href="/marches/indices" className="hover:text-slate-900">
+            <span className="mx-2 text-slate-500">›</span>
+            <Link href="/marches/indices" className="hover:text-white transition">
               Indices
             </Link>
-            <span className="mx-2">›</span>
-            <span>{name}</span>
+            <span className="mx-2 text-slate-500">›</span>
+            <span className="text-slate-200">{name}</span>
           </div>
 
           <div className="flex items-baseline justify-between flex-wrap gap-3 mb-2">
             <div>
               <div className="flex items-center gap-2 mb-1 flex-wrap">
-                <h1 className="text-2xl md:text-3xl font-semibold">{name}</h1>
-                <span className="text-xs px-2 py-0.5 bg-slate-100 rounded text-slate-600 font-mono">
+                <h1 className="text-2xl md:text-3xl font-semibold text-white">{name}</h1>
+                <span className="text-xs px-2 py-0.5 bg-slate-800 rounded text-slate-300 font-mono border border-slate-700">
                   {code}
                 </span>
                 <span
                   className={`text-xs px-2 py-0.5 rounded font-medium ${
                     category === "principal"
-                      ? "bg-blue-100 text-blue-800"
+                      ? "bg-blue-900/60 text-blue-200 border border-blue-800"
                       : category === "sectoriel"
-                        ? "bg-emerald-100 text-emerald-800"
-                        : "bg-purple-100 text-purple-800"
+                        ? "bg-emerald-900/60 text-emerald-200 border border-emerald-800"
+                        : "bg-purple-900/60 text-purple-200 border border-purple-800"
                   }`}
                 >
                   {categoryLabel(category)}
@@ -518,16 +518,16 @@ export default function IndexDetailView({
               </div>
             </div>
             <LivePriceBadge
-              fetchedAt={session.fetchedAt}
               sessionLabel={session.sessionLabel}
               isClosed={session.isClosed}
+              variant="dark"
             />
           </div>
 
           {/* Prix + variation */}
           <div className="flex flex-wrap items-baseline gap-4 md:gap-7 mt-4 mb-2">
             <div>
-              <span className="text-3xl md:text-4xl font-semibold tabular-nums">
+              <span className="text-3xl md:text-4xl font-semibold tabular-nums text-white">
                 {formatNumber(value)}
               </span>
             </div>

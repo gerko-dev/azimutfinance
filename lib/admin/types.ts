@@ -16,7 +16,7 @@ export const ROLE_LABEL: Record<AppRole, string> = {
   pro: "Pro",
   adminlevel1: "Admin · Niveau 1",
   adminlevel2: "Admin · Niveau 2",
-  adminlevel3: "Modérateur · Niveau 3",
+  adminlevel3: "Éditeur · Niveau 3",
 };
 
 export const ROLE_COLOR: Record<AppRole, string> = {
@@ -160,3 +160,66 @@ export type AdminReport = {
 export type ActionResult<T = void> =
   | { ok: true; data: T }
   | { ok: false; error: string };
+
+// === Tarification ===
+
+export type PricingPlanRow = {
+  code: string;
+  label: string;
+  duration_label: string;
+  duration_months: number;
+  price_fcfa: number;
+  discount_pct: number;
+  tagline: string | null;
+  highlight: boolean;
+  active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PromoDiscountType = "percent" | "fixed";
+
+export type PromoCodeRow = {
+  id: string;
+  code: string;
+  description: string | null;
+  discount_type: PromoDiscountType;
+  discount_value: number;
+  applicable_plans: string[] | null;
+  valid_from: string;
+  valid_until: string | null;
+  max_uses: number | null;
+  max_uses_per_user: number;
+  current_uses: number;
+  active: boolean;
+  created_at: string;
+  created_by: string | null;
+  updated_at: string;
+};
+
+export type TrialConfigRow = {
+  id: string;
+  name: string;
+  duration_days: number;
+  auto_grant_on_signup: boolean;
+  active: boolean;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type UserTrialRow = {
+  user_id: string;
+  trial_config_id: string | null;
+  granted_at: string;
+  expires_at: string;
+  source: "signup" | "admin_grant";
+  granted_by: string | null;
+};
+
+export type UserTrialWithProfile = UserTrialRow & {
+  email: string | null;
+  username: string | null;
+  full_name: string | null;
+};

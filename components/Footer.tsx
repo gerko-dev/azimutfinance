@@ -1,4 +1,5 @@
 import Link from "next/link";
+import CookiePreferencesTrigger from "@/components/CookiePreferencesTrigger";
 
 export default function Footer() {
   const year = new Date().getFullYear();
@@ -34,14 +35,17 @@ export default function Footer() {
           <Column title="Marchés">
             <Item href="/marches/actions">Actions BRVM</Item>
             <Item href="/marches/obligations">Obligations cotées</Item>
-            <Item href="/marches/souverains-non-cotes">Souverains UMOA-Titres</Item>
+            <Item href="/marches/souverains-non-cotes">Souverains non cotés</Item>
             <Item href="/marches/fcp">FCP / OPCVM</Item>
+            <Item href="/fcp/categories">OPC par catégorie</Item>
+            <Item href="/sgo">Sociétés de gestion</Item>
             <Item href="/marche-monetaire">Marché monétaire</Item>
+            <Item href="/marche-monetaire/mtp">Récapitulatif MTP</Item>
           </Column>
 
           {/* Macro & Outils */}
           <Column title="Macro &amp; outils">
-            <Item href="/macro/pays">Pays UEMOA</Item>
+            <Item href="/macro/pays">Indicateurs pays UEMOA</Item>
             <Item href="/macro/matieres-premieres">Matières premières</Item>
             <Item href="/macro/devises">Devises &amp; FX</Item>
             <Item href="/macro/immobilier">Immobilier</Item>
@@ -50,20 +54,22 @@ export default function Footer() {
 
           {/* Académie */}
           <Column title="Académie">
-            <Item href="/academie/formations">Formations</Item>
-            <Item href="/academie/glossaire">Glossaire</Item>
-            <Item href="/academie/magazine">Magazine</Item>
-            <Item href="/academie/simulateur">Simulateur</Item>
-            <Item href="/communaute/newsletter">Newsletter</Item>
+            <Item href="/academie/formations">Catalogue formations</Item>
+            <Item href="/academie/glossaire">Glossaire financier</Item>
+            <Item href="/academie/compte-titre">Suivi compte titre</Item>
+            <Item href="/academie/simulateur">Ligue Azimut</Item>
+            <Item href="/academie/magazine">Magazine digital</Item>
           </Column>
 
-          {/* Compte / Légal */}
-          <Column title="Compte">
+          {/* Communauté & compte */}
+          <Column title="Communauté &amp; compte">
+            <Item href="/communaute/newsletter">Newsletter</Item>
+            <Item href="/communaute/forum">Forum investisseurs</Item>
+            <Item href="/communaute/classements">Classements</Item>
             <Item href="/compte">Mon compte</Item>
             <Item href="/messagerie">Messagerie</Item>
-            <Item href="/connexion">Connexion</Item>
-            <Item href="/inscription">S&apos;inscrire</Item>
-            <Item href="/pros">Espace Pros</Item>
+            <Item href="/premium">Passer à Premium</Item>
+            <Item href="/demande-demo-pro">Demander une démo Pro</Item>
           </Column>
         </div>
 
@@ -74,6 +80,7 @@ export default function Footer() {
             <Link href="/legal/cgu" className="hover:text-white">CGU</Link>
             <Link href="/legal/confidentialite" className="hover:text-white">Confidentialité</Link>
             <Link href="/legal/cookies" className="hover:text-white">Cookies</Link>
+            <CookiePreferencesTrigger />
           </div>
         </div>
 

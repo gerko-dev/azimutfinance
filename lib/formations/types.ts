@@ -28,6 +28,9 @@ export type FormationRow = {
   instructor_title: string | null;
   featured: boolean;
   published_at: string | null;
+  registration_deadline: string | null;
+  starts_at: string | null;
+  ends_at: string | null;
   created_at: string;
   updated_at: string;
 };

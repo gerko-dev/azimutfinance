@@ -48,6 +48,12 @@ export type Formation = {
   instructor?: { name: string; title: string };
   featured: boolean;
   publishedAt: string | null;
+  /** ISO date YYYY-MM-DD, optionnel — date butoir d'inscription a la session */
+  registrationDeadline: string | null;
+  /** ISO date YYYY-MM-DD, optionnel — date de debut de la session */
+  startsAt: string | null;
+  /** ISO date YYYY-MM-DD, optionnel — date de fin de la session */
+  endsAt: string | null;
   updatedAt: string;
 };
 
@@ -160,6 +166,20 @@ export function pricingShortLabel(formation: Formation): string {
   if (formation.pricing.type === "gratuit") return "Gratuit";
   if (formation.pricing.type === "certifiant") return "Certifiant";
   return "Premium";
+}
+
+/**
+ * Retourne true si la date limite d'inscription est strictement passee
+ * (par rapport a aujourd'hui en heure locale, jour entier).
+ * Si pas de deadline, retourne false (inscription toujours ouverte).
+ */
+export function isRegistrationClosed(formation: Formation, now: Date = new Date()): boolean {
+  if (!formation.registrationDeadline) return false;
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+  const deadline = new Date(formation.registrationDeadline);
+  deadline.setHours(0, 0, 0, 0);
+  return deadline.getTime() < today.getTime();
 }
 
 export function getCatalogStats(formations: Formation[]): {

@@ -16,7 +16,7 @@ export default async function FormationsAdminPage({
 }: {
   searchParams: Promise<{ q?: string }>;
 }) {
-  await requireAdmin(2);
+  await requireAdmin(3);
   const sp = await searchParams;
   const search = (sp.q ?? "").trim();
 

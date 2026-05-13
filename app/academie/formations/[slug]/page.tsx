@@ -7,6 +7,7 @@ import {
   INSCRIPTION_STATUS_COLOR,
   INSCRIPTION_STATUS_LABEL,
   LEVEL_META,
+  isRegistrationClosed,
   pricingLabel,
   pricingShortLabel,
   totalDurationLabel,
@@ -56,6 +57,7 @@ export default async function FormationPage({
   if (!formation) notFound();
 
   const myInscription = await getMyInscriptionForFormation(formation.id);
+  const registrationClosed = isRegistrationClosed(formation);
 
   const categoryMeta = CATEGORY_META[formation.category];
   const levelMeta = LEVEL_META[formation.level];
@@ -75,14 +77,14 @@ export default async function FormationPage({
       <Header />
 
       {/* HERO */}
-      <div className="bg-white border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-4 md:px-6 py-6">
-          <div className="text-xs text-slate-500 mb-2 flex items-center gap-1.5 flex-wrap">
-            <Link href="/" className="hover:text-slate-700">Accueil</Link>
+      <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-b border-slate-800">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10">
+          <div className="text-xs text-slate-400 mb-2 flex items-center gap-1.5 flex-wrap">
+            <Link href="/" className="hover:text-white">Accueil</Link>
             <span>›</span>
-            <Link href="/academie/formations" className="hover:text-slate-700">Catalogue</Link>
+            <Link href="/academie/formations" className="hover:text-white">Catalogue</Link>
             <span>›</span>
-            <span className="text-slate-700">{formation.title}</span>
+            <span className="text-slate-200">{formation.title}</span>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 mt-4">
@@ -110,38 +112,38 @@ export default async function FormationPage({
                   />
                   {levelMeta.label}
                 </span>
-                <span className="text-[11px] px-2 py-0.5 rounded font-medium bg-slate-100 text-slate-700">
+                <span className="text-[11px] px-2 py-0.5 rounded font-medium bg-slate-800 text-slate-200 border border-slate-700">
                   {formatMeta.label}
                 </span>
                 {formation.featured && (
-                  <span className="text-[11px] px-2 py-0.5 rounded bg-amber-50 text-amber-800 font-medium">
+                  <span className="text-[11px] px-2 py-0.5 rounded bg-amber-900/40 text-amber-200 border border-amber-800 font-medium">
                     ★ Mise en avant
                   </span>
                 )}
               </div>
 
-              <h1 className="text-2xl md:text-3xl font-semibold text-slate-900 leading-tight">
+              <h1 className="text-2xl md:text-3xl font-semibold text-white leading-tight">
                 {formation.title}
               </h1>
 
-              <p className="text-sm text-slate-600 mt-3 leading-relaxed max-w-3xl">
+              <p className="text-sm text-slate-300 mt-3 leading-relaxed max-w-3xl">
                 {formation.shortDescription}
               </p>
 
-              <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-slate-500">
+              <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-slate-400">
                 <span className="flex items-center gap-1">
-                  <span className="text-slate-400">Durée totale :</span>
-                  <span className="font-medium text-slate-800 tabular-nums">{totalLabel}</span>
+                  <span className="text-slate-500">Durée totale :</span>
+                  <span className="font-medium text-slate-200 tabular-nums">{totalLabel}</span>
                 </span>
                 <span>·</span>
                 <span>
-                  <span className="text-slate-400">Modules :</span>{" "}
-                  <span className="font-medium text-slate-800">{formation.modules.length}</span>
+                  <span className="text-slate-500">Modules :</span>{" "}
+                  <span className="font-medium text-slate-200">{formation.modules.length}</span>
                 </span>
                 <span>·</span>
                 <span>
-                  <span className="text-slate-400">Mise à jour :</span>{" "}
-                  <span className="font-medium text-slate-800">{fmtDateFr(formation.updatedAt)}</span>
+                  <span className="text-slate-500">Mise à jour :</span>{" "}
+                  <span className="font-medium text-slate-200">{fmtDateFr(formation.updatedAt)}</span>
                 </span>
                 {formation.instructor && (
                   <>
@@ -197,6 +199,18 @@ export default async function FormationPage({
                       Voir mes inscriptions →
                     </Link>
                   </div>
+                ) : registrationClosed ? (
+                  <div className="mt-3 space-y-2">
+                    <div
+                      className="block w-full text-center text-sm bg-slate-100 text-slate-500 py-2.5 rounded font-medium cursor-not-allowed select-none"
+                      aria-disabled="true"
+                    >
+                      Inscriptions clôturées
+                    </div>
+                    <div className="text-[11px] text-rose-700 text-center">
+                      Date limite dépassée
+                    </div>
+                  </div>
                 ) : (
                   <Link
                     href={`/academie/formations/${formation.slug}/inscription`}
@@ -216,6 +230,62 @@ export default async function FormationPage({
                 {formation.pricing.type === "certifiant" && (
                   <div className="mt-3 text-[11px] text-purple-700 bg-purple-50 px-2 py-1.5 rounded text-center">
                     Examen + certificat numérique inclus
+                  </div>
+                )}
+                {(formation.registrationDeadline || formation.startsAt || formation.endsAt) && (
+                  <div className="mt-3 pt-3 border-t border-slate-100 space-y-1.5">
+                    <div className="text-[10px] uppercase tracking-wide font-semibold text-slate-500">
+                      Session
+                    </div>
+                    {formation.startsAt && (
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-slate-500">Début</span>
+                        <span className="font-medium text-slate-800 tabular-nums">
+                          {fmtDateFr(formation.startsAt)}
+                        </span>
+                      </div>
+                    )}
+                    {formation.endsAt && (
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-slate-500">Fin</span>
+                        <span className="font-medium text-slate-800 tabular-nums">
+                          {fmtDateFr(formation.endsAt)}
+                        </span>
+                      </div>
+                    )}
+                    {formation.registrationDeadline && (() => {
+                      const deadline = new Date(formation.registrationDeadline);
+                      const today = new Date();
+                      today.setHours(0, 0, 0, 0);
+                      const diffMs = deadline.getTime() - today.getTime();
+                      const daysLeft = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+                      const isPast = daysLeft < 0;
+                      const isUrgent = daysLeft >= 0 && daysLeft <= 7;
+                      return (
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-slate-500">Date limite d&apos;inscription</span>
+                          <span
+                            className={`font-medium tabular-nums ${
+                              isPast
+                                ? "text-rose-700"
+                                : isUrgent
+                                  ? "text-amber-700"
+                                  : "text-slate-800"
+                            }`}
+                          >
+                            {fmtDateFr(formation.registrationDeadline)}
+                            {!isPast && daysLeft <= 30 && (
+                              <span className="ml-1 text-[10px]">
+                                · J-{daysLeft}
+                              </span>
+                            )}
+                            {isPast && (
+                              <span className="ml-1 text-[10px]">· Clôturée</span>
+                            )}
+                          </span>
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
                 <div className="mt-3 pt-3 border-t border-slate-100 grid grid-cols-2 gap-2 text-[11px]">

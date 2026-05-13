@@ -33,7 +33,7 @@ export default function MacroCountrySelector({
             key={c.code}
             href={buildHref(c.code)}
             scroll={false}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium border transition ${
+            className={`flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium border transition w-[8.5rem] ${
               active
                 ? "bg-blue-700 text-white border-blue-700 shadow-sm"
                 : "bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50"

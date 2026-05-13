@@ -315,11 +315,11 @@ export default async function MarcheMonetairePage() {
       <Header />
       <Ticker />
 
-      <div className="bg-white border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8">
-          <div className="text-xs md:text-sm text-slate-500 mb-2">Accueil › Taux BCEAO &amp; UEMOA</div>
-          <h1 className="text-2xl md:text-3xl font-semibold mb-2">Taux BCEAO &amp; UEMOA</h1>
-          <p className="text-sm md:text-base text-slate-600">
+      <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-b border-slate-800">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10">
+          <div className="text-xs md:text-sm text-slate-400 mb-2">Accueil › Taux BCEAO &amp; UEMOA</div>
+          <h1 className="text-2xl md:text-3xl font-semibold mb-2 text-white">Taux BCEAO &amp; UEMOA</h1>
+          <p className="text-sm md:text-base text-slate-300">
             Suivi exhaustif des taux directeurs, marché monétaire et interbancaire, inflation, conditions de banque et change.
             Studio d&apos;analyse interactif pour explorer toutes les séries.
           </p>
@@ -343,7 +343,7 @@ export default async function MarcheMonetairePage() {
               <a
                 key={href}
                 href={href}
-                className="px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700"
+                className="px-2.5 py-1 rounded-full bg-slate-800/60 hover:bg-slate-700 text-slate-200 border border-slate-700"
               >
                 {label}
               </a>

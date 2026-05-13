@@ -247,41 +247,36 @@ export default function TechnicalAnalysisView({
 
   return (
     <div className="space-y-4 md:space-y-6">
-      {/* === BANDEAU SIGNAL GLOBAL === */}
-      <div
-        className={`rounded-lg border p-4 md:p-5 ${SIGNAL_STYLE[signal.label].cls}`}
-      >
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <div className="text-xs font-medium uppercase tracking-wide opacity-70">
-              Signal technique agrégé
+      {/* === BANDEAU SIGNAL GLOBAL — visible uniquement pour membres+ === */}
+      {isMember && (
+        <div
+          className={`rounded-lg border p-4 md:p-5 ${SIGNAL_STYLE[signal.label].cls}`}
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-xs font-medium uppercase tracking-wide opacity-70">
+                Signal technique agrégé
+              </div>
+              <div className="text-xl md:text-2xl font-semibold mt-1">
+                {SIGNAL_STYLE[signal.label].icon} {signal.label}
+              </div>
+              <p className="text-sm mt-1 opacity-80">
+                {signal.bullishCount} indicateurs haussiers ·{" "}
+                {signal.bearishCount} baissiers · {signal.neutralCount} neutres
+                {" — "}
+                <span className="opacity-70">
+                  score {signal.score >= 0 ? "+" : ""}
+                  {signal.score} / {signal.total}
+                </span>
+              </p>
             </div>
-            <div className="text-xl md:text-2xl font-semibold mt-1">
-              {SIGNAL_STYLE[signal.label].icon} {signal.label}
+            <div className="text-xs px-3 py-1 rounded-full bg-white/60 border border-current/30 font-mono">
+              {ticker}
             </div>
-            <p className="text-sm mt-1 opacity-80">
-              {signal.bullishCount} indicateurs haussiers ·{" "}
-              {signal.bearishCount} baissiers · {signal.neutralCount} neutres
-              {" — "}
-              <span className="opacity-70">
-                score {signal.score >= 0 ? "+" : ""}
-                {signal.score} / {signal.total}
-              </span>
-            </p>
           </div>
-          <div className="text-xs px-3 py-1 rounded-full bg-white/60 border border-current/30 font-mono">
-            {ticker}
-          </div>
-        </div>
 
-        {/* Détail des votes — Membre, cadenas pour visiteur */}
-        <div className="relative mt-4">
-          <div
-            className={`grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 ${
-              isMember ? "" : "blur-[3px] pointer-events-none select-none"
-            }`}
-            aria-hidden={isMember ? undefined : true}
-          >
+          {/* Détail des votes */}
+          <div className="mt-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
             {signal.entries.map((e) => (
               <div
                 key={e.label}
@@ -307,30 +302,31 @@ export default function TechnicalAnalysisView({
               </div>
             ))}
           </div>
-          {!isMember && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <button
-                type="button"
-                onClick={() => setMemberGateOpen(true)}
-                className="bg-white rounded-lg shadow-xl border border-slate-200 max-w-md w-full p-4 pointer-events-auto text-left hover:border-slate-300 transition"
-              >
-                <div className="flex items-start gap-3">
-                  <div className="text-2xl shrink-0">🔓</div>
-                  <div className="min-w-0">
-                    <h4 className="text-sm font-semibold text-slate-900">
-                      Inscrivez-vous pour voir le détail
-                    </h4>
-                    <p className="text-xs text-slate-600 mt-1">
-                      Détail des indicateurs qui composent la recommandation.
-                      Inscription gratuite.
-                    </p>
-                  </div>
-                </div>
-              </button>
-            </div>
-          )}
         </div>
-      </div>
+      )}
+
+      {/* Bandeau d'invitation pour visiteurs anonymes */}
+      {!isMember && (
+        <button
+          type="button"
+          onClick={() => setMemberGateOpen(true)}
+          className="w-full rounded-lg border border-slate-200 bg-white p-4 md:p-5 text-left hover:border-slate-300 transition"
+        >
+          <div className="flex items-start gap-3">
+            <div className="text-2xl shrink-0">🔓</div>
+            <div className="min-w-0">
+              <h4 className="text-sm font-semibold text-slate-900">
+                Signal technique réservé aux membres
+              </h4>
+              <p className="text-xs text-slate-600 mt-1">
+                Inscrivez-vous gratuitement pour accéder au signal technique
+                agrégé et au détail des indicateurs (MM, RSI, MACD, supports
+                & résistances…).
+              </p>
+            </div>
+          </div>
+        </button>
+      )}
 
       {/* === CHART PRINCIPAL : prix + MM + Bollinger + volume === */}
       <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">

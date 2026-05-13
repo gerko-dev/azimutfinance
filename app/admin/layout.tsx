@@ -1,7 +1,10 @@
 import Header from "@/components/Header";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import { requireAdmin } from "@/lib/admin/auth";
-import { getOpenReportsCount } from "@/lib/admin/queries";
+import {
+  getOpenReportsCount,
+  getOpenForumReportsCount,
+} from "@/lib/admin/queries";
 import { ROLE_LABEL } from "@/lib/admin/types";
 
 export const metadata = {
@@ -19,7 +22,10 @@ export default async function AdminLayout({
   // Niveau minimum pour entrer dans /admin : level 3 (modérateur).
   // Les pages individuelles peuvent re-checker un niveau plus restrictif.
   const { level } = await requireAdmin(3);
-  const openReportsCount = await getOpenReportsCount();
+  const [openReportsCount, openForumReportsCount] = await Promise.all([
+    getOpenReportsCount(),
+    getOpenForumReportsCount(),
+  ]);
 
   const roleKey = `adminlevel${level}` as keyof typeof ROLE_LABEL;
 
@@ -46,7 +52,11 @@ export default async function AdminLayout({
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-5 md:py-6">
         <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-6">
           <aside>
-            <AdminSidebar level={level} openReportsCount={openReportsCount} />
+            <AdminSidebar
+              level={level}
+              openReportsCount={openReportsCount}
+              openForumReportsCount={openForumReportsCount}
+            />
           </aside>
           <main className="min-w-0">{children}</main>
         </div>

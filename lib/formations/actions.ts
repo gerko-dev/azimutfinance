@@ -18,10 +18,13 @@ import type {
 
 const SLUG_RE = /^[a-z0-9-]+$/;
 
+// Garde des actions formations : Editeur (N3+) — page placee dans groupe
+// Editeur de la sidebar. Nom de la fonction conserve pour eviter de toucher
+// tous les call sites locaux.
 async function ensureAdmin2(): Promise<{ ok: true } | { ok: false; error: string }> {
   const level = await getMyAdminLevel();
   if (level === null) return { ok: false, error: "Réservé aux administrateurs." };
-  if (level > 2) return { ok: false, error: "Niveau d'administration insuffisant (L2+ requis)." };
+  if (level > 3) return { ok: false, error: "Niveau d'administration insuffisant (L3+ requis)." };
   return { ok: true };
 }
 
@@ -43,7 +46,19 @@ type FormationPayload = {
   instructorTitle: string;
   featured: boolean;
   publish: boolean;
+  /** YYYY-MM-DD ou null si pas de date */
+  registrationDeadline: string | null;
+  startsAt: string | null;
+  endsAt: string | null;
 };
+
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+function parseOptionalDate(v: FormDataEntryValue | null): string | null | "INVALID" {
+  const s = String(v ?? "").trim();
+  if (!s) return null;
+  if (!ISO_DATE_RE.test(s)) return "INVALID";
+  return s;
+}
 
 function parseFormationPayload(formData: FormData): {
   ok: true;
@@ -126,12 +141,32 @@ function parseFormationPayload(formData: FormData): {
     .map((s) => s.trim())
     .filter(Boolean);
 
+  const registrationDeadline = parseOptionalDate(formData.get("registrationDeadline"));
+  const startsAt = parseOptionalDate(formData.get("startsAt"));
+  const endsAt = parseOptionalDate(formData.get("endsAt"));
+  if (registrationDeadline === "INVALID") {
+    return { ok: false, error: "Date limite d'inscription invalide (format YYYY-MM-DD)." };
+  }
+  if (startsAt === "INVALID") {
+    return { ok: false, error: "Date de début invalide (format YYYY-MM-DD)." };
+  }
+  if (endsAt === "INVALID") {
+    return { ok: false, error: "Date de fin invalide (format YYYY-MM-DD)." };
+  }
+  if (startsAt && endsAt && endsAt < startsAt) {
+    return { ok: false, error: "La date de fin doit être postérieure à la date de début." };
+  }
+  if (registrationDeadline && startsAt && registrationDeadline > startsAt) {
+    return { ok: false, error: "La date limite d'inscription doit être avant la date de début." };
+  }
+
   return {
     ok: true,
     data: {
       slug, title, shortDescription, longDescription, level, format, category,
       modules, prerequisites, outcomes, pricingType, priceFcfa, tags,
       instructorName, instructorTitle, featured, publish,
+      registrationDeadline, startsAt, endsAt,
     },
   };
 }
@@ -167,6 +202,9 @@ export async function createFormation(
       instructor_title: p.instructorTitle || null,
       featured: p.featured,
       published_at: p.publish ? new Date().toISOString() : null,
+      registration_deadline: p.registrationDeadline,
+      starts_at: p.startsAt,
+      ends_at: p.endsAt,
     })
     .select("id")
     .single();
@@ -222,6 +260,9 @@ export async function updateFormation(
       published_at: p.publish
         ? existingPublishedAt ?? new Date().toISOString()
         : null,
+      registration_deadline: p.registrationDeadline,
+      starts_at: p.startsAt,
+      ends_at: p.endsAt,
     })
     .eq("id", id);
   if (error) return { ok: false, error: error.message };
@@ -283,7 +324,7 @@ export async function inscrireFormation(
   // Recupere la formation pour figer le montant et verifier la coherence
   const { data: formation } = await supabase
     .from("formations")
-    .select("id, slug, pricing_type, price_fcfa, published_at")
+    .select("id, slug, pricing_type, price_fcfa, published_at, registration_deadline")
     .eq("id", formationId)
     .maybeSingle();
   if (!formation) return { ok: false, error: "Formation introuvable." };
@@ -293,9 +334,20 @@ export async function inscrireFormation(
     pricing_type: FormationPricingType;
     price_fcfa: number;
     published_at: string | null;
+    registration_deadline: string | null;
   };
   if (!f.published_at) {
     return { ok: false, error: "Cette formation n'est pas encore disponible." };
+  }
+  // Gate deadline : si renseignee et strictement passee, inscription bloquee
+  if (f.registration_deadline) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const deadline = new Date(f.registration_deadline);
+    deadline.setHours(0, 0, 0, 0);
+    if (deadline.getTime() < today.getTime()) {
+      return { ok: false, error: "La date limite d'inscription est dépassée." };
+    }
   }
   if (f.pricing_type === "gratuit" && paymentMethod !== "gratuit") {
     return { ok: false, error: "Mode de paiement incompatible avec une formation gratuite." };

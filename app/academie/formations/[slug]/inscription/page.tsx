@@ -6,6 +6,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   CATEGORY_META,
   LEVEL_META,
+  isRegistrationClosed,
   pricingLabel,
   totalDurationLabel,
 } from "@/lib/formations";
@@ -47,6 +48,9 @@ export default async function InscriptionPage({
   if (existing) {
     redirect(`/academie/formations/${formation.slug}/inscription/confirmation`);
   }
+
+  // Si la date limite est passee, on bloque l'acces au formulaire
+  const closed = isRegistrationClosed(formation);
 
   // Recupere le profil pour pre-remplir le formulaire
   const { data: profile } = await supabase
@@ -134,21 +138,55 @@ export default async function InscriptionPage({
         </section>
 
         <div className="mt-5">
-          <InscriptionForm
-            formationId={formation.id}
-            slug={formation.slug}
-            isFree={formation.pricing.type === "gratuit"}
-            priceFcfa={
-              formation.pricing.type === "gratuit"
-                ? 0
-                : formation.pricing.priceFcfa
-            }
-            initial={{
-              fullName: profile?.full_name ?? "",
-              email: profile?.email ?? user.email ?? "",
-              country: profile?.country ?? "",
-            }}
-          />
+          {closed ? (
+            <div className="bg-white rounded-lg border border-rose-200 p-5 text-center space-y-3">
+              <div className="text-3xl">⏳</div>
+              <h2 className="text-base font-semibold text-rose-900">
+                Inscriptions clôturées
+              </h2>
+              <p className="text-sm text-slate-600">
+                La date limite d&apos;inscription à cette session (
+                {formation.registrationDeadline &&
+                  new Date(formation.registrationDeadline).toLocaleDateString(
+                    "fr-FR",
+                    { day: "2-digit", month: "long", year: "numeric" },
+                  )}
+                ) est dépassée.
+              </p>
+              <Link
+                href={`/academie/formations/${formation.slug}`}
+                className="inline-block text-sm bg-slate-900 hover:bg-slate-700 text-white px-4 py-2 rounded font-medium transition"
+              >
+                ← Retour à la formation
+              </Link>
+              <div className="text-[11px] text-slate-500 pt-2 border-t border-slate-100">
+                Une nouvelle session sera bientôt annoncée.{" "}
+                <Link
+                  href="/academie/formations"
+                  className="text-slate-700 hover:underline"
+                >
+                  Voir le catalogue
+                </Link>
+                .
+              </div>
+            </div>
+          ) : (
+            <InscriptionForm
+              formationId={formation.id}
+              slug={formation.slug}
+              isFree={formation.pricing.type === "gratuit"}
+              priceFcfa={
+                formation.pricing.type === "gratuit"
+                  ? 0
+                  : formation.pricing.priceFcfa
+              }
+              initial={{
+                fullName: profile?.full_name ?? "",
+                email: profile?.email ?? user.email ?? "",
+                country: profile?.country ?? "",
+              }}
+            />
+          )}
         </div>
       </main>
     </div>

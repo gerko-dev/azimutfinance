@@ -3,7 +3,7 @@ import { requireAdmin } from "@/lib/admin/auth";
 import { listRecentMessages } from "@/lib/admin/queries";
 
 export default async function ModerationPage() {
-  const { level } = await requireAdmin(3);
+  const { level } = await requireAdmin(2);
   const messages = await listRecentMessages(150);
 
   return (

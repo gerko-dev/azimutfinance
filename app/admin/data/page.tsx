@@ -5,8 +5,8 @@ import { listDataFiles } from "@/lib/admin/dataFiles";
 export const dynamic = "force-dynamic";
 
 export default async function DataFilesPage() {
-  // L1 only — capacité de modification du data layer
-  await requireAdmin(1);
+  // Editeur (N3+) : page placee dans le groupe Editeur de la sidebar.
+  await requireAdmin(3);
 
   const result = await listDataFiles();
 

@@ -2,7 +2,10 @@ import Link from "next/link";
 import Header from "@/components/Header";
 import { computeCommodityStats } from "@/lib/commodities";
 import { computeFxStats } from "@/lib/fx";
-import { loadIndexHistory, loadStocks } from "@/lib/dataLoader";
+import { computeStockYtdPct, loadStocks } from "@/lib/dataLoader";
+import { getBrvmIndicesSnapshot } from "@/lib/brvm/liveIndices";
+import { getBrvmSnapshot } from "@/lib/brvm/liveQuotes";
+import LivePriceBadge from "@/components/LivePriceBadge";
 import {
   listPublishedArticles,
   listPublishedIssues,
@@ -16,6 +19,10 @@ import {
   getPortfolioSnapshot,
   getLeaderboard,
 } from "@/lib/simulator/queries";
+import {
+  getDynamicPlanList,
+  listTrialConfigs,
+} from "@/lib/premium/pricingQueries";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +46,9 @@ export default async function Home() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  // ---- Saison simulateur active (utilisee par memberContext + Spotlight) ----
+  const currentSeason = await getCurrentSeason();
 
   // ---- Personnalisation membre connecte ----
   let memberContext: {
@@ -66,7 +76,7 @@ export default async function Home() {
       (profile as { username?: string | null } | null)?.username ?? null;
     const displayName = fullName || username || user.email?.split("@")[0] || "membre";
 
-    const season = await getCurrentSeason();
+    const season = currentSeason;
     let snapshot: Awaited<ReturnType<typeof getPortfolioSnapshot>> = null;
     let rank: number | null = null;
     let totalPlayers = 0;
@@ -87,11 +97,56 @@ export default async function Home() {
   }
 
   // ---- Données live ----
-  const brvmc = loadIndexHistory("BRVMC");
-  const brvmcLast = brvmc[brvmc.length - 1]?.value ?? null;
-  const brvmcPrev = brvmc.length > 250 ? brvmc[brvmc.length - 250].value : brvmc[0]?.value ?? null;
-  const brvmcYearChange =
-    brvmcLast !== null && brvmcPrev ? ((brvmcLast - brvmcPrev) / brvmcPrev) * 100 : null;
+  // Indices + quotes BRVM scrapes en direct depuis brvm.org (cache 5 min) :
+  //   - Indices : variation jour de la col "Variation jour (%)" du site
+  //   - Quotes  : variation jour de chaque action (col "Variation (%)")
+  //   - Seance  : isClosed scrape via classes CSS seance-fermee/seance-ouverte
+  const [indicesSnapshot, brvmQuotesSnapshot, premiumPlans, trialConfigs] =
+    await Promise.all([
+      getBrvmIndicesSnapshot(),
+      getBrvmSnapshot(),
+      getDynamicPlanList(),
+      listTrialConfigs(),
+    ]);
+
+  // Carte tarif Premium : on prefere le plan mensuel "m1" pour afficher un
+  // prix /mois ; sinon on prend le plan au plus petit prix/mois.
+  const m1 = premiumPlans.find((p) => p.code === "m1");
+  const premiumDisplay = m1
+    ? { priceFcfa: m1.priceFcfa, suffix: "/ mois" }
+    : premiumPlans.length > 0
+      ? (() => {
+          const cheapest = [...premiumPlans].sort(
+            (a, b) => a.pricePerMonthFcfa - b.pricePerMonthFcfa,
+          )[0];
+          return { priceFcfa: cheapest.pricePerMonthFcfa, suffix: "/ mois" };
+        })()
+      : { priceFcfa: 9900, suffix: "/ mois" };
+
+  // CTA "essai" : si une trial_config active existe, on affiche la duree reelle ;
+  // sinon CTA generique.
+  const activeTrial = trialConfigs.find((t) => t.active);
+  const premiumCta = activeTrial
+    ? `Essai ${activeTrial.duration_days} jours gratuit`
+    : "Découvrir Premium";
+  const liveIndexByCode = new Map(
+    indicesSnapshot.indices.map((i) => [i.code, i]),
+  );
+  const brvmcLive = liveIndexByCode.get("BRVMC");
+  const brvm30Live = liveIndexByCode.get("BRVM30");
+  const brvmPrestigeLive = liveIndexByCode.get("BRVMPR");
+
+  // Top hausse / Top baisse du jour : sur la variation jour BRVM (variationPct).
+  // On ignore les quotes a 0% (pas de transaction du jour).
+  const dailyMovers = brvmQuotesSnapshot.quotes.filter(
+    (q) => Number.isFinite(q.variationPct) && q.variationPct !== 0,
+  );
+  const topDailyGainer = [...dailyMovers].sort(
+    (a, b) => b.variationPct - a.variationPct,
+  )[0];
+  const topDailyLoser = [...dailyMovers].sort(
+    (a, b) => a.variationPct - b.variationPct,
+  )[0];
 
   const cacao = computeCommodityStats("cacao");
   const or = computeCommodityStats("or");
@@ -114,23 +169,39 @@ export default async function Home() {
   const articlesCount = magazineArticles.length;
   const issuesCount = magazineIssues.length;
 
-  // Top movers (3 gagnants / 3 perdants sur la perf annuelle)
-  const stocksWithChange = stocks
+  // Top movers YTD : cours live BRVM (scrap) vs cours au 31/12 N-1 (historique
+  // Sika). On ignore les actions sans historique YTD suffisant ou sans cours
+  // live (fallback CSV si live indisponible).
+  const liveQuoteByCode = new Map(
+    brvmQuotesSnapshot.quotes.map((q) => [q.code, q]),
+  );
+  const stocksWithYtd = stocks
     .map((s) => {
-      const yearChange = parseFloat(s.yearChange);
+      const live = liveQuoteByCode.get(s.code);
+      const priceFromCsv = parseFloat(s.price);
+      const currentPrice =
+        live && Number.isFinite(live.currentPrice) && live.currentPrice > 0
+          ? live.currentPrice
+          : Number.isFinite(priceFromCsv)
+            ? priceFromCsv
+            : 0;
+      const ytdChange = computeStockYtdPct(s.code, currentPrice);
       return {
         code: s.code,
         name: s.name,
         sector: s.sector,
-        yearChange: isFinite(yearChange) ? yearChange : 0,
+        ytdChange,
       };
     })
-    .filter((s) => s.yearChange !== 0);
-  const topGainers = [...stocksWithChange]
-    .sort((a, b) => b.yearChange - a.yearChange)
+    .filter(
+      (s): s is { code: string; name: string; sector: string; ytdChange: number } =>
+        s.ytdChange !== null && Number.isFinite(s.ytdChange) && s.ytdChange !== 0,
+    );
+  const topGainers = [...stocksWithYtd]
+    .sort((a, b) => b.ytdChange - a.ytdChange)
     .slice(0, 3);
-  const topLosers = [...stocksWithChange]
-    .sort((a, b) => a.yearChange - b.yearChange)
+  const topLosers = [...stocksWithYtd]
+    .sort((a, b) => a.ytdChange - b.ytdChange)
     .slice(0, 3);
 
   return (
@@ -172,10 +243,10 @@ export default async function Home() {
               </span>
             </h1>
             <p className="text-base md:text-lg text-slate-300 mt-5 leading-relaxed max-w-2xl">
-              Données BRVM en temps réel, marché obligataire UEMOA décrypté,
-              macroéconomie zone CFA, académie pédagogique et simulateur de portefeuille
-              avec saisons. Tout ce dont vous avez besoin pour investir sur les marchés
-              ouest-africains.
+              Cotation en quasi réel, marché obligataire UEMOA décrypté,
+              informations éclairées sur les FCP, académie d&apos;investissement
+              et simulateur de portefeuille. Tout ce qu&apos;il faut pour
+              apprendre, décider et investir sur les marchés en un seul endroit.
             </p>
             <div className="flex flex-wrap gap-3 mt-7">
               <Link
@@ -191,80 +262,138 @@ export default async function Home() {
                 Explorer les marchés
               </Link>
             </div>
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-6 text-xs text-slate-400">
-              <span className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                Inscription gratuite, sans CB
-              </span>
-              <span>·</span>
-              <span>{stocksCount}+ valeurs cotées suivies</span>
-              <span>·</span>
-              <span>{catalog.total} formations</span>
-              <span>·</span>
-              <span>Mise à jour quotidienne</span>
+          </div>
+
+          {/* Section BRVM */}
+          <div className="mt-10 md:mt-14">
+            <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <div className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold">
+                  BRVM
+                </div>
+                <LivePriceBadge
+                  sessionLabel={indicesSnapshot.sessionLabel}
+                  isClosed={indicesSnapshot.isClosed}
+                />
+              </div>
+              <Link
+                href="/marches/actions"
+                className="text-[11px] text-slate-300 hover:text-white inline-flex items-center gap-1"
+              >
+                Voir toute la cote
+                <span aria-hidden>→</span>
+              </Link>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 md:gap-3">
+              <BrvmCard
+                href="/marches/indices"
+                kicker="INDICE · JOUR"
+                title="BRVM Composite"
+                value={brvmcLive ? fmtNum(brvmcLive.value, 2) : "—"}
+                delta={fmtPct(brvmcLive?.variationPct ?? null, 2)}
+                positive={(brvmcLive?.variationPct ?? 0) >= 0}
+              />
+              <BrvmCard
+                href="/marches/indices"
+                kicker="INDICE · JOUR"
+                title="BRVM 30"
+                value={brvm30Live ? fmtNum(brvm30Live.value, 2) : "—"}
+                delta={fmtPct(brvm30Live?.variationPct ?? null, 2)}
+                positive={(brvm30Live?.variationPct ?? 0) >= 0}
+              />
+              <BrvmCard
+                href="/marches/indices"
+                kicker="INDICE · JOUR"
+                title="BRVM Prestige"
+                value={
+                  brvmPrestigeLive ? fmtNum(brvmPrestigeLive.value, 2) : "—"
+                }
+                delta={fmtPct(brvmPrestigeLive?.variationPct ?? null, 2)}
+                positive={(brvmPrestigeLive?.variationPct ?? 0) >= 0}
+              />
+              <BrvmCard
+                href={topDailyGainer ? `/titre/${topDailyGainer.code}` : "/marches/actions"}
+                kicker="TOP HAUSSE · JOUR"
+                title={topDailyGainer?.code ?? "—"}
+                value={topDailyGainer?.name ?? "—"}
+                delta={
+                  topDailyGainer ? fmtPct(topDailyGainer.variationPct, 2) : "—"
+                }
+                positive
+              />
+              <BrvmCard
+                href={topDailyLoser ? `/titre/${topDailyLoser.code}` : "/marches/actions"}
+                kicker="TOP BAISSE · JOUR"
+                title={topDailyLoser?.code ?? "—"}
+                value={topDailyLoser?.name ?? "—"}
+                delta={
+                  topDailyLoser ? fmtPct(topDailyLoser.variationPct, 2) : "—"
+                }
+                positive={false}
+              />
             </div>
           </div>
 
-          {/* Live market bar */}
-          <div className="mt-10 md:mt-14">
-            <div className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold mb-3">
-              Marchés à l&apos;instant
+          {/* Section Autres instruments cotes importants */}
+          <div className="mt-6 md:mt-8">
+            <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+              <div className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold">
+                Autres instruments cotés importants
+              </div>
+              <Link
+                href="/macro/matieres-premieres"
+                className="text-[11px] text-slate-300 hover:text-white inline-flex items-center gap-1"
+              >
+                Toutes les matières premières
+                <span aria-hidden>→</span>
+              </Link>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 md:gap-3">
-              <LiveStat
-                label="BRVM Composite"
-                value={brvmcLast ? fmtNum(brvmcLast, 1) : "—"}
-                change={fmtPct(brvmcYearChange)}
-                positive={(brvmcYearChange ?? 0) >= 0}
-              />
-              <LiveStat
-                label="USD / XOF"
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 md:gap-3">
+              <BrvmCard
+                href="/macro/devises"
+                kicker="DEVISE · JOUR"
+                title="USD / XOF"
                 value={usdXof ? fmtNum(usdXof.last, 2) : "—"}
-                change={fmtPct(usdXof?.returns["1A"] ?? null)}
-                positive={(usdXof?.returns["1A"] ?? 0) >= 0}
+                delta={fmtPct(usdXof?.changeDayPct ?? null, 2)}
+                positive={(usdXof?.changeDayPct ?? 0) >= 0}
               />
-              <LiveStat
-                label="EUR / USD"
+              <BrvmCard
+                href="/macro/devises"
+                kicker="DEVISE · JOUR"
+                title="EUR / USD"
                 value={eurUsd ? fmtNum(eurUsd.last, 4) : "—"}
-                change={fmtPct(eurUsd?.returns["1A"] ?? null)}
-                positive={(eurUsd?.returns["1A"] ?? 0) >= 0}
+                delta={fmtPct(eurUsd?.changeDayPct ?? null, 2)}
+                positive={(eurUsd?.changeDayPct ?? 0) >= 0}
               />
-              <LiveStat
-                label="Cacao USD/t"
+              <BrvmCard
+                href="/macro/matieres-premieres/cacao"
+                kicker="AGRICOLE · JOUR"
+                title="Cacao USD/t"
                 value={cacao ? fmtNum(cacao.last, 0) : "—"}
-                change={fmtPct(cacao?.returns["1A"] ?? null)}
-                positive={(cacao?.returns["1A"] ?? 0) >= 0}
+                delta={fmtPct(cacao?.changeDayPct ?? null, 2)}
+                positive={(cacao?.changeDayPct ?? 0) >= 0}
               />
-              <LiveStat
-                label="Or USD/oz"
+              <BrvmCard
+                href="/macro/matieres-premieres/or"
+                kicker="MÉTAL · JOUR"
+                title="Or USD/oz"
                 value={or ? fmtNum(or.last, 0) : "—"}
-                change={fmtPct(or?.returns["1A"] ?? null)}
-                positive={(or?.returns["1A"] ?? 0) >= 0}
+                delta={fmtPct(or?.changeDayPct ?? null, 2)}
+                positive={(or?.changeDayPct ?? 0) >= 0}
               />
-              <LiveStat
-                label="Brent USD/bbl"
+              <BrvmCard
+                href="/macro/matieres-premieres/brent"
+                kicker="ÉNERGIE · JOUR"
+                title="Brent USD/bbl"
                 value={brent ? fmtNum(brent.last, 1) : "—"}
-                change={fmtPct(brent?.returns["1A"] ?? null)}
-                positive={(brent?.returns["1A"] ?? 0) >= 0}
+                delta={fmtPct(brent?.changeDayPct ?? null, 2)}
+                positive={(brent?.changeDayPct ?? 0) >= 0}
               />
             </div>
           </div>
         </div>
       </section>
       )}
-
-      {/* Trust signals — chiffres clés */}
-      <section className="bg-slate-50 border-y border-slate-200">
-        <div className="max-w-7xl mx-auto px-4 md:px-6 py-8 md:py-10">
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-6 md:gap-4">
-            <BigNumber number={`${stocksCount}+`} label="Valeurs cotées" sub="BRVM 8 pays UEMOA" />
-            <BigNumber number={`${catalog.total}`} label="Formations" sub={`${catalog.totalHours} h de contenu`} />
-            <BigNumber number={`${articlesCount}`} label="Articles publiés" sub={`${issuesCount} numéros magazine`} />
-            <BigNumber number="11k+" label="Annonces immo" sub="Abidjan & UEMOA" />
-            <BigNumber number="65+" label="Termes glossaire" sub="contextualisés UEMOA" />
-          </div>
-        </div>
-      </section>
 
       {/* Pourquoi AzimutFinance */}
       <section className="max-w-7xl mx-auto px-4 md:px-6 py-14 md:py-20">
@@ -279,28 +408,28 @@ export default async function Home() {
             color="#1d4ed8"
             kicker="MARCHÉS"
             title="BRVM en clair"
-            description="Cotations actions, obligations cotées, indices, top mouvements et flux de trading sur les 8 pays de l'UEMOA. Données quotidiennes."
+            description="Actions et obligations cotées en quasi réel, indices, top mouvements, analyses approfondies. Données quotidiennes."
             href="/marches/actions"
           />
           <FeatureCard
             color="#b45309"
             kicker="OBLIGATIONS"
             title="UMOA-Titres décrypté"
-            description="OAT, BAT, courbes de taux par pays, calculateur YTM/duration et fiches d'émission. Le seul outil dédié au marché obligataire UEMOA."
+            description="OAT, BAT, courbes de taux par pays, calculateur YTM/duration et fiches d'émission. Le seul outil dédié aux obligations du monétaire."
             href="/marches/souverains-non-cotes"
           />
           <FeatureCard
             color="#059669"
             kicker="MACRO"
             title="Zone UEMOA en temps réel"
-            description="BCEAO, taux directeurs, inflation, matières premières, FCFA face aux majors, immobilier abidjanais. Le pouls macro de la zone."
+            description="PIB, taux directeurs, inflation, matières premières, FCFA face aux majors, marché immobilier. Le pouls macro de la zone."
             href="/macro/pays"
           />
           <FeatureCard
             color="#7c3aed"
             kicker="ACADÉMIE"
             title="Formations & glossaire"
-            description={`${catalog.total} formations couvrant BRVM, obligations, analyse, macro, gestion. Glossaire de 65+ termes contextualisés. Parcours certifiant Niveau 1.`}
+            description="Formations et certifications permettant de prendre des décisions éclairées, glossaire de 65+ termes contextualisés."
             href="/academie/formations"
           />
           <FeatureCard
@@ -331,19 +460,47 @@ export default async function Home() {
               <h2 className="text-3xl md:text-5xl font-bold mt-4 leading-tight">
                 Affrontez la BRVM
                 <br />
-                <span className="text-emerald-300">avec 10 M FCFA virtuels.</span>
+                <span className="text-emerald-300">avec du capital virtuel.</span>
               </h2>
               <p className="text-base md:text-lg text-slate-300 mt-5 leading-relaxed max-w-xl">
-                Rejoignez la compétition mensuelle : passez vos ordres d&apos;achat et de
+                Rejoignez la compétition : passez vos ordres d&apos;achat et de
                 vente sur les vraies valeurs cotées BRVM, suivez votre P&amp;L au jour le
                 jour, et grimpez dans le classement général. À la clôture de la saison,
                 le meilleur portefeuille gagne.
               </p>
 
               <div className="grid grid-cols-3 gap-3 mt-7 max-w-lg">
-                <Stat darkLabel="Capital initial" darkValue="10 M FCFA" />
-                <Stat darkLabel="Frais réalistes" darkValue="1 % / ordre" />
-                <Stat darkLabel="Durée saison" darkValue="60 jours" />
+                <Stat
+                  darkLabel="Capital initial"
+                  darkValue={
+                    currentSeason
+                      ? `${fmtFCFAShort(currentSeason.initial_capital)} FCFA`
+                      : "—"
+                  }
+                />
+                <Stat
+                  darkLabel="Frais"
+                  darkValue={
+                    currentSeason
+                      ? `${(currentSeason.transaction_fee_pct * 100)
+                          .toFixed(2)
+                          .replace(/\.?0+$/, "")
+                          .replace(".", ",")} % / ordre`
+                      : "—"
+                  }
+                />
+                <Stat
+                  darkLabel="Durée saison"
+                  darkValue={
+                    currentSeason
+                      ? `${Math.round(
+                          (new Date(currentSeason.ends_at + "T00:00:00Z").getTime() -
+                            new Date(currentSeason.starts_at + "T00:00:00Z").getTime()) /
+                            (1000 * 60 * 60 * 24),
+                        )} jours`
+                      : "—"
+                  }
+                />
               </div>
 
               <div className="mt-7 flex flex-wrap gap-3">
@@ -412,8 +569,8 @@ export default async function Home() {
           description="Performances annuelles des actions BRVM. Cliquez pour analyser une valeur en détail."
         />
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mt-10">
-          <MoversBlock title="Top hausses 1 an" tone="up" stocks={topGainers} />
-          <MoversBlock title="Top baisses 1 an" tone="down" stocks={topLosers} />
+          <MoversBlock title="Top hausses YTD" tone="up" stocks={topGainers} />
+          <MoversBlock title="Top baisses YTD" tone="down" stocks={topLosers} />
         </div>
         <div className="text-center mt-8">
           <Link
@@ -530,32 +687,34 @@ export default async function Home() {
             price="Gratuit"
             tagline="Pour découvrir le marché UEMOA"
             features={[
-              "Cotations BRVM quotidiennes",
-              "Glossaire 65+ termes",
-              `${catalog.freeCount} formations gratuites`,
-              "Magazine : articles libres",
-              "Simulateur de portefeuille",
-              "Messagerie membres",
+              "Marchés BRVM : cours quotidiens, indices, top mouvements",
+              "Obligations · souverains UMOA-Titres · FCP · sociétés de gestion",
+              "Macro UEMOA : BCEAO, inflation, immobilier, matières premières",
+              `Académie : ${catalog.freeCount} formation${catalog.freeCount > 1 ? "s" : ""} gratuite${catalog.freeCount > 1 ? "s" : ""} + glossaire 65+ termes + suivi compte titre`,
+              "Simulateur Ligue Azimut avec classement saisonnier",
+              "Magazine éditorial · articles libres",
+              "Newsletter",
             ]}
             cta="Créer un compte"
             ctaHref="/inscription"
           />
           <PricingCard
             name="Premium"
-            price="9 900 FCFA"
-            priceSuffix="/ mois"
+            price={`${premiumDisplay.priceFcfa.toLocaleString("fr-FR")} FCFA`}
+            priceSuffix={premiumDisplay.suffix}
             tagline="Pour investir avec méthode"
             highlighted
             features={[
               "Tout le plan Membre",
-              "Calculateur YTM & duration",
-              "Screener actions multi-critères",
-              "Alertes prix par email",
-              "Magazine : tous les articles",
-              `Toutes les ${catalog.premiumCount} formations premium`,
-              "Outils de portefeuille avancés",
+              "Analyses approfondies et recommandations",
+              "Courbe des taux souverains UEMOA · analyse obligataire approfondie",
+              "Pricing élaboré et simulateur avancé pour les obligations",
+              "Fiches détaillées FCP / OPCVM (perf vs catégorie, quartiles, AUM)",
+              "Fiches détaillées sociétés de gestion (league table, qualité)",
+              "Graphiques avancés (chandeliers OHLC + indicateurs techniques)",
+              "Magazine éditorial complet",
             ]}
-            cta="Essai 14 jours gratuit"
+            cta={premiumCta}
             ctaHref="/premium"
           />
           <PricingCard
@@ -564,15 +723,19 @@ export default async function Home() {
             tagline="Pour les institutions financières"
             features={[
               "Tout le plan Premium",
-              "Terminal Pro temps réel",
+              "Pro Terminal : tableau de bord marché professionnel",
               "Place de marché OTC",
-              "API data complète",
-              "Research personnalisée",
-              "Support dédié",
-              "Multi-utilisateurs",
+              "Multiple data au format excel",
+              "Private equity database",
+              "Screener actions avec quadrants stratégiques et risk-return",
+              "Screener FCP comparatif (catégorie, AUM, performance)",
+              "Watchlists pro",
+              "Etudes sectorielles",
+              "Studios d'analyse de données",
+              "Support dédié et accompagnement personnalisé",
             ]}
             cta="Demander une démo"
-            ctaHref="/pros"
+            ctaHref="/demande-demo-pro"
           />
         </div>
       </section>
@@ -619,7 +782,7 @@ export default async function Home() {
             Prêt à investir avec méthode ?
           </h2>
           <p className="text-base md:text-lg text-blue-100 mt-4 max-w-2xl mx-auto leading-relaxed">
-            Inscription gratuite en 30 secondes. Pas de carte bancaire. Annulation à tout moment.
+            Inscription gratuite en 30 secondes.
           </p>
           <div className="mt-7 flex flex-wrap gap-3 justify-center">
             <Link
@@ -649,31 +812,49 @@ export default async function Home() {
 // SOUS-COMPONENTS
 // =============================================================================
 
-function LiveStat({
-  label,
+function BrvmCard({
+  href,
+  kicker,
+  title,
   value,
-  change,
+  delta,
   positive,
 }: {
-  label: string;
+  href: string;
+  kicker: string;
+  title: string;
   value: string;
-  change: string;
+  delta: string;
   positive: boolean;
 }) {
   return (
-    <div className="bg-white/5 backdrop-blur border border-white/10 rounded-lg px-3 py-2.5">
-      <div className="text-[10px] text-slate-400 uppercase tracking-wide font-medium truncate">
-        {label}
+    <Link
+      href={href}
+      className="group relative bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-white/25 rounded-lg p-3 md:p-3.5 transition"
+    >
+      <div className="text-[9px] uppercase tracking-wider font-semibold text-slate-400">
+        {kicker}
       </div>
-      <div className="text-base md:text-lg font-semibold tabular-nums mt-0.5">{value}</div>
+      <div className="text-sm md:text-base font-semibold text-white mt-1 leading-tight truncate">
+        {title}
+      </div>
+      <div className="text-xs md:text-sm tabular-nums text-slate-300 mt-0.5 truncate">
+        {value}
+      </div>
       <div
-        className={`text-[11px] tabular-nums font-medium ${
+        className={`text-[11px] tabular-nums font-medium mt-0.5 ${
           positive ? "text-emerald-400" : "text-rose-400"
         }`}
       >
-        {change}
+        {delta}
       </div>
-    </div>
+      <span
+        className="absolute top-2.5 right-2.5 text-slate-500 group-hover:text-white transition"
+        aria-hidden
+      >
+        →
+      </span>
+    </Link>
   );
 }
 
@@ -794,7 +975,8 @@ function MoversBlock({
 }: {
   title: string;
   tone: "up" | "down";
-  stocks: { code: string; name: string; sector: string; yearChange: number }[];
+  /** ytdChange en pourcentage (ex 12.5 = +12,5 %) */
+  stocks: { code: string; name: string; sector: string; ytdChange: number }[];
 }) {
   return (
     <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
@@ -827,11 +1009,11 @@ function MoversBlock({
                 </div>
                 <div
                   className={`text-base font-bold tabular-nums ${
-                    s.yearChange >= 0 ? "text-emerald-600" : "text-rose-600"
+                    s.ytdChange >= 0 ? "text-emerald-600" : "text-rose-600"
                   }`}
                 >
-                  {s.yearChange >= 0 ? "+" : ""}
-                  {(s.yearChange * 100).toFixed(0)} %
+                  {s.ytdChange >= 0 ? "+" : ""}
+                  {s.ytdChange.toFixed(1).replace(".", ",")} %
                 </div>
               </Link>
             </li>
