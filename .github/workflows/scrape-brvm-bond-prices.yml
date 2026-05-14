@@ -1,0 +1,97 @@
+# Snapshot quotidien des cours obligataires cotes BRVM.
+#
+# A 15h00 UTC les jours ouvres, scrape brvm.org/fr/cours-obligations pour
+# capter le "Cours du jour" (clean price) de chaque obligation cotee, calcule
+# le dirty price avec la formule d'interets courus du site
+# (cf. scripts/scrape_brvm_bond_prices.py) et append une ligne par obligation
+# dans data/obligations-cotees-prix.csv.
+#
+# Les colonnes volume / transactions sont laissees a 0 ici : le BOC du jour J
+# n'etant publie qu'en soiree, c'est le workflow scrape-boc (passes 18h/20h)
+# qui les complete via le backfill de scripts/scrape_brvm_boc.py.
+#
+# Egalement declenchable manuellement depuis l'UI GitHub Actions.
+
+name: Scrape cours obligations BRVM
+
+on:
+  schedule:
+    - cron: "0 15 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "Date du snapshot YYYY-MM-DD. Vide = aujourd'hui (UTC)."
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: scrape-brvm-bond-prices
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install requests
+
+      - name: Scrape cours obligations
+        run: |
+          if [ -n "${{ inputs.date }}" ]; then
+            python scripts/scrape_brvm_bond_prices.py --date "${{ inputs.date }}"
+          else
+            python scripts/scrape_brvm_bond_prices.py
+          fi
+
+      - name: Show diff stats
+        run: |
+          echo "=== File modified ==="
+          git status --short data/obligations-cotees-prix.csv || true
+          echo ""
+          echo "=== Diff summary ==="
+          git diff --stat data/obligations-cotees-prix.csv || true
+
+      - name: Commit & push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/obligations-cotees-prix.csv
+          if git diff --staged --quiet; then
+            echo "Aucun changement a commiter."
+            exit 0
+          fi
+          DATE_TAG=$(date -u +%Y-%m-%d)
+          git commit \
+            -m "chore(data): snapshot cours obligations cotees BRVM ${DATE_TAG}" \
+            -m "Mise a jour automatique via GitHub Actions (workflow scrape-brvm-bond-prices)." \
+            -m "Source : brvm.org/fr/cours-obligations. Dirty price calcule via la formule d'interets courus du site."
+          # Retry pour gerer les pushs concurrents avec les autres workflows
+          # (scrape-boc, scrape-sika...) sur main.
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main && git push && {
+              echo "Push effectue avec succes (essai $i)."
+              exit 0
+            }
+            echo "Essai $i echoue, nouvelle tentative dans 10s..."
+            sleep 10
+          done
+          echo "Push definitivement echoue apres 5 essais."
+          exit 1

@@ -18,6 +18,8 @@ Sorties :
     - data/obligations-cotees-boc-synthese.json : KPIs marche obligataire
     - data/fcp.csv                              : tableau FCP / SICAV
     - data/obligations-cotees.csv : maj colonne nominalValue (avec --merge)
+    - data/obligations-cotees-prix.csv : backfill volume + transactions des
+      lignes du jour (avec --merge) — cf. scrape_brvm_bond_prices.py
 
 Dependances :
     pip install requests pypdf
@@ -63,6 +65,11 @@ BONDS_CSV = DATA_DIR / "obligations-cotees.csv"
 OUTPUT_CSV = DATA_DIR / "obligations-cotees-vn-boc.csv"
 SYNTHESE_JSON = DATA_DIR / "obligations-cotees-boc-synthese.json"
 FCP_CSV = DATA_DIR / "fcp.csv"
+# Historique des cours obligataires : alimente a 15h par
+# scripts/scrape_brvm_bond_prices.py (clean + dirty price) ; les colonnes
+# volume / transactions sont completees ici le soir, une fois le BOC publie.
+PRICES_CSV = DATA_DIR / "obligations-cotees-prix.csv"
+PRICE_COLUMNS = ["isin", "date", "cleanPrice", "dirtyPrice", "volume", "transactions"]
 # Referentiel OPCVM pour enrichissement (gestionnaire canonique + type + categorie).
 # Encode Latin-1 (Excel FR), separateur ";".
 AUMFCP_CSV = DATA_DIR / "fcp" / "aumfcp.csv"
@@ -335,6 +342,166 @@ def merge_into_bonds_csv(values: dict[str, float]) -> None:
     BONDS_CSV.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
     print(
         f"{updated} lignes mises a jour dans {BONDS_CSV.relative_to(ROOT)}",
+        file=sys.stderr,
+    )
+
+
+# ============================================================
+# VOLUME / TRANSACTIONS PAR OBLIGATION — table "OBLIGATIONS CLASSIQUES"
+# ============================================================
+# Structure d'une ligne du BOC (apres le mnemonique) :
+#   <Titre> <VN> <CoursPrec> <CoursJour|NC|SP> <CoursRef> [<Volume> <Valeur>]
+#   <CouponCouru> <Periode A|S|T> <MontantNet> <Ech.> <TypeAmort IF|AC|ACD>
+# Les colonnes Volume + Valeur n'existent que si l'obligation a ete cotee
+# (sinon "Cours du jour" = NC = Non Cote, ou SP = Suspendu).
+#
+# On ancre sur la "queue" (CouponCouru Periode MontantNet Ech. TypeAmort), tres
+# reguliere : CouponCouru et MontantNet sont des montants par titre toujours
+# < 10 000 et a virgule, donc sans separateur de milliers -> pas d'ambiguite.
+# Tout ce qui precede la queue = <Titre ...VN CoursPrec CoursJour CoursRef
+# [Volume Valeur]>. Si "NC"/"SP" y figure -> pas de transaction (0, 0). Sinon,
+# Volume et Valeur sont les deux dernieres "colonnes" (separees par 2+ espaces).
+
+# CouponCouru / MontantNet : montant par titre, < 10 000, a virgule, sans
+# espace -> pas d'ambiguite avec les separateurs de milliers. On n'ancre pas en
+# fin de chunk : un saut de page peut coller un pied de page / entete apres la
+# ligne, donc on prend la 1ere occurrence (le motif est assez specifique pour
+# ne matcher que la vraie queue).
+BOND_TAIL_RE = re.compile(
+    r"\s\d{1,4}[.,]\d+\s+[AST]\s+\d{1,4}[.,]\d+\s+"
+    r"\d{1,2}-[^\s-]+-\d{2,4}\s+(?:IF|AC|ACD)\b"
+)
+
+
+def extract_bond_volumes(text: str) -> dict[str, tuple[float, float]]:
+    """Pour chaque mnemonique de la table principale, extrait (volume, valeur
+    transigee). NC / SP / non parsable -> (0.0, 0.0). On ne garde que la
+    premiere occurrence de chaque mnemonique (= table OBLIGATIONS CLASSIQUES ;
+    le PDF reaffiche les memes symboles ailleurs)."""
+    out: dict[str, tuple[float, float]] = {}
+    matches = list(SYMBOL_RE.finditer(text))
+    for i, m in enumerate(matches):
+        sym = m.group(1)
+        if sym in out:
+            continue
+        start = m.end()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        chunk = text[start:end]
+        # Recolle les nombres coupes par un retour a la ligne du PDF
+        # (ex "319 068 \n400" -> "319 068 400"), puis aplatit les \n restants.
+        chunk = re.sub(r"(\d)[^\S\n]*\n[^\S\n]*(\d)", r"\1 \2", chunk)
+        chunk = chunk.replace("\n", " ")
+
+        tail = BOND_TAIL_RE.search(chunk)
+        if not tail:
+            # Pas une ligne de la table principale (autre section / entete).
+            continue
+        prefix = chunk[: tail.start()]
+
+        if re.search(r"\b(?:NC|SP)\b", prefix):
+            out[sym] = (0.0, 0.0)
+            continue
+
+        # Les colonnes sont separees par 2+ espaces ; au sein d'un nombre il n'y
+        # a qu'un espace simple. Volume et Valeur = 2 dernieres colonnes.
+        cells = [c for c in re.split(r"\s{2,}", prefix.strip()) if c]
+        if len(cells) >= 2:
+            volume = parse_french_number(cells[-2])
+            valeur = parse_french_number(cells[-1])
+            if volume is not None and valeur is not None:
+                out[sym] = (volume, valeur)
+                continue
+        # Ligne cotee mais colonnes illisibles : on n'invente rien.
+        out[sym] = (0.0, 0.0)
+    return out
+
+
+def _read_prices_csv() -> list[list[str]]:
+    """Lit obligations-cotees-prix.csv -> liste de lignes (sans header).
+    Dedoublonne par (isin, date), derniere occurrence gagnante."""
+    if not PRICES_CSV.exists():
+        return []
+    seen: dict[tuple[str, str], list[str]] = {}
+    raw = PRICES_CSV.read_text(encoding="utf-8")
+    if raw.startswith("﻿"):
+        raw = raw[1:]
+    reader = csv.reader(io.StringIO(raw), delimiter=";")
+    next(reader, None)  # header
+    for row in reader:
+        if len(row) < 6 or not row[0].strip():
+            continue
+        seen[(row[0].strip(), row[1].strip())] = row[:6]
+    return list(seen.values())
+
+
+def _write_prices_csv(rows: list[list[str]]) -> None:
+    rows.sort(key=lambda r: (r[1], r[0]))
+    with PRICES_CSV.open("w", encoding="utf-8", newline="") as f:
+        w = csv.writer(f, delimiter=";")
+        w.writerow(PRICE_COLUMNS)
+        w.writerows(rows)
+
+
+def backfill_bond_prices(
+    volumes: dict[str, tuple[float, float]], boc_date: date
+) -> None:
+    """Complete les colonnes volume / transactions des lignes du BOC dans
+    data/obligations-cotees-prix.csv (celles dont la date == boc_date), a partir
+    des volumes extraits. Les lignes des autres dates sont laissees intactes."""
+    if not PRICES_CSV.exists():
+        print(
+            f"  {PRICES_CSV.relative_to(ROOT)} absent — backfill volume ignore.",
+            file=sys.stderr,
+        )
+        return
+    if not BONDS_CSV.exists():
+        return
+
+    # code mnemonique -> isin (cle de jointure avec le CSV des prix).
+    code_to_isin: dict[str, str] = {}
+    raw = BONDS_CSV.read_text(encoding="utf-8")
+    if raw.startswith("﻿"):
+        raw = raw[1:]
+    reader = csv.DictReader(io.StringIO(raw), delimiter=";")
+    for row in reader:
+        code = (row.get("code") or "").strip().upper()
+        isin = (row.get("isin") or "").strip()
+        if code and isin:
+            code_to_isin[code] = isin
+
+    isin_vol: dict[str, tuple[float, float]] = {}
+    for code, vv in volumes.items():
+        isin = code_to_isin.get(code.upper())
+        if isin:
+            isin_vol[isin] = vv
+
+    date_iso = boc_date.isoformat()
+    rows = _read_prices_csv()
+    updated = 0
+    for row in rows:
+        if row[1].strip() != date_iso:
+            continue
+        vv = isin_vol.get(row[0].strip())
+        if vv is None:
+            continue
+        volume, valeur = vv
+        row[4] = str(int(round(volume)))
+        row[5] = str(int(round(valeur)))
+        updated += 1
+
+    if updated == 0:
+        print(
+            f"  Backfill volume : aucune ligne du {date_iso} dans "
+            f"{PRICES_CSV.relative_to(ROOT)} (snapshot 15h pas encore passe ?).",
+            file=sys.stderr,
+        )
+        return
+
+    _write_prices_csv(rows)
+    traded = sum(1 for v in isin_vol.values() if v[0] > 0)
+    print(
+        f"  Backfill volume : {updated} lignes du {date_iso} mises a jour dans "
+        f"{PRICES_CSV.relative_to(ROOT)} ({traded} obligations effectivement cotees).",
         file=sys.stderr,
     )
 
@@ -916,6 +1083,24 @@ def main() -> int:
             merge_into_bonds_csv(values)
     else:
         print("Aucune VN extraite, on continue avec la synthese.", file=sys.stderr)
+
+    # === Volume / transactions par obligation -> backfill du CSV des prix ===
+    # Independant de l'extraction des VN. La page "OBLIGATIONS CLASSIQUES" du
+    # BOC porte, pour chaque obligation cotee ce jour, le volume echange et la
+    # valeur transigee. On les injecte dans obligations-cotees-prix.csv sur les
+    # lignes du jour (deja ecrites a 15h par scrape_brvm_bond_prices.py).
+    bond_volumes = extract_bond_volumes(text)
+    if bond_volumes:
+        traded = sum(1 for v in bond_volumes.values() if v[0] > 0)
+        print(
+            f"\nVolumes obligations : {len(bond_volumes)} obligations dans le BOC, "
+            f"{traded} cotees ce jour.",
+            file=sys.stderr,
+        )
+        if args.merge:
+            backfill_bond_prices(bond_volumes, boc_date)
+    else:
+        print("Aucun volume obligataire extrait du BOC.", file=sys.stderr)
 
     if synthese:
         write_synthese_json(synthese, boc_date)
