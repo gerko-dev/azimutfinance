@@ -8,6 +8,8 @@ import {
   UMOA_COUNTRY_CODE,
   generateAllListedBondEvents,
 } from "./listedBondsTypes";
+import { getBrvmSnapshot } from "./brvm/liveQuotes";
+import { computeLiveRatios } from "./fundamentalsCalc";
 
 const DATA_DIR = join(process.cwd(), "data");
 // Historiques scrapes depuis Sikafinance : un CSV par titre/indice avec OHLCV
@@ -206,45 +208,23 @@ export function loadAverageVolumes(days = 30): Map<string, number | null> {
   return result;
 }
 
-export function formatStockForUI(s: StockRow) {
-  const price = parseNum(s.price);
-  const change = parseNum(s.change);
-  const changePercentValue = parseNum(s.changePercent) * 100;
-  const up = change >= 0;
-
-  return {
-    code: s.code?.trim() || "",
-    sector: s.sector?.trim() || "",
-    price: price > 0 ? price.toLocaleString("fr-FR").replace(/,/g, " ") : "NC",
-    change: isPresent(s.changePercent)
-      ? (changePercentValue >= 0 ? "+" : "") + changePercentValue.toFixed(2) + "%"
-      : "NC",
-    up,
-    volume: isPresent(s.volume)
-      ? parseNum(s.volume).toLocaleString("fr-FR").replace(/,/g, " ")
-      : "NC",
-    capi: isPresent(s.capitalization)
-      ? Math.round(parseNum(s.capitalization) / 1000000)
-          .toLocaleString("fr-FR")
-          .replace(/,/g, " ")
-      : "NC",
-    per: isPresent(s.per) ? parseNum(s.per).toFixed(1) : "NC",
-    yield: isPresent(s.yield) ? (parseNum(s.yield) * 100).toFixed(2) + "%" : "NC",
-  };
-}
-
 export function loadStockByCode(code: string): StockRow | undefined {
   const stocks = loadStocks();
   return stocks.find((s) => s.code?.trim().toUpperCase() === code.toUpperCase());
 }
 
+/**
+ * Champs STATIQUES d'une action depuis titres.csv (identité + structure du
+ * capital). Les champs dynamiques — price / change / changePercent / volume /
+ * per / yield — sont volontairement renvoyés à 0 / false : ils ne doivent plus
+ * venir du CSV. La fiche /titre/[code] les remplit depuis le cours live BRVM
+ * (repli historique_sika) et computeLiveRatios. high52w / low52w / yearChange /
+ * volatility sont recalculés depuis l'historique Sika par la page.
+ */
 export function getStockDetails(code: string) {
   const s = loadStockByCode(code);
   if (!s) return null;
 
-  const price = parseNum(s.price);
-  const change = parseNum(s.change);
-  const changePercent = parseNum(s.changePercent) * 100;
   const high52w = parseNum(s.high52w);
   const low52w = parseNum(s.low52w);
   const yearChange = parseNum(s.yearChange) * 100;
@@ -252,9 +232,6 @@ export function getStockDetails(code: string) {
   const capitalization = parseNum(s.capitalization);
   const sharesOutstanding = parseNum(s.sharesOutstanding);
   const floatValue = parseNum(s.float);
-  const per = parseNum(s.per);
-  const stockYield = parseNum(s.yield) * 100;
-  const volume = parseNum(s.volume);
 
   return {
     code: s.code?.trim() || "",
@@ -263,23 +240,24 @@ export function getStockDetails(code: string) {
     country: s.country?.trim() || "",
     isin: s.isin?.trim() || "",
     description: s.description?.trim() || "",
-    price,
-    change,
-    changePercent,
-    volume,
+    // Dynamiques : remplis par la page depuis le live / Sika / ratios.
+    price: 0,
+    change: 0,
+    changePercent: 0,
+    volume: 0,
+    per: 0,
+    yield: 0,
     capitalization,
     sharesOutstanding,
     float: floatValue,
-    per,
-    yield: stockYield,
     high52w,
     low52w,
     yearChange,
     volatility,
-    hasPer: isPresent(s.per),
-    hasYield: isPresent(s.yield),
+    hasPer: false,
+    hasYield: false,
     hasYearChange: isPresent(s.yearChange),
-    hasVolume: isPresent(s.volume),
+    hasVolume: false,
   };
 }
 
@@ -980,6 +958,42 @@ export function loadOhlcHistory(code: string): PriceHistoryEntry[] {
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
+export type SikaQuote = {
+  /** Dernière clôture disponible dans data/historique_sika/ */
+  price: number;
+  /** Volume de la dernière séance (0 si absent) */
+  volume: number;
+  /** Variation en FCFA vs séance précédente */
+  change: number;
+  /** Variation en % vs séance précédente */
+  changePercent: number;
+  /** Date ISO de la dernière séance */
+  date: string;
+};
+
+/**
+ * Dernière cotation connue d'une action d'après l'historique Sika
+ * (data/historique_sika/). Sert de repli quand le cours live BRVM est
+ * indisponible — on ne retombe JAMAIS sur titres.csv pour price/volume/var.
+ * Renvoie null si le ticker n'a aucun historique.
+ */
+export function getLatestSikaQuote(code: string): SikaQuote | null {
+  const hist = loadOhlcHistory(code); // trié par date asc
+  if (hist.length === 0) return null;
+  const last = hist[hist.length - 1];
+  const prev = hist.length >= 2 ? hist[hist.length - 2] : null;
+  const change = prev ? last.value - prev.value : 0;
+  const changePercent =
+    prev && prev.value > 0 ? ((last.value - prev.value) / prev.value) * 100 : 0;
+  return {
+    price: last.value,
+    volume: last.volume ?? 0,
+    change,
+    changePercent,
+    date: last.date,
+  };
+}
+
 /** Charge l'historique d'un indice BRVM (code = BRVMC, BRVM30, BRVM-SF, etc.) */
 export function loadIndexHistory(
   code: string
@@ -1241,47 +1255,99 @@ export type ActionRow = {
   hasYield: boolean;
 };
 
-/** Charge toutes les actions enrichies pour la page Actions BRVM */
+/**
+ * Assemble un ActionRow à partir des champs statiques de titres.csv + un cours
+ * courant (live BRVM ou dernière clôture Sika — jamais le prix de titres.csv).
+ * PER / rendement sont recalculés sur ce cours via computeLiveRatios, et la
+ * capitalisation = nbTitres × cours courant si les fondamentaux sont dispo.
+ */
+function buildActionRow(
+  s: StockRow,
+  code: string,
+  price: number,
+  volume: number,
+  changePercent: number,
+): ActionRow {
+  const ratios = price > 0 ? computeLiveRatios(code, price) : null;
+  const per = ratios?.per ?? 0;
+  const yieldPct =
+    ratios?.dividendYield != null ? ratios.dividendYield * 100 : 0;
+
+  let capitalization = parseNum(s.capitalization);
+  if (ratios && ratios.nbTitres > 0 && price > 0) {
+    capitalization = ratios.nbTitres * price;
+  }
+
+  return {
+    code,
+    name: s.name?.trim() || "",
+    sector: s.sector?.trim() || "",
+    country: s.country?.trim() || "",
+    isin: s.isin?.trim() || "",
+    price,
+    changePercent,
+    volume,
+    capitalization,
+    per,
+    yieldPct,
+    hasPer: per > 0,
+    hasYield: yieldPct > 0 && yieldPct < 50,
+  };
+}
+
+/**
+ * Charge toutes les actions cotées (version SYNCHRONE) :
+ *  - identité / secteur / pays / ISIN : titres.csv
+ *  - price / changePercent / volume : dernière clôture de l'historique Sika
+ *    (data/historique_sika/) — JAMAIS les colonnes de titres.csv
+ *  - per / yield : recalculés sur ce cours (computeLiveRatios)
+ *
+ * Pour le cours intraday live BRVM, utiliser `loadAllActionsEnriched()`.
+ */
 export function loadAllActions(): ActionRow[] {
+  return loadStocks().map((s) => {
+    const code = s.code?.trim().toUpperCase() || "";
+    const sika = getLatestSikaQuote(code);
+    return buildActionRow(
+      s,
+      code,
+      sika?.price ?? 0,
+      sika?.volume ?? 0,
+      sika?.changePercent ?? 0,
+    );
+  });
+}
+
+/**
+ * Variante ASYNCHRONE : superpose le cours intraday live BRVM (mémoïsé ~5 min)
+ * sur l'historique Sika. Pour un ticker sans cotation live du jour, on retombe
+ * sur la dernière clôture Sika. À utiliser dans les pages déjà async.
+ */
+export async function loadAllActionsEnriched(): Promise<ActionRow[]> {
   const stocks = loadStocks();
+  const snapshot = await getBrvmSnapshot();
+  const liveByCode = new Map(snapshot.quotes.map((q) => [q.code, q]));
+
   return stocks.map((s) => {
-    const rawYield = parseNum(s.yield);
-    // Detection intelligente : si la valeur > 1 c'est deja en %, sinon en decimal
-    // (un yield > 100% n'a pas de sens, donc on cap aussi)
-    let yieldPct: number;
-    if (rawYield > 1) {
-      // Deja en pourcentage (ex: 7.5)
-      yieldPct = rawYield;
-    } else {
-      // En decimal (ex: 0.075)
-      yieldPct = rawYield * 100;
+    const code = s.code?.trim().toUpperCase() || "";
+    const live = liveByCode.get(code);
+    if (live && Number.isFinite(live.currentPrice) && live.currentPrice > 0) {
+      return buildActionRow(
+        s,
+        code,
+        live.currentPrice,
+        Number.isFinite(live.volume) && live.volume > 0 ? live.volume : 0,
+        Number.isFinite(live.variationPct) ? live.variationPct : 0,
+      );
     }
-    if (!isFinite(yieldPct) || yieldPct > 50) yieldPct = 0;
-
-    const rawChange = parseNum(s.changePercent);
-    let changePct: number;
-    if (Math.abs(rawChange) > 1) {
-      changePct = rawChange;
-    } else {
-      changePct = rawChange * 100;
-    }
-    if (!isFinite(changePct)) changePct = 0;
-
-    return {
-      code: s.code?.trim() || "",
-      name: s.name?.trim() || "",
-      sector: s.sector?.trim() || "",
-      country: s.country?.trim() || "",
-      isin: s.isin?.trim() || "",
-      price: parseNum(s.price),
-      changePercent: changePct,
-      volume: parseNum(s.volume),
-      capitalization: parseNum(s.capitalization),
-      per: parseNum(s.per),
-      yieldPct,
-      hasPer: isPresent(s.per) && parseNum(s.per) > 0,
-      hasYield: isPresent(s.yield) && yieldPct > 0 && yieldPct < 50,
-    };
+    const sika = getLatestSikaQuote(code);
+    return buildActionRow(
+      s,
+      code,
+      sika?.price ?? 0,
+      sika?.volume ?? 0,
+      sika?.changePercent ?? 0,
+    );
   });
 }
 /** KPIs globaux du marche actions */

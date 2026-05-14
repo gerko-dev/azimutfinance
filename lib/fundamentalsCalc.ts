@@ -465,6 +465,55 @@ export function computeLatestRatios(ticker: string): FundRatios | null {
   return list[list.length - 1] ?? null;
 }
 
+export type LiveRatios = {
+  /** PER = cours actuel / BPA du dernier exercice. null si BPA <= 0 (pertes)
+   *  ou exercice non disponible. */
+  per: number | null;
+  /** Rendement = DPA du dernier exercice / cours actuel (décimal, ex 0.075).
+   *  null si aucun dividende au dernier exercice. */
+  dividendYield: number | null;
+  /** Bénéfice net par action du dernier exercice (peut être négatif / null). */
+  bpa: number | null;
+  /** Dividende par action du dernier exercice (0 si non distribué). */
+  dpa: number;
+  /** Nombre de titres (DB_Titres) — pour recalculer la capitalisation live. */
+  nbTitres: number;
+  /** Dernier résultat net disponible. */
+  resultatNet: number;
+};
+
+/**
+ * Ratios de marché recalculés sur le cours COURANT (live ou dernière clôture
+ * Sika), pas sur la clôture de fin d'exercice. C'est la définition attendue
+ * côté site :
+ *   PER   = cours actuel / dernier BPA disponible
+ *   yield = dernier DPA versé / cours actuel
+ * Les agrégats fondamentaux (BPA, DPA, Nb_Titres) viennent du dernier exercice
+ * publié dans DB_Valeurs.csv. Renvoie null si le ticker n'a aucun exercice
+ * exploitable.
+ */
+export function computeLiveRatios(
+  ticker: string,
+  currentPrice: number,
+): LiveRatios | null {
+  const r = computeLatestRatios(ticker);
+  if (!r) return null;
+  const per =
+    r.bpa !== null && r.bpa > 0 && currentPrice > 0
+      ? currentPrice / r.bpa
+      : null;
+  const dividendYield =
+    r.dpa > 0 && currentPrice > 0 ? r.dpa / currentPrice : null;
+  return {
+    per,
+    dividendYield,
+    bpa: r.bpa,
+    dpa: r.dpa,
+    nbTitres: r.nbTitres,
+    resultatNet: r.resultatNet,
+  };
+}
+
 // ── Snapshots screener ──────────────────────────────────────────────────────
 
 /**

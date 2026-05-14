@@ -3,7 +3,7 @@ import Ticker from "@/components/Ticker";
 import ActionsBRVMView from "@/components/ActionsBRVMView";
 import ProfileNudge from "@/components/profile/ProfileNudge";
 import {
-  loadAllActions,
+  loadAllActionsEnriched,
   getActionsMarketStats,
   loadMultipleIndicesHistory,
   getIndexStats,
@@ -11,11 +11,9 @@ import {
   BRVM_INDEX_NAMES,
   buildRiskReturnDataset,
   computeYtdPct,
-  type ActionRow,
 } from "@/lib/dataLoader";
 import { getBrvmSnapshot } from "@/lib/brvm/liveQuotes";
 import { getBrvmIndicesSnapshot } from "@/lib/brvm/liveIndices";
-import { computeLatestRatios } from "@/lib/fundamentalsCalc";
 import { fetchUserRole } from "@/lib/auth/userRole";
 
 export const dynamic = "force-dynamic";
@@ -35,100 +33,26 @@ const indexColors: Record<string, string> = {
 };
 
 export default async function Page() {
-  const actions = loadAllActions();
-
-  const [liveSnapshot, indicesSnapshot, userRole] = await Promise.all([
+  // loadAllActionsEnriched : identité titres.csv + cours/volume/var live BRVM
+  // (repli historique_sika), capi/PER/yield recalculés sur le cours courant.
+  // titres.csv n'est plus utilisé pour price/volume/changePercent/per/yield.
+  const [actions, liveSnapshot, indicesSnapshot, userRole] = await Promise.all([
+    loadAllActionsEnriched(),
     getBrvmSnapshot(),
     getBrvmIndicesSnapshot(),
     fetchUserRole(),
   ]);
 
-  // === FUSION CSV + LIVE + FONDAMENTAUX ===
-  // Override price/changePercent/volume par le live BRVM, et recalcule
-  // capi/PER/yield depuis le calculateur (BPA, DPA, Nb_Titres calculés à la
-  // volée depuis DB_Valeurs + DB_Titres + historique_sika) :
-  //   - capi   = nbTitres × prix_live
-  //   - PER    = prix_live / BPA(dernier exercice)
-  //   - yield  = DPA(dernier exercice) / prix_live
-  // Si pas de BPA/DPA disponible (ou BPA<=0 = pertes), PER/yield sont marques
-  // absents. Si pas de ratios du tout, on retombe sur titres.csv scale par le
-  // ratio de prix.
   const liveByCode = new Map(liveSnapshot.quotes.map((q) => [q.code, q]));
-  const mergedActions: ActionRow[] = actions.map((a) => {
-    const lv = liveByCode.get(a.code);
-    const ratios = computeLatestRatios(a.code);
 
-    const newPrice = lv && lv.currentPrice > 0 ? lv.currentPrice : a.price;
-    const newChange =
-      lv && Number.isFinite(lv.variationPct) ? lv.variationPct : a.changePercent;
-    const newVolume =
-      lv && Number.isFinite(lv.volume) && lv.volume > 0 ? lv.volume : a.volume;
-    const priceChanged = a.price > 0 && newPrice !== a.price;
-
-    // --- Capitalisation ---
-    let capitalization = a.capitalization;
-    if (ratios && ratios.nbTitres > 0 && newPrice > 0) {
-      capitalization = ratios.nbTitres * newPrice;
-    } else if (priceChanged && a.capitalization > 0) {
-      capitalization = a.capitalization * (newPrice / a.price);
-    }
-
-    // --- PER : prix_live / BPA(dernier exercice) ---
-    let per = a.per;
-    let hasPer = a.hasPer;
-    if (ratios) {
-      const bpa = ratios.bpa ?? 0;
-      if (bpa > 0 && newPrice > 0) {
-        per = newPrice / bpa;
-        hasPer = true;
-      } else {
-        // BPA <= 0 (pertes) ou non renseigne : PER non significatif
-        per = 0;
-        hasPer = false;
-      }
-    } else if (priceChanged && a.hasPer && a.per > 0) {
-      per = a.per * (newPrice / a.price);
-    }
-
-    // --- Rendement du dividende : DPA(dernier exercice) / prix_live ---
-    let yieldPct = a.yieldPct;
-    let hasYield = a.hasYield;
-    if (ratios) {
-      if (ratios.dpa > 0 && newPrice > 0) {
-        yieldPct = (ratios.dpa / newPrice) * 100;
-        hasYield = yieldPct > 0 && yieldPct < 50;
-      } else {
-        // Pas de dividende sur le dernier exercice connu
-        yieldPct = 0;
-        hasYield = false;
-      }
-    } else if (priceChanged && a.hasYield && a.yieldPct > 0) {
-      yieldPct = a.yieldPct * (a.price / newPrice);
-    }
-
-    return {
-      ...a,
-      price: newPrice,
-      changePercent: newChange,
-      volume: newVolume,
-      capitalization,
-      per,
-      yieldPct,
-      hasPer,
-      hasYield,
-    };
-  });
-
-  const marketStats = getActionsMarketStats(mergedActions);
+  const marketStats = getActionsMarketStats(actions);
   // Live count : nombre d'actions cotees vu sur la page BRVM aujourd'hui
   const liveListedCount = liveSnapshot.quotes.length;
 
   // === TOP/FLOP DEPUIS LE LIVE ===
   // Tri sur la variation % live, ties broken by volume desc pour eviter les
   // ex-aequo a 0% qui flotteraient en tete arbitrairement.
-  const liveActionsOnly = mergedActions.filter((a) =>
-    liveByCode.has(a.code),
-  );
+  const liveActionsOnly = actions.filter((a) => liveByCode.has(a.code));
   const topGainers = [...liveActionsOnly]
     .filter((a) => a.changePercent > 0 && a.price > 0)
     .sort((a, b) =>
@@ -180,7 +104,7 @@ export default async function Page() {
 
   // YTD par action : meme logique, le helper computeYtdPct est generique
   const ytdByAction: Record<string, number | null> = {};
-  for (const a of mergedActions) {
+  for (const a of actions) {
     ytdByAction[a.code] = computeYtdPct(a.code, a.price);
   }
 
@@ -192,7 +116,7 @@ export default async function Page() {
         <ProfileNudge field="interests" revalidate="/marches/actions" />
       </div>
       <ActionsBRVMView
-        actions={mergedActions}
+        actions={actions}
         marketStats={marketStats}
         liveListedCount={liveListedCount}
         topGainers={topGainers}

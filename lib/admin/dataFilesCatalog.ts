@@ -34,12 +34,22 @@ export type DataFileMeta = {
   dateColumn: string | null;
   delimiter: "," | ";";
   description: string;
+  /**
+   * En-tête attendu : liste exacte des colonnes du CSV. Sert à valider qu'un
+   * fichier importé via /admin/data correspond bien à sa cible (cf.
+   * uploadDataFile). Toutes ces colonnes doivent être présentes dans le
+   * fichier uploadé (colonnes supplémentaires tolérées). Optionnel : si absent,
+   * aucune validation de colonnes n'est appliquée.
+   */
+  columns?: string[];
 };
 
 /**
  * Fichiers rafraîchis automatiquement par un workflow GitHub Actions (scrape-*).
  * Ils n'ont plus besoin d'import manuel : on les masque de la page admin Data.
  *  - obligations-cotees.csv / obligations-cotees-vn-boc.csv / fcp.csv → scrape-boc
+ *  - obligations-cotees-prix.csv → scrape-brvm-bond-prices (snapshot 15h) +
+ *    backfill volume/transactions par scrape-boc
  *  - commodities + FX → scrape-investing
  *  - umoa-emissions-* → scrape-umoa-emissions
  *  - apromac.csv → scrape-apromac
@@ -51,6 +61,8 @@ export const AUTO_SCRAPED_FILES: ReadonlySet<string> = new Set([
   "obligations-cotees.csv",
   "obligations-cotees-vn-boc.csv",
   "fcp.csv",
+  // scrape-brvm-bond-prices (snapshot 15h) + backfill volume/transactions par scrape-boc
+  "obligations-cotees-prix.csv",
   // scrape-investing — commodities
   "Cacao.csv",
   "Cafe.csv",
@@ -102,6 +114,18 @@ export const HIDDEN_DATA_FILES: ReadonlySet<string> = new Set([
   ...LEGACY_DEAD_FILES,
 ]);
 
+// En-têtes partagés des CSV d'annonces immobilières (deux formats).
+const IMMO_CI_COLUMNS = [
+  "source", "transaction", "type_bien", "titre", "prix_fcfa", "surface_m2",
+  "prix_m2_fcfa", "chambres", "quartier", "sous_quartier", "standing", "url",
+  "scraped_at",
+];
+const IMMO_HARMONISE_COLUMNS = [
+  "country", "country_label", "source", "transaction", "type_bien",
+  "subcategory", "titre", "prix_fcfa", "surface_m2", "prix_m2_fcfa", "chambres",
+  "quartier", "sous_quartier", "standing", "url", "scraped_at",
+];
+
 export const DATA_FILES_CATALOG: Record<string, DataFileMeta> = {
   // === Cours BRVM ===
   "titres.csv": {
@@ -110,13 +134,12 @@ export const DATA_FILES_CATALOG: Record<string, DataFileMeta> = {
     dateColumn: null,
     delimiter: ";",
     description: "Snapshot actions cotées (prix, capi, ratios)",
-  },
-  "obligations-cotees-prix.csv": {
-    category: "Cours BRVM",
-    cadence: "daily-business",
-    dateColumn: "date",
-    delimiter: ";",
-    description: "Historique prix obligataires",
+    columns: [
+      "code", "name", "sector", "country", "isin", "price", "change",
+      "changePercent", "volume", "capitalization", "sharesOutstanding",
+      "float", "per", "yield", "high52w", "low52w", "yearChange",
+      "volatility", "description",
+    ],
   },
   "fcp/aumfcp.csv": {
     category: "Cours BRVM",
@@ -124,6 +147,7 @@ export const DATA_FILES_CATALOG: Record<string, DataFileMeta> = {
     dateColumn: "Date",
     delimiter: ";",
     description: "Historique trimestriel VL + Actif net OPCVM (source AGP UEMOA)",
+    // Pas de `columns` : fichier en sous-dossier, non importable via le panneau.
   },
 
   // === Macro & taux ===
@@ -133,31 +157,28 @@ export const DATA_FILES_CATALOG: Record<string, DataFileMeta> = {
     dateColumn: "Periode",
     delimiter: ";",
     description: "Indicateurs macro UEMOA (annuel)",
+    columns: ["Pays", "Feuille", "Code", "Indicateur", "Periode", "Valeur"],
   },
-  "bddtaux.csv": {
-    category: "Macro & taux",
-    cadence: "monthly",
-    dateColumn: "period",
-    delimiter: ",",
-    description: "Taux directeurs et interbancaires — fallback si le PDF BCEAO est absent",
-  },
+  // Note : les taux BCEAO/UEMOA viennent désormais du PDF
+  // data/marche-monetaire/Bul_stat.pdf, importé via lib/admin/bceaoBulletin.ts
+  // (carte dédiée sur /admin/data) — plus de bddtaux.csv.
 
   // === Immobilier (scrapers locaux scripts/*.py, import manuel) ===
-  "jiji-achat.csv": { category: "Immobilier", cadence: "monthly", dateColumn: "scraped_at", delimiter: ";", description: "Annonces achat — Jiji (Côte d'Ivoire)" },
-  "jiji-location.csv": { category: "Immobilier", cadence: "monthly", dateColumn: "scraped_at", delimiter: ";", description: "Annonces location — Jiji (Côte d'Ivoire)" },
-  "coinafrique-location.csv": { category: "Immobilier", cadence: "monthly", dateColumn: "scraped_at", delimiter: ";", description: "Annonces location — CoinAfrique (Côte d'Ivoire)" },
-  "coinafrique-uemoa.csv": { category: "Immobilier", cadence: "monthly", dateColumn: "scraped_at", delimiter: ";", description: "Annonces CoinAfrique harmonisées — 7 pays UEMOA" },
-  "selogeraumali.csv": { category: "Immobilier", cadence: "monthly", dateColumn: "scraped_at", delimiter: ";", description: "Annonces SeLogerAuMali (Mali)" },
-  "expat-dakar.csv": { category: "Immobilier", cadence: "monthly", dateColumn: "scraped_at", delimiter: ";", description: "Annonces Expat-Dakar (Sénégal)" },
-  "annoncesimmo-ci.csv": { category: "Immobilier", cadence: "monthly", dateColumn: "scraped_at", delimiter: ";", description: "Annonces AnnoncesImmo (Côte d'Ivoire)" },
-  "clefsdufaso.csv": { category: "Immobilier", cadence: "monthly", dateColumn: "scraped_at", delimiter: ";", description: "Annonces Clefs du Faso (Burkina Faso)" },
-  "beninagence.csv": { category: "Immobilier", cadence: "monthly", dateColumn: "scraped_at", delimiter: ";", description: "Annonces Bénin Agence (Bénin)" },
-  "quartier-mapping.csv": { category: "Immobilier", cadence: "ref", dateColumn: null, delimiter: ";", description: "Mapping quartier → commune / région" },
+  "jiji-achat.csv": { category: "Immobilier", cadence: "monthly", dateColumn: "scraped_at", delimiter: ";", description: "Annonces achat — Jiji (Côte d'Ivoire)", columns: IMMO_CI_COLUMNS },
+  "jiji-location.csv": { category: "Immobilier", cadence: "monthly", dateColumn: "scraped_at", delimiter: ";", description: "Annonces location — Jiji (Côte d'Ivoire)", columns: IMMO_CI_COLUMNS },
+  "coinafrique-location.csv": { category: "Immobilier", cadence: "monthly", dateColumn: "scraped_at", delimiter: ";", description: "Annonces location — CoinAfrique (Côte d'Ivoire)", columns: IMMO_CI_COLUMNS },
+  "coinafrique-uemoa.csv": { category: "Immobilier", cadence: "monthly", dateColumn: "scraped_at", delimiter: ";", description: "Annonces CoinAfrique harmonisées — 7 pays UEMOA", columns: IMMO_HARMONISE_COLUMNS },
+  "selogeraumali.csv": { category: "Immobilier", cadence: "monthly", dateColumn: "scraped_at", delimiter: ";", description: "Annonces SeLogerAuMali (Mali)", columns: IMMO_HARMONISE_COLUMNS },
+  "expat-dakar.csv": { category: "Immobilier", cadence: "monthly", dateColumn: "scraped_at", delimiter: ";", description: "Annonces Expat-Dakar (Sénégal)", columns: IMMO_HARMONISE_COLUMNS },
+  "annoncesimmo-ci.csv": { category: "Immobilier", cadence: "monthly", dateColumn: "scraped_at", delimiter: ";", description: "Annonces AnnoncesImmo (Côte d'Ivoire)", columns: IMMO_HARMONISE_COLUMNS },
+  "clefsdufaso.csv": { category: "Immobilier", cadence: "monthly", dateColumn: "scraped_at", delimiter: ";", description: "Annonces Clefs du Faso (Burkina Faso)", columns: IMMO_HARMONISE_COLUMNS },
+  "beninagence.csv": { category: "Immobilier", cadence: "monthly", dateColumn: "scraped_at", delimiter: ";", description: "Annonces Bénin Agence (Bénin)", columns: IMMO_HARMONISE_COLUMNS },
+  "quartier-mapping.csv": { category: "Immobilier", cadence: "ref", dateColumn: null, delimiter: ";", description: "Mapping quartier → commune / région", columns: ["country", "quartier_alias", "commune", "quartier_pretty", "region"] },
 
   // === Référentiels comptables ===
-  "DB_Postes.csv": { category: "Référentiel comptable", cadence: "ref", dateColumn: null, delimiter: ",", description: "Codes des postes comptables" },
-  "DB_Titres.csv": { category: "Référentiel comptable", cadence: "ref", dateColumn: null, delimiter: ",", description: "Référentiel des sociétés cotées" },
-  "DB_Valeurs.csv": { category: "Référentiel comptable", cadence: "yearly", dateColumn: "exercice", delimiter: ",", description: "Valeurs comptables par exercice" },
+  "DB_Postes.csv": { category: "Référentiel comptable", cadence: "ref", dateColumn: null, delimiter: ",", description: "Codes des postes comptables", columns: ["code_poste", "libelle_long", "libelle_court", "categorie", "format_etats", "ordre", "type_valeur"] },
+  "DB_Titres.csv": { category: "Référentiel comptable", cadence: "ref", dateColumn: null, delimiter: ",", description: "Référentiel des sociétés cotées", columns: ["ticker", "raison_sociale", "secteur", "nb_titres", "cours", "capitalisation", "devise", "format_etats"] },
+  "DB_Valeurs.csv": { category: "Référentiel comptable", cadence: "yearly", dateColumn: "exercice", delimiter: ",", description: "Valeurs comptables par exercice", columns: ["ticker", "exercice", "periode", "code_poste", "valeur", "devise"] },
 };
 
 export const CATEGORY_ORDER: string[] = [

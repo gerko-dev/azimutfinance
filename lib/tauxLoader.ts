@@ -1,14 +1,14 @@
 // Loader pour les taux BCEAO & UEMOA.
 //
-// Source primaire : data/marche-monetaire/Bul_stat.pdf (parsé par tauxPdfParser).
-// Fallback : data/bddtaux.csv (utilisé si le PDF est absent).
+// Source UNIQUE : data/marche-monetaire/Bul_stat.pdf (parsé par tauxPdfParser).
+// Le PDF s'importe depuis /admin/data. Aucun fallback CSV : si le PDF est
+// absent ou illisible, les séries sont simplement vides.
 //
 // Le cache est invalidé par la mtime du PDF — il suffit de remplacer le fichier
 // pour que la page se mette à jour au prochain rendu.
 
-import { readFileSync, statSync, existsSync } from "fs";
+import { statSync, existsSync } from "fs";
 import { join } from "path";
-import Papa from "papaparse";
 import { parseBceaoBulletinPdf, type ParsedBulletin } from "./tauxPdfParser";
 import type {
   NormalizedPeriod,
@@ -21,18 +21,7 @@ import type {
 } from "./tauxTypes";
 
 const DATA_DIR = join(process.cwd(), "data");
-const FILE = "bddtaux.csv";
 const PDF_PATH = join(DATA_DIR, "marche-monetaire", "Bul_stat.pdf");
-
-type RawRow = {
-  section: string;
-  indicator: string;
-  country: string;
-  period: string;
-  value: string;
-  unit: string;
-  source: string;
-};
 
 let _cache: TauxRow[] | null = null;
 let _cachePdfMtimeMs = 0;
@@ -206,45 +195,6 @@ function normalizePeriod(raw: string): NormalizedPeriod {
   };
 }
 
-function parseValue(v: string): number {
-  const s = (v ?? "").toString().trim();
-  if (!s || s === "NC" || s === "-") return NaN;
-  // Format CSV : point décimal standard, parfois trailing dot ("5226.")
-  const n = Number(s);
-  return isNaN(n) ? NaN : n;
-}
-
-function loadFromCsv(): TauxRow[] {
-  const filePath = join(DATA_DIR, FILE);
-  let content = readFileSync(filePath, "utf-8");
-  if (content.charCodeAt(0) === 0xfeff) content = content.slice(1);
-
-  const result = Papa.parse<RawRow>(content, {
-    header: true,
-    delimiter: ",",
-    skipEmptyLines: true,
-    dynamicTyping: false,
-    transformHeader: (h) => h.trim().replace(/^﻿/, ""),
-  });
-
-  const rows: TauxRow[] = [];
-  for (const r of result.data) {
-    const section = r.section?.trim() as TauxSection;
-    const indicator = r.indicator?.trim();
-    const country = r.country?.trim();
-    const periodRaw = r.period?.trim();
-    const value = parseValue(r.value);
-    const unit = (r.unit?.trim() || "pct") as TauxUnit;
-    const source = r.source?.trim() || "";
-
-    if (!section || !indicator || !country || !periodRaw) continue;
-    if (!isFinite(value)) continue;
-
-    rows.push({ section, indicator, country, period: normalizePeriod(periodRaw), value, unit, source });
-  }
-  return rows;
-}
-
 function rowsFromBulletin(b: ParsedBulletin): TauxRow[] {
   const out: TauxRow[] = [];
   for (const r of b.rows) {
@@ -263,11 +213,10 @@ function rowsFromBulletin(b: ParsedBulletin): TauxRow[] {
 }
 
 function loadRaw(): TauxRow[] {
-  if (_cache !== null) return _cache;
-  // The PDF preload may not have been awaited (synchronous render path). Fall
-  // back to CSV in that case.
-  _cache = loadFromCsv();
-  return _cache;
+  // _cache est rempli par preloadTauxData() (à await avant tout getSeries).
+  // Si le PDF est absent / illisible / le preload pas encore passé, on renvoie
+  // un tableau vide — il n'y a plus de fallback CSV.
+  return _cache ?? [];
 }
 
 /**
@@ -275,7 +224,7 @@ function loadRaw(): TauxRow[] {
  * subsequent calls (mtime check is the only I/O). The page is expected to await
  * this before any getSeries/getSnapshot calls.
  *
- * If the PDF is absent, no-op (the CSV fallback kicks in via loadRaw).
+ * Si le PDF est absent, no-op : loadRaw renverra un tableau vide.
  */
 export async function preloadTauxData(): Promise<void> {
   if (!existsSync(PDF_PATH)) return;
@@ -287,8 +236,8 @@ export async function preloadTauxData(): Promise<void> {
     _cachePdfMtimeMs = mtime;
     _bulletinLabel = bulletin.bulletinLabel;
   } catch (err) {
-    console.warn("[tauxLoader] PDF parse failed, falling back to CSV:", err);
-    // Leave _cache as-is — loadRaw will load CSV.
+    console.warn("[tauxLoader] échec du parsing du PDF BCEAO :", err);
+    // _cache reste tel quel (null ou parsing précédent) — pas de fallback CSV.
   }
 }
 

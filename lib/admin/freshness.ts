@@ -63,7 +63,7 @@ const FR_MONTHS: Record<string, number> = {
  * Parse une cellule de date dans les formats utilisés à travers data/ :
  *  - ISO YYYY-MM-DD
  *  - FR DD/MM/YYYY ou DD-MM-YYYY
- *  - FR mois abrégé "déc-19" / "déc.-2019" (utilisé par bddtaux.csv)
+ *  - FR mois abrégé "déc-19" / "déc.-2019"
  *  - Année seule "1970" (macro.csv et exercice DB_*)
  * Retourne null si non parsable.
  */
@@ -217,4 +217,40 @@ export async function analyzeFreshness(filename: string): Promise<FileFreshness>
       message: `Erreur d'analyse : ${(e as Error).message}`,
     };
   }
+}
+
+/**
+ * Fraîcheur d'un document non-CSV (ex : PDF importé manuellement). On ne lit
+ * pas son contenu : la fraîcheur est dérivée de la date de dernière
+ * modification du fichier comparée à la cadence attendue. `mtimeMs` à null
+ * signifie « document non importé ».
+ */
+export function documentFreshness(
+  meta: { category: string; cadence: DataFileCadence; description: string },
+  mtimeMs: number | null,
+): FileFreshness {
+  if (mtimeMs === null) {
+    return {
+      category: meta.category,
+      cadence: meta.cadence,
+      description: meta.description,
+      rowCount: null,
+      lastDataDate: null,
+      lagDays: null,
+      status: "unknown",
+      message: "Document non importé.",
+    };
+  }
+  const lastDataDate = new Date(mtimeMs).toISOString().slice(0, 10);
+  const { status, lagDays } = computeStatus(lastDataDate, meta.cadence, new Date());
+  return {
+    category: meta.category,
+    cadence: meta.cadence,
+    description: meta.description,
+    rowCount: null,
+    lastDataDate,
+    lagDays,
+    status,
+    message: null,
+  };
 }

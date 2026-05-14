@@ -2,7 +2,11 @@ import Link from "next/link";
 import Header from "@/components/Header";
 import { computeCommodityStats } from "@/lib/commodities";
 import { computeFxStats } from "@/lib/fx";
-import { computeStockYtdPct, loadStocks } from "@/lib/dataLoader";
+import {
+  computeStockYtdPct,
+  loadStocks,
+  getLatestSikaQuote,
+} from "@/lib/dataLoader";
 import { getBrvmIndicesSnapshot } from "@/lib/brvm/liveIndices";
 import { getBrvmSnapshot } from "@/lib/brvm/liveQuotes";
 import LivePriceBadge from "@/components/LivePriceBadge";
@@ -179,13 +183,12 @@ export default async function Home() {
   const stocksWithYtd = stocks
     .map((s) => {
       const live = liveQuoteByCode.get(s.code);
-      const priceFromCsv = parseFloat(s.price);
+      // Cours courant : live BRVM → repli dernière clôture historique_sika.
+      // titres.csv n'est plus utilisé pour le prix.
       const currentPrice =
         live && Number.isFinite(live.currentPrice) && live.currentPrice > 0
           ? live.currentPrice
-          : Number.isFinite(priceFromCsv)
-            ? priceFromCsv
-            : 0;
+          : getLatestSikaQuote(s.code)?.price ?? 0;
       const ytdChange = computeStockYtdPct(s.code, currentPrice);
       return {
         code: s.code,

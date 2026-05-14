@@ -1,4 +1,5 @@
-// Types pour le module Taux BCEAO & UEMOA (data/bddtaux.csv)
+// Types pour le module Taux BCEAO & UEMOA
+// (source : data/marche-monetaire/Bul_stat.pdf, cf. lib/tauxLoader.ts)
 
 export type TauxSection =
   | "1_Taux_directeurs_BCEAO"

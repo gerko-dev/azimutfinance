@@ -9,7 +9,17 @@ type ProviderConfig = {
   icon: React.ReactNode;
 };
 
-const providers: ProviderConfig[] = [
+// Liste des providers réellement activés côté Supabase, pilotée par
+// NEXT_PUBLIC_OAUTH_PROVIDERS (CSV, ex "google,apple"). Non défini = les 4
+// par défaut. Évite que l'UI propose un provider non configuré.
+const ENABLED_PROVIDERS = new Set(
+  (process.env.NEXT_PUBLIC_OAUTH_PROVIDERS ?? "google,facebook,twitter,apple")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean),
+);
+
+const ALL_PROVIDERS: ProviderConfig[] = [
   {
     id: "google",
     label: "Google",
@@ -61,6 +71,9 @@ const providers: ProviderConfig[] = [
 ];
 
 export default function SocialButtons() {
+  const providers = ALL_PROVIDERS.filter((p) => ENABLED_PROVIDERS.has(p.id));
+  if (providers.length === 0) return null;
+
   return (
     <div className="grid grid-cols-2 gap-2">
       {providers.map((p) => (

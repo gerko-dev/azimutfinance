@@ -4,6 +4,7 @@ import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { uploadDataFile } from "@/lib/admin/dataFiles";
 import type { DataFileInfo } from "@/lib/admin/dataFiles";
+import { uploadBceaoBulletin } from "@/lib/admin/bceaoBulletin";
 import { CATEGORY_ORDER } from "@/lib/admin/dataFilesCatalog";
 import type { FreshnessStatus } from "@/lib/admin/freshness";
 
@@ -82,9 +83,33 @@ export default function DataFilesPanel({ files }: { files: DataFileInfo[] }) {
     fileInputRefs.current[filename]?.click();
   }
 
-  function onFileChange(filename: string, e: React.ChangeEvent<HTMLInputElement>) {
+  function onFileChange(
+    target: DataFileInfo,
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) {
     const file = e.target.files?.[0];
     if (!file) return;
+    const { filename, kind } = target;
+
+    // Garde-fou : le nom du fichier choisi ressemble-t-il à la ligne cible ?
+    // Le contenu sera de toute façon écrit sous le nom canonique — on évite
+    // juste d'écraser une ligne par erreur avec le mauvais fichier.
+    const targetBase = (filename.split("/").pop() ?? filename)
+      .replace(/\.[^.]+$/, "")
+      .toLowerCase();
+    if (targetBase && !file.name.toLowerCase().includes(targetBase)) {
+      const confirmed = window.confirm(
+        `Le fichier choisi « ${file.name} » ne semble pas correspondre à « ${filename} ».\n\n` +
+          `Confirmer le remplacement de « ${filename} » par ce fichier ?`,
+      );
+      if (!confirmed) {
+        if (fileInputRefs.current[filename]) {
+          fileInputRefs.current[filename]!.value = "";
+        }
+        return;
+      }
+    }
+
     setFeedback(null);
     setUploadingFor(filename);
 
@@ -93,7 +118,12 @@ export default function DataFilesPanel({ files }: { files: DataFileInfo[] }) {
     fd.append("filename", filename);
 
     startUpload(async () => {
-      const res = await uploadDataFile(fd);
+      // Le PDF BCEAO a sa propre action serveur (validation %PDF, écriture en
+      // sous-dossier) ; les CSV passent par uploadDataFile.
+      const res =
+        kind === "pdf"
+          ? await uploadBceaoBulletin(fd)
+          : await uploadDataFile(fd);
       if (res.ok) {
         setFeedback({
           ok: true,
@@ -276,8 +306,12 @@ export default function DataFilesPanel({ files }: { files: DataFileInfo[] }) {
                             fileInputRefs.current[f.filename] = el;
                           }}
                           type="file"
-                          accept=".csv,text/csv"
-                          onChange={(e) => onFileChange(f.filename, e)}
+                          accept={
+                            f.kind === "pdf"
+                              ? ".pdf,application/pdf"
+                              : ".csv,text/csv"
+                          }
+                          onChange={(e) => onFileChange(f, e)}
                           className="hidden"
                         />
                         <button
@@ -287,7 +321,9 @@ export default function DataFilesPanel({ files }: { files: DataFileInfo[] }) {
                         >
                           {uploading && uploadingFor === f.filename
                             ? "Upload..."
-                            : "Remplacer"}
+                            : f.modifiedAt
+                              ? "Remplacer"
+                              : "Importer"}
                         </button>
                       </td>
                     </tr>

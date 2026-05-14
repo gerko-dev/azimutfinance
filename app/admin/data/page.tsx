@@ -15,9 +15,9 @@ export default async function DataFilesPage() {
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Fichiers de données</h1>
         <p className="text-sm text-slate-500 mt-1">
-          CSV à importer manuellement. Les fichiers rafraîchis automatiquement par
-          les workflows GitHub Actions (cours BRVM, commodities, FX, émissions
-          UMOA-Titres…) ne sont pas listés ici.
+          Documents à importer manuellement (CSV + PDF BCEAO). Les fichiers
+          rafraîchis automatiquement par les workflows GitHub Actions (cours
+          BRVM, commodities, FX, émissions UMOA-Titres…) ne sont pas listés ici.
         </p>
       </div>
 

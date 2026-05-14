@@ -60,7 +60,9 @@ create index if not exists subscriptions_user_active_idx
 
 create table if not exists public.payments (
   id                          uuid primary key default gen_random_uuid(),
-  user_id                     uuid not null references auth.users(id) on delete restrict,
+  -- on delete set null : la suppression d'un compte ne doit PAS effacer
+  -- l'historique de paiement (trace comptable) — la ligne survit, déliée.
+  user_id                     uuid references auth.users(id) on delete set null,
   subscription_id             uuid references public.subscriptions(id) on delete set null,
   plan                        public.subscription_plan not null,
   amount_fcfa                 bigint not null,

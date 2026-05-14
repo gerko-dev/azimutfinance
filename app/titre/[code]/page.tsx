@@ -5,13 +5,14 @@ import StockDetailView from "@/components/StockDetailView";
 import { getBrvmQuote, getBrvmSnapshot } from "@/lib/brvm/liveQuotes";
 import {
   getStockDetails,
+  getLatestSikaQuote,
   loadPriceHistoryWithVolume,
   loadOhlcHistory,
   loadIndexHistory,
   buildRiskReturnDataset,
   getSectorIndexCode,
   BRVM_INDEX_NAMES,
-  loadAllActions,
+  loadAllActionsEnriched,
   loadMultipleIndicesHistory,
 } from "@/lib/dataLoader";
 import {
@@ -24,7 +25,7 @@ import {
   getFundTitre,
   getStatement,
 } from "@/lib/fundamentals";
-import { computeRatiosByTicker } from "@/lib/fundamentalsCalc";
+import { computeRatiosByTicker, computeLiveRatios } from "@/lib/fundamentalsCalc";
 import { loadDbNewsByTicker } from "@/lib/newsFromDb";
 import { fetchUserRole } from "@/lib/auth/userRole";
 
@@ -68,6 +69,8 @@ export default async function TitrePage({
     getBrvmSnapshot(),
     fetchUserRole(),
   ]);
+  // Cours / volume / variation : live BRVM → repli historique_sika.
+  // titres.csv n'alimente plus ces champs (getStockDetails les renvoie à 0).
   if (liveQuote && Number.isFinite(liveQuote.currentPrice) && liveQuote.currentPrice > 0) {
     stock.price = liveQuote.currentPrice;
     stock.change = liveQuote.variationAmount;
@@ -75,6 +78,33 @@ export default async function TitrePage({
     if (Number.isFinite(liveQuote.volume) && liveQuote.volume > 0) {
       stock.volume = liveQuote.volume;
       stock.hasVolume = true;
+    }
+  } else {
+    const sika = getLatestSikaQuote(codeUpper);
+    if (sika) {
+      stock.price = sika.price;
+      stock.change = sika.change;
+      stock.changePercent = sika.changePercent;
+      if (sika.volume > 0) {
+        stock.volume = sika.volume;
+        stock.hasVolume = true;
+      }
+    }
+  }
+
+  // PER / rendement : recalculés sur le cours courant (jamais titres.csv).
+  //   PER   = cours actuel / BPA du dernier exercice
+  //   yield = DPA du dernier exercice / cours actuel
+  const liveRatios =
+    stock.price > 0 ? computeLiveRatios(codeUpper, stock.price) : null;
+  if (liveRatios) {
+    if (liveRatios.per !== null) {
+      stock.per = liveRatios.per;
+      stock.hasPer = true;
+    }
+    if (liveRatios.dividendYield !== null) {
+      stock.yield = liveRatios.dividendYield * 100;
+      stock.hasYield = true;
     }
   }
 
@@ -150,7 +180,7 @@ export default async function TitrePage({
       : null;
 
   // Pairs du même secteur, top 6 par capitalisation (hors le titre courant)
-  const peers = loadAllActions()
+  const peers = (await loadAllActionsEnriched())
     .filter(
       (a) =>
         a.sector === stock.sector && a.code !== codeUpper && a.price > 0

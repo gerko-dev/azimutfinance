@@ -1,0 +1,55 @@
+# Snapshot 8 h de la présence du site.
+#
+# Toutes les 8 heures, appelle /api/cron/presence-snapshot qui :
+#   - archive les sessions terminées dans presence_sessions
+#   - insère un agrégat par rôle dans presence_snapshots
+# Alimente l'onglet « Analytique du site » de /admin/presence.
+#
+# Pré-requis : secrets GitHub `CRON_SECRET` (même valeur que côté serveur) et
+# optionnellement `APP_URL` (défaut : azimutfinance.com).
+# Également déclenchable manuellement depuis l'UI GitHub Actions.
+
+name: Snapshot présence site
+
+on:
+  schedule:
+    - cron: "0 */8 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: presence-snapshot
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Trigger presence snapshot
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_URL: ${{ secrets.APP_URL || 'https://azimutfinance.com' }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::Secret CRON_SECRET non defini."
+            exit 1
+          fi
+          for i in 1 2 3; do
+            HTTP=$(curl -s -o /tmp/snap.json -w "%{http_code}" \
+              -H "Authorization: Bearer ${CRON_SECRET}" \
+              "${APP_URL}/api/cron/presence-snapshot")
+            echo "Essai $i — HTTP ${HTTP}"
+            cat /tmp/snap.json || true
+            echo ""
+            if [ "$HTTP" = "200" ]; then
+              echo "Snapshot presence OK."
+              exit 0
+            fi
+            if [ $i -lt 3 ]; then
+              echo "Nouvel essai dans 30s..."
+              sleep 30
+            fi
+          done
+          echo "::error::Echec du snapshot presence apres 3 essais."
+          exit 1
