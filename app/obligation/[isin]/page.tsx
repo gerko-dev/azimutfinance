@@ -23,17 +23,40 @@ import { fetchUserRole } from "@/lib/auth/userRole";
 // Le cache module-level dans liveBonds.ts limite la frequence des fetchs reels.
 export const dynamic = "force-dynamic";
 
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ isin: string }>;
+}) {
+  const { isin } = await params;
+  const idUpper = isin.toUpperCase();
+  // Même résolution ISIN-ou-code mnémonique que le composant page.
+  const bond = loadListedBonds().find(
+    (b) => b.isin === idUpper || b.code.toUpperCase() === idUpper,
+  );
+  if (!bond) return { title: "Obligation introuvable — AzimutFinance" };
+  return {
+    title: `${bond.name} (${bond.isin}) — Obligation cotée BRVM`,
+    description: `Fiche obligation ${bond.name} émise par ${bond.issuer} — ${bond.country} : cotation BRVM, rendement à maturité, prix théorique, échéancier d'amortissement et événements.`,
+  };
+}
+
 export default async function Page({
   params,
 }: {
   params: Promise<{ isin: string }>;
 }) {
   const { isin } = await params;
-  const isinUpper = isin.toUpperCase();
+  const idUpper = isin.toUpperCase();
 
+  // Le segment d'URL accepte soit l'ISIN ISO, soit le code symbole BRVM
+  // (ex: "TPBF.O12") qui est ce qu'on stocke dans watchlist_items / alerts.
   const bonds = loadListedBonds();
-  const bond = bonds.find((b) => b.isin === isinUpper);
+  const bond = bonds.find(
+    (b) => b.isin === idUpper || b.code.toUpperCase() === idUpper,
+  );
   if (!bond) notFound();
+  const isinUpper = bond.isin;
 
   const allPrices = loadListedBondPrices();
   const priceHistory = allPrices.filter((p) => p.isin === isinUpper);

@@ -1,6 +1,6 @@
-// Parses data/marche-monetaire/Bul_stat.pdf and returns the rows that feed
-// data/bddtaux.csv (same schema). Called by lib/tauxLoader.ts when the PDF
-// is newer than the cached parse.
+// Parses data/marche-monetaire/Bul_stat.pdf — source unique des séries de taux
+// BCEAO & UEMOA. Appelé par lib/tauxLoader.ts quand le PDF est plus récent que
+// le parse mémoïsé.
 
 import { readFileSync } from "fs";
 import { join } from "path";

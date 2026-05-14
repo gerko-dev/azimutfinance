@@ -46,7 +46,7 @@ create table if not exists public.brokerage_tps_rates (
   rate        numeric not null default 0, -- ex 0.10 = 10 %
   description text not null default '',
   updated_at  timestamptz not null default now(),
-  updated_by  uuid references auth.users(id)
+  updated_by  uuid references auth.users(id) on delete set null
 );
 
 drop trigger if exists brokerage_tps_rates_set_updated_at on public.brokerage_tps_rates;

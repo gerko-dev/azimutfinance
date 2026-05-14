@@ -1,8 +1,11 @@
 # Scrape le Bulletin Officiel de la Cote (BOC) BRVM pour rafraichir les
 # valeurs nominales courantes des obligations cotees, puis commit + push.
 #
-# Cron : tous les jours ouvres a 20h GMT (apres cloture BRVM + publication du
-# BOC du jour). 5 runs par semaine.
+# Cron : 3 passes les jours ouvres :
+#   - 08h00 UTC : rattrapage matinal au cas ou le BOC du jour J-1 a ete
+#     republie tardivement la veille
+#   - 18h00 UTC : premiere tentative apres publication BRVM (souvent dispo)
+#   - 20h00 UTC : deuxieme tentative pour les jours ou le BOC est publie tard
 # Egalement declenchable manuellement depuis l'UI GitHub Actions.
 #
 # Le scraper :
@@ -22,6 +25,8 @@ name: Scrape BOC BRVM
 
 on:
   schedule:
+    - cron: "0 8 * * 1-5"
+    - cron: "0 18 * * 1-5"
     - cron: "0 20 * * 1-5"
   workflow_dispatch:
     inputs:
@@ -70,23 +75,23 @@ jobs:
       - name: Show diff stats
         run: |
           echo "=== Files modified ==="
-          git status --short data/obligations-cotees.csv data/obligations-cotees-vn-boc.csv data/obligations-cotees-boc-synthese.json data/fcp.csv || true
+          git status --short data/obligations-cotees.csv data/obligations-cotees-vn-boc.csv data/obligations-cotees-boc-synthese.json data/fcp.csv data/obligations-cotees-prix.csv || true
           echo ""
           echo "=== Diff summary ==="
-          git diff --stat data/obligations-cotees.csv data/obligations-cotees-vn-boc.csv data/obligations-cotees-boc-synthese.json data/fcp.csv || true
+          git diff --stat data/obligations-cotees.csv data/obligations-cotees-vn-boc.csv data/obligations-cotees-boc-synthese.json data/fcp.csv data/obligations-cotees-prix.csv || true
 
       - name: Commit & push if changed
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/obligations-cotees.csv data/obligations-cotees-vn-boc.csv data/obligations-cotees-boc-synthese.json data/fcp.csv
+          git add data/obligations-cotees.csv data/obligations-cotees-vn-boc.csv data/obligations-cotees-boc-synthese.json data/fcp.csv data/obligations-cotees-prix.csv
           if git diff --staged --quiet; then
             echo "Aucun changement a commiter."
             exit 0
           fi
           DATE_TAG=$(date -u +%Y-%m-%d)
           git commit \
-            -m "chore(data): refresh VN obligations cotees BRVM ${DATE_TAG}" \
+            -m "chore(data): refresh VN + volumes obligations cotees BRVM ${DATE_TAG}" \
             -m "Mise a jour automatique via GitHub Actions (workflow scrape-boc)." \
             -m "Source : Bulletin Officiel de la Cote BRVM (bfin.brvm.org)."
           # Retry pour gerer les pushs concurrents (eviter conflits avec

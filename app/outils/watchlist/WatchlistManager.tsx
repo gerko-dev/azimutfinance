@@ -5,10 +5,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type {
   WatchlistWithCount,
-  WatchlistWithItems,
+  Watchlist,
   WatchlistTargetType,
 } from "@/lib/watchlists/types";
-import { TARGET_TYPE_LABEL, targetHref } from "@/lib/watchlists/types";
+import type { EnrichedItem } from "@/lib/watchlists/enrich";
+import {
+  TARGET_TYPE_LABEL,
+  formatTargetCode,
+  targetHref,
+} from "@/lib/watchlists/types";
 import {
   createWatchlistAction,
   deleteWatchlistAction,
@@ -16,6 +21,15 @@ import {
   renameWatchlistAction,
   updateItemNoteAction,
 } from "@/lib/watchlists/actions";
+
+type EnrichedWatchlist = Watchlist & { items: EnrichedItem[] };
+
+function fmtNum(n: number): string {
+  return n.toLocaleString("fr-FR", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
+}
 
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString("fr-FR", {
@@ -31,7 +45,7 @@ export default function WatchlistManager({
   selectedId,
 }: {
   lists: WatchlistWithCount[];
-  selected: WatchlistWithItems | null;
+  selected: EnrichedWatchlist | null;
   selectedId: string | null;
 }) {
   return (
@@ -181,7 +195,7 @@ function EmptyState() {
   );
 }
 
-function Detail({ list }: { list: WatchlistWithItems }) {
+function Detail({ list }: { list: EnrichedWatchlist }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(list.name);
@@ -327,7 +341,7 @@ function Detail({ list }: { list: WatchlistWithItems }) {
 function Item({
   item,
 }: {
-  item: WatchlistWithItems["items"][number];
+  item: EnrichedItem;
 }) {
   const router = useRouter();
   const [editingNote, setEditingNote] = useState(false);
@@ -366,7 +380,7 @@ function Item({
               href={targetHref(item.target_type as WatchlistTargetType, item.target_code)}
               className="text-sm font-semibold text-slate-900 hover:text-blue-700"
             >
-              {item.target_code}
+              {formatTargetCode(item.target_type, item.target_code)}
             </Link>
             <span className="text-[10px] uppercase font-semibold bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded">
               {TARGET_TYPE_LABEL[item.target_type as WatchlistTargetType]}
@@ -374,6 +388,16 @@ function Item({
           </div>
           {item.target_label && (
             <div className="text-xs text-slate-500">{item.target_label}</div>
+          )}
+          {item.enriched.sublabel && (
+            <div className="text-[11px] text-slate-400">
+              {item.enriched.sublabel}
+            </div>
+          )}
+          {item.enriched.error && (
+            <div className="text-[11px] text-rose-600 mt-0.5">
+              {item.enriched.error}
+            </div>
           )}
           {editingNote ? (
             <div className="mt-2 space-y-2">
@@ -414,6 +438,34 @@ function Item({
           ) : null}
         </div>
         <div className="flex flex-col items-end gap-1">
+          {item.enriched.price !== null && (
+            <div className="text-right">
+              <div className="text-sm font-semibold tabular-nums text-slate-900">
+                {fmtNum(item.enriched.price)}
+                {item.enriched.unit && (
+                  <span className="text-[10px] font-normal text-slate-500 ml-1">
+                    {item.enriched.unit}
+                  </span>
+                )}
+              </div>
+              {item.enriched.ytdPct !== null && (
+                <div
+                  className={`text-[11px] tabular-nums font-medium ${
+                    item.enriched.ytdPct >= 0
+                      ? "text-emerald-700"
+                      : "text-rose-700"
+                  }`}
+                  title="Variation depuis le 1er janvier"
+                >
+                  {item.enriched.ytdPct >= 0 ? "+" : ""}
+                  {item.enriched.ytdPct.toFixed(2)} %
+                  <span className="ml-1 text-[9px] uppercase font-semibold text-slate-400">
+                    YTD
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
           <span className="text-[10px] text-slate-400">
             ajouté {fmtDate(item.added_at)}
           </span>

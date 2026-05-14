@@ -16,6 +16,17 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get("code");
   const next = searchParams.get("next") ?? "/compte";
 
+  // Supabase peut rediriger ici avec une erreur explicite plutôt qu'un `code`
+  // (OAuth refusé par l'utilisateur, lien de confirmation/reset expiré, ...).
+  // On remonte le message réel à /connexion au lieu d'un générique.
+  const oauthError =
+    searchParams.get("error_description") || searchParams.get("error");
+  if (oauthError) {
+    return NextResponse.redirect(
+      `${origin}/connexion?error=${encodeURIComponent(oauthError)}`,
+    );
+  }
+
   if (code) {
     const supabase = await createSupabaseServerClient();
     const { error, data } = await supabase.auth.exchangeCodeForSession(code);

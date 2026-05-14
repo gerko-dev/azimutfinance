@@ -6,8 +6,7 @@ import type { User } from "@supabase/supabase-js";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { signOutAction } from "@/lib/auth/actions";
 import MessagerieIconBadge from "@/components/messagerie/MessagerieIconBadge";
-import ForumIconBadge from "@/components/forum/ForumIconBadge";
-import AlertsIconBadge from "@/components/alerts/AlertsIconBadge";
+import NotificationsBell from "@/components/notifications/NotificationsBell";
 import HeartbeatPinger from "@/components/HeartbeatPinger";
 
 type MenuItem = {
@@ -15,6 +14,8 @@ type MenuItem = {
   href: string;
   badge?: "Premium" | "Pro" | "Bientôt";
   children?: MenuItem[];
+  /** Item masqué tant que l'utilisateur n'est pas connecté (membre+). */
+  requiresAuth?: boolean;
 };
 
 type MenuSection = {
@@ -68,8 +69,7 @@ const menuSections: MenuSection[] = [
     label: "Communauté",
     items: [
       { label: "Forum investisseurs", href: "/communaute/forum" },
-      { label: "Classements", href: "/communaute/classements", badge: "Bientôt" },
-      { label: "Magazine digital", href: "/academie/magazine" },
+      { label: "Magazine digital", href: "/academie/magazine", requiresAuth: true },
       { label: "Newsletter", href: "/communaute/newsletter" },
     ],
   },
@@ -172,10 +172,21 @@ export default function Header() {
   }, [supabase]);
 
   const showProButton = userRole === "pro" || adminLevel !== null;
-  // Le menu "Communaute" n'est visible que pour les utilisateurs connectes
-  // (membre+). Les visiteurs anonymes ne le voient pas.
+  // "Mes alertes" : reserve aux comptes premium (et au-dessus : pro, admins).
+  const showAlertes =
+    userRole === "premium" || userRole === "pro" || adminLevel !== null;
+  // Toutes les sections sont visibles ; pour les invités on filtre les items
+  // marqués `requiresAuth` (ex : Magazine digital, réservé membre+).
   const visibleMenuSections = useMemo(
-    () => (user ? menuSections : menuSections.filter((s) => s.label !== "Communauté")),
+    () =>
+      user
+        ? menuSections
+        : menuSections
+            .map((s) => ({
+              ...s,
+              items: s.items.filter((it) => !it.requiresAuth),
+            }))
+            .filter((s) => s.items.length > 0),
     [user],
   );
   // CTA "Passer a Premium" : reserve aux comptes Membres connectes uniquement.
@@ -339,8 +350,7 @@ export default function Header() {
                   Espace Pro
                 </Link>
               )}
-              <AlertsIconBadge user={user} />
-              <ForumIconBadge user={user} />
+              <NotificationsBell user={user} />
               <MessagerieIconBadge user={user} />
             <div className="relative">
               <button
@@ -370,6 +380,22 @@ export default function Header() {
                   >
                     Mon compte
                   </Link>
+                  <Link
+                    href="/outils/watchlist"
+                    onClick={() => setUserMenuOpen(false)}
+                    className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                  >
+                    Ma watchlist
+                  </Link>
+                  {showAlertes && (
+                    <Link
+                      href="/outils/alertes"
+                      onClick={() => setUserMenuOpen(false)}
+                      className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                    >
+                      Mes alertes
+                    </Link>
+                  )}
                   <Link
                     href="/messagerie"
                     onClick={() => setUserMenuOpen(false)}
@@ -420,8 +446,7 @@ export default function Header() {
         <div className="flex items-center gap-1 md:hidden">
           {authLoaded && user && (
             <>
-              <AlertsIconBadge user={user} />
-              <ForumIconBadge user={user} />
+              <NotificationsBell user={user} />
               <MessagerieIconBadge user={user} />
             </>
           )}
@@ -582,6 +607,22 @@ export default function Header() {
                   >
                     Mon compte
                   </Link>
+                  <Link
+                    href="/outils/watchlist"
+                    onClick={() => setMenuOpen(false)}
+                    className="px-4 py-2 text-sm text-center border border-slate-300 rounded-md"
+                  >
+                    Ma watchlist
+                  </Link>
+                  {showAlertes && (
+                    <Link
+                      href="/outils/alertes"
+                      onClick={() => setMenuOpen(false)}
+                      className="px-4 py-2 text-sm text-center border border-slate-300 rounded-md"
+                    >
+                      Mes alertes
+                    </Link>
+                  )}
                   <Link
                     href="/messagerie"
                     onClick={() => setMenuOpen(false)}

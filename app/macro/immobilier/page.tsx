@@ -1,23 +1,29 @@
+import React from "react";
 import Link from "next/link";
 import Header from "@/components/Header";
 import {
   BIEN_CATEGORIES,
+  BIEN_CATEGORIES_BY_TRANSACTION,
   BIEN_CATEGORIE_LABEL,
   UEMOA_COUNTRY_LABEL,
   UEMOA_COUNTRIES,
-  computePriceM2ByQuartierAndCategorie,
+  computeDispersionByQuartier,
+  computeHeroMediansFromListings,
+  computePriceM2ByCountry,
+  computePriceM2HierarchicalByCommune,
+  computeYieldsHierarchicalByCommune,
   filterListings,
   formatFCFA,
   listAvailableCountries,
   listAvailableYears,
   loadAllListings,
-  median,
   type BienCategorie,
+  type CommuneM2Row,
   type CountryCode,
   type ListingFilters,
-  type PriceM2CategoryRow,
   type Transaction,
 } from "@/lib/immobilier";
+import ImmobilierAnalytics from "@/components/macro/ImmobilierAnalytics";
 
 export const metadata = {
   title: "Immobilier UEMOA — Prix au m² par localité — AzimutFinance",
@@ -64,10 +70,28 @@ export default async function Page({ searchParams }: { searchParams: SearchParam
   };
 
   const filtered = filterListings(allListings, filters);
-  const rows = computePriceM2ByQuartierAndCategorie(filtered, { minSamples: 2 });
+  const rows = computePriceM2HierarchicalByCommune(filtered, {
+    minSamplesCommune: 5,
+    minSamplesQuartier: 3,
+  });
 
-  const heroAchat = computeHeroMedians(rows, "achat");
-  const heroLocation = computeHeroMedians(rows, "location");
+  // Analytics
+  const yieldsByCommune = computeYieldsHierarchicalByCommune(filtered, {
+    minSamplesCommune: 3,
+    minSamplesQuartier: 3,
+  });
+  // Pour la comparaison cross-pays, on retire le filtre pays (sinon une seule ligne)
+  const crossCountryListings = filterListings(allListings, {
+    year: selectedYear,
+    transaction: selectedTransaction,
+  });
+  const pricesByCountryAchat = computePriceM2ByCountry(crossCountryListings, "achat", { minSamples: 5 });
+  const pricesByCountryLocation = computePriceM2ByCountry(crossCountryListings, "location", { minSamples: 5 });
+  const dispersionAchat = computeDispersionByQuartier(filtered, "achat", "logements", { minSamples: 5, topN: 15 });
+  const dispersionLocation = computeDispersionByQuartier(filtered, "location", "logements", { minSamples: 5, topN: 15 });
+
+  const heroAchat = computeHeroMediansFromListings(filtered, "achat");
+  const heroLocation = computeHeroMediansFromListings(filtered, "location");
 
   const showAchatTable = !selectedTransaction || selectedTransaction === "achat";
   const showLocationTable =
@@ -157,16 +181,24 @@ export default async function Page({ searchParams }: { searchParams: SearchParam
 
           {/* KPIs */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {BIEN_CATEGORIES.map((c) => (
-              <HeroKpi
-                key={c}
-                label={BIEN_CATEGORIE_LABEL[c]}
-                achat={heroAchat[c]}
-                location={heroLocation[c]}
-                showAchat={showAchatTable}
-                showLocation={showLocationTable}
-              />
-            ))}
+            {BIEN_CATEGORIES.map((c) => {
+              const showAchatForCat =
+                showAchatTable && BIEN_CATEGORIES_BY_TRANSACTION.achat.includes(c);
+              const showLocationForCat =
+                showLocationTable &&
+                BIEN_CATEGORIES_BY_TRANSACTION.location.includes(c);
+              if (!showAchatForCat && !showLocationForCat) return null;
+              return (
+                <HeroKpi
+                  key={c}
+                  label={BIEN_CATEGORIE_LABEL[c]}
+                  achat={heroAchat[c]}
+                  location={heroLocation[c]}
+                  showAchat={showAchatForCat}
+                  showLocation={showLocationForCat}
+                />
+              );
+            })}
           </div>
         </div>
       </div>
@@ -186,19 +218,31 @@ export default async function Page({ searchParams }: { searchParams: SearchParam
             {showAchatTable && (
               <PriceM2Table
                 title={`Prix d'achat médian au m² — ${UEMOA_COUNTRY_LABEL[selectedCountry]}`}
-                subtitle="Médianes par localité. Minimum 3 annonces par cellule sinon vide. Unité : FCFA/m²."
+                subtitle="Médianes par commune (drill-down quartiers si dispo). Min. 5 annonces par commune, 3 par quartier. Unité : FCFA/m²."
                 rows={rows}
                 transaction="achat"
+                globalMedians={heroAchat}
               />
             )}
             {showLocationTable && (
               <PriceM2Table
                 title={`Loyer médian au m² / mois — ${UEMOA_COUNTRY_LABEL[selectedCountry]}`}
-                subtitle="Médianes des loyers mensuels par localité, ramenés au mètre carré. Unité : FCFA/m²/mois."
+                subtitle="Médianes des loyers mensuels par commune (drill-down quartiers). Min. 5 annonces par commune, 3 par quartier. Unité : FCFA/m²/mois."
                 rows={rows}
                 transaction="location"
+                globalMedians={heroLocation}
               />
             )}
+
+            <ImmobilierAnalytics
+              yieldsByCommune={yieldsByCommune}
+              pricesByCountryAchat={pricesByCountryAchat}
+              pricesByCountryLocation={pricesByCountryLocation}
+              dispersionAchat={dispersionAchat}
+              dispersionLocation={dispersionLocation}
+              showAchat={showAchatTable}
+              showLocation={showLocationTable}
+            />
           </>
         )}
       </main>
@@ -209,25 +253,6 @@ export default async function Page({ searchParams }: { searchParams: SearchParam
 // =============================================================================
 // HELPERS
 // =============================================================================
-
-function computeHeroMedians(
-  rows: PriceM2CategoryRow[],
-  transaction: Transaction,
-): Record<BienCategorie, number | null> {
-  const out: Record<BienCategorie, number | null> = {
-    bureaux: null,
-    logements: null,
-    magasins: null,
-    terrains: null,
-  };
-  for (const c of BIEN_CATEGORIES) {
-    const values = rows
-      .map((r) => r[transaction][c])
-      .filter((v): v is number => v !== null);
-    out[c] = median(values);
-  }
-  return out;
-}
 
 // =============================================================================
 // SUB-COMPONENTS
@@ -338,27 +363,40 @@ function PriceM2Table({
   subtitle,
   rows,
   transaction,
+  globalMedians,
 }: {
   title: string;
   subtitle: string;
-  rows: PriceM2CategoryRow[];
+  rows: CommuneM2Row[];
   transaction: Transaction;
+  globalMedians: Record<BienCategorie, number | null>;
 }) {
-  const filtered = rows.filter((r) =>
-    BIEN_CATEGORIES.some((c) => r[transaction][c] !== null),
+  const cats = BIEN_CATEGORIES_BY_TRANSACTION[transaction];
+  const filtered = rows.filter(
+    (r) =>
+      cats.some((c) => r[transaction][c] !== null) ||
+      r.children.some((ch) => cats.some((c) => ch[transaction][c] !== null)),
   );
 
-  const refMedians: Record<BienCategorie, number | null> = {
-    bureaux: null,
-    logements: null,
-    magasins: null,
-    terrains: null,
-  };
-  for (const c of BIEN_CATEGORIES) {
-    const values = filtered
-      .map((r) => r[transaction][c])
-      .filter((v): v is number => v !== null);
-    refMedians[c] = median(values);
+  function cellClass(v: number, c: BienCategorie): string {
+    const ref = globalMedians[c];
+    if (ref === null) return "text-slate-900";
+    if (v >= ref * 1.3) return "text-rose-700";
+    if (v <= ref * 0.7) return "text-emerald-700";
+    return "text-slate-900";
+  }
+
+  function renderCell(
+    v: number | null,
+    c: BienCategorie,
+    weight: "bold" | "normal",
+  ) {
+    if (v === null) return <span className="text-slate-300">—</span>;
+    return (
+      <span className={`${weight === "bold" ? "font-semibold" : "font-medium"} ${cellClass(v, c)}`}>
+        {formatFCFA(v)}
+      </span>
+    );
   }
 
   return (
@@ -377,7 +415,7 @@ function PriceM2Table({
             <thead>
               <tr className="text-slate-500 text-[10px] uppercase bg-slate-50/50">
                 <th className="text-left font-medium py-2 px-4">Localité</th>
-                {BIEN_CATEGORIES.map((c) => (
+                {cats.map((c) => (
                   <th key={c} className="text-right font-medium py-2 px-3">
                     {BIEN_CATEGORIE_LABEL[c]}
                   </th>
@@ -385,45 +423,75 @@ function PriceM2Table({
               </tr>
             </thead>
             <tbody>
-              {filtered.map((r) => (
-                <tr key={r.quartier} className="border-t border-slate-100 hover:bg-slate-50">
-                  <td className="py-2 px-4 font-medium text-slate-900">{r.quartier}</td>
-                  {BIEN_CATEGORIES.map((c) => {
-                    const v = r[transaction][c];
-                    const ref = refMedians[c];
-                    return (
-                      <td key={c} className="py-2 px-3 text-right tabular-nums">
-                        {v !== null ? (
+              {filtered.map((r, idx) => {
+                const prevRegion = idx > 0 ? filtered[idx - 1].region : "";
+                const showRegionHeader = r.region && r.region !== prevRegion;
+                return (
+                  <React.Fragment key={r.commune}>
+                    {showRegionHeader && (
+                      <tr className="bg-slate-100 border-t-2 border-slate-300">
+                        <td
+                          colSpan={cats.length + 1}
+                          className="py-1.5 px-4 text-[10px] uppercase tracking-wider font-bold text-slate-600"
+                        >
+                          {r.region}
+                        </td>
+                      </tr>
+                    )}
+                    <tr className="border-t border-slate-100 hover:bg-slate-50">
+                      <td className="py-2 px-4 font-semibold text-slate-900">
+                        {r.commune}
+                        {r.children.length > 0 && (
                           <span
-                            className={`font-medium ${
-                              ref !== null && v >= ref * 1.3
-                                ? "text-rose-700"
-                                : ref !== null && v <= ref * 0.7
-                                ? "text-emerald-700"
-                                : "text-slate-900"
-                            }`}
+                            className="ml-1.5 text-[10px] text-amber-600 font-normal"
+                            title="Drill-down quartiers disponible"
                           >
-                            {formatFCFA(v)}
+                            *
                           </span>
-                        ) : (
-                          <span className="text-slate-300">—</span>
                         )}
                       </td>
-                    );
-                  })}
-                </tr>
-              ))}
+                      {cats.map((c) => (
+                        <td
+                          key={c}
+                          className="py-2 px-3 text-right tabular-nums"
+                        >
+                          {renderCell(r[transaction][c], c, "bold")}
+                        </td>
+                      ))}
+                    </tr>
+                    {r.children.map((ch) => (
+                      <tr
+                        key={`${r.commune}|${ch.quartier}`}
+                        className="border-t border-slate-50 bg-slate-50/30 hover:bg-slate-50"
+                      >
+                        <td className="py-1.5 pl-8 pr-4 text-slate-700">
+                          <span className="text-slate-400 mr-1">└</span>
+                          {ch.quartier}
+                        </td>
+                        {cats.map((c) => (
+                          <td
+                            key={c}
+                            className="py-1.5 px-3 text-right tabular-nums"
+                          >
+                            {renderCell(ch[transaction][c], c, "normal")}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </React.Fragment>
+                );
+              })}
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-slate-200 bg-slate-50/70">
                 <td className="py-2 px-4 text-[11px] font-semibold text-slate-700">
-                  Médiane globale
+                  Médiane globale (pondérée par annonces)
                 </td>
-                {BIEN_CATEGORIES.map((c) => (
+                {cats.map((c) => (
                   <td key={c} className="py-2 px-3 text-right tabular-nums">
-                    {refMedians[c] !== null ? (
+                    {globalMedians[c] !== null ? (
                       <span className="text-[11px] font-semibold text-slate-700">
-                        {formatFCFA(refMedians[c])}
+                        {formatFCFA(globalMedians[c])}
                       </span>
                     ) : (
                       <span className="text-slate-300">—</span>
@@ -436,7 +504,7 @@ function PriceM2Table({
         </div>
       )}
       <div className="px-4 md:px-6 py-2 text-[10px] text-slate-400 border-t border-slate-100">
-        Vert = ≥30 % sous la médiane globale. Rouge = ≥30 % au-dessus.
+        Vert = ≥30 % sous la médiane globale. Rouge = ≥30 % au-dessus. <span className="text-amber-600">*</span> = drill-down quartiers disponible.
       </div>
     </section>
   );

@@ -3,6 +3,7 @@ import Link from "next/link";
 import Header from "@/components/Header";
 import CommodityDetailView from "@/components/macro/CommodityDetailView";
 import CommodityAdvancedChart from "@/components/macro/CommodityAdvancedChart";
+import AddToWatchlistButton from "@/components/watchlist/AddToWatchlistButton";
 import { fetchUserRole } from "@/lib/auth/userRole";
 import type { OhlcPoint } from "@/components/charting/KlineChart";
 import {
@@ -72,6 +73,15 @@ function fmtDateFr(iso: string): string {
   if (!iso || iso.length < 10) return iso;
   const [y, m, d] = iso.split("-");
   return `${d}/${m}/${y}`;
+}
+
+// Mapping entre les slugs de lib/commodities.ts (canoniques pour la page détail
+// et le scrape Investing) et les slugs canoniques pour la watchlist
+// (KNOWN_COMMODITIES dans lib/watchlists/validate.ts).
+function watchlistSlugForCommodity(slug: CommoditySlug): string {
+  if (slug === "palmoil") return "huile-de-palme";
+  if (slug === "tsr") return "caoutchouc";
+  return slug; // cacao, cafe, brent, wti, or, sugar
 }
 
 export default async function CommodityPage({
@@ -214,6 +224,21 @@ export default async function CommodityPage({
               <p className="text-xs md:text-sm text-slate-300 mt-1.5 max-w-2xl">
                 {meta.brvmRelevance}
               </p>
+              <div className="flex gap-2 flex-wrap mt-3">
+                <AddToWatchlistButton
+                  targetType="commodity"
+                  targetCode={watchlistSlugForCommodity(meta.slug)}
+                  targetLabel={meta.name}
+                  isAuthenticated={true}
+                  variant="dark"
+                />
+                <Link
+                  href="/outils/alertes"
+                  className="px-3 py-1.5 text-xs md:text-sm border border-white/20 bg-white/10 hover:bg-white/20 text-white rounded-md inline-flex items-center gap-1.5"
+                >
+                  🔔 Alerte
+                </Link>
+              </div>
             </div>
 
             <div className="text-right">

@@ -1,16 +1,8 @@
 // === Helpers de formatage : Suivi de compte titre ===
 
-export function fmtFCFA(v: number): string {
-  if (!Number.isFinite(v)) return "—";
-  const abs = Math.abs(v);
-  const sign = v < 0 ? "-" : "";
-  return (
-    sign +
-    abs
-      .toLocaleString("fr-FR", { maximumFractionDigits: 0 })
-      .replace(/ /g, " ")
-  );
-}
+// Rendu « montant entier FCFA » — centralisé dans @/lib/format.
+// Ré-exporté ici pour ne pas toucher aux imports `./format` des composants.
+export { fmtFCFAExact as fmtFCFA } from "@/lib/format";
 
 export function fmtPct(v: number, digits = 2): string {
   if (!Number.isFinite(v)) return "—";
@@ -25,7 +17,7 @@ export function fmtNum(v: number, digits = 0): string {
       minimumFractionDigits: digits,
       maximumFractionDigits: digits,
     })
-    .replace(/ /g, " ");
+    .replace(/ /g, " ");
 }
 
 export function fmtDateFr(iso: string): string {

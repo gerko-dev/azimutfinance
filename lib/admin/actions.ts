@@ -24,6 +24,10 @@ const RPC_ERRORS: Record<string, string> = {
   REPORT_NOT_FOUND: "Signalement introuvable.",
   ALREADY_RESOLVED: "Ce signalement a déjà été traité.",
   INVALID_ACTION: "Action invalide.",
+  INVALID_REGISTRATION_DATES:
+    "La date de fin d'inscription doit être supérieure ou égale à la date de début d'inscription.",
+  REGISTRATION_AFTER_COMPETITION:
+    "Les inscriptions doivent fermer au plus tard à la date de début de compétition.",
 };
 
 function translateError(message: string): string {
@@ -310,14 +314,18 @@ export async function resolveReportWithSanction(input: {
 
 export async function createSeason(input: {
   name: string;
+  registrationStartsAt: string;
+  registrationEndsAt: string;
   startsAt: string;
   endsAt: string;
   initialCapital: number;
   feePct: number;
 }): Promise<ActionResult<{ id: string }>> {
   const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase.rpc("admin_create_season", {
+  const { data, error } = await supabase.rpc("admin_create_season_v2", {
     p_name: input.name,
+    p_registration_starts_at: input.registrationStartsAt,
+    p_registration_ends_at: input.registrationEndsAt,
     p_starts_at: input.startsAt,
     p_ends_at: input.endsAt,
     p_initial_capital: input.initialCapital,
@@ -327,6 +335,28 @@ export async function createSeason(input: {
   revalidatePath("/admin/saisons");
   revalidatePath("/admin/audit");
   return { ok: true, data: { id: data as string } };
+}
+
+export async function deleteSeason(input: {
+  seasonId: string;
+}): Promise<ActionResult> {
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.rpc("admin_delete_season", {
+    p_season_id: input.seasonId,
+  });
+  if (error) return { ok: false, error: translateError(error.message) };
+  revalidatePath("/admin/saisons");
+  revalidatePath("/admin/audit");
+  return { ok: true, data: undefined };
+}
+
+export async function deleteAllSeasons(): Promise<ActionResult<{ count: number }>> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("admin_delete_all_seasons");
+  if (error) return { ok: false, error: translateError(error.message) };
+  revalidatePath("/admin/saisons");
+  revalidatePath("/admin/audit");
+  return { ok: true, data: { count: (data as number) ?? 0 } };
 }
 
 export async function setSeasonStatus(input: {

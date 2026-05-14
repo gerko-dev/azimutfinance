@@ -35,7 +35,7 @@ export default async function SourcesPage() {
             name="BCEAO"
             scope="Banque centrale UEMOA"
             usage="Taux directeurs, agrégats monétaires (M1/M2/M3), inflation IHPC, balance des paiements, statistiques pays, bulletin mensuel de statistiques."
-            ingestion="PDF mensuel parsé via lib/tauxPdfParser.ts ; ratios pays via data/bddtaux.csv."
+            ingestion="PDF mensuel (data/marche-monetaire/Bul_stat.pdf) importé depuis /admin/data et parsé via lib/tauxPdfParser.ts. Source unique, sans fallback."
             pages="/marche-monetaire, /macro/pays, /macro/devises (peg EUR/XOF)"
           />
           <OfficialCard
@@ -275,7 +275,6 @@ export default async function SourcesPage() {
 
       <p className="text-xs text-slate-400 italic">
         Cette page n&apos;est pas indexée et n&apos;apparaît dans aucun menu public.
-        Niveau d&apos;accès requis : super-admin (niveau 1).
       </p>
     </div>
   );

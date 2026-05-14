@@ -85,7 +85,7 @@ create table if not exists public.brokerage_market_fees (
   min_amount   numeric not null default 0,
   description  text not null default '',
   updated_at   timestamptz not null default now(),
-  updated_by   uuid references auth.users(id)
+  updated_by   uuid references auth.users(id) on delete set null
 );
 
 -- Trigger updated_at

@@ -59,14 +59,48 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  v_base     text;
+  v_username text;
+  v_n        int := 1;
 begin
-  insert into public.profiles (id, email, full_name, avatar_url)
+  -- Nom d'utilisateur : on en derive un POUR TOUT COMPTE, quel que soit le
+  -- moyen d'inscription.
+  --   - inscription email : la valeur saisie est passee en metadata 'username'
+  --   - inscription OAuth  : derivee du nom/email renvoye par le provider
+  -- Normalisation : minuscules, [a-z0-9_] uniquement.
+  v_base := lower(coalesce(
+    nullif(trim(new.raw_user_meta_data->>'username'), ''),
+    nullif(trim(new.raw_user_meta_data->>'full_name'), ''),
+    nullif(trim(new.raw_user_meta_data->>'name'), ''),
+    split_part(coalesce(new.email, ''), '@', 1),
+    ''
+  ));
+  v_base := regexp_replace(v_base, '[^a-z0-9_]+', '_', 'g');
+  v_base := regexp_replace(v_base, '_+', '_', 'g');
+  v_base := trim(both '_' from v_base);
+  if length(v_base) < 3 then
+    v_base := 'membre_' || substr(replace(new.id::text, '-', ''), 1, 8);
+  end if;
+  v_base := left(v_base, 24);
+
+  -- Unicite garantie : suffixe numerique si la base est deja prise (collision
+  -- de noms OAuth, ou race a l'inscription email). La contrainte UNIQUE sur
+  -- profiles.username reste le filet de securite ultime.
+  v_username := v_base;
+  while exists (select 1 from public.profiles where username = v_username) loop
+    v_n := v_n + 1;
+    v_username := v_base || v_n;
+  end loop;
+
+  insert into public.profiles (id, email, username, full_name, avatar_url)
   values (
     new.id,
     new.email,
+    v_username,
     coalesce(
-      new.raw_user_meta_data->>'full_name',
-      new.raw_user_meta_data->>'name'
+      nullif(trim(new.raw_user_meta_data->>'full_name'), ''),
+      nullif(trim(new.raw_user_meta_data->>'name'), '')
     ),
     new.raw_user_meta_data->>'avatar_url'
   );
@@ -78,6 +112,63 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
+
+-- 4 bis) Trigger : garder profiles.email synchronise avec auth.users.email.
+--    handle_new_user ne copie l'email qu'a la creation ; sans ce trigger,
+--    profiles.email se perime des que l'utilisateur change son email.
+create or replace function public.handle_user_email_update()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.email is distinct from old.email then
+    update public.profiles set email = new.email where id = new.id;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_email_updated on auth.users;
+create trigger on_auth_user_email_updated
+  after update of email on auth.users
+  for each row execute procedure public.handle_user_email_update();
+
+-- 4 ter) RPC publiques pour l'inscription / la connexion (anon).
+--    username_available : verifie qu'un nom d'utilisateur est libre, AVANT
+--      l'inscription (la RLS empeche un visiteur anonyme de lire profiles).
+--    email_for_username : resout un nom d'utilisateur en email, pour permettre
+--      la connexion via username OU email.
+create or replace function public.username_available(p_username text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select not exists (
+    select 1 from public.profiles
+    where lower(username) = lower(trim(p_username))
+  );
+$$;
+
+grant execute on function public.username_available(text) to anon, authenticated;
+
+create or replace function public.email_for_username(p_username text)
+returns text
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select email
+  from public.profiles
+  where lower(username) = lower(trim(p_username))
+  limit 1;
+$$;
+
+grant execute on function public.email_for_username(text) to anon, authenticated;
 
 -- 5) Row Level Security
 alter table public.profiles enable row level security;

@@ -1,0 +1,205 @@
+country;quartier_alias;commune;quartier_pretty;region
+# ============================================================================
+# Mapping geographique : alias quartier brut -> commune + quartier propre.
+# Une ligne par alias rencontre dans les CSV d'annonces. Plusieurs alias
+# peuvent pointer vers la meme commune+quartier+region.
+#
+# Format :
+#   country         : code ISO du pays (CI, SN, BJ, BF, ML, TG, NE)
+#   quartier_alias  : valeur observee dans le CSV (forme normalisee : lower-
+#                     case, accents/apostrophes retires apres normalizeQuartier)
+#   commune         : commune canonique d'affichage (Cotonou, Cocody...)
+#   quartier_pretty : libelle quartier pour le drill-down. Vide si l'alias
+#                     est le centre-ville ou ne distingue pas de quartier.
+#   region          : section geographique d'agregat (ex: ABIDJAN, LITTORAL EST).
+#                     Vide = commune affichee a plat sans section.
+#
+# Lignes # = commentaires (ignorees). Fallback si pas de mapping :
+# le quartier devient sa propre commune sans region.
+# ============================================================================
+
+# === BENIN ===
+BJ;cotonou;Cotonou;;
+BJ;fidjrosse;Cotonou;Fidjrosse;
+BJ;fidjrosse plage;Cotonou;Fidjrosse Plage;
+BJ;fidjrosse kpota;Cotonou;Fidjrosse Kpota;
+BJ;cadjehoun;Cotonou;Cadjèhoun;
+BJ;haie vive;Cotonou;Haie Vive;
+BJ;akpakpa;Cotonou;Akpakpa;
+BJ;vodje;Cotonou;Vodjè;
+BJ;agla;Cotonou;Agla;
+BJ;cocotomey;Cotonou;Cocotomey;
+BJ;abomey-calavi;Abomey-Calavi;;
+BJ;abomey calavi;Abomey-Calavi;;
+BJ;calavi;Abomey-Calavi;Calavi centre;
+BJ;calavi centre;Abomey-Calavi;Calavi centre;
+BJ;calavi kpota;Abomey-Calavi;Calavi Kpota;
+BJ;zopah;Abomey-Calavi;Zopah;
+BJ;godomey;Abomey-Calavi;Godomey;
+BJ;hevie;Abomey-Calavi;Hèvie;
+BJ;tankpe;Abomey-Calavi;Tankpè;
+BJ;abomey;Abomey;;
+BJ;porto-novo;Porto-Novo;;
+BJ;porto novo;Porto-Novo;;
+BJ;parakou;Parakou;;
+BJ;bohicon;Bohicon;;
+BJ;ouidah;Ouidah;;
+BJ;seme-podji;Sèmè-Podji;;
+BJ;seme podji;Sèmè-Podji;;
+BJ;allada;Allada;;
+
+# === BURKINA FASO ===
+BF;ouagadougou;Ouagadougou;;
+BF;ouaga;Ouagadougou;;
+BF;ouaga 2000;Ouagadougou;Ouaga 2000;
+BF;ouaga2000;Ouagadougou;Ouaga 2000;
+BF;zone du bois;Ouagadougou;Zone du Bois;
+BF;patte d oie;Ouagadougou;Patte d'Oie;
+BF;patte d'oie;Ouagadougou;Patte d'Oie;
+BF;zogona;Ouagadougou;Zogona;
+BF;gounghin;Ouagadougou;Gounghin;
+BF;pissy;Ouagadougou;Pissy;
+BF;cissin;Ouagadougou;Cissin;
+BF;tampouy;Ouagadougou;Tampouy;
+BF;tanghin;Ouagadougou;Tanghin;
+BF;karpala;Ouagadougou;Karpala;
+BF;dapoya;Ouagadougou;Dapoya;
+BF;dassasgho;Ouagadougou;Dassasgho;
+BF;wemtenga;Ouagadougou;Wemtenga;
+BF;saaba;Ouagadougou;Saaba;
+BF;cite an ii;Ouagadougou;Cité An II;
+BF;cite an iii;Ouagadougou;Cité An III;
+BF;cite an iv;Ouagadougou;Cité An IV;
+BF;1200 logements;Ouagadougou;1200 Logements;
+BF;bobo-dioulasso;Bobo-Dioulasso;;
+BF;bobo dioulasso;Bobo-Dioulasso;;
+BF;bobo;Bobo-Dioulasso;;
+BF;koudougou;Koudougou;;
+BF;ouahigouya;Ouahigouya;;
+BF;banfora;Banfora;;
+BF;kaya;Kaya;;
+BF;tenkodogo;Tenkodogo;;
+
+# === COTE D'IVOIRE ===
+# --- Abidjan + sous-quartiers ---
+CI;abidjan;Abidjan;;ABIDJAN
+CI;cocody;Cocody;;ABIDJAN
+CI;cocody centre;Cocody;Centre;ABIDJAN
+CI;cocody danga;Cocody;Centre / Danga;ABIDJAN
+CI;danga;Cocody;Centre / Danga;ABIDJAN
+CI;2 plateaux;Cocody;2 Plateaux;ABIDJAN
+CI;deux plateaux;Cocody;2 Plateaux;ABIDJAN
+CI;ii plateaux;Cocody;2 Plateaux;ABIDJAN
+CI;riviera;Cocody;Riviera;ABIDJAN
+CI;riviera 2;Cocody;Riviera;ABIDJAN
+CI;riviera 3;Cocody;Riviera;ABIDJAN
+CI;riviera bonoumin;Cocody;Riviera;ABIDJAN
+CI;riviera palmeraie;Cocody;Riviera;ABIDJAN
+CI;riviera faya;Cocody;Riviera;ABIDJAN
+CI;riviera m bessou;Cocody;Riviera;ABIDJAN
+CI;riviera m'bessou;Cocody;Riviera;ABIDJAN
+CI;angre;Cocody;Angré;ABIDJAN
+CI;angre star;Cocody;Angré;ABIDJAN
+CI;angre 7e tranche;Cocody;Angré;ABIDJAN
+CI;angre 8e tranche;Cocody;Angré;ABIDJAN
+CI;cocody m pouto;Cocody;M'Pouto;ABIDJAN
+CI;cocody m'pouto;Cocody;M'Pouto;ABIDJAN
+CI;m pouto;Cocody;M'Pouto;ABIDJAN
+CI;m'pouto;Cocody;M'Pouto;ABIDJAN
+CI;mpouto;Cocody;M'Pouto;ABIDJAN
+CI;cocody aghien;Cocody;Aghien;ABIDJAN
+CI;aghien;Cocody;Aghien;ABIDJAN
+CI;cocody saint jean;Cocody;Saint-Jean;ABIDJAN
+CI;saint jean;Cocody;Saint-Jean;ABIDJAN
+CI;saint-jean;Cocody;Saint-Jean;ABIDJAN
+CI;cocody ambassades;Cocody;Ambassades;ABIDJAN
+CI;ambassades;Cocody;Ambassades;ABIDJAN
+CI;cocody cocoteraie;Cocody;Cocoteraie;ABIDJAN
+CI;cocoteraie;Cocody;Cocoteraie;ABIDJAN
+CI;faya;Cocody;Faya;ABIDJAN
+CI;palmeraie;Cocody;Palmeraie;ABIDJAN
+CI;marcory;Marcory;;ABIDJAN
+CI;marcory centre;Marcory;Centre;ABIDJAN
+CI;zone 4;Marcory;Zone 4;ABIDJAN
+CI;zone 4c;Marcory;Zone 4;ABIDJAN
+CI;marcory residentiel;Marcory;Résidentiel;ABIDJAN
+CI;residentiel;Marcory;Résidentiel;ABIDJAN
+CI;anoumabo;Marcory;Anoumabo;ABIDJAN
+CI;biafra;Marcory;Biafra;ABIDJAN
+CI;sicogi marcory;Marcory;Sicogi;ABIDJAN
+CI;yopougon;Yopougon;;ABIDJAN
+CI;yopougon niangon;Yopougon;Niangon;ABIDJAN
+CI;niangon;Yopougon;Niangon;ABIDJAN
+CI;yopougon selmer;Yopougon;Selmer;ABIDJAN
+CI;selmer;Yopougon;Selmer;ABIDJAN
+CI;yopougon maroc;Yopougon;Maroc;ABIDJAN
+CI;maroc;Yopougon;Maroc;ABIDJAN
+CI;yopougon sicogi;Yopougon;Sicogi;ABIDJAN
+CI;yopougon andokoi;Yopougon;Andokoï;ABIDJAN
+CI;andokoi;Yopougon;Andokoï;ABIDJAN
+CI;yopougon sideci;Yopougon;Sideci;ABIDJAN
+CI;sideci;Yopougon;Sideci;ABIDJAN
+CI;yopougon academie;Yopougon;Académie;ABIDJAN
+CI;academie;Yopougon;Académie;ABIDJAN
+CI;yopougon toits rouges;Yopougon;Toits Rouges;ABIDJAN
+CI;toits rouges;Yopougon;Toits Rouges;ABIDJAN
+CI;yopougon kouté;Yopougon;Kouté;ABIDJAN
+CI;plateau;Plateau;;ABIDJAN
+CI;plateau centre;Plateau;Centre;ABIDJAN
+CI;treichville;Treichville;;ABIDJAN
+CI;treichville zone 1;Treichville;Zone 1;ABIDJAN
+CI;treichville zone 2;Treichville;Zone 2;ABIDJAN
+CI;treichville zone 3;Treichville;Zone 3;ABIDJAN
+CI;treichville avocatier;Treichville;Avocatier;ABIDJAN
+CI;abobo;Abobo;;ABIDJAN
+CI;abobo gare;Abobo;Gare;ABIDJAN
+CI;abobo sagbe;Abobo;Sagbé;ABIDJAN
+CI;abobo sodeci;Abobo;Sodeci;ABIDJAN
+CI;abobocidad;Abobo;Cité Ado;ABIDJAN
+CI;abobo n dotre;Abobo;N'Dotré;ABIDJAN
+CI;n dotre;Abobo;N'Dotré;ABIDJAN
+CI;n'dotre;Abobo;N'Dotré;ABIDJAN
+CI;koumassi;Koumassi;;ABIDJAN
+CI;koumassi centre;Koumassi;Centre;ABIDJAN
+CI;remblais;Koumassi;Remblais;ABIDJAN
+CI;prodomo;Koumassi;Prodomo;ABIDJAN
+CI;port-bouet;Port-Bouët;;ABIDJAN
+CI;port bouet;Port-Bouët;;ABIDJAN
+CI;vridi;Port-Bouët;Vridi;ABIDJAN
+CI;adjouffou;Port-Bouët;Adjouffou;ABIDJAN
+CI;adjame;Adjamé;;ABIDJAN
+CI;adjame centre;Adjamé;Centre;ABIDJAN
+CI;williamsville;Adjamé;Williamsville;ABIDJAN
+CI;220 logements;Adjamé;220 Logements;ABIDJAN
+CI;attecoube;Attécoubé;;ABIDJAN
+CI;locodjro;Attécoubé;Locodjro;ABIDJAN
+
+# --- Littoral est (banlieue est et axe Bassam) ---
+CI;bingerville;Bingerville;;LITTORAL EST
+CI;bingerville centre;Bingerville;Centre;LITTORAL EST
+CI;bingerville eloka;Bingerville;Eloka;LITTORAL EST
+CI;grand-bassam;Grand-Bassam;;LITTORAL EST
+CI;grand bassam;Grand-Bassam;;LITTORAL EST
+CI;bassam;Grand-Bassam;;LITTORAL EST
+CI;assinie;Assinie;;LITTORAL EST
+CI;assinie mafia;Assinie;;LITTORAL EST
+CI;assouinde;Assouindé;;LITTORAL EST
+
+# --- Banlieue ouest et nord ---
+CI;songon;Songon;;BANLIEUE
+CI;songon agban;Songon;Agban;BANLIEUE
+CI;anyama;Anyama;;BANLIEUE
+CI;dabou;Dabou;;BANLIEUE
+CI;jacqueville;Jacqueville;;BANLIEUE
+
+# --- Autres villes principales (sans regroupement region) ---
+CI;bouake;Bouaké;;
+CI;san pedro;San-Pédro;;
+CI;san-pedro;San-Pédro;;
+CI;yamoussoukro;Yamoussoukro;;
+CI;daloa;Daloa;;
+CI;korhogo;Korhogo;;
+CI;man;Man;;
+CI;gagnoa;Gagnoa;;
+CI;divo;Divo;;
+CI;sassandra;Sassandra;;

@@ -1,7 +1,7 @@
 import ScreenerView from "@/components/ScreenerView";
 import ProPageHeader from "@/components/pros/ProPageHeader";
 import {
-  loadAllActions,
+  loadAllActionsEnriched,
   buildRiskReturnDataset,
   loadMultipleIndicesHistory,
   loadAverageVolumes,
@@ -13,8 +13,8 @@ export const metadata = {
   title: "Screener actions — Pro Terminal",
 };
 
-export default function ScreenerPage() {
-  const actions = loadAllActions();
+export default async function ScreenerPage() {
+  const actions = await loadAllActionsEnriched();
   const riskReturn = buildRiskReturnDataset();
   const quadrants = computeAllQuadrants(riskReturn.points);
   const volMap = new Map(riskReturn.points.map((p) => [p.code, p.volatility]));

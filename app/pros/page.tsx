@@ -2,7 +2,7 @@ import Link from "next/link";
 import Flag from "@/components/Flag";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
-  loadAllActions,
+  loadAllActionsEnriched,
   getActionsMarketStats,
   getTopGainers,
   getTopLosers,
@@ -58,7 +58,7 @@ export default async function ProDashboard() {
     firstName = profile?.full_name?.split(" ")[0] ?? null;
   }
 
-  const actions = loadAllActions();
+  const actions = await loadAllActionsEnriched();
   const stats = getActionsMarketStats(actions);
   const gainers = getTopGainers(actions, 5);
   const losers = getTopLosers(actions, 5);

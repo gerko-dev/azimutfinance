@@ -104,6 +104,8 @@ export type AdminDashboardStats = {
   audit_last_24h: number;
 };
 
+export type AdminSeasonStatus = "upcoming" | "intro" | "active" | "ended" | "frozen";
+
 export type AdminSeason = {
   id: string;
   name: string;
@@ -111,8 +113,18 @@ export type AdminSeason = {
   ends_at: string;
   initial_capital: number;
   transaction_fee_pct: number;
-  status: "upcoming" | "active" | "ended";
+  status: AdminSeasonStatus;
   created_at: string;
+  // Période d'inscription (distincte de la période de compétition starts_at/ends_at)
+  registration_starts_at?: string | null;
+  registration_ends_at?: string | null;
+  // Ligue Azimut v2 (rempli après "Lancer la Course à l'introduction")
+  intro_phase_start_at?: string | null;
+  intro_phase_end_at?: string | null;
+  float_snapshot_at?: string | null;
+  total_pool_units?: number | null;
+  total_pool_value?: number | null;
+  participant_count?: number | null;
 };
 
 export type ReportCategory = "spam" | "harcelement" | "insulte" | "arnaque" | "autre";

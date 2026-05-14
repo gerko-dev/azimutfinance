@@ -15,8 +15,9 @@ export default async function DataFilesPage() {
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Fichiers de données</h1>
         <p className="text-sm text-slate-500 mt-1">
-          Mise à jour des CSV qui alimentent les pages Marchés, Macro, Académie, etc.
-          Réservé au super-admin (niveau 1).
+          Documents à importer manuellement (CSV + PDF BCEAO). Les fichiers
+          rafraîchis automatiquement par les workflows GitHub Actions (cours
+          BRVM, commodities, FX, émissions UMOA-Titres…) ne sont pas listés ici.
         </p>
       </div>
 

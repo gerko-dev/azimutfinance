@@ -5,6 +5,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getPremiumStatus } from "@/lib/auth/premium";
 import type { ActionResult } from "@/lib/admin/types";
 import type { AlertParams, AlertType } from "./types";
+import { validateAlertTarget } from "@/lib/watchlists/validate";
 
 function s(v: FormDataEntryValue | null): string {
   return String(v ?? "").trim();
@@ -159,6 +160,12 @@ export async function upsertAlertAction(
     return { ok: false, error: "Type de cible invalide." };
   if (!target_code)
     return { ok: false, error: "Code de cible requis (utilise * pour tout)." };
+
+  // Alertes "custom" : pas de cible reelle (pense-bete libre)
+  if (alert_type !== "custom") {
+    const check = validateAlertTarget(target_type, target_code);
+    if (!check.ok) return { ok: false, error: check.error };
+  }
 
   const params = buildParams(alert_type, fd);
   if ("error" in params) return { ok: false, error: params.error };

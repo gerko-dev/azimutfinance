@@ -584,6 +584,305 @@ export function computeYields(
   return out.sort((a, b) => b.rendement_brut_pct - a.rendement_brut_pct);
 }
 
+/**
+ * Rendement locatif brut au m² — l'analytique clé pour l'investisseur.
+ * Calculé uniquement sur la catégorie `logements` (seule où achat ET
+ * location existent simultanément).
+ *
+ * Formule : (loyer médian m²/mois × 12) / prix achat médian m² × 100
+ */
+export type QuartierYieldM2Row = {
+  quartier: string;
+  prixAchatM2: number;
+  loyerM2Monthly: number;
+  rendementBrutPct: number;
+  countAchat: number;
+  countLocation: number;
+};
+
+export type CommuneYieldM2Row = {
+  commune: string;
+  region: string;
+  /** Calculé sur l'ensemble des listings logements de la commune (vraie médiane
+   *  agrégée, pas moyenne des sous-quartiers). */
+  prixAchatM2: number;
+  loyerM2Monthly: number;
+  rendementBrutPct: number;
+  countAchat: number;
+  countLocation: number;
+  children: QuartierYieldM2Row[];
+};
+
+/**
+ * Rendements hiérarchiques par commune (via mapping `quartier-mapping.csv`)
+ * avec drill-down par quartier. Cohérent avec computePriceM2HierarchicalByCommune.
+ */
+export function computeYieldsHierarchicalByCommune(
+  listings: Listing[],
+  opts: { minSamplesCommune?: number; minSamplesQuartier?: number } = {},
+): CommuneYieldM2Row[] {
+  const minCommune = opts.minSamplesCommune ?? 3;
+  const minQuartier = opts.minSamplesQuartier ?? 3;
+
+  type Bucket = { achat: number[]; location: number[] };
+  const newBucket = (): Bucket => ({ achat: [], location: [] });
+
+  type CommuneAgg = {
+    commune: string;
+    region: string;
+    agg: Bucket;
+    children: Map<string, Bucket>;
+  };
+
+  const communes = new Map<string, CommuneAgg>();
+
+  for (const l of listings) {
+    if (!l.quartier) continue;
+    const { commune, quartierPretty, region } = assignCommune(
+      l.country,
+      l.quartier,
+    );
+    if (!commune) continue;
+    const cat = classifyBien(l);
+    if (cat !== "logements") continue;
+
+    let prixM2: number | null = l.prix_m2_fcfa;
+    if (prixM2 === null && l.prix_fcfa && l.surface_m2 && l.surface_m2 > 0) {
+      prixM2 = l.prix_fcfa / l.surface_m2;
+    }
+    if (prixM2 === null || !isFinite(prixM2) || prixM2 <= 0) continue;
+    if (l.transaction === "achat") {
+      if (prixM2 < 50_000 || prixM2 > 5_000_000) continue;
+    } else {
+      if (prixM2 < 1_000 || prixM2 > 50_000) continue;
+    }
+
+    let cg = communes.get(commune);
+    if (!cg) {
+      cg = { commune, region, agg: newBucket(), children: new Map() };
+      communes.set(commune, cg);
+    } else if (!cg.region && region) {
+      cg.region = region;
+    }
+    cg.agg[l.transaction].push(prixM2);
+
+    if (quartierPretty) {
+      let qb = cg.children.get(quartierPretty);
+      if (!qb) {
+        qb = newBucket();
+        cg.children.set(quartierPretty, qb);
+      }
+      qb[l.transaction].push(prixM2);
+    }
+  }
+
+  function summarize(
+    b: Bucket,
+    minS: number,
+  ): { pa: number; pl: number; r: number; nA: number; nL: number } | null {
+    if (b.achat.length < minS || b.location.length < minS) return null;
+    const pa = median(b.achat);
+    const pl = median(b.location);
+    if (pa === null || pl === null || pa <= 0) return null;
+    return {
+      pa,
+      pl,
+      r: ((pl * 12) / pa) * 100,
+      nA: b.achat.length,
+      nL: b.location.length,
+    };
+  }
+
+  const out: CommuneYieldM2Row[] = [];
+  for (const [, cg] of communes) {
+    const summ = summarize(cg.agg, minCommune);
+    const childrenRows: QuartierYieldM2Row[] = [];
+    for (const [q, qb] of cg.children) {
+      const s = summarize(qb, minQuartier);
+      if (!s) continue;
+      childrenRows.push({
+        quartier: q,
+        prixAchatM2: s.pa,
+        loyerM2Monthly: s.pl,
+        rendementBrutPct: s.r,
+        countAchat: s.nA,
+        countLocation: s.nL,
+      });
+    }
+    childrenRows.sort((a, b) => b.rendementBrutPct - a.rendementBrutPct);
+
+    if (!summ && childrenRows.length === 0) continue;
+    out.push({
+      commune: cg.commune,
+      region: cg.region,
+      prixAchatM2: summ?.pa ?? 0,
+      loyerM2Monthly: summ?.pl ?? 0,
+      rendementBrutPct: summ?.r ?? 0,
+      countAchat: summ?.nA ?? 0,
+      countLocation: summ?.nL ?? 0,
+      children: childrenRows,
+    });
+  }
+
+  // Tri : region (ordre CSV), puis rendement décroissant
+  const regionOrder = getRegionOrder();
+  const regionRank = new Map<string, number>();
+  regionOrder.forEach((r, i) => regionRank.set(r, i));
+  return out.sort((a, b) => {
+    const ra = a.region ? (regionRank.get(a.region) ?? 1e9) : 1e9 + 1;
+    const rb = b.region ? (regionRank.get(b.region) ?? 1e9) : 1e9 + 1;
+    if (ra !== rb) return ra - rb;
+    return b.rendementBrutPct - a.rendementBrutPct;
+  });
+}
+
+/**
+ * Comparaison cross-pays : médiane du prix au m² par pays × catégorie,
+ * pour une transaction donnée. Utilisé pour le bar chart "Quel pays
+ * est le moins cher pour acheter un logement ?".
+ */
+export type CountryPriceM2Row = {
+  country: CountryCode;
+  prices: Record<BienCategorie, number | null>;
+  counts: Record<BienCategorie, number>;
+};
+
+export function computePriceM2ByCountry(
+  listings: Listing[],
+  transaction: Transaction,
+  opts: { minSamples?: number } = {},
+): CountryPriceM2Row[] {
+  const minSamples = opts.minSamples ?? 5;
+  const groups = new Map<CountryCode, Record<BienCategorie, number[]>>();
+
+  for (const l of listings) {
+    if (l.transaction !== transaction) continue;
+    const cat = classifyBien(l);
+    if (cat === null) continue;
+    if (!BIEN_CATEGORIES_BY_TRANSACTION[transaction].includes(cat)) continue;
+
+    let prixM2: number | null = l.prix_m2_fcfa;
+    if (prixM2 === null && l.prix_fcfa && l.surface_m2 && l.surface_m2 > 0) {
+      prixM2 = l.prix_fcfa / l.surface_m2;
+    }
+    if (prixM2 === null || !isFinite(prixM2) || prixM2 <= 0) continue;
+
+    if (cat === "terrains") {
+      if (prixM2 < 5_000 || prixM2 > 5_000_000) continue;
+    } else if (transaction === "achat") {
+      if (prixM2 < 50_000 || prixM2 > 5_000_000) continue;
+    } else {
+      if (prixM2 < 1_000 || prixM2 > 50_000) continue;
+    }
+
+    let g = groups.get(l.country);
+    if (!g) {
+      g = EMPTY_CAT_RECORD() as unknown as Record<BienCategorie, number[]>;
+      for (const c of BIEN_CATEGORIES) (g as Record<BienCategorie, number[]>)[c] = [];
+      groups.set(l.country, g as Record<BienCategorie, number[]>);
+    }
+    (g as Record<BienCategorie, number[]>)[cat].push(prixM2);
+  }
+
+  const out: CountryPriceM2Row[] = [];
+  for (const [country, byCat] of groups) {
+    const prices = EMPTY_CAT_RECORD();
+    const counts: Record<BienCategorie, number> = {
+      bureaux: 0,
+      logements: 0,
+      magasins: 0,
+      terrains: 0,
+    };
+    for (const c of BIEN_CATEGORIES) {
+      const vals = byCat[c];
+      counts[c] = vals.length;
+      if (vals.length >= minSamples) prices[c] = median(vals);
+    }
+    out.push({ country, prices, counts });
+  }
+
+  return out.sort((a, b) => a.country.localeCompare(b.country));
+}
+
+/**
+ * Dispersion (Q1, médiane, Q3, IQR) du prix au m² par quartier normalisé,
+ * pour une transaction × catégorie. Permet de visualiser un boxplot-like
+ * et de repérer les quartiers où le marché est hétérogène.
+ */
+export type QuartierDispersionRow = {
+  quartier: string;
+  count: number;
+  q1: number;
+  median: number;
+  q3: number;
+  iqr: number;
+};
+
+export function computeDispersionByQuartier(
+  listings: Listing[],
+  transaction: Transaction,
+  categorie: BienCategorie,
+  opts: { minSamples?: number; topN?: number } = {},
+): QuartierDispersionRow[] {
+  const minSamples = opts.minSamples ?? 5;
+  const topN = opts.topN ?? 15;
+  // Groupes par (commune, quartierPretty) — utilise le mapping pour éviter
+  // la fragmentation type "cocody" / "cocody riviera" / "abidjan-cocody-riviera".
+  const groups = new Map<string, { label: string; values: number[] }>();
+
+  for (const l of listings) {
+    if (l.transaction !== transaction) continue;
+    if (!l.quartier) continue;
+    const { commune, quartierPretty } = assignCommune(l.country, l.quartier);
+    if (!commune) continue;
+    const cat = classifyBien(l);
+    if (cat !== categorie) continue;
+
+    let prixM2: number | null = l.prix_m2_fcfa;
+    if (prixM2 === null && l.prix_fcfa && l.surface_m2 && l.surface_m2 > 0) {
+      prixM2 = l.prix_fcfa / l.surface_m2;
+    }
+    if (prixM2 === null || !isFinite(prixM2) || prixM2 <= 0) continue;
+
+    if (categorie === "terrains") {
+      if (prixM2 < 5_000 || prixM2 > 5_000_000) continue;
+    } else if (transaction === "achat") {
+      if (prixM2 < 50_000 || prixM2 > 5_000_000) continue;
+    } else {
+      if (prixM2 < 1_000 || prixM2 > 50_000) continue;
+    }
+
+    const key = quartierPretty ? `${commune}||${quartierPretty}` : commune;
+    const label = quartierPretty ? `${commune} — ${quartierPretty}` : commune;
+    let g = groups.get(key);
+    if (!g) {
+      g = { label, values: [] };
+      groups.set(key, g);
+    }
+    g.values.push(prixM2);
+  }
+
+  const out: QuartierDispersionRow[] = [];
+  for (const [, g] of groups) {
+    if (g.values.length < minSamples) continue;
+    const q1 = quantile(g.values, 0.25);
+    const med = median(g.values);
+    const q3 = quantile(g.values, 0.75);
+    if (q1 === null || med === null || q3 === null) continue;
+    out.push({
+      quartier: g.label,
+      count: g.values.length,
+      q1,
+      median: med,
+      q3,
+      iqr: q3 - q1,
+    });
+  }
+  return out
+    .sort((a, b) => b.median - a.median)
+    .slice(0, topN);
+}
+
 // =============================================================================
 // HEATMAP : prix median par (quartier, type_bien)
 // =============================================================================
@@ -665,9 +964,12 @@ export function findTopDeals(
       l.prix_fcfa !== null,
   );
 
-  // Group by (quartier, type, chambres) -> compute median
+  // Group by (quartier normalisé, type, chambres) -> compute median
+  // La normalisation fusionne les variantes typographiques du même quartier
+  // (Cocody, COCODY, cocody) avant de calculer la médiane de référence.
   const groups = new Map<string, number[]>();
-  const groupKey = (l: Listing) => `${l.quartier}|${l.type_bien}|${l.chambres}`;
+  const groupKey = (l: Listing) =>
+    `${normalizeQuartier(l.quartier)}|${l.type_bien}|${l.chambres}`;
   for (const l of filtered) {
     const k = groupKey(l);
     const arr = groups.get(k) ?? [];
@@ -738,6 +1040,18 @@ export const BIEN_CATEGORIE_LABEL: Record<BienCategorie, string> = {
 };
 
 /**
+ * Catégories pertinentes par type de transaction :
+ *   - achat    : on n'achète pas typiquement des bureaux ou magasins seuls (les
+ *                annonces correspondantes sont des biens commerciaux entiers, hors
+ *                cible). Reste : logements et terrains.
+ *   - location : pas de location de terrain (les terrains se vendent, pas se louent).
+ */
+export const BIEN_CATEGORIES_BY_TRANSACTION: Record<Transaction, BienCategorie[]> = {
+  achat: ["logements", "terrains"],
+  location: ["bureaux", "logements", "magasins"],
+};
+
+/**
  * Classifie une annonce dans l'une des 4 catégories métier.
  * Le champ `type_bien` ne distingue pas bureau/magasin (regroupés en "commercial"),
  * d'où l'utilisation du titre pour départager.
@@ -790,6 +1104,25 @@ export type PriceM2CategoryRow = {
   achat: Record<BienCategorie, number | null>;
   /** Médiane prix/m² location (loyer/m² mensuel), FCFA */
   location: Record<BienCategorie, number | null>;
+  countAchat: number;
+  countLocation: number;
+};
+
+/**
+ * Ligne hiérarchique pour le tableau immobilier : agrégat commune avec
+ * éventuellement des quartiers enfants (drill-down).
+ */
+export type CommuneM2Row = {
+  commune: string;
+  /** Région d'agrégat (ex: ABIDJAN). Vide = pas de regroupement. */
+  region: string;
+  /** Médiane prix/m² achat, calculée sur l'ensemble des listings de la commune */
+  achat: Record<BienCategorie, number | null>;
+  location: Record<BienCategorie, number | null>;
+  countAchat: number;
+  countLocation: number;
+  /** Quartiers détaillés appartenant à cette commune (vide si pas de mapping) */
+  children: PriceM2CategoryRow[];
 };
 
 const EMPTY_CAT_RECORD = (): Record<BienCategorie, number | null> => ({
@@ -805,6 +1138,150 @@ const EMPTY_CAT_RECORD = (): Record<BienCategorie, number | null> => ({
  *   indicateur pertinent même si pas "habitable").
  * - Pour les autres : on garde prix_m2_fcfa déjà calculé dans le CSV.
  */
+/**
+ * Normalise un nom de quartier pour fusionner les variantes :
+ *   "Cocody"           → "cocody"
+ *   "COCODY"           → "cocody"
+ *   "Cocody  Riviera"  → "cocody riviera"
+ *   "Côte d'Ivoire"    → "cote d ivoire"
+ * Utilisé comme clé d'agrégation. Pour l'affichage, voir prettyQuartierLabel.
+ */
+export function normalizeQuartier(q: string): string {
+  if (!q) return "";
+  return q
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "") // diacritiques combinants
+    .replace(/[‘’'`]/g, " ") // apostrophes typographiques + droites
+    .replace(/-/g, " ") // tirets → espaces (slugs type "grand-bassam")
+    .replace(/[^a-z0-9\s]/g, " ") // ponctuation résiduelle
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Mapping géographique : alias quartier → { commune, quartier_pretty, region }.
+ * Chargé depuis data/quartier-mapping.csv. Mémoïsé.
+ *
+ * `region` permet de grouper plusieurs communes dans une section géographique
+ * (ex: "ABIDJAN" pour Cocody/Marcory/Yopougon ; "LITTORAL EST" pour
+ * Bingerville/Grand-Bassam). Vide = pas de regroupement.
+ */
+type CommuneAssignment = {
+  commune: string;
+  quartierPretty: string;
+  region: string;
+};
+let _mappingCache: Map<string, CommuneAssignment> | null = null;
+/** Ordre d'apparition des régions dans le CSV (pour le tri d'affichage). */
+let _regionOrder: string[] = [];
+
+function mappingKey(country: string, normalizedAlias: string): string {
+  return `${country.toUpperCase()}|${normalizedAlias}`;
+}
+
+function loadQuartierMapping(): Map<string, CommuneAssignment> {
+  if (_mappingCache) return _mappingCache;
+  const map = new Map<string, CommuneAssignment>();
+  const seenRegions = new Set<string>();
+  const regionOrder: string[] = [];
+  try {
+    const content = readFileSync(
+      join(DATA_DIR, "quartier-mapping.csv"),
+      "utf-8",
+    );
+    const result = Papa.parse<Record<string, string>>(content, {
+      header: true,
+      delimiter: ";",
+      skipEmptyLines: true,
+      transformHeader: (h) => h.replace(/^﻿/, "").trim(),
+      comments: "#",
+    });
+    for (const r of result.data) {
+      const country = (r.country || "").trim().toUpperCase();
+      const alias = normalizeQuartier(r.quartier_alias || "");
+      const commune = (r.commune || "").trim();
+      const pretty = (r.quartier_pretty || "").trim();
+      const region = (r.region || "").trim();
+      if (!country || !alias || !commune) continue;
+      map.set(mappingKey(country, alias), {
+        commune,
+        quartierPretty: pretty,
+        region,
+      });
+      if (region && !seenRegions.has(region)) {
+        seenRegions.add(region);
+        regionOrder.push(region);
+      }
+    }
+  } catch {
+    // CSV absent : on continue sans mapping
+  }
+  _mappingCache = map;
+  _regionOrder = regionOrder;
+  return map;
+}
+
+/** Ordre des régions tel que rencontré dans le CSV. */
+export function getRegionOrder(): string[] {
+  loadQuartierMapping();
+  return _regionOrder;
+}
+
+/**
+ * Pour un listing donné, retourne la commune canonique et le quartier propre.
+ * Fallback : si aucun mapping, le quartier devient sa propre commune.
+ */
+export function assignCommune(
+  country: string,
+  quartierRaw: string,
+): CommuneAssignment {
+  const normalized = normalizeQuartier(quartierRaw);
+  if (!normalized) return { commune: "", quartierPretty: "", region: "" };
+  const map = loadQuartierMapping();
+
+  // 1) Match exact
+  const exact = map.get(mappingKey(country, normalized));
+  if (exact) return exact;
+
+  // 2) Match flexible par suffixes : "abidjan cocody angre" → "cocody angre"
+  //    → "angre". On retire un token de gauche à chaque itération. On garde
+  //    le suffixe **le plus long** qui matche (= plus spécifique géographiquement).
+  const tokens = normalized.split(" ").filter(Boolean);
+  for (let i = 1; i < tokens.length; i++) {
+    const candidate = tokens.slice(i).join(" ");
+    const hit = map.get(mappingKey(country, candidate));
+    if (hit) return hit;
+  }
+
+  // 3) Match d'un préfixe : "fidjrosse plage centre" → "fidjrosse plage"
+  //    → "fidjrosse". On retire un token de droite cette fois.
+  for (let len = tokens.length - 1; len >= 1; len--) {
+    const candidate = tokens.slice(0, len).join(" ");
+    const hit = map.get(mappingKey(country, candidate));
+    if (hit) return hit;
+  }
+
+  // 4) Fallback : quartier brut promu en commune (libellé propre, pas de drill)
+  return {
+    commune: prettyQuartierLabel(normalized),
+    quartierPretty: "",
+    region: "",
+  };
+}
+
+/**
+ * Joli label depuis un nom normalisé : title case mot par mot.
+ *   "cocody riviera" → "Cocody Riviera"
+ */
+export function prettyQuartierLabel(normalized: string): string {
+  if (!normalized) return "";
+  return normalized
+    .split(/\s+/)
+    .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : ""))
+    .join(" ");
+}
+
 /** Filtres applicables avant agrégation (utilisés depuis la page via search params). */
 export type ListingFilters = {
   /** Code pays UEMOA. Si défini, filtre les listings de ce pays. */
@@ -844,86 +1321,201 @@ export function listAvailableCountries(listings: Listing[]): CountryCode[] {
   return UEMOA_COUNTRIES.filter((c) => set.has(c));
 }
 
-export function computePriceM2ByQuartierAndCategorie(
+/**
+ * Médianes "Hero" calculées directement sur les listings individuels (par
+ * catégorie), pas sur les médianes commune. Donne la **vraie** médiane
+ * pondérée pour le pays sélectionné.
+ */
+export function computeHeroMediansFromListings(
   listings: Listing[],
-  opts: { minSamples?: number } = {},
-): PriceM2CategoryRow[] {
-  const minSamples = opts.minSamples ?? 3;
+  transaction: Transaction,
+): Record<BienCategorie, number | null> {
+  const buckets: Record<BienCategorie, number[]> = {
+    bureaux: [],
+    logements: [],
+    magasins: [],
+    terrains: [],
+  };
+  for (const l of listings) {
+    if (l.transaction !== transaction) continue;
+    const cat = classifyBien(l);
+    if (cat === null) continue;
+    let prixM2: number | null = l.prix_m2_fcfa;
+    if (prixM2 === null && l.prix_fcfa && l.surface_m2 && l.surface_m2 > 0) {
+      prixM2 = l.prix_fcfa / l.surface_m2;
+    }
+    if (prixM2 === null || !isFinite(prixM2) || prixM2 <= 0) continue;
+    if (cat === "terrains") {
+      if (prixM2 < 5_000 || prixM2 > 5_000_000) continue;
+    } else if (transaction === "achat") {
+      if (prixM2 < 50_000 || prixM2 > 5_000_000) continue;
+    } else {
+      if (prixM2 < 1_000 || prixM2 > 50_000) continue;
+    }
+    buckets[cat].push(prixM2);
+  }
+  return {
+    bureaux: median(buckets.bureaux),
+    logements: median(buckets.logements),
+    magasins: median(buckets.magasins),
+    terrains: median(buckets.terrains),
+  };
+}
 
-  // groupes : quartier -> transaction -> catégorie -> valeurs
-  const groups = new Map<
-    string,
-    Record<Transaction, Record<BienCategorie, number[]>>
-  >();
+/**
+ * Hiérarchique : pour chaque listing, on déduit (commune, quartier) via le
+ * mapping `data/quartier-mapping.csv`, puis :
+ *   - les médianes commune sont calculées sur **tous** les listings rattachés
+ *     à cette commune (vraie médiane pondérée, pas moyenne des médianes)
+ *   - les quartiers enfants apparaissent comme drill-down (avec leur propre
+ *     médiane) si le mapping leur donne un `quartier_pretty`
+ *   - fallback : un quartier sans mapping devient sa propre commune sans enfant
+ */
+export function computePriceM2HierarchicalByCommune(
+  listings: Listing[],
+  opts: { minSamplesCommune?: number; minSamplesQuartier?: number } = {},
+): CommuneM2Row[] {
+  const minCommune = opts.minSamplesCommune ?? 5;
+  const minQuartier = opts.minSamplesQuartier ?? 3;
+
+  type Bucket = {
+    achat: Record<BienCategorie, number[]>;
+    location: Record<BienCategorie, number[]>;
+  };
+  const newBucket = (): Bucket => ({
+    achat: { bureaux: [], logements: [], magasins: [], terrains: [] },
+    location: { bureaux: [], logements: [], magasins: [], terrains: [] },
+  });
+
+  type CommuneAgg = {
+    commune: string;
+    region: string;
+    agg: Bucket;
+    children: Map<string, Bucket>;
+  };
+
+  const communes = new Map<string, CommuneAgg>();
 
   for (const l of listings) {
     if (!l.quartier) continue;
+    const { commune, quartierPretty, region } = assignCommune(
+      l.country,
+      l.quartier,
+    );
+    if (!commune) continue;
     const cat = classifyBien(l);
     if (cat === null) continue;
 
-    // Calcul du prix/m² pour cette annonce
     let prixM2: number | null = l.prix_m2_fcfa;
     if (prixM2 === null && l.prix_fcfa && l.surface_m2 && l.surface_m2 > 0) {
       prixM2 = l.prix_fcfa / l.surface_m2;
     }
     if (prixM2 === null || !isFinite(prixM2) || prixM2 <= 0) continue;
 
-    // Filtres de plausibilité par catégorie (FCFA/m²)
     if (cat === "terrains") {
-      // Terrains : 5 000 à 5 000 000 FCFA/m² (achat) ; loyer terrain rare
       if (prixM2 < 5_000 || prixM2 > 5_000_000) continue;
     } else if (l.transaction === "achat") {
-      // Achat habitable / commercial : 50 000 à 5 000 000 FCFA/m²
       if (prixM2 < 50_000 || prixM2 > 5_000_000) continue;
     } else {
-      // Location : 1 000 à 50 000 FCFA/m²/mois
       if (prixM2 < 1_000 || prixM2 > 50_000) continue;
     }
 
-    let q = groups.get(l.quartier);
-    if (!q) {
-      q = {
-        achat: EMPTY_CAT_RECORD() as unknown as Record<BienCategorie, number[]>,
-        location: EMPTY_CAT_RECORD() as unknown as Record<BienCategorie, number[]>,
-      };
-      // Remplace les null par []
-      for (const c of BIEN_CATEGORIES) {
-        q.achat[c] = [];
-        q.location[c] = [];
-      }
-      groups.set(l.quartier, q);
+    let cg = communes.get(commune);
+    if (!cg) {
+      cg = { commune, region, agg: newBucket(), children: new Map() };
+      communes.set(commune, cg);
+    } else if (!cg.region && region) {
+      // Si une 1ère ligne n'avait pas de region mais une plus tardive en a une, on l'adopte
+      cg.region = region;
     }
-    (q[l.transaction][cat] as number[]).push(prixM2);
+    cg.agg[l.transaction][cat].push(prixM2);
+
+    if (quartierPretty) {
+      let qb = cg.children.get(quartierPretty);
+      if (!qb) {
+        qb = newBucket();
+        cg.children.set(quartierPretty, qb);
+      }
+      qb[l.transaction][cat].push(prixM2);
+    }
   }
 
-  const rows: PriceM2CategoryRow[] = [];
-  for (const [quartier, byTrans] of groups) {
+  function summarize(
+    bucket: Bucket,
+    minSamples: number,
+  ): {
+    achat: Record<BienCategorie, number | null>;
+    location: Record<BienCategorie, number | null>;
+    countA: number;
+    countL: number;
+  } {
     const achat = EMPTY_CAT_RECORD();
     const location = EMPTY_CAT_RECORD();
+    let countA = 0;
+    let countL = 0;
     for (const c of BIEN_CATEGORIES) {
-      const aValues = byTrans.achat[c] as unknown as number[];
-      const lValues = byTrans.location[c] as unknown as number[];
-      if (aValues.length >= minSamples) achat[c] = median(aValues);
-      if (lValues.length >= minSamples) location[c] = median(lValues);
+      const a = bucket.achat[c];
+      const lo = bucket.location[c];
+      if (a.length >= minSamples) achat[c] = median(a);
+      if (lo.length >= minSamples) location[c] = median(lo);
+      countA += a.length;
+      countL += lo.length;
     }
-    // On garde le quartier si au moins une catégorie a une valeur
-    const hasAny = BIEN_CATEGORIES.some(
-      (c) => achat[c] !== null || location[c] !== null,
-    );
-    if (hasAny) rows.push({ quartier, achat, location });
+    return { achat, location, countA, countL };
   }
 
-  // Tri par "richesse globale" approximée : somme des médianes achat des catégories
-  return rows.sort((a, b) => {
-    const sumA = BIEN_CATEGORIES.reduce(
-      (s, c) => s + (a.achat[c] ?? 0),
-      0,
+  const out: CommuneM2Row[] = [];
+  for (const [, cg] of communes) {
+    const commune = summarize(cg.agg, minCommune);
+    const hasCommune = BIEN_CATEGORIES.some(
+      (c) => commune.achat[c] !== null || commune.location[c] !== null,
     );
-    const sumB = BIEN_CATEGORIES.reduce(
-      (s, c) => s + (b.achat[c] ?? 0),
-      0,
-    );
-    return sumB - sumA;
+    const childrenRows: PriceM2CategoryRow[] = [];
+    for (const [quartier, qb] of cg.children) {
+      const s = summarize(qb, minQuartier);
+      const hasAny = BIEN_CATEGORIES.some(
+        (c) => s.achat[c] !== null || s.location[c] !== null,
+      );
+      if (!hasAny) continue;
+      childrenRows.push({
+        quartier,
+        achat: s.achat,
+        location: s.location,
+        countAchat: s.countA,
+        countLocation: s.countL,
+      });
+    }
+    // Tri quartiers enfants par médiane achat decroissante
+    childrenRows.sort((a, b) => {
+      const sa = BIEN_CATEGORIES.reduce((s, c) => s + (a.achat[c] ?? 0), 0);
+      const sb = BIEN_CATEGORIES.reduce((s, c) => s + (b.achat[c] ?? 0), 0);
+      return sb - sa;
+    });
+
+    if (!hasCommune && childrenRows.length === 0) continue;
+    out.push({
+      commune: cg.commune,
+      region: cg.region,
+      achat: commune.achat,
+      location: commune.location,
+      countAchat: commune.countA,
+      countLocation: commune.countL,
+      children: childrenRows,
+    });
+  }
+
+  // Tri : d'abord par region (selon ordre du CSV ; les sans-region à la fin),
+  // puis par richesse décroissante au sein de chaque region.
+  const regionOrder = getRegionOrder();
+  const regionRank = new Map<string, number>();
+  regionOrder.forEach((r, i) => regionRank.set(r, i));
+  return out.sort((a, b) => {
+    const ra = a.region ? (regionRank.get(a.region) ?? 1e9) : 1e9 + 1;
+    const rb = b.region ? (regionRank.get(b.region) ?? 1e9) : 1e9 + 1;
+    if (ra !== rb) return ra - rb;
+    const sa = BIEN_CATEGORIES.reduce((s, c) => s + (a.achat[c] ?? 0), 0);
+    const sb = BIEN_CATEGORIES.reduce((s, c) => s + (b.achat[c] ?? 0), 0);
+    return sb - sa;
   });
 }
 

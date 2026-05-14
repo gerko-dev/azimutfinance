@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { Alert, AlertTriggerWithAlert, AlertType } from "@/lib/alerts/types";
 import {
@@ -15,6 +15,7 @@ import {
   toggleAlertAction,
   upsertAlertAction,
 } from "@/lib/alerts/actions";
+import type { TargetOptionsByType } from "@/lib/watchlists/targetOptions";
 
 const TARGET_TYPES = ["stock", "bond", "index", "currency", "commodity", "any"] as const;
 const TARGET_TYPE_LABEL: Record<(typeof TARGET_TYPES)[number], string> = {
@@ -39,9 +40,11 @@ function fmtDateTime(iso: string): string {
 export default function AlertsManager({
   alerts,
   triggers,
+  targetOptions,
 }: {
   alerts: Alert[];
   triggers: AlertTriggerWithAlert[];
+  targetOptions: TargetOptionsByType;
 }) {
   const [editing, setEditing] = useState<Alert | "new" | null>(null);
   const router = useRouter();
@@ -74,6 +77,7 @@ export default function AlertsManager({
         {editing && (
           <AlertForm
             initial={editing === "new" ? null : editing}
+            targetOptions={targetOptions}
             onCancel={() => setEditing(null)}
             onSaved={() => {
               setEditing(null);
@@ -261,10 +265,12 @@ function AlertRow({
 
 function AlertForm({
   initial,
+  targetOptions,
   onCancel,
   onSaved,
 }: {
   initial: Alert | null;
+  targetOptions: TargetOptionsByType;
   onCancel: () => void;
   onSaved: () => void;
 }) {
@@ -296,6 +302,44 @@ function AlertForm({
   const [params, setParams] = useState<AlertParamsView>(initialParams);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  // Options de cible pour le type courant. Pour 'any', pas de liste : tout est permis (sert pour news_mention avec *).
+  const currentOptions = useMemo(() => {
+    if (targetType === "any") return [];
+    return targetOptions[targetType as keyof TargetOptionsByType] ?? [];
+  }, [targetType, targetOptions]);
+
+  const validValues = useMemo(
+    () => new Set(currentOptions.map((o) => o.value)),
+    [currentOptions],
+  );
+
+  // Validation client : 'custom' et 'any/*' bypassent la liste
+  const codeAcceptedAsAny =
+    targetType === "any" && (targetCode === "*" || targetCode === "");
+  const isCustom = alertType === "custom";
+  const codeMatchesList =
+    targetCode !== "" && validValues.has(targetCode);
+  const codeIsValid =
+    isCustom || codeAcceptedAsAny || codeMatchesList;
+  const showCodeError =
+    !isCustom && !codeAcceptedAsAny && targetCode !== "" && !codeMatchesList;
+
+  // Quand le type de cible change, on remet le code à zéro (sauf en édition initiale)
+  function handleTargetTypeChange(next: string) {
+    setTargetType(next);
+    setTargetCode("");
+  }
+
+  function handleTargetCodeChange(raw: string) {
+    const trimmed = raw.replace(/\s+/g, "");
+    // Commodity utilise des slugs minuscules ; le reste est en majuscules
+    if (targetType === "commodity") {
+      setTargetCode(trimmed.toLowerCase());
+    } else {
+      setTargetCode(trimmed.toUpperCase());
+    }
+  }
 
   function submit() {
     setError(null);
@@ -371,7 +415,7 @@ function AlertForm({
         <Field label="Type de cible" required>
           <select
             value={targetType}
-            onChange={(e) => setTargetType(e.target.value)}
+            onChange={(e) => handleTargetTypeChange(e.target.value)}
             className="w-full text-sm border border-slate-300 rounded-md px-2 py-1.5 bg-white"
           >
             {TARGET_TYPES.map((t) => (
@@ -382,16 +426,64 @@ function AlertForm({
           </select>
         </Field>
 
-        <Field label="Code (ticker, ISIN, paire, slug)" required>
-          <input
-            type="text"
-            value={targetCode}
-            onChange={(e) =>
-              setTargetCode(e.target.value.toUpperCase().replace(/\s+/g, ""))
-            }
-            placeholder="SNTS, BRVMC, EUR/XOF, cacao… (* pour tout)"
-            className="w-full text-sm border border-slate-300 rounded-md px-2 py-1.5 font-mono"
-          />
+        <Field label="Code (symbole, paire, slug)" required>
+          {targetType === "any" ? (
+            <input
+              type="text"
+              value={targetCode}
+              onChange={(e) => handleTargetCodeChange(e.target.value)}
+              placeholder="* (toutes les cibles)"
+              autoComplete="off"
+              className="w-full text-sm border border-slate-300 rounded-md px-2 py-1.5 font-mono"
+            />
+          ) : (
+            <>
+              <input
+                type="text"
+                value={targetCode}
+                onChange={(e) => handleTargetCodeChange(e.target.value)}
+                list={`target-options-${targetType}`}
+                autoComplete="off"
+                placeholder={
+                  targetType === "stock"
+                    ? "Ex: SNTS — commence à taper"
+                    : targetType === "bond"
+                      ? "Ex: TPBF.O12"
+                      : targetType === "index"
+                        ? "Ex: BRVMC"
+                        : targetType === "currency"
+                          ? "Ex: EUR/XOF"
+                          : "Ex: cacao"
+                }
+                className={`w-full text-sm border rounded-md px-2 py-1.5 font-mono ${
+                  showCodeError
+                    ? "border-rose-400 focus:border-rose-500"
+                    : codeMatchesList
+                      ? "border-emerald-400"
+                      : "border-slate-300"
+                }`}
+                aria-invalid={showCodeError}
+              />
+              <datalist id={`target-options-${targetType}`}>
+                {currentOptions.map((o) => (
+                  <option key={o.value} value={o.value} label={o.label} />
+                ))}
+              </datalist>
+              {showCodeError && (
+                <div className="text-[11px] text-rose-700 mt-1">
+                  Code introuvable pour ce type. Choisis une option dans la
+                  liste ({currentOptions.length} disponible
+                  {currentOptions.length > 1 ? "s" : ""}).
+                </div>
+              )}
+              {codeMatchesList && (
+                <div className="text-[11px] text-emerald-700 mt-1 truncate">
+                  ✓{" "}
+                  {currentOptions.find((o) => o.value === targetCode)?.label}
+                </div>
+              )}
+            </>
+          )}
         </Field>
 
         {/* Champs spécifiques selon le type */}
@@ -546,8 +638,9 @@ function AlertForm({
         <button
           type="button"
           onClick={submit}
-          disabled={pending}
-          className="px-4 py-2 text-xs rounded-md bg-blue-700 text-white hover:bg-blue-800 disabled:opacity-60"
+          disabled={pending || !codeIsValid}
+          title={!codeIsValid ? "Choisis un code valide dans la liste" : undefined}
+          className="px-4 py-2 text-xs rounded-md bg-blue-700 text-white hover:bg-blue-800 disabled:opacity-60 disabled:cursor-not-allowed"
         >
           {pending ? "Enregistrement…" : "Enregistrer"}
         </button>

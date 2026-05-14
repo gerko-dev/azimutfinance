@@ -21,7 +21,7 @@ export default async function ActualitesAdminPage({
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Actualités BRVM</h1>
           <p className="text-sm text-slate-500 mt-1">
-            Articles d&apos;actualité par valeur cotée. Création réservée à l&apos;admin L2+.
+            Articles d&apos;actualité par valeur cotée.
           </p>
         </div>
         <Link
