@@ -25,13 +25,27 @@ import {
   getStatement,
 } from "@/lib/fundamentals";
 import { computeRatiosByTicker } from "@/lib/fundamentalsCalc";
-import { loadNewsByTicker } from "@/lib/news";
 import { loadDbNewsByTicker } from "@/lib/newsFromDb";
 import { fetchUserRole } from "@/lib/auth/userRole";
 
 // Page rendue dynamiquement a chaque requete pour beneficier du cours live BRVM.
 // Le cache module-level dans liveQuotes.ts limite la frequence des fetchs reels.
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ code: string }>;
+}) {
+  const { code } = await params;
+  const stock = getStockDetails(code.toUpperCase());
+  if (!stock) return { title: "Titre introuvable — AzimutFinance" };
+  const secteur = stock.sector ? ` — ${stock.sector}` : "";
+  return {
+    title: `${stock.name} (${stock.code}) — Cours, dividende et ratios BRVM`,
+    description: `Fiche action ${stock.name} (${stock.code})${secteur} cotée à la BRVM : cours en direct, performances multi-horizons, ratios fondamentaux, profil risque/rendement et actualités.`,
+  };
+}
 
 export default async function TitrePage({
   params,
@@ -151,12 +165,9 @@ export default async function TitrePage({
     peerSparklines[p.code] = (peerHistoriesAll[p.code] ?? []).slice(-30);
   }
 
-  // Actualités : merge CSV (édité a la main) + DB (publiees via /admin/actualites)
-  const csvNews = loadNewsByTicker(codeUpper);
-  const dbNews = await loadDbNewsByTicker(codeUpper);
-  const news = [...dbNews, ...csvNews].sort((a, b) =>
-    b.date.localeCompare(a.date),
-  );
+  // Actualités : publiées via /admin/actualites (base de données).
+  // Déjà triées par date desc par loadDbNewsByTicker.
+  const news = await loadDbNewsByTicker(codeUpper);
 
   // Fondamentaux
   const fundTitre = getFundTitre(codeUpper);

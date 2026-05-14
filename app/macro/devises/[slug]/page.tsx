@@ -3,6 +3,7 @@ import Link from "next/link";
 import Header from "@/components/Header";
 import CommodityDetailView from "@/components/macro/CommodityDetailView";
 import CommodityAdvancedChart from "@/components/macro/CommodityAdvancedChart";
+import AddToWatchlistButton from "@/components/watchlist/AddToWatchlistButton";
 import { fetchUserRole } from "@/lib/auth/userRole";
 import type { OhlcPoint } from "@/components/charting/KlineChart";
 import {
@@ -200,6 +201,21 @@ export default async function FxPairPage({
               <p className="text-xs md:text-sm text-slate-300 mt-1.5 max-w-2xl">
                 {meta.uemoaRelevance}
               </p>
+              <div className="flex gap-2 flex-wrap mt-3">
+                <AddToWatchlistButton
+                  targetType="currency"
+                  targetCode={meta.pair}
+                  targetLabel={meta.name}
+                  isAuthenticated={true}
+                  variant="dark"
+                />
+                <Link
+                  href="/outils/alertes"
+                  className="px-3 py-1.5 text-xs md:text-sm border border-white/20 bg-white/10 hover:bg-white/20 text-white rounded-md inline-flex items-center gap-1.5"
+                >
+                  🔔 Alerte
+                </Link>
+              </div>
             </div>
 
             <div className="text-right">

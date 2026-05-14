@@ -739,7 +739,7 @@ export default function BondDetailView({
               {isMember ? (
                 <AddToWatchlistButton
                   targetType="bond"
-                  targetCode={bond.isin}
+                  targetCode={bond.code}
                   targetLabel={bond.issuer}
                   isAuthenticated={true}
                 />

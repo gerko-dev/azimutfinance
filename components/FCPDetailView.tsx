@@ -348,65 +348,73 @@ export default function FCPDetailView(props: Props) {
   }, [calendar]);
 
   return (
-    <main className="mx-auto max-w-7xl px-4 py-8 space-y-8">
-      {/* === BANDEAU FRAÎCHEUR BOC === */}
-      {latestBocDate && (
-        <div className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs font-semibold text-emerald-900">
-          <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
-          Données au {fmtDateFR(latestBocDate)}
-        </div>
-      )}
-
-      {/* ============================================ */}
-      {/* BLOCK 1 : HEADER IDENTITE */}
-      {/* ============================================ */}
-      <header className="bg-white border border-slate-200 rounded-lg p-6">
-        <div className="flex items-start justify-between flex-wrap gap-4">
-          <div className="space-y-2 min-w-0">
-            <p className="text-xs uppercase tracking-wider text-slate-500">
-              <Link href="/marches/fcp" className="hover:underline">
-                FCP / OPCVM
-              </Link>{" "}
-              ·{" "}
-              <Link
-                href={`/sgo/${managerSlug(fund.gestionnaire)}`}
-                className="hover:underline text-slate-700 font-medium"
-              >
-                {fund.gestionnaire}
-              </Link>
-            </p>
-            <h1 className="text-3xl font-bold text-slate-900">{fund.nom}</h1>
-            <div className="flex items-center gap-3 flex-wrap">
+    <>
+      {/* === HERO === */}
+      <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-b border-slate-800">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10">
+          <div className="text-xs text-slate-400 mb-2 flex items-center gap-1.5 flex-wrap">
+            <Link href="/" className="hover:text-white">Accueil</Link>
+            <span>›</span>
+            <Link href="/marches/fcp" className="hover:text-white">FCP / OPCVM</Link>
+            <span>›</span>
+            <Link
+              href={`/sgo/${managerSlug(fund.gestionnaire)}`}
+              className="hover:text-white"
+            >
+              {fund.gestionnaire}
+            </Link>
+            <span>›</span>
+            <span className="text-slate-200 truncate">{fund.nom}</span>
+          </div>
+          <h1 className="text-2xl md:text-3xl font-semibold text-white">
+            {fund.nom}
+          </h1>
+          <div className="flex items-center gap-2 flex-wrap mt-3">
+            <span
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md"
+              style={{
+                background: CATEGORY_COLORS[fund.categorie] + "33" || "#1e293b",
+                color: "#ffffff",
+              }}
+            >
               <span
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md"
+                className="w-2 h-2 rounded-full"
+                style={{ background: CATEGORY_COLORS[fund.categorie] || "#94a3b8" }}
+              />
+              {fund.categorie}
+            </span>
+            <span className="px-2.5 py-1 text-xs font-medium rounded-md bg-white/10 text-slate-200">
+              {fund.type}
+            </span>
+            {ytdQuartile !== null && (
+              <span
+                className="px-2.5 py-1 text-xs font-bold rounded-md"
                 style={{
-                  background: CATEGORY_COLORS[fund.categorie] + "1a" || "#e2e8f0",
-                  color: CATEGORY_COLORS[fund.categorie] || "#475569",
+                  background: QUARTILE_COLORS[ytdQuartile] + "44",
+                  color: "#ffffff",
                 }}
               >
-                <span
-                  className="w-2 h-2 rounded-full"
-                  style={{ background: CATEGORY_COLORS[fund.categorie] || "#94a3b8" }}
-                />
-                {fund.categorie}
+                {QUARTILE_LABELS[ytdQuartile]} YTD
               </span>
-              <span className="px-2.5 py-1 text-xs font-medium rounded-md bg-slate-100 text-slate-600">
-                {fund.type}
-              </span>
-              {ytdQuartile !== null && (
-                <span
-                  className="px-2.5 py-1 text-xs font-bold rounded-md"
-                  style={{
-                    background: QUARTILE_COLORS[ytdQuartile] + "22",
-                    color: QUARTILE_COLORS[ytdQuartile],
-                  }}
-                >
-                  {QUARTILE_LABELS[ytdQuartile]} YTD
-                </span>
-              )}
-            </div>
+            )}
           </div>
-          <div className="grid grid-cols-2 gap-3 min-w-[280px]">
+        </div>
+      </div>
+
+      <main className="mx-auto max-w-7xl px-4 py-8 space-y-8">
+        {/* === BANDEAU FRAÎCHEUR BOC === */}
+        {latestBocDate && (
+          <div className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs font-semibold text-emerald-900">
+            <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+            Données au {fmtDateFR(latestBocDate)}
+          </div>
+        )}
+
+        {/* ============================================ */}
+        {/* BLOCK 1 : KPIs identité OPC (titre + tags dans hero ci-dessus) */}
+        {/* ============================================ */}
+        <section className="bg-white border border-slate-200 rounded-lg p-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <KPI
               label="Encours"
               value={fmtBigFCFA(aumRef) + " FCFA"}
@@ -441,26 +449,25 @@ export default function FCPDetailView(props: Props) {
               }
             />
           </div>
-        </div>
 
-        {/* Caractéristiques OPC (issu du BOC : dépositaire + fréquence calcul) */}
-        {(fund.depositaire || fund.frequenceCalcul) && (
-          <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-1.5 border-t border-slate-100 pt-3 text-xs text-slate-600">
-            {fund.depositaire && (
-              <span>
-                <span className="text-slate-400">Dépositaire · </span>
-                <span className="font-medium text-slate-800">{fund.depositaire}</span>
-              </span>
-            )}
-            {fund.frequenceCalcul && (
-              <span>
-                <span className="text-slate-400">Fréquence VL · </span>
-                <span className="font-medium text-slate-800">{fund.frequenceCalcul}</span>
-              </span>
-            )}
-          </div>
-        )}
-      </header>
+          {/* Caractéristiques OPC (issu du BOC : dépositaire + fréquence calcul) */}
+          {(fund.depositaire || fund.frequenceCalcul) && (
+            <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-1.5 border-t border-slate-100 pt-3 text-xs text-slate-600">
+              {fund.depositaire && (
+                <span>
+                  <span className="text-slate-400">Dépositaire · </span>
+                  <span className="font-medium text-slate-800">{fund.depositaire}</span>
+                </span>
+              )}
+              {fund.frequenceCalcul && (
+                <span>
+                  <span className="text-slate-400">Fréquence VL · </span>
+                  <span className="font-medium text-slate-800">{fund.frequenceCalcul}</span>
+                </span>
+              )}
+            </div>
+          )}
+        </section>
 
       {/* ============================================ */}
       {/* BLOCK 2 : TABLEAU DE PERFORMANCE */}
@@ -966,10 +973,11 @@ export default function FCPDetailView(props: Props) {
         </div>
       </section>
 
-      <p className="text-xs text-slate-400">
-        Source : <span className="font-medium text-slate-600">BRVM</span>.
-      </p>
-    </main>
+        <p className="text-xs text-slate-400">
+          Source : <span className="font-medium text-slate-600">BRVM</span>.
+        </p>
+      </main>
+    </>
   );
 }
 

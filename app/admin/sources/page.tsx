@@ -275,7 +275,6 @@ export default async function SourcesPage() {
 
       <p className="text-xs text-slate-400 italic">
         Cette page n&apos;est pas indexée et n&apos;apparaît dans aucun menu public.
-        Niveau d&apos;accès requis : super-admin (niveau 1).
       </p>
     </div>
   );

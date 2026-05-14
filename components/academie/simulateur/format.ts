@@ -1,19 +1,14 @@
 // Helpers de formatage partages par les composants simulateur
 
-export const fmtFCFA = (v: number): string => {
-  if (!isFinite(v)) return "—";
-  if (Math.abs(v) >= 1_000_000_000)
-    return `${(v / 1_000_000_000).toFixed(2).replace(".", ",")} Md`;
-  if (Math.abs(v) >= 1_000_000)
-    return `${(v / 1_000_000).toFixed(2).replace(".", ",")} M`;
-  if (Math.abs(v) >= 1_000) return `${Math.round(v).toLocaleString("fr-FR")}`;
-  return Math.round(v).toLocaleString("fr-FR");
-};
+// Rendus FCFA centralisés dans @/lib/format.
+// Ré-exportés ici pour ne pas toucher aux imports `./format` des composants :
+//  - fmtFCFA      : abrégé variante "simulator" (Md / M 2 déc., entier sous 1 M)
+//  - fmtFCFAExact : montant entier arrondi
+import { fmtFCFAShort } from "@/lib/format";
 
-export const fmtFCFAExact = (v: number): string => {
-  if (!isFinite(v)) return "—";
-  return Math.round(v).toLocaleString("fr-FR");
-};
+export { fmtFCFAExact } from "@/lib/format";
+
+export const fmtFCFA = (v: number): string => fmtFCFAShort(v, "simulator");
 
 export const fmtPct = (v: number | null, dec = 1): string => {
   if (v === null || !isFinite(v)) return "—";

@@ -21,13 +21,20 @@ export async function getMyAdminLevel(): Promise<AdminLevel | null> {
 }
 
 /**
- * Garde-fou : redirige si l'utilisateur n'a pas au moins le niveau requis.
+ * Garde-fou : redirige si l'utilisateur n'a pas le niveau de privilege requis.
  * Renvoie le user + son niveau si OK.
+ *
+ * ATTENTION a la numerotation inversee : N1 = super-admin (plus haut privilege),
+ * N3 = editeur (plus bas). `maxLevelNumber` est donc le NUMERO de niveau le plus
+ * eleve tolere : l'acces passe si `level <= maxLevelNumber`.
+ *   - requireAdmin(1) -> super-admins uniquement
+ *   - requireAdmin(2) -> N1 et N2
+ *   - requireAdmin(3) -> tous les admins (defaut)
  *
  * Usage cote server component :
  *   const { level } = await requireAdmin(2);
  */
-export async function requireAdmin(minLevel: AdminLevel = 3): Promise<{
+export async function requireAdmin(maxLevelNumber: AdminLevel = 3): Promise<{
   userId: string;
   level: AdminLevel;
 }> {
@@ -42,8 +49,8 @@ export async function requireAdmin(minLevel: AdminLevel = 3): Promise<{
   if (level === null) {
     redirect("/?error=not_admin");
   }
-  if (level > minLevel) {
-    // level 3 mais on demande minLevel = 1 ou 2 -> pas autorise
+  if (level > maxLevelNumber) {
+    // ex : level 3 (editeur) mais on exige maxLevelNumber = 1 ou 2 -> pas autorise
     redirect("/admin?error=insufficient_level");
   }
   return { userId: user.id, level };

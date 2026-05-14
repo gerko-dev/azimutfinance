@@ -1,8 +1,32 @@
+"use client";
+
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import CookiePreferencesTrigger from "@/components/CookiePreferencesTrigger";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 export default function Footer() {
   const year = new Date().getFullYear();
+
+  // Auth-aware comme le Header : certains liens (ex. Magazine) sont reserves
+  // aux membres connectes. Tant que la session n'est pas resolue, on traite
+  // l'utilisateur comme invite -> les liens requiresAuth restent masques.
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    supabase.auth.getUser().then(({ data }) => {
+      if (!cancelled) setIsAuthenticated(!!data.user);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsAuthenticated(!!session?.user);
+    });
+    return () => {
+      cancelled = true;
+      sub.subscription.unsubscribe();
+    };
+  }, [supabase]);
 
   return (
     <footer className="bg-slate-900 text-slate-300 mt-12">
@@ -49,7 +73,6 @@ export default function Footer() {
             <Item href="/macro/matieres-premieres">Matières premières</Item>
             <Item href="/macro/devises">Devises &amp; FX</Item>
             <Item href="/macro/immobilier">Immobilier</Item>
-            <Item href="/outils/ytm">Calculateur YTM</Item>
           </Column>
 
           {/* Académie */}
@@ -58,14 +81,19 @@ export default function Footer() {
             <Item href="/academie/glossaire">Glossaire financier</Item>
             <Item href="/academie/compte-titre">Suivi compte titre</Item>
             <Item href="/academie/simulateur">Ligue Azimut</Item>
-            <Item href="/academie/magazine">Magazine digital</Item>
+            <Item
+              href="/academie/magazine"
+              requiresAuth
+              isAuthenticated={isAuthenticated}
+            >
+              Magazine digital
+            </Item>
           </Column>
 
           {/* Communauté & compte */}
           <Column title="Communauté &amp; compte">
             <Item href="/communaute/newsletter">Newsletter</Item>
             <Item href="/communaute/forum">Forum investisseurs</Item>
-            <Item href="/communaute/classements">Classements</Item>
             <Item href="/compte">Mon compte</Item>
             <Item href="/messagerie">Messagerie</Item>
             <Item href="/premium">Passer à Premium</Item>
@@ -112,7 +140,19 @@ function Column({
   );
 }
 
-function Item({ href, children }: { href: string; children: React.ReactNode }) {
+function Item({
+  href,
+  children,
+  requiresAuth = false,
+  isAuthenticated = false,
+}: {
+  href: string;
+  children: React.ReactNode;
+  /** Lien masque tant que l'utilisateur n'est pas connecte (membre+). */
+  requiresAuth?: boolean;
+  isAuthenticated?: boolean;
+}) {
+  if (requiresAuth && !isAuthenticated) return null;
   return (
     <li>
       <Link href={href} className="text-slate-400 hover:text-white transition">

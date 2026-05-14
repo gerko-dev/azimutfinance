@@ -11,6 +11,7 @@ import {
   YAxis,
   ReferenceLine,
 } from "recharts";
+import { fmtFCFAShort as fmtFCFA } from "@/lib/format";
 
 type Source = "jiji" | "coinafrique";
 type Transaction = "achat" | "location";
@@ -66,14 +67,6 @@ type PriceM2Row = {
 };
 
 const ALL_TYPES = ["appartement", "villa", "studio", "maison", "immeuble", "terrain", "commercial"] as const;
-
-function fmtFCFA(v: number | null): string {
-  if (v === null || !isFinite(v)) return "—";
-  if (Math.abs(v) >= 1_000_000_000) return `${(v / 1_000_000_000).toFixed(2).replace(".", ",")} Md`;
-  if (Math.abs(v) >= 1_000_000) return `${(v / 1_000_000).toFixed(1).replace(".", ",")} M`;
-  if (Math.abs(v) >= 1_000) return `${Math.round(v / 1_000).toLocaleString("fr-FR")} k`;
-  return Math.round(v).toLocaleString("fr-FR");
-}
 
 function fmtPct(v: number | null, dec = 1): string {
   if (v === null || !isFinite(v)) return "—";

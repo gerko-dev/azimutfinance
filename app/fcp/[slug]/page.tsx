@@ -36,6 +36,20 @@ import {
 // userRole lu via cookies → rendu dynamique requis pour le gating premium.
 export const dynamic = "force-dynamic";
 
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
+  const fund = loadFunds().find((f) => f.id === slug);
+  if (!fund) return { title: "Fonds introuvable — AzimutFinance" };
+  return {
+    title: `${fund.nom} — Fiche fonds OPCVM (${fund.gestionnaire})`,
+    description: `Analyse du fonds ${fund.nom} géré par ${fund.gestionnaire} — catégorie ${fund.categorie} : performance vs médiane catégorie, quartiles historiques, encours, peers et cadence de publication.`,
+  };
+}
+
 export default async function FCPDetailPage({
   params,
 }: {

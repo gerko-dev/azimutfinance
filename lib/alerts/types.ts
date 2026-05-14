@@ -1,3 +1,5 @@
+import { formatTargetCode } from "@/lib/watchlists/types";
+
 export type AlertType =
   | "price_threshold"
   | "daily_pct_change"
@@ -120,7 +122,8 @@ export function describeAlert(a: Alert): string {
     days_before: number;
     note: string;
   }>;
-  const code = a.target_code !== "*" ? ` ${a.target_code}` : "";
+  const prettyCode = formatTargetCode(a.target_type, a.target_code);
+  const code = a.target_code !== "*" ? ` ${prettyCode}` : "";
   switch (a.alert_type) {
     case "price_threshold":
       return `Prix${code} ${p.direction === "above" ? "≥" : "≤"} ${
@@ -143,7 +146,7 @@ export function describeAlert(a: Alert): string {
         p.value?.toLocaleString("fr-FR") ?? "—"
       }`;
     case "fx_threshold":
-      return `${a.target_code} ${p.direction === "above" ? "≥" : "≤"} ${
+      return `${prettyCode} ${p.direction === "above" ? "≥" : "≤"} ${
         p.value?.toLocaleString("fr-FR") ?? "—"
       }`;
     case "custom":

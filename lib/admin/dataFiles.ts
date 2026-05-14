@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getMyAdminLevel } from "./auth";
 import { analyzeFreshness, type FileFreshness } from "./freshness";
+import { HIDDEN_DATA_FILES } from "./dataFilesCatalog";
 import type { ActionResult } from "./types";
 
 const DATA_DIR = join(process.cwd(), "data");
@@ -33,6 +34,10 @@ export async function listDataFiles(): Promise<ActionResult<DataFileInfo[]>> {
     const candidates: { name: string; size: number; mtime: Date }[] = [];
     for (const name of entries) {
       if (!name.endsWith(".csv")) continue;
+      // Masque les CSV rafraîchis automatiquement par les workflows GitHub
+      // Actions et les fichiers legacy sans influence : ils n'ont plus besoin
+      // d'un import manuel depuis cette page.
+      if (HIDDEN_DATA_FILES.has(name)) continue;
       const stat = await fs.stat(join(DATA_DIR, name));
       if (!stat.isFile()) continue;
       candidates.push({ name, size: stat.size, mtime: stat.mtime });
@@ -83,6 +88,15 @@ export async function uploadDataFile(
     return {
       ok: false,
       error: "Nom de fichier invalide. Caractères autorisés : A-Z, 0-9, _, -, et l'extension .csv.",
+    };
+  }
+  // Refuse les fichiers gérés automatiquement (scraping GitHub Actions) ou
+  // legacy : un upload manuel serait soit écrasé au prochain cron, soit inutile.
+  if (HIDDEN_DATA_FILES.has(filename)) {
+    return {
+      ok: false,
+      error:
+        "Ce fichier est géré automatiquement (scraping) ou obsolète : il n'est pas importable manuellement.",
     };
   }
 

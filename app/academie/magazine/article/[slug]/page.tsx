@@ -1,7 +1,8 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import Header from "@/components/Header";
 import ReadingProgressBar from "@/components/academie/ReadingProgressBar";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   ARTICLE_CATEGORY_META,
   buildToc,
@@ -47,6 +48,13 @@ export default async function ArticlePage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    redirect(`/connexion?redirect=/academie/magazine/article/${slug}`);
+  }
   const article = await getPublishedArticleBySlug(slug);
   if (!article) notFound();
 

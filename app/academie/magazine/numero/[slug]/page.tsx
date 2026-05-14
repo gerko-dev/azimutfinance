@@ -1,7 +1,8 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import Header from "@/components/Header";
 import MagazineCover from "@/components/academie/MagazineCover";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   ARTICLE_CATEGORY_META,
   fmtArticleDate,
@@ -35,6 +36,13 @@ export default async function IssuePage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    redirect(`/connexion?redirect=/academie/magazine/numero/${slug}`);
+  }
   const issue = await getPublishedIssueBySlug(slug);
   if (!issue) notFound();
 

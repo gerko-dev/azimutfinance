@@ -4,6 +4,7 @@ import PremiumPaywall from "@/components/PremiumPaywall";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getPremiumStatus } from "@/lib/auth/premium";
 import { listMyAlerts, listMyAlertTriggers } from "@/lib/alerts/queries";
+import { getTargetOptions } from "@/lib/watchlists/targetOptions";
 import AlertsManager from "./AlertsManager";
 
 export const metadata = {
@@ -68,6 +69,7 @@ export default async function AlertesPage() {
     listMyAlerts(),
     listMyAlertTriggers(20),
   ]);
+  const targetOptions = getTargetOptions();
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -91,7 +93,11 @@ export default async function AlertesPage() {
       </div>
 
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 md:px-6 py-6 md:py-8">
-        <AlertsManager alerts={alerts} triggers={triggers} />
+        <AlertsManager
+          alerts={alerts}
+          triggers={triggers}
+          targetOptions={targetOptions}
+        />
       </main>
     </div>
   );

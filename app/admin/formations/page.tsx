@@ -37,7 +37,7 @@ export default async function FormationsAdminPage({
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Formations</h1>
           <p className="text-sm text-slate-500 mt-1">
-            Catalogue de formations Académie. Création/édition réservée à l&apos;admin L2+.
+            Catalogue de formations Académie.
           </p>
         </div>
         <Link

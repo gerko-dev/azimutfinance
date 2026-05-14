@@ -1,10 +1,9 @@
 # Scrape l'historique des prix du caoutchouc naturel APROMAC depuis
 # eagrici.com (page d'accueil — tableau JS embarqué, 13 mois affichés).
 #
-# Cron : chaque jour à 19h00 GMT.
+# Cron : chaque jour à 19h00 UTC.
 #   - Le site publie le nouveau prix APROMAC dans la première quinzaine
 #     de chaque mois ; un run quotidien capture la maj dès qu'elle paraît.
-#   - 19h GMT = ~20h en heure d'Abidjan (après publication probable).
 #
 # Le script merge avec data/apromac.csv existant pour préserver l'historique
 # au-delà de la fenêtre 13 mois affichée par le site.

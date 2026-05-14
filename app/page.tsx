@@ -23,6 +23,7 @@ import {
   getDynamicPlanList,
   listTrialConfigs,
 } from "@/lib/premium/pricingQueries";
+import { fmtFCFAShort } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -1394,12 +1395,3 @@ function QuickPill({
   );
 }
 
-function fmtFCFAShort(v: number): string {
-  if (!isFinite(v)) return "—";
-  if (Math.abs(v) >= 1_000_000_000)
-    return `${(v / 1_000_000_000).toFixed(2).replace(".", ",")} Md`;
-  if (Math.abs(v) >= 1_000_000)
-    return `${(v / 1_000_000).toFixed(1).replace(".", ",")} M`;
-  if (Math.abs(v) >= 1_000) return `${Math.round(v / 1_000)} k`;
-  return Math.round(v).toLocaleString("fr-FR");
-}

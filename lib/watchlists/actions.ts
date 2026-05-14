@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/lib/admin/types";
 import type { Watchlist, WatchlistTargetType } from "./types";
+import { validateTarget } from "./validate";
 
 function s(v: FormDataEntryValue | null): string {
   return String(v ?? "").trim();
@@ -93,6 +94,10 @@ export async function addToWatchlistAction(
   const { supabase, user } = await requireUser();
   if (!user) return { ok: false, error: "Tu dois être connecté." };
 
+  // Valide que la cible existe dans les datasets (sinon refuse)
+  const check = validateTarget(targetType, targetCode);
+  if (!check.ok) return { ok: false, error: check.error };
+
   // Verifier que la watchlist appartient au user
   const { data: wl } = await supabase
     .from("watchlists")
@@ -106,7 +111,7 @@ export async function addToWatchlistAction(
     watchlist_id: watchlistId,
     target_type: targetType,
     target_code: targetCode.toUpperCase(),
-    target_label: targetLabel,
+    target_label: targetLabel ?? check.label,
   });
   if (error) {
     if (error.code === "23505")
@@ -168,6 +173,11 @@ export async function quickAddToDefaultWatchlistAction(
   const { supabase, user } = await requireUser();
   if (!user) return { ok: false, error: "Tu dois être connecté." };
 
+  // Valide la cible
+  const check = validateTarget(targetType, targetCode);
+  if (!check.ok) return { ok: false, error: check.error };
+  const resolvedLabel = targetLabel ?? check.label;
+
   // Cherche une liste existante (par défaut sinon la plus ancienne)
   const { data: existing } = await supabase
     .from("watchlists")
@@ -202,7 +212,7 @@ export async function quickAddToDefaultWatchlistAction(
     watchlist_id: listId,
     target_type: targetType,
     target_code: targetCode.toUpperCase(),
-    target_label: targetLabel,
+    target_label: resolvedLabel,
   });
   if (insertErr) {
     if (insertErr.code === "23505")

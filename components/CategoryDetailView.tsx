@@ -128,41 +128,46 @@ export default function CategoryDetailView(props: Props) {
   const color = CATEGORY_COLORS[category] || "#94a3b8";
 
   return (
-    <main className="mx-auto max-w-7xl px-4 py-8 space-y-8">
-      {/* === BANDEAU FRAÎCHEUR BOC === */}
-      {latestBocDate && (
-        <div className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs font-semibold text-emerald-900">
-          <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
-          Données au {fmtDateFR(latestBocDate)}
+    <>
+      {/* === HERO === */}
+      <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-b border-slate-800">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10">
+          <div className="text-xs text-slate-400 mb-2 flex items-center gap-1.5 flex-wrap">
+            <Link href="/" className="hover:text-white">Accueil</Link>
+            <span>›</span>
+            <Link href="/marches/fcp" className="hover:text-white">FCP / OPCVM</Link>
+            <span>›</span>
+            <Link href="/fcp/categories" className="hover:text-white">Catégories</Link>
+            <span>›</span>
+            <span className="text-slate-200">{category}</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="inline-block w-4 h-4 rounded-full" style={{ background: color }} />
+            <h1 className="text-2xl md:text-3xl font-semibold text-white">{category}</h1>
+          </div>
+          <p className="text-xs md:text-sm text-slate-300 mt-1.5 max-w-2xl">
+            {nbFunds} fonds gérés par {nbManagers} sociétés de gestion · encours total{" "}
+            <strong className="text-white">{fmtBigFCFA(aumTotal)} FCFA</strong> au {fmtDateFR(refQuarter)}.
+          </p>
         </div>
-      )}
+      </div>
 
-      {/* === HEADER === */}
-      <header className="bg-white border border-slate-200 rounded-lg p-6">
-        <div className="flex items-start justify-between flex-wrap gap-4">
-          <div className="space-y-2 min-w-0">
-            <p className="text-xs uppercase tracking-wider text-slate-500">
-              <Link href="/marches/fcp" className="hover:underline">FCP / OPCVM</Link>
-              {" · "}
-              <Link href="/fcp/categories" className="hover:underline">Catégories</Link>
-            </p>
-            <div className="flex items-center gap-3">
-              <span className="inline-block w-4 h-4 rounded-full" style={{ background: color }} />
-              <h1 className="text-3xl font-bold text-slate-900">{category}</h1>
-            </div>
-            <p className="text-sm text-slate-600 max-w-2xl">
-              {nbFunds} fonds gérés par {nbManagers} sociétés de gestion · encours total{" "}
-              <strong>{fmtBigFCFA(aumTotal)} FCFA</strong> au {fmtDateFR(refQuarter)}.
-            </p>
+      <main className="mx-auto max-w-7xl px-4 py-8 space-y-8">
+        {/* === BANDEAU FRAÎCHEUR BOC === */}
+        {latestBocDate && (
+          <div className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs font-semibold text-emerald-900">
+            <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+            Données au {fmtDateFR(latestBocDate)}
           </div>
-          <div className="grid grid-cols-2 gap-3 min-w-[300px]">
-            <KPI label="Encours" value={fmtBigFCFA(aumTotal) + " FCFA"} sub={`${fmtPctRaw(marketShare, 0)} du marché`} />
-            <KPI label="Fonds" value={String(nbFunds)} sub={`${nbManagers} SGO actives`} />
-            <KPI label="Top 5 fonds" value={fmtPctRaw(top5FundsShare, 0)} sub="de l'encours cat." />
-            <KPI label="Top 5 SGO" value={fmtPctRaw(top5MgrShare, 0)} sub="de l'encours cat." />
-          </div>
+        )}
+
+        {/* === KPIs catégorie === */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <KPI label="Encours" value={fmtBigFCFA(aumTotal) + " FCFA"} sub={`${fmtPctRaw(marketShare, 0)} du marché`} />
+          <KPI label="Fonds" value={String(nbFunds)} sub={`${nbManagers} SGO actives`} />
+          <KPI label="Top 5 fonds" value={fmtPctRaw(top5FundsShare, 0)} sub="de l'encours cat." />
+          <KPI label="Top 5 SGO" value={fmtPctRaw(top5MgrShare, 0)} sub="de l'encours cat." />
         </div>
-      </header>
 
       {/* === DISPERSION === */}
       <section className="bg-white border border-slate-200 rounded-lg overflow-hidden">
@@ -369,7 +374,8 @@ export default function CategoryDetailView(props: Props) {
           ))}
         </div>
       </section>
-    </main>
+      </main>
+    </>
   );
 }
 

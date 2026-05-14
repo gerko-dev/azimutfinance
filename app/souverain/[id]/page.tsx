@@ -15,6 +15,25 @@ import { fetchUserRole } from "@/lib/auth/userRole";
 // userRole lu via cookies → rendu dynamique.
 export const dynamic = "force-dynamic";
 
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const decodedId = decodeURIComponent(id);
+  const bond = aggregateSovereignBonds(loadUmoaEmissions()).find(
+    (b) => b.id === decodedId,
+  );
+  if (!bond) return { title: "Titre souverain introuvable — AzimutFinance" };
+  const echeance = bond.maturityDate?.slice(0, 4);
+  const label = `${bond.type} ${bond.countryName}${echeance ? ` ${echeance}` : ""}`;
+  return {
+    title: `${label} — Titre souverain UMOA-Titres`,
+    description: `Fiche titre souverain ${bond.type} ${bond.countryName} (échéance ${bond.maturityDate}) : historique des adjudications UMOA-Titres, rendement, spread de signature et prix théorique.`,
+  };
+}
+
 export default async function Page({
   params,
 }: {

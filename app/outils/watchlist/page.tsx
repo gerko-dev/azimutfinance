@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Header from "@/components/Header";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { listMyWatchlists, getMyWatchlist } from "@/lib/watchlists/queries";
+import { enrichWatchlistItems } from "@/lib/watchlists/enrich";
 import WatchlistManager from "./WatchlistManager";
 
 export const metadata = {
@@ -31,7 +32,10 @@ export default async function WatchlistPage({
     (sp.id && lists.some((l) => l.id === sp.id) && sp.id) ||
     lists[0]?.id ||
     null;
-  const selected = selectedId ? await getMyWatchlist(selectedId) : null;
+  const selectedRaw = selectedId ? await getMyWatchlist(selectedId) : null;
+  const selected = selectedRaw
+    ? { ...selectedRaw, items: enrichWatchlistItems(selectedRaw.items) }
+    : null;
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">

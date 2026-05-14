@@ -2,9 +2,12 @@
 # suivies par /macro/matieres-premieres ET des 13 paires FX suivies par
 # /macro/devises, puis commit + push.
 #
-# Cron : 2 fois par jour, 08h00 et 17h30 GMT.
-#   - 08h00 GMT  = ~09h00 en heure d'Abidjan (debut de journee)
-#   - 17h30 GMT  = ~18h30 en heure d'Abidjan (apres cloture europeenne, donnees J quasi finales)
+# Cron : 5 fois par jour pour suivre les marches mondiaux en intra-day.
+#   - 08h00 UTC : open Europe / Asia milieu de journee
+#   - 10h00 UTC : matinee Europe
+#   - 12h00 UTC : mid-day Europe
+#   - 15h00 UTC : open New York
+#   - 17h30 UTC : cloture europeenne (donnees J quasi finales)
 # Egalement declenchable manuellement depuis l'UI GitHub Actions.
 #
 # Source : API publique api.investing.com/api/financialdata/historical/<id>.
@@ -20,6 +23,9 @@ name: Scrape Investing.com Commodities &amp; FX
 on:
   schedule:
     - cron: "0 8 * * *"
+    - cron: "0 10 * * *"
+    - cron: "0 12 * * *"
+    - cron: "0 15 * * *"
     - cron: "30 17 * * *"
   workflow_dispatch:
     inputs:

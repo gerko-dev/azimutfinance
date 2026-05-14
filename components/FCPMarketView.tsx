@@ -294,40 +294,51 @@ export default function FCPMarketView(props: Props) {
   const visibleDates = heatmapDates.slice(-8);
 
   return (
-    <main className="mx-auto max-w-7xl px-4 py-8 space-y-8">
-      {/* === HEADER === */}
-      <header className="space-y-3">
-        <p className="text-xs uppercase tracking-wider text-slate-500">Marchés UEMOA</p>
-        <h1 className="text-3xl font-bold text-slate-900">FCP / OPCVM</h1>
-        <p className="text-sm text-slate-600 max-w-3xl">
-          Performances et structure du marché des organismes de placement collectif UEMOA. Encours
-          arrêté à la dernière publication trimestrielle ({fmtDateFR(refQuarter)}). Performances
-          calculées par catégorie de FCP, fonds dont la dernière VL date de plus de 15 jours
-          avant {fmtDateFR(latestVLGlobal)} exclus du classement.
-        </p>
-        <div className="flex flex-wrap gap-2 pt-1">
-          <Link
-            href="/sgo"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-slate-200 bg-white text-slate-700 hover:border-slate-400"
-          >
-            Sociétés de gestion
-          </Link>
-          <Link
-            href="/fcp/categories"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-slate-200 bg-white text-slate-700 hover:border-slate-400"
-          >
-            OPC
-          </Link>
+    <>
+      {/* === HERO === */}
+      <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-b border-slate-800">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10">
+          <div className="text-xs text-slate-400 mb-2 flex items-center gap-1.5 flex-wrap">
+            <Link href="/" className="hover:text-white">Accueil</Link>
+            <span>›</span>
+            <span className="text-slate-200">Marchés UEMOA</span>
+            <span>›</span>
+            <span className="text-slate-200">FCP / OPCVM</span>
+          </div>
+          <h1 className="text-2xl md:text-3xl font-semibold text-white">
+            FCP / OPCVM
+          </h1>
+          <p className="text-xs md:text-sm text-slate-300 mt-1.5 max-w-3xl">
+            Performances et structure du marché des organismes de placement collectif UEMOA.
+            Encours arrêté à la dernière publication trimestrielle ({fmtDateFR(refQuarter)}).
+            Performances calculées par catégorie de FCP, fonds dont la dernière VL date de
+            plus de 15 jours avant {fmtDateFR(latestVLGlobal)} exclus du classement.
+          </p>
+          <div className="flex flex-wrap gap-2 mt-3">
+            <Link
+              href="/sgo"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-white/20 bg-white/10 hover:bg-white/20 text-white"
+            >
+              Sociétés de gestion
+            </Link>
+            <Link
+              href="/fcp/categories"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-white/20 bg-white/10 hover:bg-white/20 text-white"
+            >
+              OPC
+            </Link>
+          </div>
         </div>
-      </header>
+      </div>
 
-      {/* === BANDEAU FRAÎCHEUR BOC === */}
-      {latestBocDate && (
-        <div className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs font-semibold text-emerald-900">
-          <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
-          Données au {fmtDateFR(latestBocDate)}
-        </div>
-      )}
+      <main className="mx-auto max-w-7xl px-4 py-8 space-y-8">
+        {/* === BANDEAU FRAÎCHEUR BOC === */}
+        {latestBocDate && (
+          <div className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs font-semibold text-emerald-900">
+            <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+            Données au {fmtDateFR(latestBocDate)}
+          </div>
+        )}
 
       {/* === KPI BAR === */}
       <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -678,10 +689,11 @@ export default function FCPMarketView(props: Props) {
         </table>
       </section>
 
-      <p className="text-xs text-slate-400">
-        Source : <span className="font-medium text-slate-600">BRVM</span>.
-      </p>
-    </main>
+        <p className="text-xs text-slate-400">
+          Source : <span className="font-medium text-slate-600">BRVM</span>.
+        </p>
+      </main>
+    </>
   );
 }
 

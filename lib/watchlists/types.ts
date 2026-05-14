@@ -39,6 +39,22 @@ export type WatchlistWithCount = Watchlist & { item_count: number };
 export type WatchlistWithItems = Watchlist & { items: WatchlistItem[] };
 
 /**
+ * Met en forme un target_code pour l'affichage. Pour les matières premières,
+ * convertit le slug (ex: "huile-de-palme") en nom lisible ("Huile de palme") :
+ * remplace les tirets par des espaces et capitalise la première lettre.
+ * Les autres types sont retournés tels quels (les tickers BRVM et symboles
+ * bonds sont déjà en majuscules).
+ */
+export function formatTargetCode(t: WatchlistTargetType | string, code: string): string {
+  if (!code || code === "*") return code;
+  if (t === "commodity") {
+    const spaced = code.replace(/-/g, " ");
+    return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+  }
+  return code;
+}
+
+/**
  * Détermine l'URL canonique de fiche détail d'un item watchlist.
  */
 export function targetHref(t: WatchlistTargetType, code: string): string {

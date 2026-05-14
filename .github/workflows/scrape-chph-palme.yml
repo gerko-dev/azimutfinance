@@ -1,7 +1,7 @@
 # Découverte, OCR et extraction des prix CHPH palmier à huile depuis
 # conseilheveapalmier.ci. Bout en bout automatisé : aucune action manuelle.
 #
-# Cron : chaque jour à 19h00 GMT (~20h Abidjan).
+# Cron : chaque jour à 19h00 UTC.
 #   - Le CHPH publie des "Avis aux planteurs" trimestriels fixant les prix
 #     d'achat de l'huile de palme brute et du régime de palme bord-champ.
 #   - Le run quotidien capture les nouvelles publications dès qu'elles paraissent.

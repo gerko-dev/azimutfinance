@@ -56,13 +56,6 @@ export type StockRow = {
   description: string;
 };
 
-type PriceHistoryRow = {
-  code: string;
-  date: string;
-  value: string;
-  volume?: string; // colonne ajoutée au format historique-prix.csv
-};
-
 /**
  * Parse un nombre en acceptant les formats :
  * - 12345.67 (standard)
@@ -967,29 +960,8 @@ function loadAllPriceHistory(): {
     }
   }
 
-  // 3) Fallback historique-prix.csv si les dossiers Sika sont vides
-  // (premier deploiement sans scrape, ou env de dev)
-  if (out.length === 0) {
-    try {
-      const rows = parseCSV<PriceHistoryRow>("historique-prix.csv", ",");
-      out.push(
-        ...rows
-          .map((r) => ({
-            code: r.code?.trim().toUpperCase() || "",
-            date: normalizeDateISO(r.date),
-            value: parseNum(r.value),
-            volume: isPresent(r.volume) ? parseNum(r.volume) : null,
-            open: null,
-            high: null,
-            low: null,
-          }))
-          .filter((r) => r.code && r.date && r.value > 0),
-      );
-    } catch {
-      // historique-prix.csv absent : on retourne juste un tableau vide
-    }
-  }
-
+  // Si les dossiers Sika sont vides (cold start avant le premier scrape,
+  // ou env de dev nu), on retourne simplement un historique vide.
   _allHistoryCache = out;
   return out;
 }

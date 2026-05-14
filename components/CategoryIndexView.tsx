@@ -61,25 +61,35 @@ type Props = {
 
 export default function CategoryIndexView({ rows, refQuarter, marketTotalAUM, totalFunds, latestBocDate }: Props) {
   return (
-    <main className="mx-auto max-w-7xl px-4 py-8 space-y-6">
-      {/* === BANDEAU FRAÎCHEUR BOC === */}
-      {latestBocDate && (
-        <div className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs font-semibold text-emerald-900">
-          <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
-          Données au {fmtDateFR(latestBocDate)}
+    <>
+      {/* === HERO === */}
+      <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-b border-slate-800">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10">
+          <div className="text-xs text-slate-400 mb-2 flex items-center gap-1.5 flex-wrap">
+            <Link href="/" className="hover:text-white">Accueil</Link>
+            <span>›</span>
+            <Link href="/marches/fcp" className="hover:text-white">FCP / OPCVM</Link>
+            <span>›</span>
+            <span className="text-slate-200">Catégories</span>
+          </div>
+          <h1 className="text-2xl md:text-3xl font-semibold text-white">
+            Catégories de FCP UEMOA
+          </h1>
+          <p className="text-xs md:text-sm text-slate-300 mt-1.5 max-w-3xl">
+            {rows.length} catégories regroupent les {totalFunds} fonds suivis · encours total{" "}
+            <strong className="text-white">{fmtBigFCFA(marketTotalAUM)} FCFA</strong> au {fmtDateFR(refQuarter)}.
+          </p>
         </div>
-      )}
+      </div>
 
-      <header className="space-y-2">
-        <p className="text-xs uppercase tracking-wider text-slate-500">
-          <Link href="/marches/fcp" className="hover:underline">FCP / OPCVM</Link>
-        </p>
-        <h1 className="text-3xl font-bold text-slate-900">Catégories de FCP UEMOA</h1>
-        <p className="text-sm text-slate-600 max-w-3xl">
-          {rows.length} catégories regroupent les {totalFunds} fonds suivis · encours total{" "}
-          <strong>{fmtBigFCFA(marketTotalAUM)} FCFA</strong> au {fmtDateFR(refQuarter)}.
-        </p>
-      </header>
+      <main className="mx-auto max-w-7xl px-4 py-8 space-y-6">
+        {/* === BANDEAU FRAÎCHEUR BOC === */}
+        {latestBocDate && (
+          <div className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs font-semibold text-emerald-900">
+            <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+            Données au {fmtDateFR(latestBocDate)}
+          </div>
+        )}
 
       <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {rows.map((r) => (
@@ -119,11 +129,12 @@ export default function CategoryIndexView({ rows, refQuarter, marketTotalAUM, to
         ))}
       </section>
 
-      <p className="text-xs text-slate-400">
-        Encours ponctuel au {fmtDateFR(refQuarter)}. Cliquez sur une catégorie pour voir la
-        dispersion détaillée, les concurrents et l&apos;historique.
-      </p>
-    </main>
+        <p className="text-xs text-slate-400">
+          Encours ponctuel au {fmtDateFR(refQuarter)}. Cliquez sur une catégorie pour voir la
+          dispersion détaillée, les concurrents et l&apos;historique.
+        </p>
+      </main>
+    </>
   );
 }
 

@@ -3,13 +3,16 @@
 #   - data/umoa-emissions-a-venir.csv    (prochaines emissions)
 #   - data/umoa-emissions-planifiees.csv (calendrier annuel)
 #
-# Cron : tous les jours a 19h GMT (apres cloture des adjudications UMOA).
+# Cron : 2 passes par jour :
+#   - 08h00 UTC : rafraichissement matinal pour les calendriers prochaines emissions
+#   - 19h00 UTC : apres cloture des adjudications UMOA
 # Egalement declenchable manuellement depuis l'UI GitHub Actions.
 
 name: Scrape UMOA-Titres emissions
 
 on:
   schedule:
+    - cron: "0 8 * * *"
     - cron: "0 19 * * *"
   workflow_dispatch:
 

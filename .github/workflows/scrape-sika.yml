@@ -1,15 +1,19 @@
 # Scrape Sikafinance pour rafraichir l'historique OHLC des titres + indices
 # BRVM, puis commit + push automatiquement. Vercel redeploiera en cascade.
 #
-# Cron : tous les jours ouvres a 16h GMT (apres cloture BRVM ~12h UTC + marge
-# pour laisser Sika consolider la session). 5 runs par semaine.
+# Cron : 3 passes les jours ouvres :
+#   - 08h00 UTC : avant l'ouverture BRVM (rattrape les corrections de la veille au soir)
+#   - 16h00 UTC : apres cloture BRVM + marge consolidation Sika
+#   - 19h00 UTC : confirmation tardive
 # Egalement declenchable manuellement depuis l'UI GitHub Actions.
 
 name: Scrape Sikafinance
 
 on:
   schedule:
+    - cron: "0 8 * * 1-5"
     - cron: "0 16 * * 1-5"
+    - cron: "0 19 * * 1-5"
   workflow_dispatch:
     inputs:
       only_tickers:
@@ -79,12 +83,14 @@ jobs:
           git diff --stat data/historique_sika data/historique_sika_indices || true
 
       - name: Commit & push if changed
+        id: commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add data/historique_sika data/historique_sika_indices
           if git diff --staged --quiet; then
             echo "Aucun changement a commiter."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           DATE_TAG=$(date -u +%Y-%m-%d)
@@ -97,10 +103,51 @@ jobs:
           for i in 1 2 3 4 5; do
             git pull --rebase origin main && git push && {
               echo "Push effectue avec succes (essai $i)."
+              echo "changed=true" >> "$GITHUB_OUTPUT"
               exit 0
             }
             echo "Essai $i echoue, nouvelle tentative dans 10s..."
             sleep 10
           done
           echo "Push definitivement echoue apres 5 essais."
+          exit 1
+
+      # Apres rafraichissement des cours BRVM, on declenche l'evaluation des
+      # ordres LIMIT/STOP du simulateur : annulation hors bande +-7,5 %,
+      # declenchement des STOP touches, retry du matching. Voir
+      # app/api/cron/evaluate-simulator-orders/route.ts.
+      #
+      # Pre-requis : secrets GitHub `CRON_SECRET` (meme valeur que Vercel)
+      # et optionnellement `APP_URL` (defaut: azimutfinance.com).
+      - name: Trigger simulator orders evaluation
+        if: ${{ steps.commit.outputs.changed == 'true' && inputs.indices_only != true }}
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_URL: ${{ secrets.APP_URL || 'https://azimutfinance.com' }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::warning::Secret CRON_SECRET non defini — skip evaluation simulateur."
+            exit 0
+          fi
+          # Attente que Vercel ait redeploie avec le nouveau CSV.
+          # Deploiement type ~1-2 min ; on attend 90s puis on retente jusqu'a 4 fois.
+          echo "Attente 90s pour redeploiement Vercel..."
+          sleep 90
+          for i in 1 2 3 4; do
+            HTTP=$(curl -s -o /tmp/eval.json -w "%{http_code}" \
+              -H "Authorization: Bearer ${CRON_SECRET}" \
+              "${APP_URL}/api/cron/evaluate-simulator-orders")
+            echo "Essai $i — HTTP ${HTTP}"
+            cat /tmp/eval.json || true
+            echo ""
+            if [ "$HTTP" = "200" ]; then
+              echo "Evaluation simulateur OK."
+              exit 0
+            fi
+            if [ $i -lt 4 ]; then
+              echo "Nouvel essai dans 60s..."
+              sleep 60
+            fi
+          done
+          echo "::error::Echec evaluation simulateur apres 4 essais."
           exit 1

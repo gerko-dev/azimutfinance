@@ -1,5 +1,7 @@
 // Helpers de formatage admin
 
+import { fmtFCFAShort } from "@/lib/format";
+
 export function fmtDateTime(iso: string): string {
   if (!iso) return "";
   const d = new Date(iso);
@@ -18,11 +20,10 @@ export function fmtDate(iso: string): string {
   return `${d}/${m}/${y}`;
 }
 
+// Rendu FCFA abrégé variante "admin" (M 1 déc. / k, pas de palier Md) —
+// centralisé dans @/lib/format, ré-exporté ici pour les imports `./format`.
 export function fmtFCFA(v: number): string {
-  if (!isFinite(v)) return "—";
-  if (Math.abs(v) >= 1_000_000) return `${(v / 1_000_000).toFixed(1).replace(".", ",")} M`;
-  if (Math.abs(v) >= 1_000) return `${Math.round(v / 1_000).toLocaleString("fr-FR")} k`;
-  return Math.round(v).toLocaleString("fr-FR");
+  return fmtFCFAShort(v, "admin");
 }
 
 export function fmtNumber(v: number): string {

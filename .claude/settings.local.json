@@ -253,7 +253,27 @@
       "PowerShell(Get-Content data\\\\historique_sika_indices\\\\BRVMC.csv -Tail 3; \"---\"; Get-Content data\\\\historique_sika_indices\\\\BRVM30.csv -Tail 3)",
       "PowerShell(Get-Content data\\\\historique_sika_indices\\\\BRVMPA.csv -Tail 1; \"---\"; Get-Content data\\\\historique_sika_indices\\\\BRVM-SF.csv -Tail 1; \"---\"; Get-Content data\\\\historique_sika_indices\\\\BRVM-TEL.csv -Tail 1)",
       "PowerShell(npx tsc --noEmit 2>&1 | Select-Object -First 10)",
-      "PowerShell(npx tsc --noEmit 2>&1 | Select-Object -First 15)"
+      "PowerShell(npx tsc --noEmit 2>&1 | Select-Object -First 15)",
+      "Bash(where curl *)",
+      "Bash(head -n 1343 C:/Users/hp/GerKo/azimutfinance/supabase/simulateur_v2.sql)",
+      "Bash(mv /tmp/sim_v2_clean.sql C:/Users/hp/GerKo/azimutfinance/supabase/simulateur_v2.sql)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\hp\\\\GerKo\\\\azimutfinance\\\\app\" -Directory)",
+      "Bash(Select-Object Name)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\hp\\\\GerKo\\\\azimutfinance\\\\app\" -Recurse -Directory)",
+      "Bash(Select-Object FullName)",
+      "Bash(Sort-Object FullName)",
+      "Bash(powershell *)",
+      "Bash(echo \"exit:$?\")",
+      "Bash(sed -n '34,50p' app/pros/page.tsx)",
+      "Bash(sed -n '1397,1415p' app/page.tsx)",
+      "Bash(sed -n '1,20p' components/academie/compte-titre/format.ts)",
+      "Bash(sed -n '1,25p' components/academie/simulateur/format.ts)",
+      "Bash(sed -n '1,35p' components/admin/format.ts)",
+      "Bash(echo \"lint exit:$?\")",
+      "Bash(grep -rn \"@/lib/news\\\\b\\\\|@/lib/news\\\\\"\" app components lib)",
+      "Bash(sed -n '20,35p;160,215p' app/titre/[code]/page.tsx)",
+      "Bash(grep -rln \"NEWS_TYPE_LABELS\\\\|NewsItem\\\\|NEWS_TYPES\\\\|loadAllNews\" app components lib)",
+      "Bash(git restore *)"
     ]
   }
 }
