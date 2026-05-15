@@ -19,6 +19,8 @@ import {
   getBrvmBondsSnapshot,
 } from "@/lib/brvm/liveBonds";
 import { fetchUserRole } from "@/lib/auth/userRole";
+import { pageMetadata, breadcrumbJsonLd, listedBondJsonLd } from "@/lib/seo";
+import JsonLd from "@/components/JsonLd";
 
 // Page rendue dynamiquement pour beneficier du cours live BRVM.
 // Le cache module-level dans liveBonds.ts limite la frequence des fetchs reels.
@@ -36,10 +38,11 @@ export async function generateMetadata({
     (b) => b.isin === idUpper || b.code.toUpperCase() === idUpper,
   );
   if (!bond) return { title: "Obligation introuvable — AzimutFinance" };
-  return {
+  return pageMetadata({
     title: `${bond.name} (${bond.isin}) — Obligation cotée BRVM`,
     description: `Fiche obligation ${bond.name} émise par ${bond.issuer} — ${bond.country} : cotation BRVM, rendement à maturité, prix théorique, échéancier d'amortissement et événements.`,
-  };
+    path: `/obligation/${bond.isin}`,
+  });
 }
 
 export default async function Page({
@@ -100,6 +103,16 @@ export default async function Page({
 
   return (
     <div className="min-h-screen bg-slate-50">
+      <JsonLd
+        data={[
+          breadcrumbJsonLd([
+            { name: "Accueil", path: "/" },
+            { name: "Obligations cotées", path: "/marches/obligations" },
+            { name: `${bond.name} (${bond.isin})` },
+          ]),
+          listedBondJsonLd(bond),
+        ]}
+      />
       <Header />
       <Ticker />
       <PageHero

@@ -102,13 +102,13 @@ export default async function IssuePage({
                   size="lg"
                 />
               </div>
-              <button
-                type="button"
+              <Link
+                href={`/academie/magazine/numero/${issue.slug}/imprimer`}
                 className="mt-4 w-full text-xs bg-slate-900 hover:bg-slate-700 text-white py-2.5 rounded font-medium transition flex items-center justify-center gap-2"
-                title="Téléchargement bientôt disponible"
+                title="Ouvre la version imprimable — choisissez « Enregistrer en PDF »"
               >
                 ↓ Télécharger en PDF
-              </button>
+              </Link>
             </div>
 
             <div className="min-w-0">

@@ -29,6 +29,8 @@ import {
 import { computeRatiosByTicker, computeLiveRatios } from "@/lib/fundamentalsCalc";
 import { loadDbNewsByTicker } from "@/lib/newsFromDb";
 import { fetchUserRole } from "@/lib/auth/userRole";
+import { pageMetadata, breadcrumbJsonLd, listedCompanyJsonLd } from "@/lib/seo";
+import JsonLd from "@/components/JsonLd";
 
 // Page rendue dynamiquement a chaque requete pour beneficier du cours live BRVM.
 // Le cache module-level dans liveQuotes.ts limite la frequence des fetchs reels.
@@ -43,10 +45,11 @@ export async function generateMetadata({
   const stock = getStockDetails(code.toUpperCase());
   if (!stock) return { title: "Titre introuvable — AzimutFinance" };
   const secteur = stock.sector ? ` — ${stock.sector}` : "";
-  return {
+  return pageMetadata({
     title: `${stock.name} (${stock.code}) — Cours, dividende et ratios BRVM`,
     description: `Fiche action ${stock.name} (${stock.code})${secteur} cotée à la BRVM : cours différés ~15 min, performances multi-horizons, ratios fondamentaux, profil risque/rendement et actualités.`,
-  };
+    path: `/titre/${stock.code}`,
+  });
 }
 
 export default async function TitrePage({
@@ -216,6 +219,16 @@ export default async function TitrePage({
 
   return (
     <div className="min-h-screen bg-slate-50">
+      <JsonLd
+        data={[
+          breadcrumbJsonLd([
+            { name: "Accueil", path: "/" },
+            { name: "Actions BRVM", path: "/marches/actions" },
+            { name: `${stock.name} (${stock.code})` },
+          ]),
+          listedCompanyJsonLd(stock),
+        ]}
+      />
       <Header />
       <Ticker />
       <PageHero

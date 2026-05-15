@@ -24,14 +24,16 @@ import {
 } from "@/lib/premium/pricingQueries";
 import { fmtFCFAShort } from "@/lib/format";
 import MemberHome from "@/components/home/MemberHome";
+import { pageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = {
+export const metadata = pageMetadata({
   title: "AzimutFinance — Le portail des marchés financiers UEMOA",
   description:
     "Données BRVM, marché obligataire UEMOA, macroéconomie zone CFA, formations, simulateur de portefeuille et magazine éditorial. Le portail des investisseurs UEMOA.",
-};
+  path: "/",
+});
 
 const fmtPct = (v: number | null, dec = 1) =>
   v === null || !isFinite(v)

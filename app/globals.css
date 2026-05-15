@@ -284,3 +284,35 @@ body[data-pro="1"]::-webkit-scrollbar-button {
   padding-right: 0;
   max-width: none;
 }
+
+/* ============================================================
+   Magazine — version imprimable
+   /academie/magazine/numero/[slug]/imprimer
+   La classe .magazine-print-active est posee sur <html> par
+   MagazinePrintToolbar pendant que la page imprimable est montee.
+   ============================================================ */
+@media print {
+  @page {
+    margin: 15mm;
+  }
+
+  /* Fond blanc + on masque toute la chrome globale (footer, banniere
+     cookies, barre d'outils d'impression) injectee par le layout racine. */
+  html.magazine-print-active,
+  html.magazine-print-active body {
+    background: #ffffff !important;
+  }
+  html.magazine-print-active footer,
+  html.magazine-print-active [role="dialog"],
+  html.magazine-print-active .no-print {
+    display: none !important;
+  }
+
+  /* Couleurs, degrades et aplats fideles a l'ecran (sinon le navigateur
+     les supprime a l'impression). */
+  .magazine-print-sheet,
+  .magazine-print-sheet * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

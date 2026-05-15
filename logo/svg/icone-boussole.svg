@@ -1,0 +1,25 @@
+<svg width="240" height="240" viewBox="0 0 240 240" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="needleGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0A2A5E"/>
+      <stop offset="100%" stop-color="#3DA4E0"/>
+    </linearGradient>
+  </defs>
+  <circle cx="120" cy="120" r="102" fill="none" stroke="#0A2A5E" stroke-width="9"/>
+  <g stroke="#0A2A5E" stroke-width="7" stroke-linecap="round">
+    <line x1="120" y1="28"  x2="120" y2="50"/>
+    <line x1="120" y1="190" x2="120" y2="212"/>
+    <line x1="28"  y1="120" x2="50"  y2="120"/>
+    <line x1="190" y1="120" x2="212" y2="120"/>
+  </g>
+  <g stroke="#3DA4E0" stroke-width="5" stroke-linecap="round">
+    <line x1="54"  y1="54"  x2="69"  y2="69"/>
+    <line x1="186" y1="54"  x2="171" y2="69"/>
+    <line x1="54"  y1="186" x2="69"  y2="171"/>
+    <line x1="186" y1="186" x2="171" y2="171"/>
+  </g>
+  <path d="M 178 62 L 132 132 L 62 178 L 108 108 Z" fill="url(#needleGrad)"/>
+  <path d="M 178 62 L 108 108 L 120 120 Z" fill="#FFFFFF" fill-opacity="0.28"/>
+  <circle cx="120" cy="120" r="13" fill="#0A2A5E"/>
+  <circle cx="120" cy="120" r="5" fill="#FFFFFF"/>
+</svg>
