@@ -65,6 +65,9 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install Python dependencies
+        run: pip install "curl_cffi>=0.7"
+
       - name: Scrape Investing.com - Commodities
         run: |
           ARGS="--years ${{ inputs.years || '20' }}"

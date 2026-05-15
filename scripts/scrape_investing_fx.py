@@ -26,13 +26,13 @@ from __future__ import annotations
 
 import argparse
 import csv
-import json
-import subprocess
 import sys
 import time
 import urllib.parse
 from datetime import date, timedelta
 from pathlib import Path
+
+from curl_cffi import requests as cc_requests
 
 # ---------------------------------------------------------------------------
 # Catalog — IDs from scripts/fx_probe.py
@@ -71,9 +71,9 @@ UA = (
 def _fetch_window(instrument_id: int, referer_slug: str, start: date, end: date) -> list[dict]:
     """Single API call. Returns rows in newest-first order.
 
-    Shells out to curl rather than using urllib because Cloudflare on
-    api.investing.com fingerprints the TLS handshake — urllib gets a 403,
-    curl sails through with the same headers.
+    Uses curl_cffi (Chrome TLS fingerprint) because Cloudflare on
+    api.investing.com filters by JA3 — system curl on GitHub runners gets a 403,
+    curl_cffi impersonating Chrome passes through.
     """
     qs = urllib.parse.urlencode({
         "start-date": start.isoformat(),
@@ -82,20 +82,21 @@ def _fetch_window(instrument_id: int, referer_slug: str, start: date, end: date)
         "add-missing-rows": "false",
     })
     url = f"https://api.investing.com/api/financialdata/historical/{instrument_id}?{qs}"
-    cmd = [
-        "curl", "-sk", "--fail", "--max-time", "60",
-        "-A", UA,
-        "-H", f"Referer: https://fr.investing.com/currencies/{referer_slug}",
-        "-H", "domain-id: fr",
-        "-H", "Accept: application/json, text/plain, */*",
-        "-H", "Accept-Language: fr-FR,fr;q=0.9,en;q=0.8",
-        url,
-    ]
-    out = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
-    if out.returncode != 0:
-        raise RuntimeError(f"curl exit {out.returncode}: {out.stderr.strip()[:200]}")
-    data = json.loads(out.stdout)
-    return data.get("data") or []
+    headers = {
+        "User-Agent": UA,
+        "Referer": f"https://fr.investing.com/currencies/{referer_slug}",
+        "domain-id": "fr",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8",
+    }
+    try:
+        r = cc_requests.get(url, headers=headers, impersonate="chrome", timeout=60, verify=False)
+    except Exception as e:
+        raise RuntimeError(f"curl_cffi {type(e).__name__}: {str(e)[:200]}")
+    if r.status_code >= 400:
+        snippet = (r.text or "").strip()[:300].replace("\n", " ")
+        raise RuntimeError(f"http {r.status_code}: {snippet}")
+    return (r.json().get("data") or [])
 
 
 # 4-year chunks — empirically safe under the 5000-row cap even for FX
