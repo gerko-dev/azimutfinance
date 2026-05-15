@@ -22,11 +22,18 @@ export type ConversationParticipant = {
   last_read_at: string;
 };
 
+export type ConversationStatus = "pending" | "accepted";
+export type ConversationKind = "direct" | "admin";
+
 /** Conversation enrichie pour la sidebar */
 export type ConversationSummary = {
   id: string;
   last_message_at: string;
-  /** L'autre participant (1-a-1) */
+  /**
+   * Interlocuteur affiché. Conversation directe : l'autre membre. Canal admin
+   * (kind='admin') : « Équipe AzimutFinance » côté membre, ou le membre
+   * lui-même côté admin.
+   */
   other: Profile;
   /** Aperçu du dernier message */
   lastMessage: {
@@ -36,6 +43,26 @@ export type ConversationSummary = {
   } | null;
   /** Nombre de messages non lus pour l'utilisateur courant */
   unreadCount: number;
+  /** 'pending' = demande de message non encore acceptée par le destinataire. */
+  status: ConversationStatus;
+  /** 'admin' = canal de contact avec l'équipe. */
+  kind: ConversationKind;
+  /** Initiateur de la conversation (distingue demande reçue / envoyée). */
+  created_by: string | null;
+  /**
+   * Horodatage de masquage côté utilisateur courant (« supprimer pour moi »).
+   * `null` = conversation jamais masquée. Sinon, seuls les messages postérieurs
+   * sont affichés.
+   */
+  clearedAt: string | null;
+};
+
+/** Profil synthétique représentant l'équipe sur le canal admin. */
+export const ADMIN_TEAM_PROFILE: Profile = {
+  id: "admin-team",
+  username: null,
+  full_name: "Équipe AzimutFinance",
+  avatar_url: null,
 };
 
 export type ActionResult<T = void> =

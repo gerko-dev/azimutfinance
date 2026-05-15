@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Header from "@/components/Header";
+import PageHero from "@/components/PageHero";
 import Footer from "@/components/Footer";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { countTopics, listTopics } from "@/lib/forum/queries";
@@ -50,45 +51,34 @@ export default async function ForumByTickerPage({
     <div className="min-h-screen bg-slate-50 flex flex-col">
       <Header />
 
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 md:px-6 py-8 md:py-12">
-        <nav className="text-xs text-slate-500 mb-4 flex flex-wrap items-center gap-2">
-          <Link href="/communaute/forum" className="hover:text-slate-900">
-            Forum
+      <PageHero
+        breadcrumb={[
+          { label: "Accueil", href: "/" },
+          { label: "Forum", href: "/communaute/forum" },
+          { label: `Ticker ${upper}` },
+        ]}
+        title={`Discussions taguées ${upper}`}
+        subtitle="Tous les topics du forum qui mentionnent ce code dans leurs tags."
+      >
+        <div className="flex flex-wrap items-center gap-3">
+          <Link
+            href={`/titre/${code.toLowerCase()}`}
+            className="text-xs text-blue-300 hover:text-blue-200 hover:underline"
+          >
+            Voir la fiche titre →
           </Link>
-          <span className="text-slate-300">/</span>
-          <span className="text-slate-700">Ticker {upper}</span>
-        </nav>
-
-        <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="font-mono text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded">
-                {upper}
-              </span>
-              <Link
-                href={`/titre/${code.toLowerCase()}`}
-                className="text-xs text-blue-700 hover:underline"
-              >
-                Voir la fiche titre →
-              </Link>
-            </div>
-            <h1 className="text-2xl md:text-3xl font-semibold text-slate-900">
-              Discussions taguées {upper}
-            </h1>
-            <p className="text-sm text-slate-500 mt-1 max-w-2xl">
-              Tous les topics du forum qui mentionnent ce code dans leurs tags.
-            </p>
-          </div>
           {user && (
             <Link
               href="/communaute/forum/nouveau"
-              className="px-4 py-2 rounded-md bg-blue-700 text-white text-sm font-medium hover:bg-blue-800"
+              className="inline-block px-4 py-2 rounded-md bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
             >
               + Nouvelle discussion
             </Link>
           )}
         </div>
+      </PageHero>
 
+      <main className="flex-1 max-w-6xl w-full mx-auto px-4 md:px-6 py-8 md:py-12">
         {topics.length === 0 ? (
           <div className="bg-white border border-slate-200 rounded-lg p-8 text-center text-sm text-slate-500">
             Aucune discussion ne tague {upper} pour le moment.

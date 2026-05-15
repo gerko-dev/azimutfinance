@@ -72,7 +72,6 @@ export default function Footer() {
             <Item href="/macro/pays">Indicateurs pays UEMOA</Item>
             <Item href="/macro/matieres-premieres">Matières premières</Item>
             <Item href="/macro/devises">Devises &amp; FX</Item>
-            <Item href="/macro/immobilier">Immobilier</Item>
           </Column>
 
           {/* Académie */}

@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import Header from "@/components/Header";
+import PageHero from "@/components/PageHero";
 import Ticker from "@/components/Ticker";
 import SovereignDetailView from "@/components/SovereignDetailView";
 import { loadUmoaEmissions } from "@/lib/dataLoader";
@@ -55,10 +56,22 @@ export default async function Page({
   const interCountrySpreads = calculateInterCountrySpreads(bond, emissions);
   const userRole = await fetchUserRole();
 
+  const echeance = bond.maturityDate?.slice(0, 4);
+  const heroTitle = `${bond.type} ${bond.countryName}${echeance ? ` · échéance ${echeance}` : ""}`;
+
   return (
     <div className="min-h-screen bg-slate-50">
       <Header />
       <Ticker />
+      <PageHero
+        breadcrumb={[
+          { label: "Marchés", href: "/" },
+          { label: "Souverains non cotés", href: "/marches/souverains-non-cotes" },
+          { label: heroTitle },
+        ]}
+        title={heroTitle}
+        subtitle={`Trésor de ${bond.countryName} · UMOA-Titres${bond.isin ? ` · ISIN ${bond.isin}` : ""}`}
+      />
       <SovereignDetailView
         bond={bond}
         spread={spread}

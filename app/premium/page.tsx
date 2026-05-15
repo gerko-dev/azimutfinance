@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Header from "@/components/Header";
+import PageHero from "@/components/PageHero";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getPremiumStatus } from "@/lib/auth/premium";
 import { PREMIUM_FEATURES } from "@/lib/premium/plans";
@@ -29,24 +30,20 @@ export default async function PremiumPage() {
     <div className="min-h-screen bg-slate-50">
       <Header />
 
-      <div className="bg-gradient-to-br from-blue-50 via-white to-amber-50 border-b border-slate-200">
-        <div className="max-w-5xl mx-auto px-4 md:px-6 py-10 md:py-16 text-center">
-          <div className="inline-block text-[11px] uppercase tracking-wider font-semibold bg-amber-100 text-amber-800 px-3 py-1 rounded-full mb-4">
-            ⭐ AzimutFinance Premium
-          </div>
-          <h1 className="text-3xl md:text-5xl font-semibold text-slate-900 mb-4">
-            Investissez avec une longueur d&apos;avance
-          </h1>
-          <p className="text-base md:text-lg text-slate-600 max-w-2xl mx-auto">
+      <PageHero
+        breadcrumb={[{ label: "Accueil", href: "/" }, { label: "Premium" }]}
+        title="Investissez avec une longueur d'avance"
+        subtitle={
+          <>
             Accédez à toutes les analyses macro, outils pro et données
             historiques étendues sur la BRVM et l&apos;UEMOA. À partir de{" "}
-            <span className="font-semibold text-slate-900">
+            <span className="font-semibold text-white">
               {cheapestPerMonth.toLocaleString("fr-FR")} FCFA / mois
             </span>{" "}
             avec l&apos;abonnement annuel.
-          </p>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       <main className="max-w-5xl mx-auto px-4 md:px-6 py-10 md:py-12">
         {premium.isPremium && premium.premiumUntil && (

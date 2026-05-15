@@ -238,13 +238,7 @@ export default function SGODetailView(props: Props) {
       <header className="bg-white border border-slate-200 rounded-lg p-6">
         <div className="flex items-start justify-between flex-wrap gap-4">
           <div className="space-y-2 min-w-0">
-            <p className="text-xs uppercase tracking-wider text-slate-500">
-              <Link href="/marches/fcp" className="hover:underline">
-                FCP / OPCVM
-              </Link>{" "}
-              · Société de gestion
-            </p>
-            <h1 className="text-3xl font-bold text-slate-900">{manager.name}</h1>
+            <div className="text-2xl font-bold text-slate-900">{manager.name}</div>
             <div className="flex items-center gap-2 flex-wrap">
               {breakdown.map((b) => (
                 <span

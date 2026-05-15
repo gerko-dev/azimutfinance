@@ -296,7 +296,17 @@
       "Bash(curl -s -o /tmp/ad.html -w \"%{http_code}\" \"http://localhost:3000/admin/data\")",
       "Bash([ -f \"data/$f.csv\" ])",
       "Bash(sed -n '78,92p' supabase/compte-titre-v2.sql)",
-      "Bash(sed -n '38,53p' supabase/compte-titre-v3.sql)"
+      "Bash(sed -n '38,53p' supabase/compte-titre-v3.sql)",
+      "Bash(sed -n '100,115p;250,262p' supabase/formations.sql)",
+      "Bash(sed -n '128,140p' supabase/magazine.sql)",
+      "Bash(sed -n '1,10p' components/admin/MembersTable.tsx)",
+      "Bash(sed -n '200,212p' components/admin/MembersTable.tsx)",
+      "Bash(sed -n '1,40p' lib/watchlists/types.ts)",
+      "Bash(sed -n '82,110p' lib/alerts/types.ts)",
+      "Bash(sed -n '1,24p' lib/alerts/queries.ts)",
+      "Bash(sed -n '198,204p' app/page.tsx)",
+      "Bash(sed -n '360,367p' app/page.tsx)",
+      "Bash(echo \"/ -> $\\(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/ \\)\")"
     ]
   }
 }

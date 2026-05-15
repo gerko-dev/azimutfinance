@@ -22,6 +22,15 @@ const RPC_ERRORS: Record<string, string> = {
     "Trop de signalements en peu de temps. Réessaie dans quelques heures.",
   INVALID_CATEGORY: "Catégorie de signalement invalide.",
   NOTE_TOO_LONG: "La note est trop longue (500 caractères max).",
+  INITIATE_REQUIRES_PREMIUM:
+    "Seuls les comptes Premium et Pro peuvent démarrer une conversation avec un membre. Tu peux néanmoins contacter l'équipe AzimutFinance.",
+  CANNOT_ACCEPT_OWN_REQUEST:
+    "Tu ne peux pas accepter ta propre demande de message.",
+  CANNOT_DECLINE_OWN_REQUEST:
+    "Tu ne peux pas refuser ta propre demande de message.",
+  NOT_A_PENDING_REQUEST: "Cette conversation n'est pas une demande en attente.",
+  DAILY_LIMIT_REACHED:
+    "Tu as atteint la limite de nouvelles conversations pour aujourd'hui (5 / 24 h). Réessaie demain — cette limite protège les membres du démarchage.",
 };
 
 function translateError(message: string): string {
@@ -55,6 +64,100 @@ export async function startConversation(
   }
   revalidatePath("/messagerie");
   return { ok: true, data: { conversationId: data as string } };
+}
+
+/**
+ * Ouvre (ou retrouve) le canal de contact avec l'équipe AzimutFinance.
+ * Accessible à TOUS les comptes, y compris gratuits.
+ */
+export async function startAdminConversation(): Promise<
+  ActionResult<{ conversationId: string }>
+> {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: RPC_ERRORS.NOT_AUTHENTICATED };
+
+  const { data, error } = await supabase.rpc("start_admin_conversation");
+  if (error) {
+    return { ok: false, error: translateError(error.message) };
+  }
+  revalidatePath("/messagerie");
+  return { ok: true, data: { conversationId: data as string } };
+}
+
+/** Accepte une demande de message reçue (status pending -> accepted). */
+export async function acceptConversation(
+  conversationId: string,
+): Promise<ActionResult> {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: RPC_ERRORS.NOT_AUTHENTICATED };
+  if (!conversationId) {
+    return { ok: false, error: "Conversation invalide." };
+  }
+
+  const { error } = await supabase.rpc("accept_conversation", {
+    p_conversation_id: conversationId,
+  });
+  if (error) {
+    return { ok: false, error: translateError(error.message) };
+  }
+  revalidatePath("/messagerie");
+  return { ok: true, data: undefined };
+}
+
+/** Refuse une demande de message reçue (suppression de la conversation). */
+export async function declineConversation(
+  conversationId: string,
+): Promise<ActionResult> {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: RPC_ERRORS.NOT_AUTHENTICATED };
+  if (!conversationId) {
+    return { ok: false, error: "Conversation invalide." };
+  }
+
+  const { error } = await supabase.rpc("decline_conversation", {
+    p_conversation_id: conversationId,
+  });
+  if (error) {
+    return { ok: false, error: translateError(error.message) };
+  }
+  revalidatePath("/messagerie");
+  return { ok: true, data: undefined };
+}
+
+/**
+ * « Supprimer pour moi » : masque la conversation de la liste de l'utilisateur
+ * courant. L'autre membre la conserve ; elle réapparaît côté utilisateur si un
+ * nouveau message arrive.
+ */
+export async function hideConversation(
+  conversationId: string,
+): Promise<ActionResult> {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: RPC_ERRORS.NOT_AUTHENTICATED };
+  if (!conversationId) {
+    return { ok: false, error: "Conversation invalide." };
+  }
+
+  const { error } = await supabase.rpc("hide_conversation", {
+    p_conversation_id: conversationId,
+  });
+  if (error) {
+    return { ok: false, error: translateError(error.message) };
+  }
+  revalidatePath("/messagerie");
+  return { ok: true, data: undefined };
 }
 
 /** Envoie un message dans une conversation existante. */
@@ -92,6 +195,15 @@ export async function sendMessage(input: {
     .select("*")
     .single();
   if (error) {
+    // RLS : dans une demande en attente, le destinataire ne peut pas répondre
+    // tant qu'il n'a pas accepté la conversation.
+    if (/row-level security/i.test(error.message)) {
+      return {
+        ok: false,
+        error:
+          "Tu dois d'abord accepter cette demande de message pour pouvoir répondre.",
+      };
+    }
     return { ok: false, error: error.message };
   }
 

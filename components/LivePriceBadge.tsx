@@ -60,6 +60,12 @@ export default function LivePriceBadge({
               : "Cours BRVM"}
         </span>
       </span>
+      {/* La BRVM ne diffuse pas de flux temps réel : les cours affichés sont
+          différés d'environ 15 minutes. On l'indique systématiquement. */}
+      <span className={sepClass}>·</span>
+      <span title="Les cours BRVM affichés sont différés d'environ 15 minutes.">
+        différé ~15 min
+      </span>
       {sessionLabel && (
         <>
           <span className={sepClass}>·</span>

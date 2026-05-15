@@ -461,16 +461,6 @@ export default function SovereignDetailView({
       {/* ====== HERO ====== */}
       <div className="bg-white border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 md:px-6 pt-4 md:pt-5">
-          <div className="text-xs md:text-sm text-slate-500 mb-3">
-            <Link href="/marches/souverains-non-cotes" className="hover:text-slate-900">
-              Souverains non cotés
-            </Link>
-            <span className="mx-2">›</span>
-            <span className="text-slate-900">
-              {bond.type} {bond.country} {formatMaturity(bond.maturity)}
-            </span>
-          </div>
-
           <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4 mb-4">
             <div className="flex gap-4 items-start">
               <div className="mt-1">
@@ -478,9 +468,9 @@ export default function SovereignDetailView({
               </div>
               <div>
                 <div className="flex items-center gap-2 flex-wrap mb-1">
-                  <h1 className="text-xl md:text-2xl font-semibold">
+                  <div className="text-xl md:text-2xl font-semibold">
                     {bond.type} {bond.countryName} · {formatMaturity(bond.maturity)}
-                  </h1>
+                  </div>
                   <span
                     className={`text-xs px-2 py-0.5 rounded font-medium ${
                       bond.type === "OAT"

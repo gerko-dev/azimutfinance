@@ -54,6 +54,12 @@ const NAV: NavSection[] = [
     ],
   },
   {
+    label: "Immobilier",
+    items: [
+      { label: "Prix au m² UEMOA", href: "/pros/immobilier" },
+    ],
+  },
+  {
     label: "Pro tools",
     items: [
       { label: "Place de marché OTC", href: "/pros/otc" },

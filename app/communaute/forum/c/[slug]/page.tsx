@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import Header from "@/components/Header";
+import PageHero from "@/components/PageHero";
 import Footer from "@/components/Footer";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { countTopics, getCategoryBySlug, listTopics } from "@/lib/forum/queries";
@@ -54,43 +55,33 @@ export default async function ForumCategoryPage({
     <div className="min-h-screen bg-slate-50 flex flex-col">
       <Header />
 
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 md:px-6 py-8 md:py-12">
-        <nav className="text-xs text-slate-500 mb-4 flex flex-wrap items-center gap-2">
-          <Link href="/communaute/forum" className="hover:text-slate-900">
-            Forum
+      <PageHero
+        breadcrumb={[
+          { label: "Accueil", href: "/" },
+          { label: "Forum", href: "/communaute/forum" },
+          { label: cat.name },
+        ]}
+        title={cat.name}
+        subtitle={cat.description ?? undefined}
+      >
+        {user ? (
+          <Link
+            href={`/communaute/forum/nouveau?categorie=${cat.slug}`}
+            className="inline-block px-4 py-2 rounded-md bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
+          >
+            + Nouvelle discussion
           </Link>
-          <span className="text-slate-300">/</span>
-          <span className="text-slate-700">{cat.name}</span>
-        </nav>
+        ) : (
+          <Link
+            href={`/connexion?redirect=/communaute/forum/c/${cat.slug}`}
+            className="inline-block px-4 py-2 rounded-md bg-white/10 text-white text-sm font-medium hover:bg-white/20 border border-white/20"
+          >
+            Connectez-vous pour participer
+          </Link>
+        )}
+      </PageHero>
 
-        <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-semibold text-slate-900">
-              {cat.name}
-            </h1>
-            {cat.description && (
-              <p className="text-sm text-slate-500 mt-1 max-w-2xl">
-                {cat.description}
-              </p>
-            )}
-          </div>
-          {user ? (
-            <Link
-              href={`/communaute/forum/nouveau?categorie=${cat.slug}`}
-              className="px-4 py-2 rounded-md bg-blue-700 text-white text-sm font-medium hover:bg-blue-800"
-            >
-              + Nouvelle discussion
-            </Link>
-          ) : (
-            <Link
-              href={`/connexion?redirect=/communaute/forum/c/${cat.slug}`}
-              className="px-4 py-2 rounded-md bg-slate-100 text-slate-700 text-sm font-medium hover:bg-slate-200 border border-slate-300"
-            >
-              Connectez-vous pour participer
-            </Link>
-          )}
-        </div>
-
+      <main className="flex-1 max-w-6xl w-full mx-auto px-4 md:px-6 py-8 md:py-12">
         {topics.length === 0 ? (
           <div className="bg-white border border-slate-200 rounded-lg p-8 text-center text-sm text-slate-500">
             Aucune discussion dans cette catégorie pour le moment.

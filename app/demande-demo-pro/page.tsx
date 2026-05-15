@@ -1,6 +1,6 @@
 import Header from "@/components/Header";
+import PageHero from "@/components/PageHero";
 import ProDemoForm from "./ProDemoForm";
-import TerminalBackdrop from "./TerminalBackdrop";
 
 export const metadata = {
   title: "Demander une démo Pro — AzimutFinance",
@@ -14,7 +14,7 @@ const BENEFITS: { title: string; description: string }[] = [
   {
     title: "Pro Terminal complet",
     description:
-      "Tableau de bord marché en temps réel, watchlists pro, alertes sur indicateurs techniques et fondamentaux.",
+      "Tableau de bord marché (cours différés ~15 min), watchlists pro, alertes sur indicateurs techniques et fondamentaux.",
   },
   {
     title: "Place de marché OTC",
@@ -69,30 +69,18 @@ export default function DemandeDemoProPage() {
     <div className="min-h-screen bg-slate-50">
       <Header />
 
-      <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 text-white">
-        {/* Mock visuel d'un Pro Terminal en arriere-plan */}
-        <TerminalBackdrop />
-
-        {/* Voile pour conserver le contraste du texte */}
-        <div
-          aria-hidden
-          className="absolute inset-0 bg-gradient-to-br from-slate-900/85 via-blue-900/70 to-indigo-900/85"
-        />
-
-        <div className="relative max-w-5xl mx-auto px-4 md:px-6 py-12 md:py-16">
-          <div className="inline-block text-[11px] uppercase tracking-wider font-semibold bg-white/10 text-white px-3 py-1 rounded-full mb-4 backdrop-blur">
-            ⚡ Offre Pro · Institutions
-          </div>
-          <h1 className="text-3xl md:text-5xl font-semibold leading-tight max-w-3xl">
-            Demande une démo de la plateforme Pro
-          </h1>
-          <p className="text-base md:text-lg text-blue-100 mt-4 max-w-2xl leading-relaxed">
-            Pro Terminal, OTC, données brutes, API, études sectorielles. Une
-            seule plateforme pour piloter votre activité sur les marchés
-            UEMOA. Notre équipe revient vers vous sous 48 h ouvrées.
-          </p>
+      <PageHero
+        breadcrumb={[
+          { label: "Accueil", href: "/" },
+          { label: "Démo Pro" },
+        ]}
+        title="Demande une démo de la plateforme Pro"
+        subtitle="Pro Terminal, OTC, données brutes, API, études sectorielles. Une seule plateforme pour piloter votre activité sur les marchés UEMOA. Notre équipe revient vers vous sous 48 h ouvrées."
+      >
+        <div className="inline-block text-[11px] uppercase tracking-wider font-semibold bg-white/10 text-white px-3 py-1 rounded-full border border-white/20">
+          ⚡ Offre Pro · Institutions
         </div>
-      </div>
+      </PageHero>
 
       <main className="max-w-5xl mx-auto px-4 md:px-6 py-10 md:py-12">
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-8 lg:gap-10">

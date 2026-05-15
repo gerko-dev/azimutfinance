@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Header from "@/components/Header";
+import PageHero from "@/components/PageHero";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getLatestPrices } from "@/lib/simulator/pricing";
 import { listMyAccounts } from "@/lib/comptetitre/queries";
@@ -15,7 +16,7 @@ import {
 export const metadata = {
   title: "Suivi de compte titre — AzimutFinance",
   description:
-    "Suivez votre compte titre BRVM en temps réel : positions, PRU, plus-values latentes et réalisées, courbe de valorisation et allocation. Réservé aux membres.",
+    "Suivez votre compte titre BRVM au quotidien : positions, PRU, plus-values latentes et réalisées, courbe de valorisation et allocation. Réservé aux membres.",
 };
 
 export const dynamic = "force-dynamic";
@@ -89,28 +90,23 @@ export default async function ComptesTitresPage() {
   return (
     <div className="min-h-screen bg-slate-50">
       <Header />
+      <PageHero
+        breadcrumb={[
+          { label: "Accueil", href: "/" },
+          { label: "Académie" },
+          { label: "Suivi de compte titre" },
+        ]}
+        title="Suivi de compte titre"
+        subtitle="Vos comptes-titres réels, leurs positions et leur performance."
+      >
+        <Link
+          href="/academie/compte-titre/nouveau"
+          className="inline-block text-sm bg-blue-600 hover:bg-blue-700 text-white font-medium px-3 py-2 rounded"
+        >
+          + Nouveau compte
+        </Link>
+      </PageHero>
       <main className="max-w-6xl mx-auto px-4 md:px-6 py-5 md:py-6 space-y-5">
-        <div className="text-xs text-slate-500">
-          Accueil &rsaquo; Académie &rsaquo; Suivi de compte titre
-        </div>
-
-        <header className="flex items-baseline justify-between flex-wrap gap-3">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-semibold text-slate-900">
-              Suivi de compte titre
-            </h1>
-            <p className="text-sm text-slate-500 mt-1">
-              Vos comptes-titres réels, leurs positions et leur performance.
-            </p>
-          </div>
-          <Link
-            href="/academie/compte-titre/nouveau"
-            className="text-sm bg-slate-900 hover:bg-slate-700 text-white font-medium px-3 py-2 rounded"
-          >
-            + Nouveau compte
-          </Link>
-        </header>
-
         {summaries.length === 0 ? (
           <div className="bg-white rounded-lg border border-slate-200 p-8 text-center">
             <div className="text-base text-slate-700 font-medium">

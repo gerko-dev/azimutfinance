@@ -385,15 +385,6 @@ export default function StockDetailView({
       {/* En-tete fiche */}
       <div className="bg-white border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 md:px-6 pt-4 md:pt-5">
-          {/* Fil d'Ariane */}
-          <div className="text-xs md:text-sm text-slate-500 mb-3">
-            <Link href="/" className="hover:text-slate-900">Marchés</Link>
-            <span className="mx-2">›</span>
-            <Link href="/marches/actions" className="hover:text-slate-900">Actions</Link>
-            <span className="mx-2">›</span>
-            <span className="text-slate-900">{stock.name}</span>
-          </div>
-
           {/* Titre + actions */}
           <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4 mb-4">
             <div className="flex gap-4 items-center">
@@ -402,7 +393,7 @@ export default function StockDetailView({
               </div>
               <div>
                 <div className="flex items-center gap-2 flex-wrap mb-1">
-                  <h1 className="text-xl md:text-2xl font-semibold">{stock.name}</h1>
+                  <div className="text-xl md:text-2xl font-semibold">{stock.name}</div>
                   <span className="text-xs px-2 py-0.5 bg-slate-100 rounded text-slate-600 font-mono">
                     {stock.code}
                   </span>

@@ -1,6 +1,6 @@
 import React from "react";
 import Link from "next/link";
-import Header from "@/components/Header";
+import ProPageHeader from "@/components/pros/ProPageHeader";
 import {
   BIEN_CATEGORIES,
   BIEN_CATEGORIES_BY_TRANSACTION,
@@ -26,7 +26,7 @@ import {
 import ImmobilierAnalytics from "@/components/macro/ImmobilierAnalytics";
 
 export const metadata = {
-  title: "Immobilier UEMOA — Prix au m² par localité — AzimutFinance",
+  title: "Immobilier UEMOA — Prix au m² — Pro Terminal",
   description:
     "Prix médian au m² par localité et par pays UEMOA, par catégorie : bureaux, logements, magasins, terrains. Achat et location.",
 };
@@ -110,100 +110,90 @@ export default async function Page({ searchParams }: { searchParams: SearchParam
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <Header />
+    <div className="space-y-4">
+      <ProPageHeader
+        title="Immobilier UEMOA — Prix au m²"
+        subtitle="Prix médian au m² par localité, à l'achat et à la location, pour quatre catégories de biens : bureaux, logements, magasins, terrains. Filtrer par pays, année et type de transaction."
+        breadcrumb={[
+          { label: "Pro Terminal", href: "/pros" },
+          { label: "Immobilier" },
+        ]}
+        badge="Pro"
+      />
 
-      {/* HERO */}
-      <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-b border-slate-800">
-        <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10">
-          <div className="text-xs text-slate-400 mb-2">
-            Accueil &rsaquo; Macro &rsaquo; Immobilier
-          </div>
-          <div className="mb-4">
-            <h1 className="text-2xl md:text-3xl font-semibold text-white">
-              Immobilier UEMOA — Prix au m²
-            </h1>
-            <p className="text-xs md:text-sm text-slate-300 mt-1 max-w-3xl">
-              Prix médian au m² par localité, à l&apos;achat et à la location, pour quatre
-              catégories de biens : bureaux, logements, magasins, terrains.
-              Filtrer par pays, année et type de transaction.
-            </p>
-          </div>
-
-          {/* FILTRES */}
-          <div className="space-y-2 mb-5">
-            <FilterRow label="Pays">
-              {UEMOA_COUNTRIES.map((c) => (
+      <div className="pro-tool space-y-6">
+        {/* FILTRES */}
+        <div className="space-y-2">
+          <FilterRow label="Pays">
+            {UEMOA_COUNTRIES.map((c) => (
+              <FilterPill
+                key={c}
+                href={qsBase({ country: c })}
+                label={UEMOA_COUNTRY_LABEL[c]}
+                active={c === selectedCountry}
+                muted={!countriesWithData.has(c)}
+              />
+            ))}
+          </FilterRow>
+          {availableYears.length > 1 && (
+            <FilterRow label="Année">
+              <FilterPill
+                href={qsBase({ year: "" })}
+                label="Toutes"
+                active={selectedYear === undefined}
+              />
+              {availableYears.map((y) => (
                 <FilterPill
-                  key={c}
-                  href={qsBase({ country: c })}
-                  label={UEMOA_COUNTRY_LABEL[c]}
-                  active={c === selectedCountry}
-                  muted={!countriesWithData.has(c)}
+                  key={y}
+                  href={qsBase({ year: String(y) })}
+                  label={String(y)}
+                  active={selectedYear === y}
                 />
               ))}
             </FilterRow>
-            {availableYears.length > 1 && (
-              <FilterRow label="Année">
-                <FilterPill
-                  href={qsBase({ year: "" })}
-                  label="Toutes"
-                  active={selectedYear === undefined}
-                />
-                {availableYears.map((y) => (
-                  <FilterPill
-                    key={y}
-                    href={qsBase({ year: String(y) })}
-                    label={String(y)}
-                    active={selectedYear === y}
-                  />
-                ))}
-              </FilterRow>
-            )}
-            <FilterRow label="Transaction">
-              <FilterPill
-                href={qsBase({ transaction: "" })}
-                label="Toutes"
-                active={selectedTransaction === undefined}
-              />
-              <FilterPill
-                href={qsBase({ transaction: "achat" })}
-                label="Achat"
-                active={selectedTransaction === "achat"}
-              />
-              <FilterPill
-                href={qsBase({ transaction: "location" })}
-                label="Location"
-                active={selectedTransaction === "location"}
-              />
-            </FilterRow>
-          </div>
-
-          {/* KPIs */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {BIEN_CATEGORIES.map((c) => {
-              const showAchatForCat =
-                showAchatTable && BIEN_CATEGORIES_BY_TRANSACTION.achat.includes(c);
-              const showLocationForCat =
-                showLocationTable &&
-                BIEN_CATEGORIES_BY_TRANSACTION.location.includes(c);
-              if (!showAchatForCat && !showLocationForCat) return null;
-              return (
-                <HeroKpi
-                  key={c}
-                  label={BIEN_CATEGORIE_LABEL[c]}
-                  achat={heroAchat[c]}
-                  location={heroLocation[c]}
-                  showAchat={showAchatForCat}
-                  showLocation={showLocationForCat}
-                />
-              );
-            })}
-          </div>
+          )}
+          <FilterRow label="Transaction">
+            <FilterPill
+              href={qsBase({ transaction: "" })}
+              label="Toutes"
+              active={selectedTransaction === undefined}
+            />
+            <FilterPill
+              href={qsBase({ transaction: "achat" })}
+              label="Achat"
+              active={selectedTransaction === "achat"}
+            />
+            <FilterPill
+              href={qsBase({ transaction: "location" })}
+              label="Location"
+              active={selectedTransaction === "location"}
+            />
+          </FilterRow>
         </div>
-      </div>
 
-      <main className="max-w-7xl mx-auto px-4 md:px-6 py-6 space-y-6">
+        {/* KPIs */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {BIEN_CATEGORIES.map((c) => {
+            const showAchatForCat =
+              showAchatTable && BIEN_CATEGORIES_BY_TRANSACTION.achat.includes(c);
+            const showLocationForCat =
+              showLocationTable &&
+              BIEN_CATEGORIES_BY_TRANSACTION.location.includes(c);
+            if (!showAchatForCat && !showLocationForCat) return null;
+            return (
+              <HeroKpi
+                key={c}
+                label={BIEN_CATEGORIE_LABEL[c]}
+                achat={heroAchat[c]}
+                location={heroLocation[c]}
+                showAchat={showAchatForCat}
+                showLocation={showLocationForCat}
+              />
+            );
+          })}
+        </div>
+
+        {/* TABLES + ANALYTICS */}
         {rows.length === 0 ? (
           <section className="bg-white rounded-lg border border-slate-200 p-8 text-center">
             <p className="text-sm text-slate-500">
@@ -245,14 +235,10 @@ export default async function Page({ searchParams }: { searchParams: SearchParam
             />
           </>
         )}
-      </main>
+      </div>
     </div>
   );
 }
-
-// =============================================================================
-// HELPERS
-// =============================================================================
 
 // =============================================================================
 // SUB-COMPONENTS

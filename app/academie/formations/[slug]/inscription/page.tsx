@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import Header from "@/components/Header";
+import PageHero from "@/components/PageHero";
 import InscriptionForm from "@/components/academie/InscriptionForm";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
@@ -66,30 +67,21 @@ export default async function InscriptionPage({
   return (
     <div className="min-h-screen bg-slate-50">
       <Header />
+      <PageHero
+        breadcrumb={[
+          { label: "Accueil", href: "/" },
+          { label: "Catalogue", href: "/academie/formations" },
+          {
+            label: formation.title,
+            href: `/academie/formations/${formation.slug}`,
+          },
+          { label: "Inscription" },
+        ]}
+        title="Confirmer mon inscription"
+        subtitle="Renseignez vos coordonnées pour vous inscrire à la formation. Vos informations sont visibles uniquement par l'équipe AzimutFinance."
+      />
 
       <main className="max-w-3xl mx-auto px-4 md:px-6 py-6 md:py-8">
-        <div className="text-xs text-slate-500 mb-3 flex items-center gap-1.5 flex-wrap">
-          <Link href="/academie/formations" className="hover:text-slate-700">
-            Catalogue
-          </Link>
-          <span>›</span>
-          <Link
-            href={`/academie/formations/${formation.slug}`}
-            className="hover:text-slate-700"
-          >
-            {formation.title}
-          </Link>
-          <span>›</span>
-          <span className="text-slate-700">Inscription</span>
-        </div>
-
-        <h1 className="text-2xl md:text-3xl font-semibold text-slate-900">
-          Confirmer mon inscription
-        </h1>
-        <p className="text-sm text-slate-500 mt-1">
-          Renseignez vos coordonnées pour vous inscrire à la formation. Vos informations sont visibles uniquement par l&apos;équipe AzimutFinance.
-        </p>
-
         {/* Récap formation */}
         <section
           className="mt-5 bg-white rounded-lg border-t-4 border border-slate-200 p-4"

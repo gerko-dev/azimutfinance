@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import Header from "@/components/Header";
+import PageHero from "@/components/PageHero";
 import TransactionForm from "@/components/academie/compte-titre/TransactionForm";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getLatestPrices } from "@/lib/simulator/pricing";
@@ -73,30 +73,21 @@ export default async function TransactionPage({
   return (
     <div className="min-h-screen bg-slate-50">
       <Header />
+      <PageHero
+        breadcrumb={[
+          { label: "Accueil", href: "/" },
+          { label: "Suivi de compte titre", href: "/academie/compte-titre" },
+          { label: account.name, href: `/academie/compte-titre/${id}` },
+          { label: isCreate ? "Nouvelle transaction" : "Éditer transaction" },
+        ]}
+        title={isCreate ? "Nouvelle transaction" : "Modifier une transaction"}
+        subtitle={
+          isCreate
+            ? "Enregistrez un mouvement : achat, vente, dépôt, dividende, frais, split, etc."
+            : "Toute modification recalcule le portefeuille automatiquement."
+        }
+      />
       <main className="max-w-4xl mx-auto px-4 md:px-6 py-5 md:py-6 space-y-4">
-        <div className="text-xs text-slate-500">
-          <Link href="/academie/compte-titre" className="hover:text-slate-700">
-            Suivi de compte titre
-          </Link>{" "}
-          &rsaquo;{" "}
-          <Link
-            href={`/academie/compte-titre/${id}`}
-            className="hover:text-slate-700"
-          >
-            {account.name}
-          </Link>{" "}
-          &rsaquo; {isCreate ? "Nouvelle transaction" : "Éditer transaction"}
-        </div>
-        <header>
-          <h1 className="text-2xl font-semibold text-slate-900">
-            {isCreate ? "Nouvelle transaction" : "Modifier une transaction"}
-          </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            {isCreate
-              ? "Enregistrez un mouvement : achat, vente, dépôt, dividende, frais, split, etc."
-              : "Toute modification recalcule le portefeuille automatiquement."}
-          </p>
-        </header>
         <TransactionForm
           mode={isCreate ? "create" : "edit"}
           account={account}

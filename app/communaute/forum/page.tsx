@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Header from "@/components/Header";
+import PageHero from "@/components/PageHero";
 import Footer from "@/components/Footer";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
@@ -32,35 +33,33 @@ export default async function ForumIndexPage() {
     <div className="min-h-screen bg-slate-50 flex flex-col">
       <Header />
 
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 md:px-6 py-8 md:py-12">
-        <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-semibold text-slate-900">
-              Forum investisseurs
-            </h1>
-            <p className="text-sm text-slate-500 mt-1 max-w-2xl">
-              Échangez sur les marchés UEMOA : actions BRVM, obligations, FCP,
-              macro, stratégies. La lecture est libre, la participation
-              nécessite un compte gratuit.
-            </p>
-          </div>
-          {user ? (
-            <Link
-              href="/communaute/forum/nouveau"
-              className="px-4 py-2 rounded-md bg-blue-700 text-white text-sm font-medium hover:bg-blue-800"
-            >
-              + Nouvelle discussion
-            </Link>
-          ) : (
-            <Link
-              href="/connexion?redirect=/communaute/forum/nouveau"
-              className="px-4 py-2 rounded-md bg-slate-100 text-slate-700 text-sm font-medium hover:bg-slate-200 border border-slate-300"
-            >
-              Connectez-vous pour participer
-            </Link>
-          )}
-        </div>
+      <PageHero
+        breadcrumb={[
+          { label: "Accueil", href: "/" },
+          { label: "Communauté" },
+          { label: "Forum" },
+        ]}
+        title="Forum investisseurs"
+        subtitle="Échangez sur les marchés UEMOA : actions BRVM, obligations, FCP, macro, stratégies. La lecture est libre, la participation nécessite un compte gratuit."
+      >
+        {user ? (
+          <Link
+            href="/communaute/forum/nouveau"
+            className="inline-block px-4 py-2 rounded-md bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
+          >
+            + Nouvelle discussion
+          </Link>
+        ) : (
+          <Link
+            href="/connexion?redirect=/communaute/forum/nouveau"
+            className="inline-block px-4 py-2 rounded-md bg-white/10 text-white text-sm font-medium hover:bg-white/20 border border-white/20"
+          >
+            Connectez-vous pour participer
+          </Link>
+        )}
+      </PageHero>
 
+      <main className="flex-1 max-w-6xl w-full mx-auto px-4 md:px-6 py-8 md:py-12">
         <ForumSearchBar />
 
         <section className="mt-8">

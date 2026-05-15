@@ -73,7 +73,9 @@ export async function signInAction(
 ): Promise<AuthState> {
   const identifier = String(formData.get("identifier") ?? "").trim();
   const password = String(formData.get("password") ?? "");
-  const redirectTo = String(formData.get("redirect") ?? "/compte");
+  // Par défaut, on renvoie le membre sur sa page d'accueil ("/", qui rend le
+  // cockpit MemberHome). Un `redirect` explicite (lien protégé) est respecté.
+  const redirectTo = String(formData.get("redirect") ?? "/");
 
   if (!identifier || !password) {
     return { error: "Identifiant et mot de passe requis." };

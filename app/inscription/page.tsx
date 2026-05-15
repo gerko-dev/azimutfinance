@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Header from "@/components/Header";
+import PageHero from "@/components/PageHero";
 import SocialButtons from "@/components/auth/SocialButtons";
 import SignupForm from "./SignupForm";
 
@@ -11,13 +12,13 @@ export default function InscriptionPage() {
   return (
     <div className="min-h-screen bg-slate-50">
       <Header />
+      <PageHero
+        breadcrumb={[{ label: "Accueil", href: "/" }, { label: "Inscription" }]}
+        title="Inscription"
+        subtitle="Crée ton compte AzimutFinance gratuitement."
+      />
       <main className="max-w-md mx-auto px-4 md:px-6 py-12 md:py-16">
         <div className="bg-white border border-slate-200 rounded-lg p-6 md:p-8 shadow-sm">
-          <h1 className="text-2xl font-semibold text-slate-900 mb-1">Inscription</h1>
-          <p className="text-sm text-slate-500 mb-6">
-            Crée ton compte AzimutFinance gratuitement.
-          </p>
-
           <SocialButtons />
 
           <div className="flex items-center my-6">

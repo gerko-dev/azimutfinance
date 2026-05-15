@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import Header from "@/components/Header";
+import PageHero from "@/components/PageHero";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   PLANS,
@@ -44,26 +44,25 @@ export default async function PaiementPage({
     <div className="min-h-screen bg-slate-50">
       <Header />
 
+      <PageHero
+        breadcrumb={[
+          { label: "Accueil", href: "/" },
+          { label: "Premium", href: "/premium" },
+          { label: "Paiement" },
+        ]}
+        title={`Paiement Premium · ${plan.label}`}
+        subtitle={
+          <>
+            Montant à payer :{" "}
+            <span className="font-semibold text-white">
+              {formatFcfa(plan.priceFcfa)}
+            </span>{" "}
+            · Durée : {plan.durationLabel}
+          </>
+        }
+      />
+
       <main className="max-w-3xl mx-auto px-4 md:px-6 py-8 md:py-12">
-        <div className="text-xs text-slate-500 mb-3">
-          <Link href="/premium" className="hover:text-slate-900">
-            Premium
-          </Link>
-          <span className="mx-2">›</span>
-          <span>Paiement</span>
-        </div>
-
-        <h1 className="text-2xl md:text-3xl font-semibold text-slate-900 mb-2">
-          Paiement Premium · {plan.label}
-        </h1>
-        <p className="text-sm text-slate-600 mb-8">
-          Montant à payer :{" "}
-          <span className="font-semibold text-slate-900">
-            {formatFcfa(plan.priceFcfa)}
-          </span>{" "}
-          · Durée : {plan.durationLabel}
-        </p>
-
         {/* Étape 1 — instructions */}
         <section className="bg-white rounded-xl border border-slate-200 p-6 md:p-8 mb-6">
           <div className="flex items-start gap-3 mb-5">

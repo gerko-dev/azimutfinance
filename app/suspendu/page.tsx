@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import Header from "@/components/Header";
+import PageHero from "@/components/PageHero";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { signOutAction } from "@/lib/auth/actions";
 
@@ -57,12 +58,12 @@ export default async function SuspenduPage() {
   return (
     <div className="min-h-screen bg-slate-50">
       <Header />
+      <PageHero
+        title={isBan ? "Votre compte a été banni" : "Votre compte est suspendu"}
+      />
       <main className="max-w-2xl mx-auto px-4 md:px-6 py-12 md:py-20">
         <div className="bg-white rounded-lg border-2 border-rose-200 p-6 md:p-10 text-center">
           <div className="text-6xl mb-3">{isBan ? "🚫" : "⏸️"}</div>
-          <h1 className="text-2xl md:text-3xl font-bold text-slate-900">
-            {isBan ? "Votre compte a été banni" : "Votre compte est suspendu"}
-          </h1>
 
           {!isBan && status.suspended_until && (
             <p className="text-base text-slate-700 mt-4">

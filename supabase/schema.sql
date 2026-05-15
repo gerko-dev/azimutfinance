@@ -222,8 +222,12 @@ begin
 end$$;
 
 -- 9) Colonnes ajoutees a profiles (idempotent via "if not exists")
+--    `country` : code ISO 3166-1 alpha-2 minuscule, en texte libre (et non
+--    l'enum uemoa_country) — l'onboarding accepte n'importe quel pays. Sur une
+--    base existante ou la colonne etait deja en enum, lancer
+--    supabase/country_to_text.sql.
 alter table public.profiles
-  add column if not exists country             public.uemoa_country,
+  add column if not exists country             text,
   add column if not exists experience_level    public.experience_level,
   add column if not exists professional_sector text,
   add column if not exists interests           text[] not null default '{}',

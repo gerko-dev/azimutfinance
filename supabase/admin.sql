@@ -112,6 +112,11 @@ $$;
 -- 5) RPC admin : LIST MEMBERS (tous les niveaux)
 -- ============================================================
 
+-- `create or replace` ne peut pas changer le type de retour d'une fonction
+-- existante (erreur 42P13) : sur une base ou admin_list_members existait avec
+-- l'ancien type `country uemoa_country`, on la supprime d'abord.
+drop function if exists public.admin_list_members(text, int, int);
+
 create or replace function public.admin_list_members(
   p_search text default null,
   p_limit  int  default 50,
@@ -123,7 +128,10 @@ returns table (
   username      text,
   full_name     text,
   role          public.app_role,
-  country       public.uemoa_country,
+  -- profiles.country est en `text` (code ISO, pas seulement UEMOA) — cf.
+  -- supabase/country_to_text.sql. Le RETURNS TABLE doit l'annoncer en text,
+  -- sinon la RPC echoue ("structure of query does not match function result").
+  country       text,
   created_at    timestamptz,
   onboarded_at  timestamptz
 )

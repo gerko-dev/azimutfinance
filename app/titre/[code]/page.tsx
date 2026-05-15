@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import Header from "@/components/Header";
+import PageHero from "@/components/PageHero";
 import Ticker from "@/components/Ticker";
 import StockDetailView from "@/components/StockDetailView";
 import { getBrvmQuote, getBrvmSnapshot } from "@/lib/brvm/liveQuotes";
@@ -44,7 +45,7 @@ export async function generateMetadata({
   const secteur = stock.sector ? ` — ${stock.sector}` : "";
   return {
     title: `${stock.name} (${stock.code}) — Cours, dividende et ratios BRVM`,
-    description: `Fiche action ${stock.name} (${stock.code})${secteur} cotée à la BRVM : cours en direct, performances multi-horizons, ratios fondamentaux, profil risque/rendement et actualités.`,
+    description: `Fiche action ${stock.name} (${stock.code})${secteur} cotée à la BRVM : cours différés ~15 min, performances multi-horizons, ratios fondamentaux, profil risque/rendement et actualités.`,
   };
 }
 
@@ -217,6 +218,15 @@ export default async function TitrePage({
     <div className="min-h-screen bg-slate-50">
       <Header />
       <Ticker />
+      <PageHero
+        breadcrumb={[
+          { label: "Marchés", href: "/" },
+          { label: "Actions", href: "/marches/actions" },
+          { label: stock.name },
+        ]}
+        title={`${stock.name} (${stock.code})`}
+        subtitle={`${stock.sector}${stock.isin ? ` · ISIN ${stock.isin}` : ""} · BRVM · ${stock.country}`}
+      />
       <StockDetailView
         stock={stock}
         priceHistory={priceHistory}

@@ -20,6 +20,13 @@ import {
   type Interest,
   type ProfileExtras,
 } from "@/lib/onboarding/types";
+import {
+  WORLD_COUNTRIES,
+  UEMOA_CODES,
+  countryFlagUrl,
+  getCountryLabel,
+} from "@/lib/onboarding/countries";
+import CountryFlag from "@/components/CountryFlag";
 
 const TOTAL_STEPS = 4;
 
@@ -70,10 +77,13 @@ export default function OnboardingWizard({
         return;
       }
       setError(null);
-      // En mode edition : on revient au compte des qu'une etape est sauvee.
-      // Sinon : on enchaine les etapes jusqu'a la fin du wizard.
-      if (isEditMode || res?.done) {
+      if (isEditMode) {
+        // Edition de profil : retour au compte des qu'une etape est sauvee.
         router.push("/compte");
+        router.refresh();
+      } else if (res?.done) {
+        // Fin de l'onboarding initial : direction la page d'accueil membre.
+        router.push("/");
         router.refresh();
       } else if (res?.step) {
         setStep(res.step);
@@ -86,11 +96,11 @@ export default function OnboardingWizard({
       {/* En-tete */}
       <div className="flex items-start justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl md:text-3xl font-semibold text-slate-900">
+          <h2 className="text-2xl md:text-3xl font-semibold text-slate-900">
             {isEditMode
               ? "Modifier mon profil"
               : `Bienvenue${firstName ? `, ${firstName}` : ""} 👋`}
-          </h1>
+          </h2>
           <p className="text-sm text-slate-500 mt-1">
             {isEditMode
               ? "Mets à jour les réponses que tu souhaites changer."
@@ -217,8 +227,18 @@ function StepCountry({
   onChange,
 }: {
   value: CountryCode | null;
-  onChange: (c: CountryCode) => void;
+  onChange: (c: CountryCode | null) => void;
 }) {
+  const valueIsUemoa = value != null && UEMOA_CODES.has(value);
+  // « Autre pays » est ouvert si l'utilisateur l'a cliqué, ou si la valeur déjà
+  // enregistrée est un pays hors UEMOA (cas du retour sur le wizard).
+  const [showOther, setShowOther] = useState<boolean>(
+    value != null && !valueIsUemoa,
+  );
+
+  // Liste déroulante : tous les pays SAUF les 8 UEMOA (déjà en accès rapide).
+  const otherCountries = WORLD_COUNTRIES.filter((c) => !UEMOA_CODES.has(c.code));
+
   return (
     <div>
       <h2 className="text-lg font-medium text-slate-900 mb-1">
@@ -227,26 +247,83 @@ function StepCountry({
       <p className="text-sm text-slate-500 mb-4">
         On adapte les contenus, devises et fiscalité affichés.
       </p>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+
+      <div className="grid grid-cols-3 gap-2">
         {COUNTRIES.map((c) => {
-          const selected = value === c.code;
+          const selected = !showOther && value === c.code;
           return (
             <button
               key={c.code}
               type="button"
-              onClick={() => onChange(c.code)}
+              onClick={() => {
+                onChange(c.code);
+                setShowOther(false);
+              }}
               className={`flex flex-col items-center justify-center gap-1.5 p-3 border rounded-lg text-sm transition ${
                 selected
                   ? "border-blue-700 bg-blue-50 text-blue-900"
                   : "border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700"
               }`}
             >
-              <span className="text-2xl leading-none">{c.flag}</span>
+              <CountryFlag country={c.code.toUpperCase()} size={26} />
               <span className="text-xs text-center leading-tight">{c.label}</span>
             </button>
           );
         })}
+
+        {/* Bouton « Autre pays » : ouvre la liste déroulante mondiale. */}
+        <button
+          type="button"
+          onClick={() => {
+            setShowOther(true);
+            // On vide une éventuelle sélection UEMOA pour forcer un choix dans
+            // la liste.
+            if (value != null && UEMOA_CODES.has(value)) onChange(null);
+          }}
+          className={`flex flex-col items-center justify-center gap-1.5 p-3 border rounded-lg text-sm transition ${
+            showOther
+              ? "border-blue-700 bg-blue-50 text-blue-900"
+              : "border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700"
+          }`}
+        >
+          <span className="text-2xl leading-none" aria-hidden>
+            🌍
+          </span>
+          <span className="text-xs text-center leading-tight">Autre pays</span>
+        </button>
       </div>
+
+      {/* Liste déroulante de tous les pays du monde. */}
+      {showOther && (
+        <div className="mt-3 space-y-2">
+          <select
+            value={value && !UEMOA_CODES.has(value) ? value : ""}
+            onChange={(e) => onChange(e.target.value || null)}
+            className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            <option value="">— Choisir un pays —</option>
+            {otherCountries.map((c) => (
+              <option key={c.code} value={c.code}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+          {value && !UEMOA_CODES.has(value) && (
+            <div className="flex items-center gap-2 text-sm text-slate-700">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={countryFlagUrl(value, 24)}
+                alt=""
+                width={24}
+                height={18}
+                className="rounded-sm border border-slate-200"
+              />
+              <span>{getCountryLabel(value)}</span>
+            </div>
+          )}
+        </div>
+      )}
+
       {value && <input type="hidden" name="country" value={value} />}
     </div>
   );

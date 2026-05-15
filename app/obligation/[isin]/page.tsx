@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import Header from "@/components/Header";
+import PageHero from "@/components/PageHero";
 import Ticker from "@/components/Ticker";
 import BondDetailView from "@/components/BondDetailView";
 import {
@@ -101,6 +102,15 @@ export default async function Page({
     <div className="min-h-screen bg-slate-50">
       <Header />
       <Ticker />
+      <PageHero
+        breadcrumb={[
+          { label: "Marchés", href: "/" },
+          { label: "Obligations cotées", href: "/marches/obligations" },
+          { label: bond.name },
+        ]}
+        title={bond.name}
+        subtitle={`${bond.issuer} · ${bond.issuerType} · ${bond.sector} · ISIN ${bond.isin}`}
+      />
       <BondDetailView
         bond={bond}
         priceHistory={priceHistory}

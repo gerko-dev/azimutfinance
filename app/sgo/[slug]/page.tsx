@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import Header from "@/components/Header";
+import PageHero from "@/components/PageHero";
 import Ticker from "@/components/Ticker";
 import SGODetailView from "@/components/SGODetailView";
 import PremiumPaywall from "@/components/PremiumPaywall";
@@ -198,6 +199,16 @@ export default async function SGODetailPage({
     <div className="min-h-screen bg-slate-50">
       <Header />
       <Ticker />
+      <PageHero
+        breadcrumb={[
+          { label: "Accueil", href: "/" },
+          { label: "FCP / OPCVM", href: "/marches/fcp" },
+          { label: "Sociétés de gestion", href: "/sgo" },
+          { label: manager.name },
+        ]}
+        title={manager.name}
+        subtitle="Société de gestion · OPCVM UEMOA"
+      />
       <SGODetailView
         manager={manager}
         refQuarter={refQuarter}

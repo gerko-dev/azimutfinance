@@ -106,17 +106,6 @@ export default function SGOIndexView({ rows, refQuarter, marketTotalAUM, totalFu
         </div>
       )}
 
-      <header className="space-y-2">
-        <p className="text-xs uppercase tracking-wider text-slate-500">
-          <Link href="/marches/fcp" className="hover:underline">FCP / OPCVM</Link>
-        </p>
-        <h1 className="text-3xl font-bold text-slate-900">Sociétés de gestion UEMOA</h1>
-        <p className="text-sm text-slate-600 max-w-3xl">
-          {rows.length} sociétés de gestion gèrent {totalFunds} fonds pour un encours total de{" "}
-          <strong>{fmtBigFCFA(marketTotalAUM)} FCFA</strong> au {fmtDateFR(refQuarter)}.
-        </p>
-      </header>
-
       {/* === KPI BAR === */}
       <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <KPI label="Sociétés de gestion" value={String(rows.length)} sub="actives sur le marché" />

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Header from "@/components/Header";
+import PageHero from "@/components/PageHero";
 import Footer from "@/components/Footer";
 import { searchForum } from "@/lib/forum/queries";
 import ForumSearchBar from "../ForumSearchBar";
@@ -23,19 +24,16 @@ export default async function ForumSearchPage({
     <div className="min-h-screen bg-slate-50 flex flex-col">
       <Header />
 
+      <PageHero
+        breadcrumb={[
+          { label: "Accueil", href: "/" },
+          { label: "Forum", href: "/communaute/forum" },
+          { label: "Recherche" },
+        ]}
+        title="Recherche dans le forum"
+      />
+
       <main className="flex-1 max-w-4xl w-full mx-auto px-4 md:px-6 py-8 md:py-12">
-        <nav className="text-xs text-slate-500 mb-4 flex flex-wrap items-center gap-2">
-          <Link href="/communaute/forum" className="hover:text-slate-900">
-            Forum
-          </Link>
-          <span className="text-slate-300">/</span>
-          <span className="text-slate-700">Recherche</span>
-        </nav>
-
-        <h1 className="text-2xl font-semibold text-slate-900 mb-4">
-          Recherche dans le forum
-        </h1>
-
         <ForumSearchBar initialQuery={q} />
 
         {q ? (

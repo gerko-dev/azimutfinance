@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import PageHero from "@/components/PageHero";
 
 export const metadata: Metadata = {
   title: "Politique de cookies — AzimutFinance",
@@ -50,12 +51,18 @@ const COOKIES: CookieRow[] = [
 export default function CookiesPage() {
   return (
     <>
-      <h1 className="text-3xl md:text-4xl font-bold text-slate-900 mb-2">
-        Politique de cookies
-      </h1>
-      <p className="text-sm text-slate-500 mb-10">
-        Dernière mise à jour&nbsp;: {LAST_UPDATE}
-      </p>
+      <PageHero
+        breadcrumb={[
+          { label: "Accueil", href: "/" },
+          { label: "Politique de cookies" },
+        ]}
+        title="Politique de cookies"
+      />
+      <main className="max-w-3xl mx-auto px-4 md:px-6 py-10 md:py-16">
+        <article className="bg-white border border-slate-200 rounded-lg px-6 md:px-10 py-8 md:py-12 text-slate-800 leading-relaxed">
+          <p className="text-sm text-slate-500 mb-10">
+            Dernière mise à jour&nbsp;: {LAST_UPDATE}
+          </p>
 
       <Section title="1. Qu'est-ce qu'un cookie ?">
         <p>
@@ -266,6 +273,8 @@ export default function CookiesPage() {
           .
         </p>
       </Section>
+      </article>
+    </main>
     </>
   );
 }

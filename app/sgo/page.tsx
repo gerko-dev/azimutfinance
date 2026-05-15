@@ -1,4 +1,5 @@
 import Header from "@/components/Header";
+import PageHero from "@/components/PageHero";
 import Ticker from "@/components/Ticker";
 import SGOIndexView from "@/components/SGOIndexView";
 import {
@@ -85,6 +86,15 @@ export default function SGOIndexPage() {
     <div className="min-h-screen bg-slate-50">
       <Header />
       <Ticker />
+      <PageHero
+        breadcrumb={[
+          { label: "Accueil", href: "/" },
+          { label: "FCP / OPCVM", href: "/marches/fcp" },
+          { label: "Sociétés de gestion" },
+        ]}
+        title="Sociétés de gestion UEMOA"
+        subtitle={`${rows.length} sociétés de gestion gèrent ${allFunds.length} fonds sur le marché des OPCVM de l'UEMOA.`}
+      />
       <SGOIndexView
         rows={rows}
         refQuarter={refQuarter}

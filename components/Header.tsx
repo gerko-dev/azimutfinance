@@ -53,7 +53,6 @@ const menuSections: MenuSection[] = [
       { label: "Indicateurs pays UEMOA", href: "/macro/pays" },
       { label: "Matières premières", href: "/macro/matieres-premieres" },
       { label: "Devises & FX", href: "/macro/devises" },
-      { label: "Immobilier", href: "/macro/immobilier" },
     ],
   },
   {

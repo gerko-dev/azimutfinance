@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import Header from "@/components/Header";
+import PageHero from "@/components/PageHero";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { PLANS, formatFcfa } from "@/lib/premium/plans";
 import { PAYMENT_METHOD_LABEL } from "@/lib/premium/payment-methods";
@@ -34,12 +35,21 @@ export default async function PaiementRecuPage() {
     <div className="min-h-screen bg-slate-50">
       <Header />
 
+      <PageHero
+        breadcrumb={[
+          { label: "Accueil", href: "/" },
+          { label: "Premium", href: "/premium" },
+          { label: "Déclaration enregistrée" },
+        ]}
+        title="Déclaration enregistrée"
+      />
+
       <main className="max-w-2xl mx-auto px-4 md:px-6 py-10 md:py-16">
         <div className="bg-white rounded-xl border border-slate-200 p-6 md:p-10 text-center">
           <div className="text-5xl md:text-6xl mb-4">📩</div>
-          <h1 className="text-xl md:text-2xl font-semibold text-slate-900 mb-2">
+          <h2 className="text-xl md:text-2xl font-semibold text-slate-900 mb-2">
             Déclaration enregistrée
-          </h1>
+          </h2>
           <p className="text-sm md:text-base text-slate-600 max-w-md mx-auto mb-6">
             Merci ! Nous vérifions ton paiement et activons ton accès Premium
             dès qu&apos;il est confirmé — généralement en quelques heures, au

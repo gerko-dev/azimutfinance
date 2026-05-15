@@ -283,7 +283,7 @@ function BlockRenderer({
       if (block.lead) {
         return (
           <p
-            className="text-xl text-slate-800 leading-relaxed font-light mb-6 first:first-letter:text-5xl first:first-letter:font-bold first:first-letter:font-serif first:first-letter:float-left first:first-letter:mr-2 first:first-letter:leading-[0.9] first:first-letter:mt-1"
+            className="text-xl text-slate-800 leading-relaxed font-light mb-6 text-justify first:first-letter:text-5xl first:first-letter:font-bold first:first-letter:font-serif first:first-letter:float-left first:first-letter:mr-2 first:first-letter:leading-[0.9] first:first-letter:mt-1"
             style={{ fontFamily: "Georgia, serif" }}
           >
             {block.text}
@@ -291,7 +291,7 @@ function BlockRenderer({
         );
       }
       return (
-        <p className="text-base md:text-[17px] text-slate-800 leading-[1.7] mb-5">{block.text}</p>
+        <p className="text-base md:text-[17px] text-slate-800 leading-[1.7] mb-5 text-justify">{block.text}</p>
       );
 
     case "heading": {

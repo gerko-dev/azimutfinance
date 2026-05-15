@@ -17,17 +17,13 @@ import {
 import { getCatalogStats } from "@/lib/formations";
 import { listPublishedFormations } from "@/lib/formations/queries";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import {
-  getCurrentSeason,
-  getMyPortfolio,
-  getPortfolioSnapshot,
-  getLeaderboard,
-} from "@/lib/simulator/queries";
+import { getCurrentSeason, getLeaderboard } from "@/lib/simulator/queries";
 import {
   getDynamicPlanList,
   listTrialConfigs,
 } from "@/lib/premium/pricingQueries";
 import { fmtFCFAShort } from "@/lib/format";
+import MemberHome from "@/components/home/MemberHome";
 
 export const dynamic = "force-dynamic";
 
@@ -46,60 +42,27 @@ const fmtNum = (v: number, dec = 0) =>
   v.toLocaleString("fr-FR", { minimumFractionDigits: dec, maximumFractionDigits: dec });
 
 export default async function Home() {
-  // ---- Auth check ----
+  // Membre connecté → cockpit personnalisé (MemberHome). Les rôles premium et
+  // pro ont leur propre page d'accueil. Cette page ne sert donc plus que la
+  // landing marketing destinée aux visiteurs anonymes.
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // ---- Saison simulateur active (utilisee par memberContext + Spotlight) ----
-  const currentSeason = await getCurrentSeason();
-
-  // ---- Personnalisation membre connecte ----
-  let memberContext: {
-    displayName: string;
-    season: Awaited<ReturnType<typeof getCurrentSeason>>;
-    snapshot: Awaited<ReturnType<typeof getPortfolioSnapshot>>;
-    rank: number | null;
-    totalPlayers: number;
-    unread: number;
-  } | null = null;
-
   if (user) {
-    const meta = user.user_metadata as { full_name?: string; name?: string } | null;
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("full_name, username")
-      .eq("id", user.id)
-      .maybeSingle();
-    const fullName =
-      (profile as { full_name?: string | null } | null)?.full_name ??
-      meta?.full_name ??
-      meta?.name ??
-      null;
-    const username =
-      (profile as { username?: string | null } | null)?.username ?? null;
-    const displayName = fullName || username || user.email?.split("@")[0] || "membre";
-
-    const season = currentSeason;
-    let snapshot: Awaited<ReturnType<typeof getPortfolioSnapshot>> = null;
-    let rank: number | null = null;
-    let totalPlayers = 0;
-    if (season) {
-      const portfolio = await getMyPortfolio(season.id);
-      if (portfolio) {
-        snapshot = await getPortfolioSnapshot(season.id);
-        const board = await getLeaderboard(season.id);
-        totalPlayers = board.length;
-        rank = board.find((e) => e.userId === user.id)?.rank ?? null;
-      }
-    }
-
-    const { data: unreadCount } = await supabase.rpc("get_unread_count");
-    const unread = typeof unreadCount === "number" ? unreadCount : 0;
-
-    memberContext = { displayName, season, snapshot, rank, totalPlayers, unread };
+    return <MemberHome user={user} />;
   }
+
+  // ---- Saison simulateur active (Spotlight Simulateur de la landing) ----
+  // currentSeason est null quand aucune saison "intro"/"active" n'existe : la
+  // section Ligue Azimut s'adapte alors automatiquement (pas de faux
+  // "saison en cours" ni de participants factices).
+  const currentSeason = await getCurrentSeason();
+  // Classement réel de la saison en cours, top 5. Vide s'il n'y a pas de saison.
+  const seasonLeaderboard = currentSeason
+    ? (await getLeaderboard(currentSeason.id)).slice(0, 5)
+    : [];
 
   // ---- Données live ----
   // Indices + quotes BRVM scrapes en direct depuis brvm.org (cache 5 min) :
@@ -212,14 +175,8 @@ export default async function Home() {
     <div className="min-h-screen bg-white">
       <Header />
 
-      {/* HERO : dashboard pour les membres connectes, marketing pour les visiteurs */}
-      {memberContext && (
-        <MemberDashboardHero
-          context={memberContext}
-          featuredArticle={featuredArticle}
-        />
-      )}
-      {!memberContext && (
+      {/* HERO marketing — visiteurs anonymes uniquement (les membres connectés
+          sont servis par MemberHome via un return anticipé plus haut). */}
       <section className="relative overflow-hidden bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 text-white">
         {/* Décor : pattern subtil */}
         <div
@@ -247,8 +204,9 @@ export default async function Home() {
               </span>
             </h1>
             <p className="text-base md:text-lg text-slate-300 mt-5 leading-relaxed max-w-2xl">
-              Cotation en quasi réel, marché obligataire UEMOA décrypté,
-              informations éclairées sur les FCP, académie d&apos;investissement
+              Cotation BRVM (différée d&apos;environ 15 min), marché obligataire
+              UEMOA décrypté, informations éclairées sur les FCP, académie
+              d&apos;investissement
               et simulateur de portefeuille. Tout ce qu&apos;il faut pour
               apprendre, décider et investir sur les marchés en un seul endroit.
             </p>
@@ -397,7 +355,6 @@ export default async function Home() {
           </div>
         </div>
       </section>
-      )}
 
       {/* Pourquoi AzimutFinance */}
       <section className="max-w-7xl mx-auto px-4 md:px-6 py-14 md:py-20">
@@ -412,7 +369,7 @@ export default async function Home() {
             color="#1d4ed8"
             kicker="MARCHÉS"
             title="BRVM en clair"
-            description="Actions et obligations cotées en quasi réel, indices, top mouvements, analyses approfondies. Données quotidiennes."
+            description="Actions et obligations cotées (cours différés ~15 min), indices, top mouvements, analyses approfondies. Données quotidiennes."
             href="/marches/actions"
           />
           <FeatureCard
@@ -453,13 +410,23 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* Spotlight Simulateur — gros highlight */}
+      {/* Spotlight Simulateur — gros highlight (s'adapte à la saison en cours) */}
       <section className="bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-900 text-white">
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-14 md:py-20">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 md:gap-14 items-center">
             <div>
-              <span className="inline-block text-[11px] uppercase tracking-wider font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 px-2.5 py-1 rounded">
-                ● Saison en cours
+              <span
+                className={`inline-block text-[11px] uppercase tracking-wider font-semibold px-2.5 py-1 rounded border ${
+                  currentSeason
+                    ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
+                    : "bg-white/10 text-slate-300 border-white/20"
+                }`}
+              >
+                {currentSeason
+                  ? currentSeason.status === "intro"
+                    ? "● Inscriptions ouvertes"
+                    : "● Saison en cours"
+                  : "○ Aucune saison en cours"}
               </span>
               <h2 className="text-3xl md:text-5xl font-bold mt-4 leading-tight">
                 Affrontez la BRVM
@@ -467,10 +434,22 @@ export default async function Home() {
                 <span className="text-emerald-300">avec du capital virtuel.</span>
               </h2>
               <p className="text-base md:text-lg text-slate-300 mt-5 leading-relaxed max-w-xl">
-                Rejoignez la compétition : passez vos ordres d&apos;achat et de
-                vente sur les vraies valeurs cotées BRVM, suivez votre P&amp;L au jour le
-                jour, et grimpez dans le classement général. À la clôture de la saison,
-                le meilleur portefeuille gagne.
+                {currentSeason ? (
+                  <>
+                    Rejoignez la compétition : passez vos ordres d&apos;achat et de
+                    vente sur les vraies valeurs cotées BRVM, suivez votre P&amp;L au jour le
+                    jour, et grimpez dans le classement général. À la clôture de la saison,
+                    le meilleur portefeuille gagne.
+                  </>
+                ) : (
+                  <>
+                    La Ligue Azimut est un jeu de portefeuille sur les vraies valeurs
+                    cotées BRVM : capital virtuel, ordres d&apos;achat/vente, valorisation
+                    quotidienne et classement saisonnier. Aucune saison n&apos;est ouverte
+                    pour l&apos;instant — créez votre compte pour être prévenu du lancement
+                    de la prochaine.
+                  </>
+                )}
               </p>
 
               <div className="grid grid-cols-3 gap-3 mt-7 max-w-lg">
@@ -512,7 +491,9 @@ export default async function Home() {
                   href="/academie/simulateur"
                   className="bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-semibold px-6 py-3 rounded-md text-sm md:text-base transition"
                 >
-                  Rejoindre la saison →
+                  {currentSeason
+                    ? "Rejoindre la saison →"
+                    : "Découvrir la Ligue Azimut →"}
                 </Link>
                 <Link
                   href="/inscription"
@@ -523,43 +504,76 @@ export default async function Home() {
               </div>
             </div>
 
-            {/* Mock leaderboard */}
+            {/* Classement réel de la saison en cours (vide si pas de saison) */}
             <div className="bg-white/5 border border-white/10 rounded-xl backdrop-blur p-5 md:p-6">
               <div className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold mb-3">
-                Classement général · Saison 1
+                {currentSeason
+                  ? `Classement général · ${currentSeason.name}`
+                  : "Classement général"}
               </div>
-              <ul className="space-y-2.5">
-                {[
-                  { rank: 1, name: "amadou_d", value: "12,4 M", perf: "+24,1 %", medal: "🥇" },
-                  { rank: 2, name: "fatou.koffi", value: "11,8 M", perf: "+18,3 %", medal: "🥈" },
-                  { rank: 3, name: "kouassi92", value: "11,2 M", perf: "+12,6 %", medal: "🥉" },
-                  { rank: 4, name: "abdoul_t", value: "10,9 M", perf: "+8,7 %" },
-                  { rank: 5, name: "mariame", value: "10,5 M", perf: "+5,2 %" },
-                ].map((p) => (
-                  <li
-                    key={p.rank}
-                    className="flex items-center gap-3 px-3 py-2 rounded bg-white/5"
-                  >
-                    <div className="w-7 text-center">
-                      {p.medal ? (
-                        <span className="text-base">{p.medal}</span>
-                      ) : (
-                        <span className="text-sm font-semibold text-slate-400">#{p.rank}</span>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-white truncate">@{p.name}</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-sm font-semibold tabular-nums">{p.value}</div>
-                      <div className="text-[11px] text-emerald-400 tabular-nums">{p.perf}</div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-              <div className="mt-3 pt-3 border-t border-white/10 text-[11px] text-slate-400 text-center">
-                Données illustratives · classement en temps réel sur le simulateur
-              </div>
+              {currentSeason && seasonLeaderboard.length > 0 ? (
+                <>
+                  <ul className="space-y-2.5">
+                    {seasonLeaderboard.map((p) => {
+                      const medal =
+                        p.rank === 1
+                          ? "🥇"
+                          : p.rank === 2
+                            ? "🥈"
+                            : p.rank === 3
+                              ? "🥉"
+                              : null;
+                      return (
+                        <li
+                          key={p.userId}
+                          className="flex items-center gap-3 px-3 py-2 rounded bg-white/5"
+                        >
+                          <div className="w-7 text-center">
+                            {medal ? (
+                              <span className="text-base">{medal}</span>
+                            ) : (
+                              <span className="text-sm font-semibold text-slate-400">
+                                #{p.rank}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium text-white truncate">
+                              @{p.username}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-sm font-semibold tabular-nums">
+                              {fmtFCFAShort(p.totalValue)}
+                            </div>
+                            <div
+                              className={`text-[11px] tabular-nums ${
+                                p.totalReturn >= 0
+                                  ? "text-emerald-400"
+                                  : "text-rose-400"
+                              }`}
+                            >
+                              {fmtPct(p.totalReturn)}
+                            </div>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  <div className="mt-3 pt-3 border-t border-white/10 text-[11px] text-slate-400 text-center">
+                    Classement en temps réel · {currentSeason.name}
+                  </div>
+                </>
+              ) : (
+                <div className="py-10 text-center">
+                  <div className="text-3xl mb-2 opacity-40">🏆</div>
+                  <p className="text-sm text-slate-300 max-w-xs mx-auto leading-relaxed">
+                    {currentSeason
+                      ? "Aucun participant inscrit pour l'instant. Soyez le premier à rejoindre la saison !"
+                      : "Aucune saison en cours. La prochaine Ligue Azimut sera annoncée bientôt — créez votre compte pour ne pas la manquer."}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -771,8 +785,7 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* CTA final + newsletter — uniquement pour les visiteurs */}
-      {!memberContext && (
+      {/* CTA final + newsletter */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-blue-700 via-blue-800 to-indigo-900" />
         <div className="absolute inset-0 opacity-10"
@@ -807,7 +820,6 @@ export default async function Home() {
           </div>
         </div>
       </section>
-      )}
     </div>
   );
 }
@@ -1129,272 +1141,3 @@ function Testimonial({
     </figure>
   );
 }
-
-// =============================================================================
-// HERO MEMBRE CONNECTE (dashboard)
-// =============================================================================
-
-type MemberContext = {
-  displayName: string;
-  season: Awaited<ReturnType<typeof getCurrentSeason>>;
-  snapshot: Awaited<ReturnType<typeof getPortfolioSnapshot>>;
-  rank: number | null;
-  totalPlayers: number;
-  unread: number;
-};
-
-function MemberDashboardHero({
-  context,
-  featuredArticle,
-}: {
-  context: MemberContext;
-  featuredArticle: Awaited<ReturnType<typeof listPublishedArticles>>[number] | undefined;
-}) {
-  const { displayName, season, snapshot, rank, totalPlayers, unread } = context;
-
-  // Calcul jours restants saison
-  let daysToEnd: number | null = null;
-  if (season) {
-    const today = new Date();
-    const end = new Date(season.ends_at + "T00:00:00Z");
-    daysToEnd = Math.max(
-      0,
-      Math.round((end.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)),
-    );
-  }
-
-  // Couleur perf selon valeur
-  const perf = snapshot?.totalReturn ?? null;
-  const perfColor =
-    perf === null
-      ? "text-slate-300"
-      : perf >= 0
-      ? "text-emerald-300"
-      : "text-rose-300";
-
-  return (
-    <section className="relative overflow-hidden bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 text-white">
-      <div
-        className="absolute inset-0 opacity-[0.06]"
-        style={{
-          backgroundImage:
-            "radial-gradient(circle at 1px 1px, white 1px, transparent 0)",
-          backgroundSize: "32px 32px",
-        }}
-      />
-      <div className="absolute -top-40 -right-40 w-96 h-96 bg-blue-500/20 rounded-full blur-3xl" />
-      <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-indigo-500/15 rounded-full blur-3xl" />
-
-      <div className="relative max-w-7xl mx-auto px-4 md:px-6 pt-10 md:pt-14 pb-10 md:pb-14">
-        <div className="flex flex-wrap items-end justify-between gap-3 mb-7">
-          <div>
-            <div className="text-[11px] uppercase tracking-wider font-semibold text-blue-300">
-              Espace membre
-            </div>
-            <h1 className="text-3xl md:text-5xl font-bold mt-1.5 leading-tight">
-              Bonjour {displayName} 👋
-            </h1>
-            <p className="text-sm md:text-base text-slate-300 mt-2">
-              {season
-                ? `Saison ${season.name.toLowerCase()} en cours${
-                    daysToEnd !== null ? ` · clôture dans ${daysToEnd} jours` : ""
-                  }`
-                : "Tout est prêt pour votre prochain investissement."}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Link
-              href="/messagerie"
-              className="relative bg-white/10 hover:bg-white/15 border border-white/20 text-white font-medium px-4 py-2 rounded-md text-sm transition flex items-center gap-2"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-              </svg>
-              Messagerie
-              {unread > 0 && (
-                <span className="bg-rose-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
-                  {unread > 99 ? "99+" : unread}
-                </span>
-              )}
-            </Link>
-            <Link
-              href="/compte"
-              className="bg-white/10 hover:bg-white/15 border border-white/20 text-white font-medium px-4 py-2 rounded-md text-sm transition"
-            >
-              Mon compte
-            </Link>
-          </div>
-        </div>
-
-        {/* Tiles dashboard */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
-          {/* Tile 1 : portefeuille */}
-          {snapshot && season ? (
-            <Link
-              href="/academie/simulateur"
-              className="group bg-white/10 hover:bg-white/15 border border-white/15 rounded-xl p-5 backdrop-blur transition"
-            >
-              <div className="flex items-center justify-between mb-2">
-                <div className="text-[11px] uppercase tracking-wide text-slate-400 font-semibold">
-                  Mon portefeuille simulateur
-                </div>
-                {rank !== null && (
-                  <div className="text-xs text-slate-300">
-                    Rang <span className="font-bold text-white">#{rank}</span>
-                    {totalPlayers > 0 && (
-                      <span className="text-slate-400">/{totalPlayers}</span>
-                    )}
-                  </div>
-                )}
-              </div>
-              <div className="text-3xl md:text-4xl font-bold tabular-nums">
-                {fmtFCFAShort(snapshot.totalValue)}
-                <span className="text-sm text-slate-400 font-normal ml-1.5">FCFA</span>
-              </div>
-              <div className="flex items-center gap-2 mt-1">
-                <span className={`text-base font-semibold tabular-nums ${perfColor}`}>
-                  {fmtPct(perf, 2)}
-                </span>
-                <span className="text-[11px] text-slate-400">
-                  vs {fmtFCFAShort(snapshot.initialCapital)} initial
-                </span>
-              </div>
-              <div className="mt-3 text-xs text-blue-300 group-hover:underline">
-                Passer un ordre →
-              </div>
-            </Link>
-          ) : season ? (
-            <Link
-              href="/academie/simulateur"
-              className="group bg-emerald-500/10 hover:bg-emerald-500/15 border border-emerald-500/30 rounded-xl p-5 backdrop-blur transition"
-            >
-              <div className="text-[11px] uppercase tracking-wide text-emerald-300 font-semibold">
-                ★ Saison ouverte
-              </div>
-              <div className="text-xl md:text-2xl font-bold mt-2 leading-tight">
-                Rejoindre la saison
-              </div>
-              <p className="text-sm text-slate-300 mt-2 leading-relaxed">
-                Recevez {fmtFCFAShort(season.initial_capital)} FCFA virtuels et défiez les autres
-                membres sur la BRVM.
-              </p>
-              <div className="mt-3 text-xs text-emerald-300 group-hover:underline">
-                Commencer à jouer →
-              </div>
-            </Link>
-          ) : (
-            <div className="bg-white/5 border border-white/10 rounded-xl p-5">
-              <div className="text-[11px] uppercase tracking-wide text-slate-400 font-semibold">
-                Simulateur
-              </div>
-              <div className="text-base font-semibold mt-1.5">
-                Aucune saison active
-              </div>
-              <p className="text-xs text-slate-400 mt-1.5">
-                Une nouvelle saison ouvrira prochainement.
-              </p>
-            </div>
-          )}
-
-          {/* Tile 2 : messagerie */}
-          <Link
-            href="/messagerie"
-            className="group bg-white/10 hover:bg-white/15 border border-white/15 rounded-xl p-5 backdrop-blur transition"
-          >
-            <div className="text-[11px] uppercase tracking-wide text-slate-400 font-semibold">
-              Messagerie
-            </div>
-            <div className="flex items-baseline gap-3 mt-2">
-              <span className="text-3xl md:text-4xl font-bold tabular-nums">
-                {unread}
-              </span>
-              <span className="text-sm text-slate-300">
-                {unread === 0
-                  ? "Aucun nouveau message"
-                  : unread === 1
-                  ? "message non lu"
-                  : "messages non lus"}
-              </span>
-            </div>
-            <p className="text-xs text-slate-400 mt-2 leading-relaxed">
-              Échangez en privé avec les autres membres : analyses, idées, opportunités.
-            </p>
-            <div className="mt-3 text-xs text-blue-300 group-hover:underline">
-              Ouvrir la messagerie →
-            </div>
-          </Link>
-
-          {/* Tile 3 : article featured */}
-          {featuredArticle ? (
-            <Link
-              href={`/academie/magazine/article/${featuredArticle.slug}`}
-              className="group bg-white/10 hover:bg-white/15 border border-white/15 rounded-xl p-5 backdrop-blur transition flex flex-col"
-            >
-              <div className="text-[11px] uppercase tracking-wide text-slate-400 font-semibold">
-                À la une du magazine
-              </div>
-              <div
-                className="text-base md:text-lg font-bold mt-2 leading-snug line-clamp-3"
-                style={{ fontFamily: "Georgia, serif" }}
-              >
-                {featuredArticle.title}
-              </div>
-              <p className="text-xs text-slate-300 mt-2 leading-relaxed line-clamp-3 flex-1">
-                {featuredArticle.excerpt}
-              </p>
-              <div className="mt-3 flex items-center justify-between text-xs">
-                <span className="text-slate-400">
-                  {featuredArticle.readingTimeMinutes} min de lecture
-                </span>
-                <span className="text-blue-300 group-hover:underline">Lire →</span>
-              </div>
-            </Link>
-          ) : null}
-        </div>
-
-        {/* Quick links horizontaux */}
-        <div className="mt-6 flex flex-wrap gap-2">
-          <QuickPill href="/marches/actions" icon="📊">
-            Marchés BRVM
-          </QuickPill>
-          <QuickPill href="/marche-monetaire" icon="💱">
-            Marché monétaire
-          </QuickPill>
-          <QuickPill href="/macro/matieres-premieres" icon="🌾">
-            Matières premières
-          </QuickPill>
-          <QuickPill href="/macro/devises" icon="💵">
-            Devises &amp; FX
-          </QuickPill>
-          <QuickPill href="/academie/formations" icon="🎓">
-            Formations
-          </QuickPill>
-          <QuickPill href="/academie/glossaire" icon="📖">
-            Glossaire
-          </QuickPill>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function QuickPill({
-  href,
-  icon,
-  children,
-}: {
-  href: string;
-  icon: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <Link
-      href={href}
-      className="bg-white/5 hover:bg-white/10 border border-white/10 text-white text-xs font-medium px-3 py-1.5 rounded-full transition flex items-center gap-1.5"
-    >
-      <span>{icon}</span>
-      <span>{children}</span>
-    </Link>
-  );
-}
-

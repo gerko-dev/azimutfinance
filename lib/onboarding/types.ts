@@ -3,6 +3,11 @@
  * Doit rester aligne avec les enums Postgres (cf. supabase/schema.sql).
  */
 
+/**
+ * Les 8 pays UEMOA — mis en avant en accès rapide dans le wizard /bienvenue et
+ * dans les nudges. La liste mondiale complète (bouton « Autre pays ») est dans
+ * ./countries.ts.
+ */
 export const COUNTRIES = [
   { code: "ci", flag: "🇨🇮", label: "Côte d'Ivoire" },
   { code: "sn", flag: "🇸🇳", label: "Sénégal" },
@@ -14,8 +19,14 @@ export const COUNTRIES = [
   { code: "gw", flag: "🇬🇼", label: "Guinée-Bissau" },
 ] as const;
 
-export type CountryCode = (typeof COUNTRIES)[number]["code"];
-export const COUNTRY_CODES = COUNTRIES.map((c) => c.code) as CountryCode[];
+/**
+ * Code pays stocké sur le profil : ISO 3166-1 alpha-2 minuscule, pouvant être
+ * N'IMPORTE QUEL pays (pas seulement UEMOA) — d'où `string` et non une union
+ * fermée. Validation via isWorldCountryCode (./countries.ts).
+ */
+export type CountryCode = string;
+/** Codes des 8 pays UEMOA (accès rapide). */
+export const COUNTRY_CODES = COUNTRIES.map((c) => c.code) as string[];
 
 export const EXPERIENCE_LEVELS = [
   {

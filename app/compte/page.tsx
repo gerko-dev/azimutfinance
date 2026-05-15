@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import Header from "@/components/Header";
+import PageHero from "@/components/PageHero";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import SignOutButton from "./SignOutButton";
 import {
@@ -9,6 +10,7 @@ import {
   HORIZONS,
   INTERESTS,
 } from "@/lib/onboarding/types";
+import { getCountryLabel } from "@/lib/onboarding/countries";
 import { getMyInscriptions } from "@/lib/formations/queries";
 import {
   INSCRIPTION_STATUS_COLOR,
@@ -34,7 +36,9 @@ const ROLE_LABELS: Record<string, { label: string; tone: string }> = {
   pro: { label: "Pro", tone: "bg-purple-100 text-purple-700" },
 };
 
-const COUNTRY_LABEL = Object.fromEntries(
+// Libellés UEMOA avec emoji drapeau ; les pays hors UEMOA passent par
+// getCountryLabel (nom français de la liste mondiale).
+const COUNTRY_LABEL: Record<string, string> = Object.fromEntries(
   COUNTRIES.map((c) => [c.code, `${c.flag} ${c.label}`])
 );
 const EXPERIENCE_LABEL = Object.fromEntries(
@@ -91,19 +95,14 @@ export default async function ComptePage() {
   return (
     <div className="min-h-screen bg-slate-50">
       <Header />
+      <PageHero
+        breadcrumb={[{ label: "Accueil", href: "/" }, { label: "Mon compte" }]}
+        title="Mon compte"
+        subtitle={`Bienvenue${profile?.full_name ? `, ${profile.full_name}` : ""}.`}
+      >
+        <SignOutButton />
+      </PageHero>
       <main className="max-w-3xl mx-auto px-4 md:px-6 py-8 md:py-12 space-y-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-semibold text-slate-900">
-              Mon compte
-            </h1>
-            <p className="text-sm text-slate-500 mt-1">
-              Bienvenue{profile?.full_name ? `, ${profile.full_name}` : ""}.
-            </p>
-          </div>
-          <SignOutButton />
-        </div>
-
         {hasMissingFields && (
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-center justify-between gap-4">
             <div>
@@ -174,7 +173,12 @@ export default async function ComptePage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
             <Field
               label="Pays"
-              value={profile?.country ? COUNTRY_LABEL[profile.country] : "—"}
+              value={
+                profile?.country
+                  ? COUNTRY_LABEL[profile.country] ??
+                    getCountryLabel(profile.country)
+                  : "—"
+              }
             />
             <Field
               label="Niveau"

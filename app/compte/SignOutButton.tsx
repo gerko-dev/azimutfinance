@@ -9,7 +9,7 @@ function Inner() {
     <button
       type="submit"
       disabled={pending}
-      className="px-4 py-2 text-sm border border-slate-300 rounded-md hover:bg-slate-50 disabled:opacity-50"
+      className="px-4 py-2 text-sm bg-white/10 text-white border border-white/20 rounded-md hover:bg-white/20 disabled:opacity-50"
     >
       {pending ? "Déconnexion..." : "Se déconnecter"}
     </button>

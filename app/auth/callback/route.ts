@@ -14,7 +14,10 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/compte";
+  // Sans `next` explicite (connexion OAuth, confirmation d'email), on renvoie
+  // le membre sur sa page d'accueil ("/"). Un `next` explicite (ex. reset de
+  // mot de passe → /nouveau-mot-de-passe) est respecté.
+  const next = searchParams.get("next") ?? "/";
 
   // Supabase peut rediriger ici avec une erreur explicite plutôt qu'un `code`
   // (OAuth refusé par l'utilisateur, lien de confirmation/reset expiré, ...).

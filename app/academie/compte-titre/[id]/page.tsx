@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import Header from "@/components/Header";
+import PageHero from "@/components/PageHero";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   getAccountEquityCurve,
@@ -54,41 +55,33 @@ export default async function CompteDashboard({
   return (
     <div className="min-h-screen bg-slate-50">
       <Header />
-      <main className="max-w-7xl mx-auto px-4 md:px-6 py-5 md:py-6 space-y-5">
-        <div className="text-xs text-slate-500">
-          <Link href="/academie/compte-titre" className="hover:text-slate-700">
-            Suivi de compte titre
-          </Link>{" "}
-          &rsaquo; {account.name}
+      <PageHero
+        breadcrumb={[
+          { label: "Accueil", href: "/" },
+          { label: "Suivi de compte titre", href: "/academie/compte-titre" },
+          { label: account.name },
+        ]}
+        title={account.name}
+        subtitle={`${account.broker ? `${account.broker} · ` : ""}ouvert le ${fmtDateFr(
+          account.openingDate,
+        )} · devise ${account.currency}`}
+      >
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/academie/compte-titre/${id}/parametres`}
+            className="text-xs bg-white/10 text-white hover:bg-white/20 border border-white/20 font-medium px-3 py-1.5 rounded"
+          >
+            Paramètres
+          </Link>
+          <Link
+            href={`/academie/compte-titre/${id}/transactions/nouvelle`}
+            className="text-sm bg-blue-600 hover:bg-blue-700 text-white font-medium px-3 py-1.5 rounded"
+          >
+            + Transaction
+          </Link>
         </div>
-
-        <header className="flex items-baseline justify-between flex-wrap gap-3">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-semibold text-slate-900">
-              {account.name}
-            </h1>
-            <p className="text-sm text-slate-500 mt-1">
-              {account.broker ? `${account.broker} · ` : ""}
-              ouvert le {fmtDateFr(account.openingDate)} · devise{" "}
-              {account.currency}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Link
-              href={`/academie/compte-titre/${id}/parametres`}
-              className="text-xs bg-white hover:bg-slate-50 text-slate-700 font-medium px-3 py-1.5 rounded border border-slate-300"
-            >
-              Paramètres
-            </Link>
-            <Link
-              href={`/academie/compte-titre/${id}/transactions/nouvelle`}
-              className="text-sm bg-slate-900 hover:bg-slate-700 text-white font-medium px-3 py-1.5 rounded"
-            >
-              + Transaction
-            </Link>
-          </div>
-        </header>
-
+      </PageHero>
+      <main className="max-w-7xl mx-auto px-4 md:px-6 py-5 md:py-6 space-y-5">
         <AccountKPIs snapshot={snapshot} />
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-5">

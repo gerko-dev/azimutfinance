@@ -48,8 +48,8 @@ export default async function SourcesPage() {
           <OfficialCard
             name="BRVM / DC-BR"
             scope="Bourse Régionale des Valeurs Mobilières / Dépositaire central"
-            usage="Cours live actions et obligations cotées, indices BRVMC/BRVM30/sectoriels, capitalisations, volumes."
-            ingestion="Snapshot live via lib/brvm/* (cache 5 min). Pas de scraping CSV — l'API BRVM est consommée à la volée."
+            usage="Cours actions et obligations cotées (différés ~15 min), indices BRVMC/BRVM30/sectoriels, capitalisations, volumes."
+            ingestion="Snapshot BRVM via lib/brvm/* — la BRVM diffuse en différé ~15 min, cache applicatif 5 min par-dessus. Pas de scraping CSV : l'API BRVM est consommée à la volée."
             pages="/marches/actions, /marches/obligations, /titre/[code], /obligation/[isin]"
           />
           <OfficialCard

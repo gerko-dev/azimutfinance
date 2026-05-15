@@ -5,7 +5,7 @@ export default function TopMovers() {
     <div className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
       <div className="flex justify-between items-baseline mb-3">
         <h3 className="text-base font-medium">Top mouvements</h3>
-        <span className="text-xs text-slate-400">Temps réel</span>
+        <span className="text-xs text-slate-400">Différé ~15 min</span>
       </div>
       <div className="space-y-3">
         {topMovers.map((stock, i) => (

@@ -10,6 +10,7 @@ import {
   type AdminMember,
   type AppRole,
 } from "@/lib/admin/types";
+import { getCountryLabel } from "@/lib/onboarding/countries";
 import { fmtDateTime } from "./format";
 
 const ALL_ROLES: AppRole[] = [
@@ -203,8 +204,8 @@ export default function MembersTable({
                         </span>
                       )}
                     </td>
-                    <td className="py-2 px-2 text-slate-600 uppercase">
-                      {m.country || "—"}
+                    <td className="py-2 px-2 text-slate-600">
+                      {m.country ? getCountryLabel(m.country) : "—"}
                     </td>
                     <td className="py-2 px-2 text-slate-500 text-[11px] tabular-nums">
                       {fmtDateTime(m.created_at)}

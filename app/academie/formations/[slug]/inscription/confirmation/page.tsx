@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import Header from "@/components/Header";
+import PageHero from "@/components/PageHero";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   INSCRIPTION_STATUS_COLOR,
@@ -48,15 +49,27 @@ export default async function ConfirmationPage({
   return (
     <div className="min-h-screen bg-slate-50">
       <Header />
+      <PageHero
+        breadcrumb={[
+          { label: "Accueil", href: "/" },
+          { label: "Catalogue", href: "/academie/formations" },
+          {
+            label: formation.title,
+            href: `/academie/formations/${formation.slug}`,
+          },
+          { label: "Inscription confirmée" },
+        ]}
+        title="Inscription confirmée"
+      />
 
       <main className="max-w-2xl mx-auto px-4 md:px-6 py-8 md:py-10">
         <div className="bg-white rounded-lg border border-slate-200 p-6 md:p-8 text-center">
           <div className="w-16 h-16 mx-auto rounded-full bg-emerald-50 flex items-center justify-center mb-4">
             <span className="text-3xl text-emerald-600">✓</span>
           </div>
-          <h1 className="text-2xl font-semibold text-slate-900">
+          <h2 className="text-2xl font-semibold text-slate-900">
             Inscription enregistrée
-          </h1>
+          </h2>
           <p className="text-sm text-slate-600 mt-2">
             Merci ! Votre inscription à <strong>{formation.title}</strong> a bien été prise en compte.
           </p>

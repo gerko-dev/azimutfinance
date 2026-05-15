@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import Header from "@/components/Header";
+import PageHero from "@/components/PageHero";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import OnboardingWizard from "./OnboardingWizard";
 import type { ProfileExtras } from "@/lib/onboarding/types";
@@ -44,6 +45,11 @@ export default async function BienvenuePage() {
   return (
     <div className="min-h-screen bg-slate-50">
       <Header />
+      <PageHero
+        breadcrumb={[{ label: "Accueil", href: "/" }, { label: "Bienvenue" }]}
+        title="Bienvenue sur AzimutFinance"
+        subtitle="En quelques questions rapides, on personnalise ton expérience."
+      />
       <main className="max-w-2xl mx-auto px-4 md:px-6 py-8 md:py-12">
         <OnboardingWizard
           initial={initial}

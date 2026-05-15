@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Header from "@/components/Header";
+import PageHero from "@/components/PageHero";
 import MessagerieApp from "@/components/messagerie/MessagerieApp";
 import {
   getConversation,
@@ -87,17 +88,27 @@ export default async function Page({
     initialOther = conv?.other ?? null;
   }
 
+  // Rôle de l'utilisateur : conditionne le droit d'INITIER une conversation.
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+  const currentUserRole = (profile?.role as string | null) ?? null;
+
   return (
     <div className="min-h-screen bg-slate-50">
       <Header />
 
-      <main className="max-w-7xl mx-auto px-4 md:px-6 py-4 md:py-6">
-        <div className="text-xs text-slate-500 mb-3">
-          Accueil &rsaquo; <span className="text-slate-700">Messagerie</span>
-        </div>
+      <PageHero
+        breadcrumb={[{ label: "Accueil", href: "/" }, { label: "Messagerie" }]}
+        title="Messagerie"
+      />
 
+      <main className="max-w-7xl mx-auto px-4 md:px-6 py-4 md:py-6">
         <MessagerieApp
           currentUserId={user.id}
+          currentUserRole={currentUserRole}
           conversations={conversations}
           initialActiveId={activeId}
           initialMessages={initialMessages}

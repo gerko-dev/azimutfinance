@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
-  COUNTRY_CODES,
   EXPERIENCE_CODES,
   HORIZON_CODES,
   INTEREST_CODES,
@@ -17,6 +16,7 @@ import {
   type Interest,
   type NudgeField,
 } from "./types";
+import { isWorldCountryCode } from "./countries";
 
 export type OnboardingState = {
   error?: string;
@@ -32,7 +32,8 @@ const STEP_TO_FIELDS: Record<number, NudgeField[]> = {
 };
 
 function isCountry(v: unknown): v is CountryCode {
-  return typeof v === "string" && (COUNTRY_CODES as string[]).includes(v);
+  // Tout pays ISO 3166-1 alpha-2 connu (UEMOA ou non).
+  return isWorldCountryCode(v);
 }
 function isExperience(v: unknown): v is ExperienceLevel {
   return typeof v === "string" && (EXPERIENCE_CODES as string[]).includes(v);
@@ -144,7 +145,8 @@ export async function skipOnboardingAction() {
     .update({ onboarded_at: new Date().toISOString() })
     .eq("id", userId);
   revalidatePath("/", "layout");
-  redirect("/compte");
+  // Fin du parcours d'inscription : direction la page d'accueil membre.
+  redirect("/");
 }
 
 // ----------------------------------------------------------------
