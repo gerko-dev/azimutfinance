@@ -27,6 +27,7 @@ import {
   getStatement,
 } from "@/lib/fundamentals";
 import { computeRatiosByTicker, computeLiveRatios } from "@/lib/fundamentalsCalc";
+import { computePriceTarget } from "@/lib/priceTarget";
 import { loadDbNewsByTicker } from "@/lib/newsFromDb";
 import { fetchUserRole } from "@/lib/auth/userRole";
 import { pageMetadata, breadcrumbJsonLd, listedCompanyJsonLd } from "@/lib/seo";
@@ -184,13 +185,21 @@ export default async function TitrePage({
       : null;
 
   // Pairs du même secteur, top 6 par capitalisation (hors le titre courant)
-  const peers = (await loadAllActionsEnriched())
+  const allActions = await loadAllActionsEnriched();
+  const peers = allActions
     .filter(
       (a) =>
         a.sector === stock.sector && a.code !== codeUpper && a.price > 0
     )
     .sort((a, b) => b.capitalization - a.capitalization)
     .slice(0, 6);
+
+  // Anticipation de cours — 8 methodes croisees, agregees en cible centrale
+  // + intervalle ±1σ. Server-side (acces fs aux CSV fondamentaux + Sika).
+  const priceTarget =
+    stock.price > 0
+      ? computePriceTarget(codeUpper, stock.price, priceHistory, allActions)
+      : null;
 
   // Sparklines : 30 derniers points de prix par pair
   const peerHistoriesAll = loadMultipleIndicesHistory(peers.map((p) => p.code));
@@ -257,6 +266,7 @@ export default async function TitrePage({
         statements={statements}
         news={news}
         advancedStats={advancedStats}
+        priceTarget={priceTarget}
         livePrice={{
           fetchedAt: brvmSnapshot.fetchedAt,
           sessionLabel: brvmSnapshot.sessionLabel,

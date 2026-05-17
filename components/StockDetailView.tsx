@@ -36,9 +36,11 @@ import type {
 import type { ActionRow } from "@/lib/dataLoader";
 import type { FundTitre, FundRatios, StatementLine } from "@/lib/fundamentals";
 import type { NewsItem } from "@/lib/newsTypes";
+import type { PriceTarget } from "@/lib/priceTarget";
 import FundamentalsView from "./FundamentalsView";
 import DividendsView from "./DividendsView";
 import NewsView from "./NewsView";
+import PriceTargetView from "./PriceTargetView";
 import AdvancedStatsView from "./AdvancedStatsView";
 import LivePriceBadge from "./LivePriceBadge";
 import AddToWatchlistButton from "./watchlist/AddToWatchlistButton";
@@ -50,6 +52,7 @@ type Tab =
   | "overview"
   | "stats"
   | "fundamentals"
+  | "anticipation"
   | "dividends"
   | "technical"
   | "news";
@@ -186,6 +189,7 @@ type Props = {
   };
   news: NewsItem[];
   advancedStats: AdvancedStatsSnapshot;
+  priceTarget: PriceTarget | null;
   livePrice?: {
     fetchedAt: string;
     sessionLabel: string | null;
@@ -270,6 +274,7 @@ export default function StockDetailView({
   statements,
   news,
   advancedStats,
+  priceTarget,
   livePrice,
   userRole,
 }: Props) {
@@ -488,6 +493,7 @@ export default function StockDetailView({
               { id: "overview", label: "Vue d'ensemble" },
               { id: "stats", label: "Statistiques" },
               { id: "fundamentals", label: "Fondamentaux" },
+              { id: "anticipation", label: "Anticipation" },
               { id: "technical", label: "Technique" },
               { id: "dividends", label: "Dividendes" },
               { id: "news", label: "Actualités" },
@@ -996,6 +1002,14 @@ export default function StockDetailView({
             fundTitre={fundTitre}
             ratios={ratios}
             statements={statements}
+            userRole={userRole}
+          />
+        )}
+
+        {activeTab === "anticipation" && (
+          <PriceTargetView
+            ticker={stock.code}
+            target={priceTarget}
             userRole={userRole}
           />
         )}
