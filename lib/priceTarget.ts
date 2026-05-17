@@ -139,59 +139,61 @@ const WEIGHTS: Record<string, number> = {
 };
 
 // ───────────────────────────────────────────────────────────────────────────
-// METHODE 1 — PROJECTION T1 -> ANNUEL
+// METHODE 1 — PROJECTION PARTIEL (9M > S1 > T1) -> ANNUEL
+// La projection cherche a anticiper le RN annuel de l'annee en cours a
+// partir du resultat partiel le plus avance publie pour cette annee. Au fil
+// de l'annee la base d'extrapolation devient plus precise (9M > S1 > T1).
+// Si AUCUN partiel n'est publie pour l'annee en cours -> methode N/A
+// (pas de fallback sur les annees anterieures).
 // ───────────────────────────────────────────────────────────────────────────
-function methodT1Projection(
+function methodPartialProjection(
   ticker: string,
   ratios: FundRatios[],
   currentYear: number,
 ): PriceTargetMethod {
   const id = "t1_projection";
-  const label = "Projection T1 → Annuel";
   const out: PriceTargetMethod = {
     id,
-    label,
+    label: "Projection partielle → Annuel",
     value: null,
     weight: WEIGHTS[id],
     hypotheses: [],
   };
 
-  // Lit le RN T1 de l'annee en cours (ou la plus recente avec T1)
-  let t1Year = currentYear;
-  let t1Rn: number | null = getQuarterly(ticker, t1Year, "T1", "CR_RNET");
-  if (t1Rn === null) {
-    // fallback : derniere annee avec T1 publie
-    for (let y = currentYear; y >= currentYear - 2; y--) {
-      const v = getQuarterly(ticker, y, "T1", "CR_RNET");
-      if (v !== null && v !== 0) {
-        t1Year = y;
-        t1Rn = v;
-        break;
-      }
+  // Priorite au partiel le plus avance disponible pour l'annee en cours.
+  const periods: Array<"9M" | "S1" | "T1"> = ["9M", "S1", "T1"];
+  let selected: { periode: "9M" | "S1" | "T1"; value: number } | null = null;
+  for (const p of periods) {
+    const v = getQuarterly(ticker, currentYear, p, "CR_RNET");
+    if (v !== null && v !== 0) {
+      selected = { periode: p, value: v };
+      break;
     }
   }
-  if (t1Rn === null || t1Rn === 0) {
-    out.reasonUnavailable = "Pas de Résultat Net T1 publié récemment";
+  if (!selected) {
+    out.reasonUnavailable = `Aucun résultat partiel publié pour ${currentYear} (T1/S1/9M)`;
     return out;
   }
+  out.label = `Projection ${selected.periode} → Annuel`;
 
-  // Taux d'avancement T1 historique : moyenne de (T1_N / Annuel_N) sur les
-  // 5 dernieres annees ou les deux sont disponibles.
-  const ratios5 = ratios.slice(-6, -1); // exclut l'annee en cours
+  // Taux d'avancement historique pour la MEME periode (T1->Annuel comparable
+  // a T1 historique, pas a S1). Sur les 5 dernieres annees ou les deux sont
+  // disponibles.
+  const ratios5 = ratios.slice(-6);
   const advancementRates: number[] = [];
   for (const r of ratios5) {
-    const t1 = getQuarterly(ticker, r.exercice, "T1", "CR_RNET");
-    if (t1 !== null && r.resultatNet > 0 && t1 > 0) {
-      advancementRates.push(t1 / r.resultatNet);
+    const partial = getQuarterly(ticker, r.exercice, selected.periode, "CR_RNET");
+    if (partial !== null && r.resultatNet > 0 && partial > 0) {
+      advancementRates.push(partial / r.resultatNet);
     }
   }
   const tauxAvancement = avg(advancementRates);
   if (tauxAvancement === null || tauxAvancement <= 0) {
-    out.reasonUnavailable = "Pas d'historique T1/Annuel exploitable";
+    out.reasonUnavailable = `Pas d'historique ${selected.periode}/Annuel exploitable`;
     return out;
   }
 
-  const rnProjete = t1Rn / tauxAvancement;
+  const rnProjete = selected.value / tauxAvancement;
   const nbT = ratios[ratios.length - 1]?.nbTitres ?? 0;
   if (nbT <= 0) {
     out.reasonUnavailable = "Nombre de titres indisponible";
@@ -199,7 +201,6 @@ function methodT1Projection(
   }
   const bpaProjete = rnProjete / nbT;
 
-  // Payout moyen historique (DPA/BPA) sur les 5 derniers exercices.
   const payouts: number[] = [];
   for (const r of ratios5) {
     if (r.dpa > 0 && r.bpa !== null && r.bpa > 0) {
@@ -213,7 +214,6 @@ function methodT1Projection(
   }
   const dpaProjete = bpaProjete * payoutMoy;
 
-  // Yield historique moyen (DPA / cours fin d'exercice).
   const yields: number[] = [];
   for (const r of ratios5) {
     if (r.dpa > 0 && r.coursFinEx > 0) {
@@ -226,12 +226,14 @@ function methodT1Projection(
     return out;
   }
 
-  const target = dpaProjete / yieldMoy;
-  out.value = target;
+  out.value = dpaProjete / yieldMoy;
   out.hypotheses = [
-    { label: `RN T1 ${t1Year}`, value: formatBig(t1Rn) },
     {
-      label: "Taux d'avancement T1",
+      label: `RN ${selected.periode} ${currentYear}`,
+      value: formatBig(selected.value),
+    },
+    {
+      label: `Taux d'avancement ${selected.periode}`,
       value: `${(tauxAvancement * 100).toFixed(1)}%`,
     },
     { label: "RN annuel projeté", value: formatBig(rnProjete) },
@@ -259,20 +261,14 @@ function methodYieldHistory(
     hypotheses: [],
   };
 
-  // DPA effectif (dernier > 0)
-  let dpaRef = 0;
-  let dpaYear: number | null = null;
-  for (let i = ratios.length - 1; i >= 0; i--) {
-    if (ratios[i].dpa > 0) {
-      dpaRef = ratios[i].dpa;
-      dpaYear = ratios[i].exercice;
-      break;
-    }
-  }
-  if (dpaRef <= 0) {
-    out.reasonUnavailable = "Aucun dividende historique";
+  // Strict : DPA du dernier exercice publie. Pas de fallback historique :
+  // si le dernier exercice n'a pas annonce de dividende -> methode N/A.
+  const last = ratios[ratios.length - 1];
+  if (!last || last.dpa <= 0) {
+    out.reasonUnavailable = "DPA du dernier exercice non disponible";
     return out;
   }
+  const dpaRef = last.dpa;
 
   const yields = ratios
     .slice(-6)
@@ -287,7 +283,7 @@ function methodYieldHistory(
   out.value = dpaRef / yieldMoy;
   out.hypotheses = [
     {
-      label: `DPA ${dpaYear}`,
+      label: `DPA ${last.exercice}`,
       value: `${Math.round(dpaRef)} FCFA`,
     },
     {
@@ -386,18 +382,13 @@ function methodDDM(ticker: string, ratios: FundRatios[]): PriceTargetMethod {
     hypotheses: [],
   };
 
-  // DPA reference
-  let dpaRef = 0;
-  for (let i = ratios.length - 1; i >= 0; i--) {
-    if (ratios[i].dpa > 0) {
-      dpaRef = ratios[i].dpa;
-      break;
-    }
-  }
-  if (dpaRef <= 0) {
-    out.reasonUnavailable = "Aucun dividende historique (DDM inapplicable)";
+  // Strict : DPA du dernier exercice publie. Pas de fallback.
+  const last = ratios[ratios.length - 1];
+  if (!last || last.dpa <= 0) {
+    out.reasonUnavailable = "DPA du dernier exercice non disponible";
     return out;
   }
+  const dpaRef = last.dpa;
 
   const dpas = ratios
     .slice(-6)
@@ -578,7 +569,7 @@ export function computePriceTarget(
   if (ratios.length === 0) return null;
 
   const methods: PriceTargetMethod[] = [
-    methodT1Projection(tk, ratios, currentYear),
+    methodPartialProjection(tk, ratios, currentYear),
     methodYieldHistory(tk, ratios),
     methodPER(tk, ratios),
     methodTechnical(history),

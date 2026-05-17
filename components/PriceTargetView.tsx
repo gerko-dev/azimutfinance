@@ -267,13 +267,16 @@ export default function PriceTargetView({ ticker, target, userRole }: Props) {
           <h4 className="text-sm font-medium text-slate-900">Méthodologie</h4>
           <ul className="list-disc pl-5 space-y-1">
             <li>
-              <strong>Projection T1</strong> : RN T1 publié / taux
-              d&apos;avancement T1 historique → BPA projeté × payout moyen →
-              DPA projeté / yield moyen.
+              <strong>Projection partielle</strong> : RN partiel publié pour
+              l&apos;année en cours (priorité 9M &gt; S1 &gt; T1) / taux
+              d&apos;avancement historique → BPA projeté × payout moyen →
+              DPA projeté / yield moyen. Si aucun partiel publié pour
+              l&apos;année en cours → méthode non applicable.
             </li>
             <li>
-              <strong>Rendement historique</strong> : dernier DPA versé /
-              yield moyen 5 ans.
+              <strong>Rendement historique</strong> : DPA du dernier exercice
+              publié / yield moyen 5 ans. Si pas de DPA déclaré sur ce
+              dernier exercice → méthode non applicable.
             </li>
             <li>
               <strong>PER moyen × BPA</strong>, <strong>P/B moyen × BV</strong>,
@@ -285,9 +288,10 @@ export default function PriceTargetView({ ticker, target, userRole }: Props) {
               titres du même secteur × BPA du titre.
             </li>
             <li>
-              <strong>Gordon-Shapiro (DDM)</strong> : DPA × (1+g) / (k−g), avec
-              g = croissance géométrique du DPA (cappé ±20%), k = yield
-              historique + 2,5%.
+              <strong>Gordon-Shapiro (DDM)</strong> : DPA dernier × (1+g) /
+              (k−g), avec g = croissance géométrique du DPA (cappé ±20%),
+              k = yield historique + 2,5%. Si pas de DPA sur dernier
+              exercice → méthode non applicable.
             </li>
             <li>
               <strong>Réversion à la moyenne (SMA 200)</strong> : moyenne
