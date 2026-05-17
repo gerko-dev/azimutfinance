@@ -2,10 +2,12 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import CookiePreferencesTrigger from "@/components/CookiePreferencesTrigger";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 export default function Footer() {
+  const pathname = usePathname();
   const year = new Date().getFullYear();
 
   // Auth-aware comme le Header : certains liens (ex. Magazine) sont reserves
@@ -27,6 +29,10 @@ export default function Footer() {
       sub.subscription.unsubscribe();
     };
   }, [supabase]);
+
+  // Le Pro Terminal (/pros/*) a son propre chrome plein ecran : pas de footer.
+  // Early-return APRES tous les useX pour respecter les Rules of Hooks.
+  if (pathname?.startsWith("/pros")) return null;
 
   return (
     <footer className="bg-slate-900 text-slate-300 mt-12">
