@@ -48,3 +48,6 @@ tmp_*
 # python
 __pycache__/
 *.pyc
+
+# Excel autosave next to .xlsb (Microsoft Office)
+*.xlk
