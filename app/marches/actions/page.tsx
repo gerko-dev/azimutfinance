@@ -5,10 +5,7 @@ import ProfileNudge from "@/components/profile/ProfileNudge";
 import {
   loadAllActionsEnriched,
   getActionsMarketStats,
-  loadMultipleIndicesHistory,
   getIndexStats,
-  BRVM_INDEX_CODES,
-  BRVM_INDEX_NAMES,
   buildRiskReturnDataset,
   computeYtdPct,
 } from "@/lib/dataLoader";
@@ -17,20 +14,6 @@ import { getBrvmIndicesSnapshot } from "@/lib/brvm/liveIndices";
 import { fetchUserRole } from "@/lib/auth/userRole";
 
 export const dynamic = "force-dynamic";
-
-const indexColors: Record<string, string> = {
-  BRVMC: "#185FA5",
-  BRVM30: "#0F6E56",
-  BRVMPA: "#7F77DD",
-  BRVMPR: "#D85A30",
-  "BRVM-CB": "#534AB7",
-  "BRVM-CD": "#9333ea",
-  "BRVM-EN": "#854F0B",
-  "BRVM-IN": "#993C1D",
-  "BRVM-SF": "#1D9E75",
-  "BRVM-SP": "#0891b2",
-  "BRVM-TEL": "#db2777",
-};
 
 export default async function Page() {
   // loadAllActionsEnriched : identité titres.csv + cours/volume/var live BRVM
@@ -69,17 +52,6 @@ export default async function Page() {
         : b.volume - a.volume,
     )
     .slice(0, 5);
-
-  // === HISTORIQUES INDICES (CSV) ===
-  const allIndicesHistory = loadMultipleIndicesHistory(BRVM_INDEX_CODES);
-  const indicesSeries = BRVM_INDEX_CODES.filter(
-    (code) => allIndicesHistory[code]?.length > 0,
-  ).map((code) => ({
-    code,
-    name: BRVM_INDEX_NAMES[code] || code,
-    data: allIndicesHistory[code],
-    color: indexColors[code] || "#6b7280",
-  }));
 
   // === KPI BRVM COMPOSITE : prefere live, fallback CSV ===
   const liveComposite = indicesSnapshot.indices.find((i) => i.code === "BRVMC");
@@ -121,7 +93,6 @@ export default async function Page() {
         liveListedCount={liveListedCount}
         topGainers={topGainers}
         topLosers={topLosers}
-        indicesSeries={indicesSeries}
         compositeStat={compositeStat}
         liveIndices={indicesSnapshot.indices}
         liveIndicesYtd={ytdComputed}

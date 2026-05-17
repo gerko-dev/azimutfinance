@@ -3,8 +3,6 @@
 import { useState, useMemo, useEffect, useDeferredValue } from "react";
 import Link from "next/link";
 import {
-  LineChart,
-  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -16,7 +14,6 @@ import {
 } from "recharts";
 import CountryFlag from "./CountryFlag";
 import LivePriceBadge from "./LivePriceBadge";
-import MemberGateDialog from "./MemberGateDialog";
 import type { ActionRow, RiskReturnPoint } from "@/lib/dataLoader";
 import type { BrvmLiveIndex } from "@/lib/brvm/liveIndices";
 import type { UserRole } from "@/lib/auth/userRole";
@@ -31,16 +28,6 @@ function formatBigFCFA(value: number): string {
   if (value >= 1e9) return (value / 1e9).toFixed(1).replace(".", ",") + " Mds FCFA";
   if (value >= 1e6) return (value / 1e6).toFixed(0) + " M FCFA";
   return formatFCFA(value) + " FCFA";
-}
-
-function formatDateShort(date: string): string {
-  if (!date) return "—";
-  return new Date(date).toLocaleDateString("fr-FR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "2-digit",
-    timeZone: "UTC",
-  });
 }
 
 // === COULEURS ET LIBELLES SECTEURS BRVM ===
@@ -103,13 +90,6 @@ function getSectorShort(sector: string): string {
   return sector;
 }
 
-type IndexSeries = {
-  code: string;
-  name: string;
-  data: { date: string; value: number }[];
-  color: string;
-};
-
 type IndexStat = {
   code: string;
   name: string;
@@ -133,7 +113,6 @@ type Props = {
   liveListedCount: number;
   topGainers: ActionRow[];
   topLosers: ActionRow[];
-  indicesSeries: IndexSeries[];
   compositeStat: IndexStat;
   liveIndices: BrvmLiveIndex[];
   liveIndicesYtd: Record<string, number | null>;
@@ -163,8 +142,6 @@ type SortOrder = "asc" | "desc";
 
 const PAGE_SIZE = 20;
 
-type Period = "1M" | "3M" | "6M" | "1A" | "3A" | "5A" | "MAX";
-
 type Quadrant = "cashcow" | "hiddengem" | "defensive" | "speculative";
 
 const QUADRANT_LABELS: Record<Quadrant, string> = {
@@ -174,23 +151,12 @@ const QUADRANT_LABELS: Record<Quadrant, string> = {
   speculative: "⚡ Spéculatives",
 };
 
-const periodToDays: Record<Period, number | null> = {
-  "1M": 30,
-  "3M": 90,
-  "6M": 180,
-  "1A": 365,
-  "3A": 365 * 3,
-  "5A": 365 * 5,
-  MAX: null,
-};
-
 export default function ActionsBRVMView({
   actions,
   marketStats,
   liveListedCount,
   topGainers,
   topLosers,
-  indicesSeries,
   compositeStat,
   liveIndices,
   liveIndicesYtd,
@@ -230,70 +196,6 @@ export default function ActionsBRVMView({
   const deferredSearch = useDeferredValue(search);
   const deferredSector = useDeferredValue(filterSector);
   const deferredCountry = useDeferredValue(filterCountry);
-
-  // === GRAPHIQUE INDICES : selection toggle ===
-  const [activeIndices, setActiveIndices] = useState<Set<string>>(
-    new Set(["BRVMC", "BRVM30"])
-  );
-
-  function toggleIndex(code: string) {
-    const newSet = new Set(activeIndices);
-    if (newSet.has(code)) {
-      newSet.delete(code);
-    } else {
-      newSet.add(code);
-    }
-    setActiveIndices(newSet);
-  }
-
-  // === SELECTEUR DE PERIODE ===
-  const [period, setPeriod] = useState<Period>("1A");
-
-  // Gate « MAX » : reserve aux membres connectes. Au clic d'un visiteur,
-  // on affiche une invitation a l'inscription au lieu d'appliquer la periode.
-  const [memberGateOpen, setMemberGateOpen] = useState(false);
-
-  // Mode base 100 : actif quand >=2 indices selectionnes (permet la comparaison
-  // d'indices d'echelles tres differentes — ex BRVMC ~400 vs BRVM-TEL ~100).
-  const useBase100 = activeIndices.size >= 2;
-
-  // === DONNEES POUR LE GRAPHIQUE ===
-  const chartData = useMemo(() => {
-    const days = periodToDays[period];
-    let cutoffDate: string | null = null;
-    if (days !== null) {
-      const d = new Date();
-      d.setUTCDate(d.getUTCDate() - days);
-      cutoffDate = d.toISOString().substring(0, 10);
-    }
-
-    const dateMap = new Map<string, Record<string, number | string>>();
-    // Valeurs de reference (1er point >= cutoff) pour la base 100, calculees
-    // par serie — permet de tracer chaque indice sur la meme echelle.
-    const baseValues = new Map<string, number>();
-
-    for (const series of indicesSeries) {
-      if (!activeIndices.has(series.code)) continue;
-      const filtered = cutoffDate
-        ? series.data.filter((p) => p.date >= cutoffDate!)
-        : series.data;
-      const baseValue = filtered.find((p) => p.value > 0)?.value ?? 0;
-      if (useBase100 && baseValue > 0) baseValues.set(series.code, baseValue);
-
-      for (const point of filtered) {
-        const entry = dateMap.get(point.date) || { date: point.date };
-        if (useBase100 && baseValue > 0) {
-          entry[series.code] = (point.value / baseValue) * 100;
-        } else {
-          entry[series.code] = point.value;
-        }
-        dateMap.set(point.date, entry);
-      }
-    }
-    return Array.from(dateMap.values()).sort((a, b) =>
-      String(a.date).localeCompare(String(b.date))
-    );
-  }, [indicesSeries, activeIndices, period, useBase100]);
 
   // === CLASSIFICATION PAR QUADRANT (medianes du dataset risk-return) ===
   const { codeToQuadrant, quadrantCounts } = useMemo(() => {
@@ -562,160 +464,6 @@ export default function ActionsBRVMView({
             </div>
           </section>
         )}
-
-        {/* ====== GRAPHIQUE INDICES ====== */}
-        <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
-          <div className="flex justify-between items-center flex-wrap gap-2 mb-3">
-            <div>
-              <h2 className="text-lg md:text-xl font-semibold">
-                📊 Évolution des indices BRVM
-              </h2>
-              {useBase100 ? (
-                <div className="text-[11px] text-slate-500 mt-1">
-                  Base 100 au {(() => {
-                    const first = chartData[0];
-                    if (!first) return "—";
-                    const d = String(first.date);
-                    return new Date(d).toLocaleDateString("fr-FR", {
-                      day: "2-digit",
-                      month: "short",
-                      year: "numeric",
-                      timeZone: "UTC",
-                    });
-                  })()} · permet la comparaison entre indices
-                </div>
-              ) : (
-                <div className="text-[11px] text-slate-500 mt-1">
-                  Ouvrez un indice pour les outils d&apos;analyse technique
-                  (SMA, EMA, Bollinger, RSI, MACD).
-                </div>
-              )}
-            </div>
-            <div className="inline-flex rounded-md bg-slate-100 p-0.5 text-xs">
-              {(["1M", "3M", "6M", "1A", "3A", "5A", "MAX"] as Period[]).map((p) => {
-                const gated = p === "MAX" && !isMember;
-                return (
-                  <button
-                    key={p}
-                    onClick={() => {
-                      if (gated) {
-                        setMemberGateOpen(true);
-                        return;
-                      }
-                      setPeriod(p);
-                    }}
-                    aria-haspopup={gated ? "dialog" : undefined}
-                    title={gated ? "Vue Max — réservée aux membres" : undefined}
-                    className={`px-2.5 py-1 rounded transition inline-flex items-center gap-1 ${
-                      period === p
-                        ? "bg-white shadow-sm font-medium text-blue-900"
-                        : "text-slate-500 hover:text-slate-700"
-                    }`}
-                  >
-                    {p}
-                    {gated && <span aria-hidden className="text-[10px]">🔒</span>}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="flex flex-wrap gap-2 mb-4">
-            {indicesSeries.map((s) => {
-              const isActive = activeIndices.has(s.code);
-              return (
-                <button
-                  key={s.code}
-                  onClick={() => toggleIndex(s.code)}
-                  className={`text-xs px-3 py-1.5 rounded-md border transition ${
-                    isActive
-                      ? "border-slate-300 shadow-sm"
-                      : "border-slate-200 text-slate-500 bg-slate-50 hover:bg-white"
-                  }`}
-                  style={
-                    isActive
-                      ? {
-                          backgroundColor: s.color + "15",
-                          color: s.color,
-                          borderColor: s.color + "40",
-                        }
-                      : {}
-                  }
-                >
-                  <span
-                    className="inline-block w-2 h-2 rounded-full mr-1.5"
-                    style={{ backgroundColor: isActive ? s.color : "#cbd5e1" }}
-                  />
-                  {s.name}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="h-72 md:h-96">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis
-                  dataKey="date"
-                  stroke="#94a3b8"
-                  fontSize={11}
-                  tickFormatter={(d) => formatDateShort(d as string)}
-                  minTickGap={50}
-                />
-                <YAxis stroke="#94a3b8" fontSize={11} domain={["auto", "auto"]} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "white",
-                    border: "1px solid #e2e8f0",
-                    borderRadius: "6px",
-                    fontSize: "12px",
-                  }}
-                  labelFormatter={(d) =>
-                    new Date(d as string).toLocaleDateString("fr-FR", {
-                      day: "2-digit",
-                      month: "long",
-                      year: "numeric",
-                      timeZone: "UTC",
-                    })
-                  }
-                  formatter={(value, name) => {
-                    const series = indicesSeries.find((s) => s.code === name);
-                    const formatted = Number(value ?? 0)
-                      .toFixed(2)
-                      .replace(".", ",");
-                    return [
-                      useBase100 ? `${formatted} (base 100)` : formatted,
-                      series?.name || name,
-                    ];
-                  }}
-                />
-                <Legend
-                  verticalAlign="top"
-                  height={24}
-                  wrapperStyle={{ fontSize: "11px" }}
-                  formatter={(value) => {
-                    const series = indicesSeries.find((s) => s.code === value);
-                    return series?.name || value;
-                  }}
-                />
-                {indicesSeries
-                  .filter((s) => activeIndices.has(s.code))
-                  .map((s) => (
-                    <Line
-                      key={s.code}
-                      type="monotone"
-                      dataKey={s.code}
-                      stroke={s.color}
-                      strokeWidth={2}
-                      dot={false}
-                      connectNulls
-                    />
-                  ))}
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </section>
 
         {/* ====== TOP MOVERS ====== */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1310,12 +1058,6 @@ export default function ActionsBRVMView({
         </section>
       </main>
 
-      <MemberGateDialog
-        open={memberGateOpen}
-        onClose={() => setMemberGateOpen(false)}
-        title="Vue Max réservée aux membres"
-        description="Inscrivez-vous gratuitement pour visualiser l'historique complet des indices BRVM. Les membres accèdent aussi aux quadrants Cash cows et Hidden gems."
-      />
     </>
   );
 }

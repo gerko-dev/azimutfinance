@@ -3,7 +3,11 @@
 import Link from "next/link";
 import { LineChart, Line, ResponsiveContainer, YAxis } from "recharts";
 import LivePriceBadge from "./LivePriceBadge";
+import IndicesEvolutionChart, {
+  type IndicesEvolutionSeries,
+} from "./IndicesEvolutionChart";
 import type { BrvmLiveIndex } from "@/lib/brvm/liveIndices";
+import type { UserRole } from "@/lib/auth/userRole";
 
 const INDEX_DESCRIPTIONS: Record<string, string> = {
   BRVMC:
@@ -36,11 +40,14 @@ type Sparkline = { date: string; value: number }[];
 type Props = {
   indices: BrvmLiveIndex[];
   sparklines: Record<string, Sparkline>;
+  /** Series complets pour le chart d'evolution multi-periodes / multi-indices. */
+  indicesSeries: IndicesEvolutionSeries[];
   /**
    * YTD recalcule depuis l'historique CSV (cours live vs cours 31/12 N-1).
    * `null` = historique indisponible, on retombe sur la valeur scrapee BRVM.
    */
   ytdComputed: Record<string, number | null>;
+  userRole: UserRole;
   session: {
     fetchedAt: string;
     sessionLabel: string | null;
@@ -78,7 +85,9 @@ function pctClass(v: number): string {
 export default function IndicesView({
   indices,
   sparklines,
+  indicesSeries,
   ytdComputed,
+  userRole,
   session,
 }: Props) {
   const principal = indices.filter((i) => i.category === "principal");
@@ -209,6 +218,11 @@ export default function IndicesView({
               ))}
             </div>
           </section>
+        )}
+
+        {/* GRAPHIQUE EVOLUTION MULTI-INDICES */}
+        {indicesSeries.length > 0 && (
+          <IndicesEvolutionChart series={indicesSeries} userRole={userRole} />
         )}
 
         {/* TABLEAU RECAP */}
