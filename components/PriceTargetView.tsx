@@ -72,37 +72,35 @@ export default function PriceTargetView({ ticker, target, userRole }: Props) {
   const scaleRange = scaleMax - scaleMin;
   const pos = (v: number) => ((v - scaleMin) / scaleRange) * 100;
 
+  // Acces Premium uniquement. Visiteurs et membres gratuits ne voient pas
+  // le contenu (analyse propre Premium) — uniquement un call-to-action.
+  if (!isPremium) {
+    return (
+      <div className="bg-gradient-to-br from-amber-50 via-white to-white rounded-lg border border-amber-200 p-6 md:p-10 text-center">
+        <div className="text-4xl md:text-5xl mb-3">⭐</div>
+        <h3 className="text-lg md:text-xl font-semibold text-slate-900 mb-2">
+          Anticipation de cours — Exclusivité Premium
+        </h3>
+        <p className="text-sm text-slate-600 max-w-2xl mx-auto mb-5">
+          Cours cible 12 mois calculé par croisement de 8 méthodes de
+          valorisation (projection partielle T1/S1/9M, PER moyen, P/B,
+          P/Sales, Gordon-Shapiro, comparables sectoriels, rendement
+          historique, réversion à la moyenne). Intervalle pondéré ±1σ,
+          upside %, hypothèses détaillées par méthode.
+        </p>
+        <Link
+          href="/compte"
+          className="inline-flex items-center px-4 py-2 rounded-md bg-amber-500 text-white text-sm font-medium hover:bg-amber-600 transition"
+        >
+          Passer Premium →
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4 md:space-y-6">
-      {/* === HEADER GATE PREMIUM === */}
-      {!isPremium && (
-        <div className="bg-gradient-to-br from-amber-50 to-white rounded-lg border border-amber-200 p-4 md:p-5">
-          <div className="flex items-start gap-3">
-            <div className="text-2xl shrink-0">⭐</div>
-            <div className="flex-1 min-w-0">
-              <h3 className="text-base font-semibold text-slate-900">
-                Anticipation de cours Premium
-              </h3>
-              <p className="text-xs md:text-sm text-slate-600 mt-1">
-                Croisement de 8 méthodes de valorisation (projection T1, PER,
-                P/B, DDM, comparables sectoriels, technique) pour obtenir un
-                intervalle de cours cible 12 mois pondéré et son upside.
-              </p>
-              <div className="mt-3">
-                <Link
-                  href="/compte"
-                  className="inline-flex items-center px-3 py-1.5 rounded-md bg-amber-500 text-white text-xs md:text-sm font-medium hover:bg-amber-600 transition"
-                >
-                  Passer Premium →
-                </Link>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className={isPremium ? "" : "blur-[3px] pointer-events-none select-none"} aria-hidden={isPremium ? undefined : true}>
-        {/* === BANDEAU PRINCIPAL : Cours actuel | Cible | Intervalle | Upside === */}
+      {/* === BANDEAU PRINCIPAL : Cours actuel | Cible | Intervalle | Upside === */}
         <section className="bg-gradient-to-br from-slate-50 to-white rounded-lg border border-slate-200 p-4 md:p-6">
           <div className="flex items-baseline justify-between flex-wrap gap-2 mb-4">
             <div>
@@ -305,7 +303,6 @@ export default function PriceTargetView({ ticker, target, userRole }: Props) {
             marché actuel.
           </p>
         </section>
-      </div>
     </div>
   );
 }
