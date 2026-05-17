@@ -137,6 +137,7 @@ jobs:
           sleep 90
           for i in 1 2 3 4; do
             HTTP=$(curl -sL --max-redirs 3 -o /tmp/eval.json -w "%{http_code}" \
+              -A "azimutfinance-cron/1.0" \
               -H "Authorization: Bearer ${CRON_SECRET}" \
               "${APP_URL}/api/cron/evaluate-simulator-orders")
             echo "Essai $i — HTTP ${HTTP}"
