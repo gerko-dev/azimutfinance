@@ -118,12 +118,14 @@ jobs:
       # app/api/cron/evaluate-simulator-orders/route.ts.
       #
       # Pre-requis : secrets GitHub `CRON_SECRET` (meme valeur que Vercel)
-      # et optionnellement `APP_URL` (defaut: azimutfinance.com).
+      # et optionnellement `APP_URL` (defaut: https://www.azimutfinance.com —
+      # cible directement le sous-domaine canonique car l'apex redirige en
+      # 307 et curl perdrait le header Authorization sur le saut cross-host).
       - name: Trigger simulator orders evaluation
         if: ${{ steps.commit.outputs.changed == 'true' && inputs.indices_only != true }}
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
-          APP_URL: ${{ secrets.APP_URL || 'https://azimutfinance.com' }}
+          APP_URL: ${{ secrets.APP_URL || 'https://www.azimutfinance.com' }}
         run: |
           if [ -z "$CRON_SECRET" ]; then
             echo "::warning::Secret CRON_SECRET non defini — skip evaluation simulateur."
@@ -134,7 +136,7 @@ jobs:
           echo "Attente 90s pour redeploiement Vercel..."
           sleep 90
           for i in 1 2 3 4; do
-            HTTP=$(curl -s -o /tmp/eval.json -w "%{http_code}" \
+            HTTP=$(curl -sL --max-redirs 3 -o /tmp/eval.json -w "%{http_code}" \
               -H "Authorization: Bearer ${CRON_SECRET}" \
               "${APP_URL}/api/cron/evaluate-simulator-orders")
             echo "Essai $i — HTTP ${HTTP}"
