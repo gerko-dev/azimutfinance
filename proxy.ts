@@ -1,10 +1,113 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
+// ─── BLOCAGE USER-AGENT SCRAPERS ──────────────────────────────────────────
+// Liste defensive : on bloque les UA flagrants (libs HTTP standard, bots
+// IA d'entrainement, scrapers SEO connus). Patterns sensibles a la casse
+// transformes en lowercase avant comparaison. Whitelist des bots
+// d'indexation et de preview sociaux pour preserver SEO.
+//
+// Limites : trivialement bypassable par un scraper qui usurpe l'UA d'un
+// Chrome standard. Cette couche filtre uniquement le tout-venant ; pour
+// les scrapers plus serieux il faut Cloudflare ou rate-limiting (non
+// implementes ici).
+const BLOCKED_UA_PATTERNS = [
+  // ── Bots IA d'entrainement ─────────────────────────────────────────────
+  "gptbot",
+  "chatgpt-user",
+  "oai-searchbot",
+  "claudebot",
+  "claude-web",
+  "anthropic-ai",
+  "google-extended",
+  "ccbot",
+  "perplexitybot",
+  "perplexity-user",
+  "cohere-ai",
+  "bytespider",
+  "amazonbot",
+  "applebot-extended",
+  "diffbot",
+  "meta-externalagent",
+  "imagesiftbot",
+  "omgilibot",
+  "webzio-extended",
+  "youbot",
+  "timpibot",
+  "velenpubliccrawler",
+  "dataforseobot",
+  "awariobot",
+  // ── Libs HTTP / scrapers generiques ───────────────────────────────────
+  "python-requests",
+  "python-urllib",
+  "aiohttp",
+  "scrapy",
+  "curl/",
+  "wget/",
+  "libwww-perl",
+  "java/",
+  "go-http-client",
+  "node-fetch",
+  "http_request2",
+  "okhttp",
+  "ruby",
+  "winhttp",
+  // ── Crawlers SEO/marketing intrusifs ──────────────────────────────────
+  "semrushbot",
+  "ahrefsbot",
+  "mj12bot",
+  "dotbot",
+  "petalbot",
+  "zoominfobot",
+  "serpstatbot",
+  "rogerbot",
+  "screaming frog",
+  // ── Outils navigateur automatises (sauf Vercel / previews) ────────────
+  "phantomjs",
+  "selenium",
+  "headlesschrome",
+  "puppeteer",
+];
+
+// Whitelist : meme si l'UA contient "bot" ou similaire, on autorise.
+const ALLOWED_BOT_PATTERNS = [
+  "googlebot",
+  "bingbot",
+  "duckduckbot",
+  "slurp",        // Yahoo
+  "yandexbot",
+  "baiduspider",
+  "facebookexternalhit",
+  "facebot",
+  "linkedinbot",
+  "twitterbot",
+  "whatsapp",
+  "slackbot",
+  "telegrambot",
+  "discordbot",
+  "applebot",     // distinct de Applebot-Extended (entrainement)
+  "vercel-screenshot", // preview deployment screenshots
+];
+
+function isBlockedUserAgent(ua: string): boolean {
+  if (!ua) return false; // UA vide : laisse passer (clients legitimes en wifi capt portal etc)
+  const lower = ua.toLowerCase();
+  // Whitelist d'abord
+  for (const allow of ALLOWED_BOT_PATTERNS) {
+    if (lower.includes(allow)) return false;
+  }
+  for (const block of BLOCKED_UA_PATTERNS) {
+    if (lower.includes(block)) return true;
+  }
+  return false;
+}
+
 /**
  * Next.js 16 proxy (anciennement middleware).
  *
  * Roles :
+ *   0. Bloquer les User-Agents scrapers/bots IA connus (defense-en-couches
+ *      en complement de robots.txt et X-Robots-Tag).
  *   1. Rafraichir le cookie de session Supabase a chaque requete
  *      (sinon les sessions expirent et l'utilisateur est deconnecte
  *      sans s'en rendre compte).
@@ -17,6 +120,21 @@ import { createServerClient } from "@supabase/ssr";
  * authentication.md, "do not rely on proxy alone").
  */
 export async function proxy(request: NextRequest) {
+  // ─── 0. Blocage scraper avant toute logique auth/db ──────────────────
+  const ua = request.headers.get("user-agent") ?? "";
+  if (isBlockedUserAgent(ua)) {
+    return new NextResponse(
+      "Access denied. This site does not authorize automated extraction or AI training. See /robots.txt for crawl policy.",
+      {
+        status: 403,
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "X-Robots-Tag": "noindex, nofollow",
+        },
+      },
+    );
+  }
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(

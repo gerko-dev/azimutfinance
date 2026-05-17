@@ -1,5 +1,44 @@
 import type { NextConfig } from "next";
 
+// ─── HEADERS DE SECURITE ──────────────────────────────────────────────────
+// Appliques a TOUTES les routes. Renforce :
+//  - blocage iframe externe (clickjacking + leakage)
+//  - non-sniff content-type
+//  - referrer minimum
+//  - X-Robots-Tag noai/noimageai pour decourager l'entrainement IA
+//    (en complement de robots.txt — certains bots respectent l'un mais pas
+//    l'autre).
+//  - permissions-policy : aucun accès camera/micro/geo demande par le site.
+const SECURITY_HEADERS = [
+  { key: "X-Frame-Options", value: "SAMEORIGIN" },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  // frame-ancestors duplique X-Frame-Options pour les navigateurs modernes.
+  // upgrade-insecure-requests force HTTPS sur les sous-ressources.
+  {
+    key: "Content-Security-Policy",
+    value:
+      "frame-ancestors 'self'; " +
+      "upgrade-insecure-requests; " +
+      "base-uri 'self'; " +
+      "form-action 'self'",
+  },
+  {
+    key: "Permissions-Policy",
+    value:
+      "camera=(), microphone=(), geolocation=(), payment=(), usb=(), magnetometer=(), accelerometer=(), gyroscope=()",
+  },
+  // Demande explicite aux bots IA de ne pas utiliser ces pages pour
+  // l'entrainement, l'indexation IA, l'extraction d'images.
+  {
+    key: "X-Robots-Tag",
+    value: "noai, noimageai, max-snippet:-1, max-image-preview:large",
+  },
+  // Indique a Cloudflare/Vercel que la reponse contient des donnees
+  // sensibles a ne pas partager dans les CDN publics (best-effort).
+  { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+];
+
 const nextConfig: NextConfig = {
   // Bundle the brvm.org TLS intermediate with serverless functions so
   // NODE_EXTRA_CA_CERTS can resolve it at runtime on Vercel.
@@ -13,6 +52,15 @@ const nextConfig: NextConfig = {
   // breaks that resolution. Keep pdfjs-dist external so it loads directly
   // from node_modules at runtime.
   serverExternalPackages: ["pdfjs-dist"],
+
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: SECURITY_HEADERS,
+      },
+    ];
+  },
 };
 
 export default nextConfig;
