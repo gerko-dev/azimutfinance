@@ -1,0 +1,81 @@
+# Régénère data/DB_Titres.csv et data/DB_Valeurs.csv à partir de
+# data/data_ef.xlsb (classeur Excel maintenu manuellement).
+#
+# Déclenchement :
+#   - Push sur main qui touche data/data_ef.xlsb (cas nominal : tu mets
+#     a jour le xlsb dans Excel, tu commit, et l'action regénère les CSV).
+#   - workflow_dispatch (regen manuelle depuis l'UI GitHub Actions).
+#
+# Le bot ne commit que les CSV (pas le xlsb) → pas de boucle de déclenchement.
+
+name: Refresh fondamentaux (xlsb -> CSV)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "data/data_ef.xlsb"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-fundamentals
+  cancel-in-progress: false
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install pyxlsb
+        run: pip install pyxlsb>=1.0
+
+      - name: Extract xlsb -> CSV
+        run: python scripts/extract_data_ef.py
+
+      - name: Show diff stats
+        run: |
+          echo "=== Fichiers modifies ==="
+          git status --short data/DB_Titres.csv data/DB_Valeurs.csv || true
+          echo ""
+          echo "=== Diff summary ==="
+          git diff --stat data/DB_Titres.csv data/DB_Valeurs.csv || true
+
+      - name: Commit & push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/DB_Titres.csv data/DB_Valeurs.csv
+          if git diff --staged --quiet; then
+            echo "Aucun changement a commiter."
+            exit 0
+          fi
+          DATE_TAG=$(date -u +%Y-%m-%d)
+          git commit \
+            -m "chore(data): refresh fondamentaux actions ${DATE_TAG}" \
+            -m "Regen automatique via GitHub Actions (workflow refresh-fundamentals)." \
+            -m "Source : data/data_ef.xlsb -> scripts/extract_data_ef.py."
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main && git push && {
+              echo "Push effectue avec succes (essai $i)."
+              exit 0
+            }
+            echo "Essai $i echoue, nouvelle tentative dans 10s..."
+            sleep 10
+          done
+          echo "Push definitivement echoue apres 5 essais."
+          exit 1
