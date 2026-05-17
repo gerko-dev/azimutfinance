@@ -469,12 +469,15 @@ export type LiveRatios = {
   /** PER = cours actuel / BPA du dernier exercice. null si BPA <= 0 (pertes)
    *  ou exercice non disponible. */
   per: number | null;
-  /** Rendement = DPA du dernier exercice / cours actuel (décimal, ex 0.075).
-   *  null si aucun dividende au dernier exercice. */
+  /** Rendement = dernier DPA versé > 0 / cours actuel (décimal, ex 0.075).
+   *  Fallback sur l'exercice N-1, N-2, ... si le dernier exercice publié
+   *  n'a pas encore son dividende renseigne. null si aucun dividende
+   *  historiquement publié. */
   dividendYield: number | null;
   /** Bénéfice net par action du dernier exercice (peut être négatif / null). */
   bpa: number | null;
-  /** Dividende par action du dernier exercice (0 si non distribué). */
+  /** Dividende par action utilisé pour le yield (dernier DPA > 0 si trouvé,
+   *  sinon DPA du dernier exercice = 0). */
   dpa: number;
   /** Nombre de titres (DB_Titres) — pour recalculer la capitalisation live. */
   nbTitres: number;
@@ -487,28 +490,44 @@ export type LiveRatios = {
  * Sika), pas sur la clôture de fin d'exercice. C'est la définition attendue
  * côté site :
  *   PER   = cours actuel / dernier BPA disponible
- *   yield = dernier DPA versé / cours actuel
- * Les agrégats fondamentaux (BPA, DPA, Nb_Titres) viennent du dernier exercice
- * publié dans DB_Valeurs.csv. Renvoie null si le ticker n'a aucun exercice
- * exploitable.
+ *   yield = dernier DPA versé > 0 / cours actuel (fallback exercices precedents
+ *           si le dernier exercice a publie ses comptes mais pas encore son
+ *           dividende — frequent au S1 N+1 entre publication et AG).
+ * Les agrégats BPA / Nb_Titres viennent du dernier exercice publié dans
+ * DB_Valeurs.csv. Renvoie null si le ticker n'a aucun exercice exploitable.
  */
 export function computeLiveRatios(
   ticker: string,
   currentPrice: number,
 ): LiveRatios | null {
-  const r = computeLatestRatios(ticker);
+  const list = computeRatiosByTicker(ticker);
+  const r = list[list.length - 1] ?? null;
   if (!r) return null;
+
+  // Fallback DPA : si le dernier exercice n'a pas (encore) annonce de
+  // dividende, on remonte jusqu'au premier DPA > 0 pour calculer un
+  // rendement stable. Cf. cas CBIBF 2025 publie en S1 avant l'AG.
+  let effectiveDpa = r.dpa;
+  if (effectiveDpa <= 0) {
+    for (let i = list.length - 2; i >= 0; i--) {
+      if (list[i].dpa > 0) {
+        effectiveDpa = list[i].dpa;
+        break;
+      }
+    }
+  }
+
   const per =
     r.bpa !== null && r.bpa > 0 && currentPrice > 0
       ? currentPrice / r.bpa
       : null;
   const dividendYield =
-    r.dpa > 0 && currentPrice > 0 ? r.dpa / currentPrice : null;
+    effectiveDpa > 0 && currentPrice > 0 ? effectiveDpa / currentPrice : null;
   return {
     per,
     dividendYield,
     bpa: r.bpa,
-    dpa: r.dpa,
+    dpa: effectiveDpa,
     nbTitres: r.nbTitres,
     resultatNet: r.resultatNet,
   };
