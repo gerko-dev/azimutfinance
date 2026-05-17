@@ -32,6 +32,32 @@ export default function PriceTargetView({ ticker, target, userRole }: Props) {
   const isPremium = userRole === "premium" || userRole === "pro";
   const [expandedMethod, setExpandedMethod] = useState<string | null>(null);
 
+  // Acces Premium uniquement. Bloque AVANT toute lecture de target pour les
+  // visiteurs/membres gratuits (target = null cote serveur pour ces roles).
+  if (!isPremium) {
+    return (
+      <div className="bg-gradient-to-br from-amber-50 via-white to-white rounded-lg border border-amber-200 p-6 md:p-10 text-center">
+        <div className="text-4xl md:text-5xl mb-3">⭐</div>
+        <h3 className="text-lg md:text-xl font-semibold text-slate-900 mb-2">
+          Anticipation de cours — Exclusivité Premium
+        </h3>
+        <p className="text-sm text-slate-600 max-w-2xl mx-auto mb-5">
+          Cours cible 12 mois calculé par croisement de 8 méthodes de
+          valorisation (projection partielle T1/S1/9M, PER moyen, P/B,
+          P/Sales, Gordon-Shapiro, comparables sectoriels, rendement
+          historique, réversion à la moyenne). Intervalle pondéré ±1σ,
+          upside %, hypothèses détaillées par méthode.
+        </p>
+        <Link
+          href="/compte"
+          className="inline-flex items-center px-4 py-2 rounded-md bg-amber-500 text-white text-sm font-medium hover:bg-amber-600 transition"
+        >
+          Passer Premium →
+        </Link>
+      </div>
+    );
+  }
+
   if (!target) {
     return (
       <div className="bg-white rounded-lg border border-slate-200 p-10 md:p-16 text-center">
@@ -71,32 +97,6 @@ export default function PriceTargetView({ ticker, target, userRole }: Props) {
   const scaleMax = maxVal + pad;
   const scaleRange = scaleMax - scaleMin;
   const pos = (v: number) => ((v - scaleMin) / scaleRange) * 100;
-
-  // Acces Premium uniquement. Visiteurs et membres gratuits ne voient pas
-  // le contenu (analyse propre Premium) — uniquement un call-to-action.
-  if (!isPremium) {
-    return (
-      <div className="bg-gradient-to-br from-amber-50 via-white to-white rounded-lg border border-amber-200 p-6 md:p-10 text-center">
-        <div className="text-4xl md:text-5xl mb-3">⭐</div>
-        <h3 className="text-lg md:text-xl font-semibold text-slate-900 mb-2">
-          Anticipation de cours — Exclusivité Premium
-        </h3>
-        <p className="text-sm text-slate-600 max-w-2xl mx-auto mb-5">
-          Cours cible 12 mois calculé par croisement de 8 méthodes de
-          valorisation (projection partielle T1/S1/9M, PER moyen, P/B,
-          P/Sales, Gordon-Shapiro, comparables sectoriels, rendement
-          historique, réversion à la moyenne). Intervalle pondéré ±1σ,
-          upside %, hypothèses détaillées par méthode.
-        </p>
-        <Link
-          href="/compte"
-          className="inline-flex items-center px-4 py-2 rounded-md bg-amber-500 text-white text-sm font-medium hover:bg-amber-600 transition"
-        >
-          Passer Premium →
-        </Link>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-4 md:space-y-6">

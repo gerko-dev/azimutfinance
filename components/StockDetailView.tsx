@@ -288,7 +288,9 @@ export default function StockDetailView({
   const [showBrvmc, setShowBrvmc] = useState(false);
   const [showSector, setShowSector] = useState(false);
   // Gate « Membre » declenche par les actions reservees (watchlist, alerte).
-  const [gateFor, setGateFor] = useState<"watchlist" | "alerte" | null>(null);
+  const [gateFor, setGateFor] = useState<
+    "watchlist" | "alerte" | "anticipation" | null
+  >(null);
 
   const filteredHistory = useMemo(
     () => filterByPeriod(priceHistory, period),
@@ -489,27 +491,53 @@ export default function StockDetailView({
 
           {/* Onglets */}
           <div className="flex gap-0 text-sm overflow-x-auto border-b border-slate-200 -mb-px">
-            {[
-              { id: "overview", label: "Vue d'ensemble" },
-              { id: "stats", label: "Statistiques" },
-              { id: "fundamentals", label: "Fondamentaux" },
-              { id: "technical", label: "Technique" },
-              { id: "anticipation", label: "Anticipation" },
-              { id: "dividends", label: "Dividendes" },
-              { id: "news", label: "Actualités" },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as Tab)}
-                className={`px-3 md:px-4 py-3 whitespace-nowrap border-b-2 transition ${
-                  activeTab === tab.id
-                    ? "border-blue-700 text-blue-700 font-medium"
-                    : "border-transparent text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+            {(
+              [
+                { id: "overview", label: "Vue d'ensemble", tier: "guest" },
+                { id: "stats", label: "Statistiques", tier: "guest" },
+                { id: "fundamentals", label: "Fondamentaux", tier: "guest" },
+                { id: "technical", label: "Technique", tier: "guest" },
+                { id: "anticipation", label: "Anticipation", tier: "premium" },
+                { id: "dividends", label: "Dividendes", tier: "guest" },
+                { id: "news", label: "Actualités", tier: "guest" },
+              ] as Array<{
+                id: Tab;
+                label: string;
+                tier: "guest" | "member" | "premium";
+              }>
+            ).map((tab) => {
+              const locked =
+                (tab.tier === "member" && !isMember) ||
+                (tab.tier === "premium" && !isPremium);
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => {
+                    if (locked) {
+                      setGateFor("anticipation");
+                      return;
+                    }
+                    setActiveTab(tab.id);
+                  }}
+                  aria-haspopup={locked ? "dialog" : undefined}
+                  title={
+                    locked
+                      ? `${tab.label} — réservé Premium`
+                      : undefined
+                  }
+                  className={`px-3 md:px-4 py-3 whitespace-nowrap border-b-2 transition inline-flex items-center gap-1 ${
+                    activeTab === tab.id
+                      ? "border-blue-700 text-blue-700 font-medium"
+                      : "border-transparent text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  {tab.label}
+                  {locked && (
+                    <span aria-hidden className="text-[10px]">🔒</span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -1039,13 +1067,18 @@ export default function StockDetailView({
       <MemberGateDialog
         open={gateFor !== null}
         onClose={() => setGateFor(null)}
+        tier={gateFor === "anticipation" ? "premium" : "member"}
         title={
-          gateFor === "alerte"
+          gateFor === "anticipation"
+            ? "Anticipation de cours — Premium"
+            : gateFor === "alerte"
             ? "Alertes réservées aux membres"
             : "Watchlist réservée aux membres"
         }
         description={
-          gateFor === "alerte"
+          gateFor === "anticipation"
+            ? "Cours cible 12 mois calculé par croisement de 8 méthodes (projection T1/S1/9M, PER, P/B, P/Sales, DDM, comparables sectoriels, rendement historique, technique). Réservé à l'abonnement Premium."
+            : gateFor === "alerte"
             ? "Inscrivez-vous gratuitement pour créer des alertes de cours, de variation et de volume sur vos titres préférés."
             : "Inscrivez-vous gratuitement pour suivre vos titres préférés et retrouver votre watchlist sur tous vos appareils."
         }

@@ -194,10 +194,13 @@ export default async function TitrePage({
     .sort((a, b) => b.capitalization - a.capitalization)
     .slice(0, 6);
 
-  // Anticipation de cours — 8 methodes croisees, agregees en cible centrale
-  // + intervalle ±1σ. Server-side (acces fs aux CSV fondamentaux + Sika).
+  // Anticipation de cours — reserve Premium. On ne calcule (et donc on
+  // n'expose dans le payload RSC) la valeur que pour les abonnes Premium/Pro.
+  // Pour les autres roles, priceTarget reste null cote serveur : le composant
+  // affiche un call-to-action.
+  const isPremium = userRole === "premium" || userRole === "pro";
   const priceTarget =
-    stock.price > 0
+    isPremium && stock.price > 0
       ? computePriceTarget(codeUpper, stock.price, priceHistory, allActions)
       : null;
 
