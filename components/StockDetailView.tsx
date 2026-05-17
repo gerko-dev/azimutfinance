@@ -493,8 +493,8 @@ export default function StockDetailView({
               { id: "overview", label: "Vue d'ensemble" },
               { id: "stats", label: "Statistiques" },
               { id: "fundamentals", label: "Fondamentaux" },
-              { id: "anticipation", label: "Anticipation" },
               { id: "technical", label: "Technique" },
+              { id: "anticipation", label: "Anticipation" },
               { id: "dividends", label: "Dividendes" },
               { id: "news", label: "Actualités" },
             ].map((tab) => (
