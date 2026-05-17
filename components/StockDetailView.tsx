@@ -41,6 +41,7 @@ import FundamentalsView from "./FundamentalsView";
 import DividendsView from "./DividendsView";
 import NewsView from "./NewsView";
 import PriceTargetView from "./PriceTargetView";
+import HistoryView from "./HistoryView";
 import AdvancedStatsView from "./AdvancedStatsView";
 import LivePriceBadge from "./LivePriceBadge";
 import AddToWatchlistButton from "./watchlist/AddToWatchlistButton";
@@ -50,6 +51,7 @@ import type { UserRole } from "@/lib/auth/userRole";
 
 type Tab =
   | "overview"
+  | "history"
   | "stats"
   | "fundamentals"
   | "anticipation"
@@ -494,6 +496,7 @@ export default function StockDetailView({
             {(
               [
                 { id: "overview", label: "Vue d'ensemble", tier: "guest" },
+                { id: "history", label: "Historique", tier: "guest" },
                 { id: "stats", label: "Statistiques", tier: "guest" },
                 { id: "fundamentals", label: "Fondamentaux", tier: "guest" },
                 { id: "technical", label: "Technique", tier: "guest" },
@@ -1011,6 +1014,15 @@ export default function StockDetailView({
               </div>
             )}
           </>
+        )}
+
+        {activeTab === "history" && (
+          <HistoryView
+            ticker={stock.code}
+            history={priceHistoryWithVolume}
+            ohlcHistory={ohlcHistory}
+            userRole={userRole}
+          />
         )}
 
         {activeTab === "stats" && (
