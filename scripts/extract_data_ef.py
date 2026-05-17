@@ -243,8 +243,9 @@ BANK_MAP: dict[int, str] = {
     104: "HB_ENGAGEMENTS_SUR_TITRES",
 }
 
-# Zone 5 — suivi infra-annuel (rows identiques sur les 2 templates : R255..R281)
-ZONE5_MAP: list[tuple[int, str, str]] = [
+# Zone 5 — suivi infra-annuel. Les rows DIFFÈRENT selon le template.
+# SYSCOHADA: Zone 5 en R250..R283 (DNPA à R281)
+ZONE5_MAP_SYSCOHADA: list[tuple[int, str, str]] = [
     # (row_idx, code_poste, periode)
     (255, "CR_CA", "T1"),
     (256, "CR_RNET", "T1"),
@@ -255,6 +256,19 @@ ZONE5_MAP: list[tuple[int, str, str]] = [
     (268, "CR_REXP", "9M"),
     (269, "CR_RNET", "9M"),
     (281, "PA_DNPA", "Annuel"),
+]
+
+# BANK: Zone 5 en R166..R199 (DNPA à R197, PNB joue le rôle de CA via CR_CA)
+ZONE5_MAP_BANK: list[tuple[int, str, str]] = [
+    (171, "CR_CA", "T1"),       # PNB T1
+    (172, "CR_RNET", "T1"),
+    (176, "CR_CA", "S1"),       # PNB S1
+    (177, "CR_REXP", "S1"),
+    (178, "CR_RNET", "S1"),
+    (183, "CR_CA", "9M"),       # PNB 9M
+    (184, "CR_REXP", "9M"),
+    (185, "CR_RNET", "9M"),
+    (197, "PA_DNPA", "Annuel"),
 ]
 
 # Lignes Zone 1 pour la fiche signalétique (SYSCOHADA, R006..R016)
@@ -363,8 +377,9 @@ def extract_values(
                 continue
             yield (ticker, year, "Annuel", code, val, devise)
 
-    # Zone 5 (mêmes rows sur les 2 templates)
-    for row_idx, code, periode in ZONE5_MAP:
+    # Zone 5 (rows distinctes selon template)
+    zone5_map = ZONE5_MAP_BANK if template == "BANK" else ZONE5_MAP_SYSCOHADA
+    for row_idx, code, periode in zone5_map:
         row = rows.get(row_idx)
         if not row:
             continue
