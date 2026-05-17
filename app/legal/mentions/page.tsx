@@ -8,7 +8,7 @@ export const metadata: Metadata = {
     "Mentions légales du site AzimutFinance : éditeur, hébergeur, propriété intellectuelle et contact.",
 };
 
-const LAST_UPDATE = "13 mai 2026";
+const LAST_UPDATE = "17 mai 2026";
 
 export default function MentionsLegalesPage() {
   return (

@@ -8,7 +8,7 @@ export const metadata: Metadata = {
     "Conditions Générales d'Utilisation du site AzimutFinance : compte, services, contenus Premium, responsabilité.",
 };
 
-const LAST_UPDATE = "13 mai 2026";
+const LAST_UPDATE = "17 mai 2026";
 
 export default function CGUPage() {
   return (
@@ -264,7 +264,63 @@ export default function CGUPage() {
         </p>
       </Section>
 
-      <Section title="10. Responsabilité">
+      <Section title="10. Extraction automatisée et entraînement d'IA">
+        <p>
+          Sont expressément <strong>interdits</strong> sans autorisation écrite
+          préalable de l&apos;Éditeur&nbsp;:
+        </p>
+        <ul className="list-disc pl-6 mt-2 space-y-1">
+          <li>
+            l&apos;extraction massive, le <em>scraping</em> ou la copie
+            systématique de tout ou partie des Contenus, par moyen automatisé
+            ou non&nbsp;;
+          </li>
+          <li>
+            l&apos;utilisation des Contenus pour entraîner, valider ou évaluer
+            tout modèle d&apos;intelligence artificielle, modèle de langage,
+            modèle prédictif ou système d&apos;apprentissage automatique&nbsp;;
+          </li>
+          <li>
+            la constitution d&apos;une base de données dérivée à des fins
+            commerciales ou de redistribution&nbsp;;
+          </li>
+          <li>
+            le contournement des mesures techniques de protection mises en
+            place (<em>robots.txt</em>, en-têtes <em>X-Robots-Tag</em>,
+            blocage par <em>User-Agent</em>, etc.).
+          </li>
+        </ul>
+        <p className="mt-3">
+          L&apos;Éditeur se réserve le droit de bloquer toute adresse IP, tout
+          réseau ou tout agent utilisateur identifié comme procédant à des
+          collectes automatisées, et d&apos;engager toute action légale en
+          réparation du préjudice subi.
+        </p>
+      </Section>
+
+      <Section title="11. Téléchargement des données">
+        <p>
+          Certaines pages permettent aux Membres de télécharger des fichiers
+          (CSV, PDF) reprenant des données de marché présentées sur le site
+          (historiques de cours d&apos;actions, d&apos;indices, fiches
+          fondamentales, états financiers…).
+        </p>
+        <p className="mt-3">
+          Ces fichiers sont fournis pour un <strong>usage personnel,
+          d&apos;analyse interne ou pédagogique</strong>. Toute redistribution,
+          republication, revente, intégration dans un produit commercial ou
+          incorporation dans un jeu de données diffusé publiquement est
+          interdite sans accord écrit préalable de l&apos;Éditeur.
+        </p>
+        <p className="mt-3">
+          Les sources primaires des données (BRVM, UMOA-Titres, BCEAO,
+          publications financières SYSCOHADA des sociétés cotées, etc.)
+          conservent leur propre régime de propriété et de réutilisation, qu&apos;il
+          appartient à l&apos;Utilisateur de respecter au-delà des présentes CGU.
+        </p>
+      </Section>
+
+      <Section title="12. Responsabilité">
         <p>
           L&apos;Éditeur s&apos;efforce d&apos;assurer l&apos;exactitude et la
           mise à jour des informations diffusées sur le site, sans garantir
@@ -291,9 +347,21 @@ export default function CGUPage() {
             du site ou de l&apos;impossibilité d&apos;y accéder.
           </li>
         </ul>
+        <p className="mt-3">
+          En particulier, les <strong>cours cibles, anticipations,
+          projections</strong> et tout résultat produit par les outils
+          d&apos;analyse (notamment l&apos;onglet «&nbsp;Anticipation&nbsp;» sur
+          les fiches action, les simulateurs d&apos;obligations, les
+          classifications «&nbsp;Cash cow / Hidden gem&nbsp;») sont des
+          indicateurs <strong>purement informatifs</strong>, basés sur des
+          hypothèses méthodologiques publiques pouvant être contestées,
+          incomplètes ou rapidement obsolètes. Ils ne sauraient se substituer à
+          l&apos;analyse personnelle de l&apos;Utilisateur ni à un conseil
+          professionnel agréé.
+        </p>
       </Section>
 
-      <Section title="11. Données personnelles">
+      <Section title="13. Données personnelles">
         <p>
           Le traitement des données personnelles est détaillé dans la{" "}
           <Link
@@ -313,7 +381,7 @@ export default function CGUPage() {
         </p>
       </Section>
 
-      <Section title="12. Évolution des CGU">
+      <Section title="14. Évolution des CGU">
         <p>
           L&apos;Éditeur se réserve le droit de modifier les présentes CGU à
           tout moment. Les modifications entrent en vigueur dès leur
@@ -324,7 +392,7 @@ export default function CGUPage() {
         </p>
       </Section>
 
-      <Section title="13. Droit applicable et juridiction">
+      <Section title="15. Droit applicable et juridiction">
         <p>
           Les présentes CGU sont régies par le droit ivoirien. Tout litige
           relatif à leur interprétation ou à leur exécution relèvera de la
@@ -333,7 +401,7 @@ export default function CGUPage() {
         </p>
       </Section>
 
-      <Section title="14. Contact">
+      <Section title="16. Contact">
         <p>
           Pour toute question relative aux présentes CGU&nbsp;:{" "}
           <a

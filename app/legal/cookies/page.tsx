@@ -8,7 +8,7 @@ export const metadata: Metadata = {
     "Politique de cookies d'AzimutFinance : types de cookies utilisés, finalités, durée et gestion du consentement.",
 };
 
-const LAST_UPDATE = "13 mai 2026";
+const LAST_UPDATE = "17 mai 2026";
 
 type CookieRow = {
   name: string;

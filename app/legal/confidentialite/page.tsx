@@ -8,7 +8,7 @@ export const metadata: Metadata = {
     "Politique de confidentialité d'AzimutFinance : données collectées, finalités, base légale, durée de conservation et droits des utilisateurs.",
 };
 
-const LAST_UPDATE = "13 mai 2026";
+const LAST_UPDATE = "17 mai 2026";
 
 export default function ConfidentialitePage() {
   return (
