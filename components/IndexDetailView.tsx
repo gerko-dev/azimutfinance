@@ -30,7 +30,9 @@ import {
 } from "@/lib/charting/drawings";
 import dynamic from "next/dynamic";
 import LivePriceBadge from "./LivePriceBadge";
+import IndexHistorySection from "./IndexHistorySection";
 import type { OhlcPoint } from "./charting/KlineChart";
+import type { UserRole } from "@/lib/auth/userRole";
 
 // KLineChart manipule directement le DOM (canvas) → SSR desactive.
 const KlineChart = dynamic(() => import("./charting/KlineChart"), {
@@ -230,6 +232,7 @@ type Props = {
   volatility52w: number | null;
   /** Vide pour les indices non sectoriels */
   sectorComponents: SectorComponent[];
+  userRole: UserRole;
   session: {
     fetchedAt: string;
     sessionLabel: string | null;
@@ -249,6 +252,7 @@ export default function IndexDetailView({
   low52w,
   volatility52w,
   sectorComponents,
+  userRole,
   session,
 }: Props) {
   const [period, setPeriod] = useState<Period>("1A");
@@ -984,6 +988,16 @@ export default function IndexDetailView({
           <SectorComponentsSection
             components={sectorComponents}
             indexYtd={ytdEffective}
+          />
+        )}
+
+        {/* HISTORIQUE TELECHARGEABLE — section CSV pour membres */}
+        {history.length > 0 && (
+          <IndexHistorySection
+            code={code}
+            name={name}
+            history={history}
+            userRole={userRole}
           />
         )}
 

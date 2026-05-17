@@ -14,6 +14,7 @@ import {
   getBrvmIndicesSnapshot,
   type BrvmLiveIndex,
 } from "@/lib/brvm/liveIndices";
+import { fetchUserRole } from "@/lib/auth/userRole";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +26,10 @@ export default async function Page({
   const { code: rawCode } = await params;
   const code = decodeURIComponent(rawCode).toUpperCase();
 
-  const snapshot = await getBrvmIndicesSnapshot();
+  const [snapshot, userRole] = await Promise.all([
+    getBrvmIndicesSnapshot(),
+    fetchUserRole(),
+  ]);
   const live: BrvmLiveIndex | null =
     snapshot.indices.find((i) => i.code === code) ?? null;
 
@@ -99,6 +103,7 @@ export default async function Page({
         low52w={low52w}
         volatility52w={volatility52w}
         sectorComponents={sectorComponents}
+        userRole={userRole}
         session={{
           fetchedAt: snapshot.fetchedAt,
           sessionLabel: snapshot.sessionLabel,
