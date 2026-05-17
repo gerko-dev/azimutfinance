@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import ProSearchBox from "./ProSearchBox";
 
 /**
  * Statut BRVM : ouverte du lundi au vendredi, environ 9h00 - 15h25 GMT.
@@ -79,29 +80,9 @@ export default function ProTopBar({
           )}
         </button>
 
-        {/* Recherche universelle (placeholder) */}
-        <div className="flex-1 max-w-md">
-          <div className="relative">
-            <svg
-              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500"
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <circle cx="11" cy="11" r="7" />
-              <path d="m21 21-4.3-4.3" />
-            </svg>
-            <input
-              type="text"
-              placeholder="Rechercher un titre, ISIN, émetteur…"
-              disabled
-              className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-800/60 border border-slate-700 rounded text-slate-300 placeholder-slate-500 focus:outline-none focus:border-slate-600 disabled:cursor-not-allowed"
-            />
-          </div>
-        </div>
+        {/* Recherche universelle : actions, obligations cotees/non cotees,
+            OPCVM, FX, matieres premieres, etats UEMOA. Raccourci "/" pour focus. */}
+        <ProSearchBox />
 
         {/* Statut marche + heure */}
         <div className="hidden md:flex items-center gap-4 text-xs text-slate-400">
