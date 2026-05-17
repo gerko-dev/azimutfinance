@@ -496,12 +496,12 @@ export default function StockDetailView({
             {(
               [
                 { id: "overview", label: "Vue d'ensemble", tier: "guest" },
-                { id: "history", label: "Historique", tier: "guest" },
                 { id: "stats", label: "Statistiques", tier: "guest" },
                 { id: "fundamentals", label: "Fondamentaux", tier: "guest" },
                 { id: "technical", label: "Technique", tier: "guest" },
                 { id: "anticipation", label: "Anticipation", tier: "premium" },
                 { id: "dividends", label: "Dividendes", tier: "guest" },
+                { id: "history", label: "Historique", tier: "guest" },
                 { id: "news", label: "Actualités", tier: "guest" },
               ] as Array<{
                 id: Tab;
