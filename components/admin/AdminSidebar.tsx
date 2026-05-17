@@ -28,6 +28,7 @@ const GROUPS: NavGroup[] = [
       { href: "/admin/presence", label: "Présence en ligne", icon: "🟢" },
       { href: "/admin/membres", label: "Membres", icon: "👥" },
       { href: "/admin/tarification", label: "Tarification", icon: "💰" },
+      { href: "/admin/reporting", label: "Reporting réseaux", icon: "📣" },
       { href: "/admin/audit", label: "Journal d'audit", icon: "📜" },
       { href: "/admin/sources", label: "Sources & méthodologie", icon: "📚" },
     ],
