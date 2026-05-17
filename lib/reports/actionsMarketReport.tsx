@@ -14,7 +14,6 @@ import {
   Text,
   Image,
   StyleSheet,
-  Font,
 } from "@react-pdf/renderer";
 import type { ActionRow } from "../dataLoader";
 import type { BrvmLiveIndex } from "../brvm/liveIndices";
@@ -31,34 +30,9 @@ const C = {
   border: "#E2E8F0",
 };
 
-// === POLICE — Poppins via Google Fonts (cdnjs) ===
-// Note : react-pdf charge la police a chaque render. Acceptable pour un rapport
-// genere a la demande. En cas de panne reseau, fallback automatique Helvetica.
-try {
-  Font.register({
-    family: "Poppins",
-    fonts: [
-      {
-        src: "https://cdnjs.cloudflare.com/ajax/libs/Poppins/2.0.0/fonts/Poppins-Regular.ttf",
-        fontWeight: 400,
-      },
-      {
-        src: "https://cdnjs.cloudflare.com/ajax/libs/Poppins/2.0.0/fonts/Poppins-Medium.ttf",
-        fontWeight: 500,
-      },
-      {
-        src: "https://cdnjs.cloudflare.com/ajax/libs/Poppins/2.0.0/fonts/Poppins-SemiBold.ttf",
-        fontWeight: 600,
-      },
-      {
-        src: "https://cdnjs.cloudflare.com/ajax/libs/Poppins/2.0.0/fonts/Poppins-Bold.ttf",
-        fontWeight: 700,
-      },
-    ],
-  });
-} catch {
-  // ignore — fallback Helvetica intégré
-}
+// Note: on s'appuie sur les fonts par defaut de react-pdf (Helvetica) au lieu
+// de Poppins. Ajout de Poppins possible plus tard en bundlant les .ttf dans
+// lib/reports/fonts/ (a charger via fs + Font.register avec src: Buffer).
 
 // === LOGOS EN BASE64 ===
 function logoDataUri(file: string): string {
@@ -69,7 +43,6 @@ function logoDataUri(file: string): string {
 // === STYLES ===
 const styles = StyleSheet.create({
   page: {
-    fontFamily: "Poppins",
     fontSize: 10,
     color: C.marine,
     paddingTop: 30,
@@ -78,7 +51,6 @@ const styles = StyleSheet.create({
   },
   // ── PAGE DE GARDE ─────────────────────────────────────────────────────
   coverPage: {
-    fontFamily: "Poppins",
     backgroundColor: C.marine,
     color: C.white,
     padding: 0,
