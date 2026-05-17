@@ -31,7 +31,10 @@ OUT_VALEURS = ROOT / "data" / "DB_Valeurs.csv"
 # Sheets à ignorer (templates et utilitaires)
 SKIP_SHEETS = {"BANK", "AUDIT_v2", "Etiquettes de données"}
 
-YEARS = list(range(2016, 2026))  # 2016..2025 (cols B..K = index 1..10)
+# 2016..2030 (cols B..P = index 1..15). On extrait toutes les colonnes ;
+# les cellules vides sont simplement ignorees par num_or_none. Permet d'absorber
+# 2026 et au-dela des qu'ils sont saisis dans le xlsb, sans changer le code.
+YEARS = list(range(2016, 2031))
 
 # ───────────────────────────────────────────────────────────────────────────
 # Mapping ligne xlsb → code_poste pour le template SYSCOHADA
