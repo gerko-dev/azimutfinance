@@ -717,6 +717,75 @@ export default function ActionsBRVMView({
           </div>
         </section>
 
+        {/* ====== TOP MOVERS ====== */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
+            <h3 className="text-base font-medium mb-3 text-green-700">🚀 Hausses du jour</h3>
+            <div className="space-y-2">
+              {topGainers.length === 0 ? (
+                <div className="text-sm text-slate-400 text-center py-4">
+                  Aucune hausse aujourd&apos;hui
+                </div>
+              ) : (
+                topGainers.map((a) => (
+                  <Link
+                    key={a.code}
+                    href={`/titre/${a.code}`}
+                    className="flex justify-between items-center p-2 rounded hover:bg-green-50/50 transition"
+                  >
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <CountryFlag country={a.country} size={16} />
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium font-mono">{a.code}</div>
+                        <div className="text-xs text-slate-500 truncate">{a.name}</div>
+                      </div>
+                    </div>
+                    <div className="text-right ml-2">
+                      <div className="text-sm font-medium">{formatFCFA(a.price)}</div>
+                      <div className="text-xs text-green-700 font-medium">
+                        +{a.changePercent.toFixed(2).replace(".", ",")}%
+                      </div>
+                    </div>
+                  </Link>
+                ))
+              )}
+            </div>
+          </section>
+
+          <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
+            <h3 className="text-base font-medium mb-3 text-red-700">📉 Baisses du jour</h3>
+            <div className="space-y-2">
+              {topLosers.length === 0 ? (
+                <div className="text-sm text-slate-400 text-center py-4">
+                  Aucune baisse aujourd&apos;hui
+                </div>
+              ) : (
+                topLosers.map((a) => (
+                  <Link
+                    key={a.code}
+                    href={`/titre/${a.code}`}
+                    className="flex justify-between items-center p-2 rounded hover:bg-red-50/50 transition"
+                  >
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <CountryFlag country={a.country} size={16} />
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium font-mono">{a.code}</div>
+                        <div className="text-xs text-slate-500 truncate">{a.name}</div>
+                      </div>
+                    </div>
+                    <div className="text-right ml-2">
+                      <div className="text-sm font-medium">{formatFCFA(a.price)}</div>
+                      <div className="text-xs text-red-700 font-medium">
+                        {a.changePercent.toFixed(2).replace(".", ",")}%
+                      </div>
+                    </div>
+                  </Link>
+                ))
+              )}
+            </div>
+          </section>
+        </div>
+
         {/* ====== SCATTER RENDEMENT vs VOLATILITE (Membres uniquement) ====== */}
         {riskReturn.points.length > 0 && (
           <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
@@ -995,75 +1064,6 @@ export default function ActionsBRVMView({
             </div>
           </section>
         )}
-
-        {/* ====== TOP MOVERS ====== */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
-            <h3 className="text-base font-medium mb-3 text-green-700">🚀 Hausses du jour</h3>
-            <div className="space-y-2">
-              {topGainers.length === 0 ? (
-                <div className="text-sm text-slate-400 text-center py-4">
-                  Aucune hausse aujourd&apos;hui
-                </div>
-              ) : (
-                topGainers.map((a) => (
-                  <Link
-                    key={a.code}
-                    href={`/titre/${a.code}`}
-                    className="flex justify-between items-center p-2 rounded hover:bg-green-50/50 transition"
-                  >
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <CountryFlag country={a.country} size={16} />
-                      <div className="min-w-0">
-                        <div className="text-sm font-medium font-mono">{a.code}</div>
-                        <div className="text-xs text-slate-500 truncate">{a.name}</div>
-                      </div>
-                    </div>
-                    <div className="text-right ml-2">
-                      <div className="text-sm font-medium">{formatFCFA(a.price)}</div>
-                      <div className="text-xs text-green-700 font-medium">
-                        +{a.changePercent.toFixed(2).replace(".", ",")}%
-                      </div>
-                    </div>
-                  </Link>
-                ))
-              )}
-            </div>
-          </section>
-
-          <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
-            <h3 className="text-base font-medium mb-3 text-red-700">📉 Baisses du jour</h3>
-            <div className="space-y-2">
-              {topLosers.length === 0 ? (
-                <div className="text-sm text-slate-400 text-center py-4">
-                  Aucune baisse aujourd&apos;hui
-                </div>
-              ) : (
-                topLosers.map((a) => (
-                  <Link
-                    key={a.code}
-                    href={`/titre/${a.code}`}
-                    className="flex justify-between items-center p-2 rounded hover:bg-red-50/50 transition"
-                  >
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <CountryFlag country={a.country} size={16} />
-                      <div className="min-w-0">
-                        <div className="text-sm font-medium font-mono">{a.code}</div>
-                        <div className="text-xs text-slate-500 truncate">{a.name}</div>
-                      </div>
-                    </div>
-                    <div className="text-right ml-2">
-                      <div className="text-sm font-medium">{formatFCFA(a.price)}</div>
-                      <div className="text-xs text-red-700 font-medium">
-                        {a.changePercent.toFixed(2).replace(".", ",")}%
-                      </div>
-                    </div>
-                  </Link>
-                ))
-              )}
-            </div>
-          </section>
-        </div>
 
         {/* ====== TABLEAU COMPLET ====== */}
         <section className="bg-white rounded-lg border border-slate-200 overflow-hidden">
