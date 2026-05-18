@@ -20,6 +20,12 @@ import {
   perfLastPeriod,
   quarterlyPerfHeatmap,
 } from "@/lib/fcpMath";
+import { pageMetadata } from "@/lib/seo";
+
+export const metadata = pageMetadata({
+  title: "FCP / OPCVM UEMOA — AzimutFinance",
+  path: "/marches/fcp",
+});
 
 // Le nudge JIT lit la session Supabase -> page necessairement dynamique.
 // Les CSV sont memoizes au niveau module, donc le cout supplementaire est minime.

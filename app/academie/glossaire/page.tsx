@@ -1,12 +1,14 @@
 import Header from "@/components/Header";
 import GlossaireCatalog from "@/components/academie/GlossaireCatalog";
 import { GLOSSAIRE, GLOSS_CATEGORY_META, getGlossaireStats } from "@/lib/glossaire";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata = {
+export const metadata = pageMetadata({
   title: "Glossaire financier UEMOA — AzimutFinance",
   description:
     "Plus de 70 termes financiers contextualisés pour la zone UEMOA et la BRVM : actions, obligations, analyse, macro, gestion de portefeuille, réglementation et fiscalité. Recherche rapide, navigation alphabétique et termes liés.",
-};
+  path: "/academie/glossaire",
+});
 
 export const dynamic = "force-static";
 

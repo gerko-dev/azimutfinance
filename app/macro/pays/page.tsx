@@ -43,12 +43,14 @@ import {
 } from "@/lib/macroLoader";
 import { getCyclePeerPoints, inferCycle } from "@/lib/macroCycle";
 import { fmtMdsFCFA, fmtPctRaw } from "@/lib/macroFormat";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata = {
+export const metadata = pageMetadata({
   title: "Indicateurs pays UEMOA — AzimutFinance",
   description:
     "Page pays UEMOA façon Article IV (FMI) : 7 KPI clés avec rang UMOA et critères de convergence ; économie réelle, finances publiques, secteur extérieur, monnaie & finance ; comparateur 8 pays + studio d'analyse complet.",
-};
+  path: "/macro/pays",
+});
 
 // =============================================================================
 // HELPERS

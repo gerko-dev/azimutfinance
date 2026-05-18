@@ -5,8 +5,14 @@
 
 import type { Metadata } from "next";
 
-/** Domaine de production (cf. memoire projet). Sans slash final. */
-export const SITE_URL = "https://azimutfinance.com";
+/** Domaine de production (cf. memoire projet). Sans slash final.
+ *
+ * Vercel sert le site sous www.azimutfinance.com et redirige l'apex
+ * (azimutfinance.com) en 307 vers cette version. SITE_URL doit donc
+ * inclure le sous-domaine www, sinon tous les canonicals et URLs du
+ * sitemap pointent vers une cible qui redirige — ce que Google Search
+ * Console flague sous "Page avec redirection". */
+export const SITE_URL = "https://www.azimutfinance.com";
 export const SITE_NAME = "AzimutFinance";
 
 export const SITE_DESCRIPTION =

@@ -35,7 +35,12 @@ export const metadata: Metadata = {
   creator: "KOUAME N'Guessan Brou Germain",
   publisher: SITE_NAME,
   category: "finance",
-  alternates: { canonical: "/" },
+  // Pas de `alternates.canonical` ici : un canonical pose dans le layout
+  // racine est herite par TOUTES les pages enfants qui ne le surchargent
+  // pas, ce qui revient a declarer la home comme canonique pour tout le
+  // site (cf. Google Search Console "Autre page avec balise canonique
+  // correcte"). Chaque page publique pose son propre canonical via
+  // pageMetadata() ou alternates.canonical.
   formatDetection: { telephone: false, email: false, address: false },
   openGraph: {
     type: "website",

@@ -1,12 +1,13 @@
-import type { Metadata } from "next";
 import Link from "next/link";
 import PageHero from "@/components/PageHero";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata = pageMetadata({
   title: "Conditions Générales d'Utilisation — AzimutFinance",
   description:
     "Conditions Générales d'Utilisation du site AzimutFinance : compte, services, contenus Premium, responsabilité.",
-};
+  path: "/legal/cgu",
+});
 
 const LAST_UPDATE = "17 mai 2026";
 

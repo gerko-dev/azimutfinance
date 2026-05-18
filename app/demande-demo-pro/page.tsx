@@ -1,12 +1,14 @@
 import Header from "@/components/Header";
 import PageHero from "@/components/PageHero";
 import ProDemoForm from "./ProDemoForm";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata = {
+export const metadata = pageMetadata({
   title: "Demander une démo Pro — AzimutFinance",
   description:
     "Pro Terminal, OTC, données macro UEMOA, API, screeners et études sectorielles pour les institutions financières. Demande une démo personnalisée.",
-};
+  path: "/demande-demo-pro",
+});
 
 export const dynamic = "force-dynamic";
 

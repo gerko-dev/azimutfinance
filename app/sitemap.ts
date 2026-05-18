@@ -30,12 +30,13 @@ const STATIC_ROUTES: { path: string; priority: number; freq: Freq }[] = [
   { path: "/macro/pays", priority: 0.7, freq: "weekly" },
   { path: "/macro/matieres-premieres", priority: 0.6, freq: "weekly" },
   { path: "/macro/devises", priority: 0.6, freq: "weekly" },
-  { path: "/outils/ytm", priority: 0.7, freq: "monthly" },
-  { path: "/outils/screener", priority: 0.7, freq: "monthly" },
-  { path: "/outils/screener-fcp", priority: 0.6, freq: "monthly" },
+  // /outils/ytm, /outils/screener, /outils/screener-fcp : redirigent
+  // desormais vers /pros/* — retires du sitemap pour ne pas envoyer
+  // Googlebot sur des 3xx (cf. GSC "Page avec redirection").
+  // /outils/alertes : redirige les visiteurs non connectes vers
+  // /connexion (Googlebot n'a pas de session) — meme raison.
   { path: "/outils/comparateur", priority: 0.6, freq: "monthly" },
   { path: "/outils/portefeuille", priority: 0.5, freq: "monthly" },
-  { path: "/outils/alertes", priority: 0.5, freq: "monthly" },
   { path: "/academie/formations", priority: 0.7, freq: "weekly" },
   { path: "/academie/glossaire", priority: 0.7, freq: "monthly" },
   { path: "/academie/simulateur", priority: 0.6, freq: "weekly" },

@@ -16,6 +16,12 @@ import {
   managerCadenceMix,
   categoryBreakdownForManager,
 } from "@/lib/fcpMath";
+import { pageMetadata } from "@/lib/seo";
+
+export const metadata = pageMetadata({
+  title: "Sociétés de gestion UEMOA — AzimutFinance",
+  path: "/sgo",
+});
 
 export const dynamic = "force-static";
 

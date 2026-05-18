@@ -14,12 +14,14 @@ import {
   periodToFromDate,
   type FxSlug,
 } from "@/lib/fx";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata = {
+export const metadata = pageMetadata({
   title: "Devises & FX — AzimutFinance",
   description:
     "Cours, performances et analyses des 13 paires FX clés pour la zone UEMOA : USD/XOF, EUR/USD, DXY, NGN/XOF, GBP/XOF, JPY/XOF, ZAR/XOF, CAD/XOF, AED/XOF, TRY/XOF, BRL/XOF, USD/CNY. Indice de force du FCFA, comparateur, corrélations et cross-rates synthétiques.",
-};
+  path: "/macro/devises",
+});
 
 export const dynamic = "force-dynamic";
 

@@ -10,6 +10,12 @@ import {
 import { getBrvmBondsSnapshot } from "@/lib/brvm/liveBonds";
 import type { ListedBondPrice } from "@/lib/listedBondsTypes";
 import { fetchUserRole } from "@/lib/auth/userRole";
+import { pageMetadata } from "@/lib/seo";
+
+export const metadata = pageMetadata({
+  title: "Obligations cotées BRVM — AzimutFinance",
+  path: "/marches/obligations",
+});
 
 // Lecture de cookies (auth Supabase) + snapshot live BRVM → rendu dynamique.
 export const dynamic = "force-dynamic";

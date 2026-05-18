@@ -23,12 +23,14 @@ import {
   listSeasons,
 } from "@/lib/simulator/queries";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata = {
+export const metadata = pageMetadata({
   title: "Ligue Azimut — AzimutFinance",
   description:
     "Compétition de portefeuille BRVM par saisons : capital virtuel, achats/ventes, valorisation quotidienne et classement général. Réservée aux membres AzimutFinance.",
-};
+  path: "/academie/simulateur",
+});
 
 export const dynamic = "force-dynamic";
 

@@ -6,12 +6,14 @@ import { getPremiumStatus } from "@/lib/auth/premium";
 import { PREMIUM_FEATURES } from "@/lib/premium/plans";
 import { getDynamicPlanList } from "@/lib/premium/pricingQueries";
 import PremiumPlanCards from "./PremiumPlanCards";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata = {
+export const metadata = pageMetadata({
   title: "Premium — AzimutFinance",
   description:
     "Accédez aux analyses macro UEMOA, outils Pro, alertes et données historiques étendues pour la BRVM. À partir de 9 999 FCFA / mois.",
-};
+  path: "/premium",
+});
 
 export const dynamic = "force-dynamic";
 

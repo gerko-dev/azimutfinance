@@ -2,11 +2,13 @@ import Link from "next/link";
 import Header from "@/components/Header";
 import PageHero from "@/components/PageHero";
 import { listPublishedActualites } from "@/lib/actualites/queries";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata = {
+export const metadata = pageMetadata({
   title: "Actualités BRVM — AzimutFinance",
   description: "Actualités sur les valeurs cotées à la BRVM par AzimutFinance.",
-};
+  path: "/actualites",
+});
 
 export const dynamic = "force-dynamic";
 

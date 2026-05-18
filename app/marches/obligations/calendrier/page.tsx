@@ -5,6 +5,12 @@ import BondsPaywallSection from "@/components/BondsPaywallSection";
 import BondsRelatedLinks from "@/components/BondsRelatedLinks";
 import { loadListedBonds, loadListedBondEvents } from "@/lib/dataLoader";
 import { fetchUserRole } from "@/lib/auth/userRole";
+import { pageMetadata } from "@/lib/seo";
+
+export const metadata = pageMetadata({
+  title: "Calendrier obligataire BRVM — AzimutFinance",
+  path: "/marches/obligations/calendrier",
+});
 
 export const dynamic = "force-dynamic";
 

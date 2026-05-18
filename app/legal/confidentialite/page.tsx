@@ -1,12 +1,13 @@
-import type { Metadata } from "next";
 import Link from "next/link";
 import PageHero from "@/components/PageHero";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata = pageMetadata({
   title: "Politique de confidentialité — AzimutFinance",
   description:
     "Politique de confidentialité d'AzimutFinance : données collectées, finalités, base légale, durée de conservation et droits des utilisateurs.",
-};
+  path: "/legal/confidentialite",
+});
 
 const LAST_UPDATE = "17 mai 2026";
 

@@ -8,6 +8,12 @@ import { loadListedBonds } from "@/lib/dataLoader";
 import { getBrvmBondsSnapshot } from "@/lib/brvm/liveBonds";
 import { fetchUserRole } from "@/lib/auth/userRole";
 import type { ListedBondPrice } from "@/lib/listedBondsTypes";
+import { pageMetadata } from "@/lib/seo";
+
+export const metadata = pageMetadata({
+  title: "Courbe des taux BRVM — AzimutFinance",
+  path: "/marches/obligations/courbe-taux",
+});
 
 // Snapshot live BRVM + cookies auth → rendu dynamique.
 export const dynamic = "force-dynamic";

@@ -8,6 +8,12 @@ import { loadListedBonds } from "@/lib/dataLoader";
 import { getBrvmBondsSnapshot } from "@/lib/brvm/liveBonds";
 import { fetchUserRole } from "@/lib/auth/userRole";
 import type { ListedBondPrice } from "@/lib/listedBondsTypes";
+import { pageMetadata } from "@/lib/seo";
+
+export const metadata = pageMetadata({
+  title: "Obligations à surveiller — AzimutFinance",
+  path: "/marches/obligations/surveillance",
+});
 
 export const dynamic = "force-dynamic";
 

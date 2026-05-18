@@ -16,14 +16,16 @@ import {
   getSectionLatestLabel,
 } from "@/lib/tauxLoader";
 import { fmtPct, fmtBp, fmtMdsFCFA, fmtRate } from "@/lib/tauxFormat";
+import { pageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-static";
 
-export const metadata = {
+export const metadata = pageMetadata({
   title: "Taux BCEAO & UEMOA — AzimutFinance",
   description:
     "Tableau de bord des taux directeurs BCEAO, marché monétaire UEMOA, marché interbancaire UMOA, inflation, conditions de banque et change. Studio d'analyse interactif.",
-};
+  path: "/marche-monetaire",
+});
 
 const MATURITES_ORDER = ["1j", "1sem", "2sem", "1mois", "3mois"];
 const MATURITES_VOL_ORDER = ["1j", "1sem", "2sem", "1mois", "3mois", "6mois"];

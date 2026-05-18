@@ -3,14 +3,16 @@ import Header from "@/components/Header";
 import Ticker from "@/components/Ticker";
 import RecapMTP from "@/components/marche-monetaire/RecapMTP";
 import { loadUmoaEmissions } from "@/lib/dataLoader";
+import { pageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-static";
 
-export const metadata = {
+export const metadata = pageMetadata({
   title: "Récapitulatif MTP — AzimutFinance",
   description:
     "Marché des Titres Publics UEMOA (UMOA-Titres) : récap des adjudications BAT et OAT sur 12 mois glissants — par pays, maturité, rendements moyens.",
-};
+  path: "/marche-monetaire/mtp",
+});
 
 export default function RecapMTPPage() {
   const emissions = loadUmoaEmissions();

@@ -7,12 +7,14 @@ import {
   totalDurationMinutes,
 } from "@/lib/formations";
 import { listPublishedFormations } from "@/lib/formations/queries";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata = {
+export const metadata = pageMetadata({
   title: "Catalogue de formations — AzimutFinance",
   description:
     "Formations couvrant la BRVM, les obligations UEMOA, l'analyse fondamentale et technique, la macro UEMOA, la gestion de portefeuille et la fiscalité. Parcours certifiant niveau 1 disponible.",
-};
+  path: "/academie/formations",
+});
 
 export const dynamic = "force-dynamic";
 

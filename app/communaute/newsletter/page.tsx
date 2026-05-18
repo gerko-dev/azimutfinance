@@ -1,12 +1,14 @@
 import Link from "next/link";
 import Header from "@/components/Header";
 import NewsletterForm from "./NewsletterForm";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata = {
+export const metadata = pageMetadata({
   title: "Newsletter — AzimutFinance",
   description:
     "Recevez chaque semaine la synthèse des marchés BRVM/UEMOA : actions, obligations, adjudications UMOA-Titres, matières premières et indicateurs macro.",
-};
+  path: "/communaute/newsletter",
+});
 
 export const dynamic = "force-static";
 

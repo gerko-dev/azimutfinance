@@ -12,12 +12,14 @@ import {
   fmtPct,
   pnlColor,
 } from "@/components/academie/compte-titre/format";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata = {
+export const metadata = pageMetadata({
   title: "Suivi de compte titre — AzimutFinance",
   description:
     "Suivez votre compte titre BRVM au quotidien : positions, PRU, plus-values latentes et réalisées, courbe de valorisation et allocation. Réservé aux membres.",
-};
+  path: "/academie/compte-titre",
+});
 
 export const dynamic = "force-dynamic";
 

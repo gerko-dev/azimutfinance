@@ -9,12 +9,14 @@ import {
 } from "@/lib/forum/queries";
 import ForumSearchBar from "./ForumSearchBar";
 import TopicRow from "./TopicRow";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata = {
+export const metadata = pageMetadata({
   title: "Forum investisseurs — AzimutFinance",
   description:
     "Discussions entre investisseurs UEMOA : actions BRVM, obligations, FCP, macro, stratégies. Posez vos questions, partagez vos idées.",
-};
+  path: "/communaute/forum",
+});
 
 export const dynamic = "force-dynamic";
 

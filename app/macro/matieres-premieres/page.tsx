@@ -21,12 +21,14 @@ import {
 } from "@/lib/commodities";
 import { loadPriceHistory, loadStocks } from "@/lib/dataLoader";
 import { fetchUserRole } from "@/lib/auth/userRole";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata = {
+export const metadata = pageMetadata({
   title: "Matières premières — AzimutFinance",
   description:
     "Cours, performances et impact sur la BRVM des 8 matières premières structurantes pour l'UEMOA : cacao, café, brent, WTI, or, huile de palme, sucre, caoutchouc. Comparateur, corrélations et indice de pression macro.",
-};
+  path: "/macro/matieres-premieres",
+});
 
 export const dynamic = "force-dynamic";
 

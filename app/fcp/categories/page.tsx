@@ -12,6 +12,12 @@ import {
   FCP_CATEGORIES,
 } from "@/lib/fcp";
 import { perfWindow, perfYTD } from "@/lib/fcpMath";
+import { pageMetadata } from "@/lib/seo";
+
+export const metadata = pageMetadata({
+  title: "Catégories de FCP UEMOA — AzimutFinance",
+  path: "/fcp/categories",
+});
 
 export const dynamic = "force-static";
 

@@ -11,6 +11,12 @@ import {
   getSovereignMarketStats,
 } from "@/lib/listedBondsTypes";
 import { fetchUserRole } from "@/lib/auth/userRole";
+import { pageMetadata } from "@/lib/seo";
+
+export const metadata = pageMetadata({
+  title: "Souverains UMOA-Titres — AzimutFinance",
+  path: "/marches/souverains-non-cotes",
+});
 
 // Source de donnees UNIQUE : les 3 CSV scrapes par scripts/scrape_umoa_emissions.py.
 //   - umoa-emissions-realisees.csv    -> bonds historiques (adjudications passees)

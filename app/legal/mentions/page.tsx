@@ -1,12 +1,13 @@
-import type { Metadata } from "next";
 import Link from "next/link";
 import PageHero from "@/components/PageHero";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata = pageMetadata({
   title: "Mentions légales — AzimutFinance",
   description:
     "Mentions légales du site AzimutFinance : éditeur, hébergeur, propriété intellectuelle et contact.",
-};
+  path: "/legal/mentions",
+});
 
 const LAST_UPDATE = "17 mai 2026";
 

@@ -7,6 +7,7 @@ import {
   GLOSS_CATEGORY_META,
   resolveRelated,
 } from "@/lib/glossaire";
+import { pageMetadata } from "@/lib/seo";
 
 export function generateStaticParams() {
   return GLOSSAIRE.map((t) => ({ slug: t.slug }));
@@ -19,11 +20,17 @@ export async function generateMetadata({
 }) {
   const { slug } = await params;
   const t = GLOSSAIRE_BY_SLUG[slug];
-  if (!t) return { title: "Glossaire — AzimutFinance" };
-  return {
+  if (!t) {
+    return pageMetadata({
+      title: "Glossaire — AzimutFinance",
+      path: `/academie/glossaire/${slug}`,
+    });
+  }
+  return pageMetadata({
     title: `${t.term}${t.acronym ? ` (${t.acronym})` : ""} — Glossaire AzimutFinance`,
     description: t.short,
-  };
+    path: `/academie/glossaire/${slug}`,
+  });
 }
 
 export default async function GlossTermPage({

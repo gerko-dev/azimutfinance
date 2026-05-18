@@ -32,6 +32,7 @@ import {
   quarterlyCalendar,
   aumDecomposition,
 } from "@/lib/fcpMath";
+import { pageMetadata } from "@/lib/seo";
 
 // userRole lu via cookies → rendu dynamique requis pour le gating premium.
 export const dynamic = "force-dynamic";
@@ -43,11 +44,17 @@ export async function generateMetadata({
 }) {
   const { slug } = await params;
   const fund = loadFunds().find((f) => f.id === slug);
-  if (!fund) return { title: "Fonds introuvable — AzimutFinance" };
-  return {
+  if (!fund) {
+    return pageMetadata({
+      title: "Fonds introuvable — AzimutFinance",
+      path: `/fcp/${slug}`,
+    });
+  }
+  return pageMetadata({
     title: `${fund.nom} — Fiche fonds OPCVM (${fund.gestionnaire})`,
     description: `Analyse du fonds ${fund.nom} géré par ${fund.gestionnaire} — catégorie ${fund.categorie} : performance vs médiane catégorie, quartiles historiques, encours, peers et cadence de publication.`,
-  };
+    path: `/fcp/${slug}`,
+  });
 }
 
 export default async function FCPDetailPage({

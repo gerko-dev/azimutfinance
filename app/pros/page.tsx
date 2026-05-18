@@ -20,10 +20,12 @@ import {
   getDelta,
 } from "@/lib/tauxLoader";
 import { computeFxStats } from "@/lib/fx";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata = {
+export const metadata = pageMetadata({
   title: "Tableau de bord — Pro Terminal",
-};
+  path: "/pros",
+});
 
 // Indices mis en avant : Composite (general), BRVM 30 (large caps), Prestige
 // (compartiment principal), Services Financiers (driver de la cote). Codes

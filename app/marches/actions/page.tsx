@@ -12,6 +12,12 @@ import {
 import { getBrvmSnapshot } from "@/lib/brvm/liveQuotes";
 import { getBrvmIndicesSnapshot } from "@/lib/brvm/liveIndices";
 import { fetchUserRole } from "@/lib/auth/userRole";
+import { pageMetadata } from "@/lib/seo";
+
+export const metadata = pageMetadata({
+  title: "Actions BRVM — AzimutFinance",
+  path: "/marches/actions",
+});
 
 export const dynamic = "force-dynamic";
 

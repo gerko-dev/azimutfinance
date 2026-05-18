@@ -1,12 +1,13 @@
-import type { Metadata } from "next";
 import Link from "next/link";
 import PageHero from "@/components/PageHero";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata = pageMetadata({
   title: "Politique de cookies — AzimutFinance",
   description:
     "Politique de cookies d'AzimutFinance : types de cookies utilisés, finalités, durée et gestion du consentement.",
-};
+  path: "/legal/cookies",
+});
 
 const LAST_UPDATE = "17 mai 2026";
 
