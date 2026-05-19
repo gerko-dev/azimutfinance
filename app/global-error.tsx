@@ -24,6 +24,15 @@ export default function GlobalError({
 
   return (
     <html lang="fr">
+      <head>
+        {/* global-error remplace le root layout : la metadata definie dans
+            app/layout.tsx n'est PAS heritee ici. Sans <title> explicite,
+            le navigateur et Google fallback sur le titre par defaut, ce
+            qui peut faire apparaitre l'ancien titre Next.js dans les
+            crawls. On le pose donc explicitement. */}
+        <title>Erreur — AzimutFinance</title>
+        <meta name="robots" content="noindex" />
+      </head>
       <body className="min-h-screen flex items-center justify-center bg-white">
         <main className="max-w-2xl mx-auto px-4 py-16 text-center">
           <p className="text-sm font-semibold uppercase tracking-wide text-rose-600">
