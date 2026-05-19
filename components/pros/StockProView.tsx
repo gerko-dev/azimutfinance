@@ -911,7 +911,7 @@ function DrawdownPanel({
                 border: "1px solid #334155",
                 fontSize: 11,
               }}
-              formatter={(v: number) => fmtPct(v)}
+              formatter={(v) => fmtPct(Number(v))}
               labelStyle={{ color: "#cbd5e1" }}
             />
             <ReferenceLine y={0} stroke="#475569" strokeDasharray="2 2" />
@@ -1121,7 +1121,7 @@ function AdvancedRiskStats({
       />
       <Kpi
         label="R² vs BRVMC"
-        value={regression?.r2 != null ? fmt2(regression.r2) : "—"}
+        value={regression?.rSquared != null ? fmt2(regression.rSquared) : "—"}
       />
       <Kpi
         label="Skewness"
@@ -1159,8 +1159,8 @@ function DistributionChart({ bins }: { bins: AdvancedStatsSnapshot["histogram"] 
               border: "1px solid #334155",
               fontSize: 11,
             }}
-            labelFormatter={(label: number) => `Bin: ${(label * 100).toFixed(2)}%`}
-            formatter={(v: number) => [v, "Fréquence"]}
+            labelFormatter={(label) => `Bin: ${(Number(label) * 100).toFixed(2)}%`}
+            formatter={(v) => [String(v), "Fréquence"]}
           />
           <Bar dataKey="count" isAnimationActive={false}>
             {bins.map((b, i) => (
@@ -1184,17 +1184,17 @@ function NormalityPanel({
   return (
     <div className="p-3 space-y-2 text-xs">
       <div className="grid grid-cols-2 gap-x-3 gap-y-2">
-        <Kpi label="Jarque-Bera" value={fmt2(normality.statistic)} />
+        <Kpi label="Jarque-Bera" value={fmt2(normality.jbStatistic)} />
         <Kpi label="p-value" value={fmt2(normality.pValue)} />
       </div>
       <div
         className={`mt-2 p-2 rounded border text-[11px] ${
-          normality.isNormal
+          normality.isNormal5
             ? "bg-emerald-900/20 border-emerald-700/40 text-emerald-300"
             : "bg-amber-900/20 border-amber-700/40 text-amber-300"
         }`}
       >
-        {normality.isNormal
+        {normality.isNormal5
           ? "Distribution compatible avec la loi normale (p > 5%)."
           : "Distribution non-normale (p < 5%) — queues épaisses ou asymétrie."}
       </div>
