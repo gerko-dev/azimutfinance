@@ -147,6 +147,8 @@ type Props = {
   height?: number;
   /** Decimales d'affichage des prix (defaut: auto selon valeur) */
   pricePrecision?: number;
+  /** "light" (defaut, fond clair) ou "dark" (Pro Terminal). */
+  theme?: "light" | "dark";
 };
 
 export default function KlineChart({
@@ -155,7 +157,49 @@ export default function KlineChart({
   name,
   height = 600,
   pricePrecision,
+  theme = "light",
 }: Props) {
+  const isDark = theme === "dark";
+
+  // Palette par theme — alignee sur Tailwind slate/emerald/red.
+  const PALETTE = isDark
+    ? {
+        // Pro Terminal : fond slate-900, accents emerald/red 400.
+        background: "#0f172a",
+        gridLine: "#1e293b",
+        tickText: "#94a3b8",
+        axisLine: "#334155",
+        crosshair: "#475569",
+        upColor: "#34d399",
+        downColor: "#f87171",
+        toolbarBg: "bg-slate-900",
+        toolbarBorder: "border-slate-800",
+        toolbarBtnBase: "border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700",
+        toolbarBtnActive: "border-blue-500 bg-blue-500/10 text-blue-300",
+        menuBg: "bg-slate-900 border-slate-700",
+        menuItemHover: "hover:bg-slate-800 text-slate-300",
+        menuItemActive: "bg-blue-500/10 text-blue-300 font-medium",
+        nameText: "text-slate-400",
+        rootBg: "bg-slate-900",
+      }
+    : {
+        background: "#ffffff",
+        gridLine: "#e2e8f0",
+        tickText: "#64748b",
+        axisLine: "#cbd5e1",
+        crosshair: "#94a3b8",
+        upColor: "#16a34a",
+        downColor: "#dc2626",
+        toolbarBg: "bg-slate-50",
+        toolbarBorder: "border-slate-200",
+        toolbarBtnBase: "border-slate-300 bg-white text-slate-600 hover:bg-slate-100",
+        toolbarBtnActive: "border-blue-500 bg-blue-50 text-blue-800",
+        menuBg: "bg-white border-slate-200",
+        menuItemHover: "hover:bg-slate-100 text-slate-700",
+        menuItemActive: "bg-blue-50 text-blue-800 font-medium",
+        nameText: "text-slate-500",
+        rootBg: "bg-white",
+      };
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<KLineChartInstance | null>(null);
   const moduleRef = useRef<KLineChartsModule | null>(null);
@@ -194,20 +238,67 @@ export default function KlineChart({
 
       const chart = klc.init(containerRef.current, {
         styles: {
-          grid: { horizontal: { color: "#e2e8f0" }, vertical: { color: "#e2e8f0" } },
+          // Fond pane principal + sub-panes
           candle: {
             bar: {
-              upColor: "#16a34a",
-              downColor: "#dc2626",
-              upBorderColor: "#16a34a",
-              downBorderColor: "#dc2626",
-              upWickColor: "#16a34a",
-              downWickColor: "#dc2626",
+              upColor: PALETTE.upColor,
+              downColor: PALETTE.downColor,
+              upBorderColor: PALETTE.upColor,
+              downBorderColor: PALETTE.downColor,
+              upWickColor: PALETTE.upColor,
+              downWickColor: PALETTE.downColor,
             },
             tooltip: { showRule: "follow_cross" },
+            priceMark: {
+              high: { color: PALETTE.tickText },
+              low: { color: PALETTE.tickText },
+              last: {
+                upColor: PALETTE.upColor,
+                downColor: PALETTE.downColor,
+                noChangeColor: PALETTE.tickText,
+                line: { dashedValue: [4, 4] },
+                text: {
+                  color: "#ffffff",
+                  backgroundColor: PALETTE.upColor,
+                },
+              },
+            },
           },
-          xAxis: { tickText: { color: "#64748b" } },
-          yAxis: { tickText: { color: "#64748b" } },
+          grid: {
+            horizontal: { color: PALETTE.gridLine },
+            vertical: { color: PALETTE.gridLine },
+          },
+          xAxis: {
+            tickText: { color: PALETTE.tickText },
+            axisLine: { color: PALETTE.axisLine },
+            tickLine: { color: PALETTE.axisLine },
+          },
+          yAxis: {
+            tickText: { color: PALETTE.tickText },
+            axisLine: { color: PALETTE.axisLine },
+            tickLine: { color: PALETTE.axisLine },
+          },
+          crosshair: {
+            horizontal: {
+              line: { color: PALETTE.crosshair },
+              text: {
+                color: "#ffffff",
+                backgroundColor: PALETTE.axisLine,
+              },
+            },
+            vertical: {
+              line: { color: PALETTE.crosshair },
+              text: {
+                color: "#ffffff",
+                backgroundColor: PALETTE.axisLine,
+              },
+            },
+          },
+          indicator: {
+            tooltip: {
+              text: { color: PALETTE.tickText },
+            },
+          },
         },
       });
       if (!chart) return;
@@ -251,8 +342,9 @@ export default function KlineChart({
     };
     // `data` est lue uniquement pour calculer la precision prix initiale ;
     // les changements ulterieurs sont propages via le useEffect [data].
+    // `theme` change recree le chart pour reappliquer les styles (rare, OK).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [code, pricePrecision]);
+  }, [code, pricePrecision, theme]);
 
   // Met a jour les bougies a chaque changement de `data`. setDataLoader
   // declenche resetData() puis _processDataLoad('init'), qui rappelle getBars
@@ -352,17 +444,17 @@ export default function KlineChart({
     <div
       className={
         isFullscreen
-          ? "fixed inset-0 z-50 bg-white p-4 flex flex-col"
-          : "relative bg-white"
+          ? `fixed inset-0 z-50 ${PALETTE.rootBg} p-4 flex flex-col`
+          : `relative ${PALETTE.rootBg}`
       }
     >
       {/* TOOLBAR */}
-      <div className="flex flex-wrap items-center gap-2 p-2 mb-2 rounded-md border border-slate-200 bg-slate-50">
+      <div className={`flex flex-wrap items-center gap-2 p-2 mb-2 rounded-md border ${PALETTE.toolbarBorder} ${PALETTE.toolbarBg}`}>
         {/* Type chart */}
         <select
           value={chartType}
           onChange={(e) => applyChartType(e.target.value as ChartTypeValue)}
-          className="text-xs px-2 py-1 rounded border border-slate-300 bg-white"
+          className={`text-xs px-2 py-1 rounded border ${PALETTE.toolbarBtnBase}`}
           aria-label="Type de graphique"
         >
           {CHART_TYPES.map((t) => (
@@ -381,8 +473,8 @@ export default function KlineChart({
               onClick={() => toggleIndicator(ind)}
               className={`text-xs px-2 py-1 rounded border transition ${
                 activeIndicators.has(ind)
-                  ? "border-blue-500 bg-blue-50 text-blue-800"
-                  : "border-slate-300 bg-white text-slate-600 hover:bg-slate-100"
+                  ? PALETTE.toolbarBtnActive
+                  : PALETTE.toolbarBtnBase
               }`}
             >
               {ind}
@@ -395,12 +487,12 @@ export default function KlineChart({
           <button
             type="button"
             onClick={() => setShowIndMenu((s) => !s)}
-            className="text-xs px-2 py-1 rounded border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+            className={`text-xs px-2 py-1 rounded border ${PALETTE.toolbarBtnBase}`}
           >
             + Oscillateurs ▾
           </button>
           {showIndMenu && (
-            <div className="absolute z-20 mt-1 left-0 bg-white border border-slate-200 rounded-md shadow-lg p-2 grid grid-cols-3 gap-1 min-w-[280px] max-h-72 overflow-auto">
+            <div className={`absolute z-20 mt-1 left-0 ${PALETTE.menuBg} border rounded-md shadow-lg p-2 grid grid-cols-3 gap-1 min-w-[280px] max-h-72 overflow-auto`}>
               {SUB_INDICATORS.map((ind) => (
                 <button
                   key={ind}
@@ -411,8 +503,8 @@ export default function KlineChart({
                   }}
                   className={`text-xs px-2 py-1 rounded text-left ${
                     activeIndicators.has(ind)
-                      ? "bg-blue-50 text-blue-800 font-medium"
-                      : "hover:bg-slate-100 text-slate-700"
+                      ? PALETTE.menuItemActive
+                      : PALETTE.menuItemHover
                   }`}
                 >
                   {ind}
@@ -427,12 +519,12 @@ export default function KlineChart({
           <button
             type="button"
             onClick={() => setShowDrawMenu((s) => !s)}
-            className="text-xs px-2 py-1 rounded border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+            className={`text-xs px-2 py-1 rounded border ${PALETTE.toolbarBtnBase}`}
           >
             ✎ Dessins ▾
           </button>
           {showDrawMenu && (
-            <div className="absolute z-20 mt-1 left-0 bg-white border border-slate-200 rounded-md shadow-lg p-3 min-w-[280px] max-h-96 overflow-auto">
+            <div className={`absolute z-20 mt-1 left-0 ${PALETTE.menuBg} border rounded-md shadow-lg p-3 min-w-[280px] max-h-96 overflow-auto`}>
               {Object.entries(
                 DRAWING_TOOLS.reduce<Record<string, typeof DRAWING_TOOLS>>(
                   (acc, t) => {
@@ -443,7 +535,7 @@ export default function KlineChart({
                 ),
               ).map(([group, tools]) => (
                 <div key={group} className="mb-2 last:mb-0">
-                  <div className="text-[10px] uppercase font-semibold text-slate-500 mb-1">
+                  <div className={`text-[10px] uppercase font-semibold ${PALETTE.nameText} mb-1`}>
                     {group}
                   </div>
                   <div className="grid grid-cols-2 gap-1">
@@ -452,7 +544,7 @@ export default function KlineChart({
                         key={t.name}
                         type="button"
                         onClick={() => startDrawing(t.name)}
-                        className="text-xs px-2 py-1 rounded text-left hover:bg-slate-100 text-slate-700"
+                        className={`text-xs px-2 py-1 rounded text-left ${PALETTE.menuItemHover}`}
                       >
                         {t.label}
                       </button>
@@ -468,7 +560,7 @@ export default function KlineChart({
         <button
           type="button"
           onClick={removeAllIndicators}
-          className="text-xs px-2 py-1 rounded border border-slate-300 bg-white text-slate-600 hover:bg-slate-100"
+          className={`text-xs px-2 py-1 rounded border ${PALETTE.toolbarBtnBase}`}
           title="Effacer tous les indicateurs"
         >
           Reset indics
@@ -476,7 +568,11 @@ export default function KlineChart({
         <button
           type="button"
           onClick={removeAllOverlays}
-          className="text-xs px-2 py-1 rounded border border-red-200 bg-white text-red-600 hover:bg-red-50"
+          className={`text-xs px-2 py-1 rounded border ${
+            isDark
+              ? "border-red-700/50 bg-red-900/20 text-red-300 hover:bg-red-900/40"
+              : "border-red-200 bg-white text-red-600 hover:bg-red-50"
+          }`}
           title="Effacer tous les dessins"
         >
           🗑 Dessins
@@ -484,19 +580,25 @@ export default function KlineChart({
 
         <div className="ml-auto flex items-center gap-2">
           {activeDrawTool && (
-            <span className="text-[11px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+            <span
+              className={`text-[11px] px-2 py-0.5 rounded border ${
+                isDark
+                  ? "text-amber-300 bg-amber-900/20 border-amber-700/50"
+                  : "text-amber-700 bg-amber-50 border-amber-200"
+              }`}
+            >
               ✎ {activeDrawTool} : tracez sur le graphique
             </span>
           )}
           {name && (
-            <span className="text-xs text-slate-500 hidden md:inline">
+            <span className={`text-xs hidden md:inline ${PALETTE.nameText}`}>
               {name}
             </span>
           )}
           <button
             type="button"
             onClick={() => setIsFullscreen((f) => !f)}
-            className="text-xs px-2 py-1 rounded border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+            className={`text-xs px-2 py-1 rounded border ${PALETTE.toolbarBtnBase}`}
             title="Plein ecran"
           >
             {isFullscreen ? "⛶ Quitter" : "⛶ Plein ecran"}
@@ -510,6 +612,7 @@ export default function KlineChart({
         style={{
           width: "100%",
           height: isFullscreen ? "calc(100vh - 100px)" : `${height}px`,
+          backgroundColor: PALETTE.background,
         }}
       />
 

@@ -99,7 +99,9 @@ function buildIndex(): ProSearchResult[] {
         kind: "stock",
         label: `${code} — ${name}`,
         sublabel,
-        href: `/titre/${encodeURIComponent(code)}`,
+        // Pointe vers la fiche pro (terminal self-contained) plutot que sur
+        // la fiche publique /titre/<code>.
+        href: `/pros/titre/${encodeURIComponent(code)}`,
         haystack: normalizeForSearch(
           [code, name, isin, sector, country].join(" "),
         ),
