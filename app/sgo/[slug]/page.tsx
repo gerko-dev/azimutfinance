@@ -27,9 +27,35 @@ import {
   aumTimelineByCategory,
   quartileInCohort,
 } from "@/lib/fcpMath";
+import { pageMetadata } from "@/lib/seo";
 
 // userRole lu via cookies → rendu dynamique requis pour le gating premium.
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
+  const result = getManagerBySlug(slug);
+  if (!result) {
+    return pageMetadata({
+      title: "Société de gestion — AzimutFinance",
+      path: `/sgo/${slug}`,
+      noindex: true,
+    });
+  }
+  const { manager } = result;
+  // noindex : la fiche est gatee Premium, le contenu visible aux bots est un
+  // paywall — pas de valeur SEO et risque de "soft 404".
+  return pageMetadata({
+    title: `${manager.name} — Société de gestion UEMOA (FCP, AUM, performances)`,
+    description: `Fiche société de gestion ${manager.name} : encours sous gestion, fonds gérés, performances pondérées, qualité et part de marché en zone UEMOA.`,
+    path: `/sgo/${slug}`,
+    noindex: true,
+  });
+}
 
 export default async function SGODetailPage({
   params,

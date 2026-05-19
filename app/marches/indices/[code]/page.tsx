@@ -15,8 +15,30 @@ import {
   type BrvmLiveIndex,
 } from "@/lib/brvm/liveIndices";
 import { fetchUserRole } from "@/lib/auth/userRole";
+import { pageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ code: string }>;
+}) {
+  const { code: rawCode } = await params;
+  const code = decodeURIComponent(rawCode).toUpperCase();
+  const name = BRVM_INDEX_NAMES[code];
+  if (!name) {
+    return pageMetadata({
+      title: "Indice BRVM — AzimutFinance",
+      path: `/marches/indices/${code}`,
+    });
+  }
+  return pageMetadata({
+    title: `${name} (${code}) — Cours, composition et performance BRVM`,
+    description: `Indice ${name} (${code}) de la BRVM : valeur en direct, historique, composition sectorielle, performances multi-horizons et plus haut/plus bas 52 semaines.`,
+    path: `/marches/indices/${code}`,
+  });
+}
 
 export default async function Page({
   params,

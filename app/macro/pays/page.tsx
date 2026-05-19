@@ -43,7 +43,8 @@ import {
 } from "@/lib/macroLoader";
 import { getCyclePeerPoints, inferCycle } from "@/lib/macroCycle";
 import { fmtMdsFCFA, fmtPctRaw } from "@/lib/macroFormat";
-import { pageMetadata } from "@/lib/seo";
+import { pageMetadata, breadcrumbJsonLd } from "@/lib/seo";
+import JsonLd from "@/components/JsonLd";
 
 export const metadata = pageMetadata({
   title: "Indicateurs pays UEMOA — AzimutFinance",
@@ -442,6 +443,13 @@ export default async function Page({
 
   return (
     <div className="min-h-screen bg-slate-50">
+      <JsonLd
+        data={breadcrumbJsonLd([
+          { name: "Accueil", path: "/" },
+          { name: "Macro", path: "/macro/pays" },
+          { name: "Indicateurs pays UEMOA" },
+        ])}
+      />
       <Header />
 
       {/* HERO */}

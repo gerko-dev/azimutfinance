@@ -14,7 +14,8 @@ import {
   periodToFromDate,
   type FxSlug,
 } from "@/lib/fx";
-import { pageMetadata } from "@/lib/seo";
+import { pageMetadata, breadcrumbJsonLd } from "@/lib/seo";
+import JsonLd from "@/components/JsonLd";
 
 export const metadata = pageMetadata({
   title: "Devises & FX — AzimutFinance",
@@ -165,6 +166,13 @@ export default async function Page() {
 
   return (
     <div className="min-h-screen bg-slate-50">
+      <JsonLd
+        data={breadcrumbJsonLd([
+          { name: "Accueil", path: "/" },
+          { name: "Macro", path: "/macro/pays" },
+          { name: "Devises & FX" },
+        ])}
+      />
       <Header />
 
       {/* HERO */}

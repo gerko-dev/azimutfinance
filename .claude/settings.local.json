@@ -312,7 +312,25 @@
       "PowerShell(git *)",
       "Bash(Start-Sleep -Seconds 6)",
       "Bash(Get-Content \"C:\\\\Users\\\\hp\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-hp-GerKo-azimutfinance\\\\d1542d44-e106-48db-bb47-6ddf7805b99a\\\\tasks\\\\b4lps0r51.output\")",
-      "Bash(git diff *)"
+      "Bash(git diff *)",
+      "PowerShell(if \\($env:VERCEL_TOKEN\\) { \"VERCEL_TOKEN set \\($\\($env:VERCEL_TOKEN.Length\\) chars\\)\" } else { \"VERCEL_TOKEN missing\" })",
+      "PowerShell($body = curl.exe -sL -A \"Mozilla/5.0\" \"https://www.azimutfinance.com/macro/matieres-premieres\" 2>&1; $body | Select-String -Pattern \"2026-05-1[34567]|14/05/2026|15/05/2026|13/05/2026\" -AllMatches | ForEach-Object { $_.Matches.Value } | Sort-Object -Unique)",
+      "PowerShell($body = curl.exe -sL -A \"Mozilla/5.0\" \"https://www.azimutfinance.com/macro/devises\" 2>&1; $body | Select-String -Pattern \"2026-05-1[34567]|1[34567]/05/2026\" -AllMatches | ForEach-Object { $_.Matches.Value } | Sort-Object -Unique)",
+      "PowerShell($body = curl.exe -sL -A \"Mozilla/5.0\" \"https://www.azimutfinance.com/macro/matieres-premieres/cacao\" 2>&1; $body | Select-String -Pattern \"2026-05-1[34567]|1[34567]/05/2026|3\\\\.034\" -AllMatches | ForEach-Object { $_.Matches.Value } | Sort-Object -Unique)",
+      "PowerShell($b = curl.exe -sL -A \"Mozilla/5.0\" \"https://www.azimutfinance.com/macro/matieres-premieres/cacao\" 2>&1; \"BodyLen=$\\($b.Length\\)\"; $b | Select-String -Pattern \"2026|cacao\" -AllMatches | ForEach-Object { $_.Matches.Value } | Sort-Object -Unique | Select-Object -First 30)",
+      "PowerShell($b = curl.exe -sL -A \"Mozilla/5.0\" \"https://www.azimutfinance.com/macro/matieres-premieres/cacao\" 2>&1; \\($b -join \"`n\"\\).Length; \\($b -join \"`n\"\\).Substring\\(0, [Math]::Min\\(2000, \\($b -join \"`n\"\\).Length\\)\\))",
+      "PowerShell($b = \\(curl.exe -sL -A \"Mozilla/5.0\" \"https://www.azimutfinance.com/macro/matieres-premieres/cacao\" 2>&1\\) -join \"`n\"; [regex]::Matches\\($b, \"\\(\\\\d{2}/\\\\d{2}/2026|2026-05-\\\\d{2}|3[\\\\.,]0\\\\d{2}\\)\"\\) | ForEach-Object { $_.Value } | Sort-Object -Unique)",
+      "PowerShell($b = \\(curl.exe -sL -A \"Mozilla/5.0\" \"https://www.azimutfinance.com/macro/matieres-premieres/cacao\" 2>&1\\) -join \"`n\"; [regex]::Matches\\($b, \"\\\\d{4}-\\\\d{2}-\\\\d{2}\"\\) | ForEach-Object { $_.Value } | Sort-Object -Unique | Select-Object -Last 10)",
+      "PowerShell($b = \\(curl.exe -sL -A \"Mozilla/5.0\" \"https://www.azimutfinance.com/macro/matieres-premieres/cacao\" 2>&1\\) -join \"`n\"; \"Length=$\\($b.Length\\)\"; \"\"; [regex]::Matches\\($b, '\"\\(date|t\\)\":\"?\\(\\\\d{4}-\\\\d{2}-\\\\d{2}\\)'\\) | ForEach-Object { $_.Groups[2].Value } | Sort-Object -Unique | Select-Object -Last 10)",
+      "PowerShell($b = \\(curl.exe -sL -A \"Mozilla/5.0\" \"https://www.azimutfinance.com/macro/matieres-premieres/cacao\" 2>&1\\) -join \"`n\"; \"First 4000 chars after <body>:\"; $i = $b.IndexOf\\(\"<body\"\\); if \\($i -ge 0\\) { $b.Substring\\($i, [Math]::Min\\(4000, $b.Length - $i\\)\\) })",
+      "PowerShell(Stop-Process *)",
+      "Bash(npm uninstall *)",
+      "Bash(git reset *)",
+      "Bash(gh auth *)",
+      "PowerShell(gh auth *)",
+      "PowerShell($bytes = New-Object byte[] 32; [System.Security.Cryptography.RandomNumberGenerator]::Create\\(\\).GetBytes\\($bytes\\); \\($bytes | ForEach-Object { $_.ToString\\('x2'\\) }\\) -join '')",
+      "Bash(magick --version)",
+      "Bash(Get-ChildItem *)"
     ]
   }
 }

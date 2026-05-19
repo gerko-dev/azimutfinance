@@ -15,6 +15,7 @@ import {
   getPublishedIssueBySlug,
   getRelatedArticles,
 } from "@/lib/magazine/queries";
+import { pageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
@@ -25,11 +26,28 @@ export async function generateMetadata({
 }) {
   const { slug } = await params;
   const a = await getPublishedArticleBySlug(slug);
-  if (!a) return { title: "Article — Azimut Magazine" };
-  return {
+  if (!a) {
+    return pageMetadata({
+      title: "Article — Azimut Magazine",
+      path: `/academie/magazine/article/${slug}`,
+      noindex: true,
+    });
+  }
+  // noindex : l'article est reserve aux membres connectes (redirection vers
+  // /connexion pour les visiteurs anonymes). Googlebot, sans session, ne voit
+  // que la redirection — pas la peine de tenter de le faire indexer la fiche.
+  // Les meta Open Graph (type=article, author, publishedTime) restent utiles
+  // pour les partages sur les reseaux sociaux par les membres.
+  return pageMetadata({
     title: `${a.title} — Azimut Magazine`,
     description: a.dek,
-  };
+    path: `/academie/magazine/article/${a.slug}`,
+    type: "article",
+    publishedTime: a.publishedAt ?? undefined,
+    modifiedTime: a.updatedAt,
+    authors: a.authorName ? [a.authorName] : undefined,
+    noindex: true,
+  });
 }
 
 function slugifyHeading(text: string, fallback?: string): string {

@@ -1,7 +1,8 @@
 import Header from "@/components/Header";
 import GlossaireCatalog from "@/components/academie/GlossaireCatalog";
 import { GLOSSAIRE, GLOSS_CATEGORY_META, getGlossaireStats } from "@/lib/glossaire";
-import { pageMetadata } from "@/lib/seo";
+import { pageMetadata, breadcrumbJsonLd } from "@/lib/seo";
+import JsonLd from "@/components/JsonLd";
 
 export const metadata = pageMetadata({
   title: "Glossaire financier UEMOA — AzimutFinance",
@@ -27,6 +28,13 @@ export default async function Page() {
 
   return (
     <div className="min-h-screen bg-slate-50">
+      <JsonLd
+        data={breadcrumbJsonLd([
+          { name: "Accueil", path: "/" },
+          { name: "Académie", path: "/academie/formations" },
+          { name: "Glossaire financier UEMOA" },
+        ])}
+      />
       <Header />
 
       {/* HERO */}

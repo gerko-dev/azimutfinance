@@ -12,6 +12,7 @@ import {
   calculateInterCountrySpreads,
 } from "@/lib/listedBondsTypes";
 import { fetchUserRole } from "@/lib/auth/userRole";
+import { pageMetadata } from "@/lib/seo";
 
 // userRole lu via cookies → rendu dynamique.
 export const dynamic = "force-dynamic";
@@ -26,13 +27,25 @@ export async function generateMetadata({
   const bond = aggregateSovereignBonds(loadUmoaEmissions()).find(
     (b) => b.id === decodedId,
   );
-  if (!bond) return { title: "Titre souverain introuvable — AzimutFinance" };
+  if (!bond) {
+    return pageMetadata({
+      title: "Titre souverain introuvable — AzimutFinance",
+      path: `/souverain/${id}`,
+      noindex: true,
+    });
+  }
   const echeance = bond.maturityDate?.slice(0, 4);
   const label = `${bond.type} ${bond.countryName}${echeance ? ` ${echeance}` : ""}`;
-  return {
+  // noindex : ~2500 fiches d'adjudications historiques. Volontairement absentes
+  // du sitemap pour preserver le budget de crawl ; on ajoute robots noindex
+  // pour que Googlebot, qui les decouvre via /marches/souverains-non-cotes,
+  // ne perde pas de temps a les reindexer en boucle. Cf. app/sitemap.ts.
+  return pageMetadata({
     title: `${label} — Titre souverain UMOA-Titres`,
     description: `Fiche titre souverain ${bond.type} ${bond.countryName} (échéance ${bond.maturityDate}) : historique des adjudications UMOA-Titres, rendement, spread de signature et prix théorique.`,
-  };
+    path: `/souverain/${id}`,
+    noindex: true,
+  });
 }
 
 export default async function Page({

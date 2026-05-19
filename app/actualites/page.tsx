@@ -2,7 +2,8 @@ import Link from "next/link";
 import Header from "@/components/Header";
 import PageHero from "@/components/PageHero";
 import { listPublishedActualites } from "@/lib/actualites/queries";
-import { pageMetadata } from "@/lib/seo";
+import { pageMetadata, breadcrumbJsonLd } from "@/lib/seo";
+import JsonLd from "@/components/JsonLd";
 
 export const metadata = pageMetadata({
   title: "Actualités BRVM — AzimutFinance",
@@ -33,6 +34,12 @@ export default async function ActualitesListPage({
 
   return (
     <div className="min-h-screen bg-slate-50">
+      <JsonLd
+        data={breadcrumbJsonLd([
+          { name: "Accueil", path: "/" },
+          { name: "Actualités" },
+        ])}
+      />
       <Header />
       <PageHero
         breadcrumb={[{ label: "Accueil", href: "/" }, { label: "Actualités" }]}

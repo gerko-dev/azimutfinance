@@ -20,7 +20,8 @@ import {
   perfLastPeriod,
   quarterlyPerfHeatmap,
 } from "@/lib/fcpMath";
-import { pageMetadata } from "@/lib/seo";
+import { pageMetadata, breadcrumbJsonLd } from "@/lib/seo";
+import JsonLd from "@/components/JsonLd";
 
 export const metadata = pageMetadata({
   title: "FCP / OPCVM UEMOA — AzimutFinance",
@@ -159,6 +160,13 @@ export default async function Page() {
 
   return (
     <div className="min-h-screen bg-slate-50">
+      <JsonLd
+        data={breadcrumbJsonLd([
+          { name: "Accueil", path: "/" },
+          { name: "Marchés", path: "/marches/actions" },
+          { name: "FCP / OPCVM UEMOA" },
+        ])}
+      />
       <Header />
       <Ticker />
       <div className="max-w-7xl mx-auto px-4 md:px-6 pt-4">

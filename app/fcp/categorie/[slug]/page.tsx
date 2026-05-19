@@ -23,8 +23,29 @@ import {
   aumTimelineByCategory,
   quartileInCohort,
 } from "@/lib/fcpMath";
+import { pageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-static";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
+  const cat = categoryFromSlug(slug);
+  if (!cat) {
+    return pageMetadata({
+      title: "Catégorie FCP — AzimutFinance",
+      path: `/fcp/categorie/${slug}`,
+    });
+  }
+  return pageMetadata({
+    title: `FCP ${cat} — Performances, dispersion et top fonds UEMOA`,
+    description: `Catégorie FCP ${cat} : encours sous gestion (AUM), dispersion des performances, quartiles, fonds dominants et part de marché des sociétés de gestion en zone UEMOA.`,
+    path: `/fcp/categorie/${slug}`,
+  });
+}
 
 export type CategoryFundRow = {
   id: string;

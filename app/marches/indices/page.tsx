@@ -9,7 +9,8 @@ import {
 } from "@/lib/dataLoader";
 import { getBrvmIndicesSnapshot } from "@/lib/brvm/liveIndices";
 import { fetchUserRole } from "@/lib/auth/userRole";
-import { pageMetadata } from "@/lib/seo";
+import { pageMetadata, breadcrumbJsonLd } from "@/lib/seo";
+import JsonLd from "@/components/JsonLd";
 
 export const metadata = pageMetadata({
   title: "Indices BRVM — AzimutFinance",
@@ -66,6 +67,13 @@ export default async function Page() {
 
   return (
     <div className="min-h-screen bg-slate-50">
+      <JsonLd
+        data={breadcrumbJsonLd([
+          { name: "Accueil", path: "/" },
+          { name: "Marchés", path: "/marches/actions" },
+          { name: "Indices BRVM" },
+        ])}
+      />
       <Header />
       <Ticker />
       <IndicesView

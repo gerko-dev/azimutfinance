@@ -6,6 +6,8 @@ import {
   getActualite,
   listPublishedActualites,
 } from "@/lib/actualites/queries";
+import { pageMetadata, articleJsonLd, breadcrumbJsonLd } from "@/lib/seo";
+import JsonLd from "@/components/JsonLd";
 
 export const dynamic = "force-dynamic";
 
@@ -16,11 +18,20 @@ export async function generateMetadata({
 }) {
   const { id } = await params;
   const a = await getActualite(id);
-  if (!a) return { title: "Actualité — AzimutFinance" };
-  return {
+  if (!a) {
+    return pageMetadata({
+      title: "Actualité — AzimutFinance",
+      path: `/actualites/${id}`,
+    });
+  }
+  return pageMetadata({
     title: `${a.title} — Actualités ${a.ticker}`,
     description: a.excerpt || a.body.slice(0, 160),
-  };
+    path: `/actualites/${a.id}`,
+    type: "article",
+    publishedTime: a.published_at ?? undefined,
+    modifiedTime: a.updated_at,
+  });
 }
 
 function fmtSize(bytes: number | null): string {
@@ -72,6 +83,25 @@ export default async function ActualitePublicPage({
   return (
     <div className="min-h-screen bg-slate-50">
       <Header />
+
+      <JsonLd
+        data={[
+          articleJsonLd({
+            title: a.title,
+            description: a.excerpt || a.body.slice(0, 160),
+            path: `/actualites/${a.id}`,
+            publishedTime: a.published_at ?? undefined,
+            modifiedTime: a.updated_at,
+            type: "NewsArticle",
+          }),
+          breadcrumbJsonLd([
+            { name: "Accueil", path: "/" },
+            { name: "Actualités", path: "/actualites" },
+            { name: a.ticker, path: `/actualites?ticker=${a.ticker}` },
+            { name: a.title },
+          ]),
+        ]}
+      />
 
       <main className="max-w-3xl mx-auto px-4 md:px-6 py-8 md:py-12">
         <div className="text-xs text-slate-500 mb-3">

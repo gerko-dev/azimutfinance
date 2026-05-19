@@ -32,20 +32,38 @@ export function absoluteUrl(path: string): string {
  * `export const metadata` ou `generateMetadata` des pages indexables.
  *
  * `path` doit commencer par "/" (ex. "/marches/actions").
+ *
+ * Options :
+ *  - `noindex` : pose `robots: { index: false, follow: true }` pour les pages
+ *    decouvrables (liens internes) mais qu'on ne veut PAS dans l'index Google
+ *    (paywalls, placeholders, archives anciennes). Le canonical reste pose
+ *    pour eviter les duplicatas si la page est partagee.
+ *  - `publishedTime` / `modifiedTime` / `authors` / `images` : meta Open Graph
+ *    pour les pages editoriales (type=article).
  */
 export function pageMetadata({
   title,
   description = SITE_DESCRIPTION,
   path,
   type = "website",
+  noindex = false,
+  publishedTime,
+  modifiedTime,
+  authors,
+  images,
 }: {
   title: string;
   description?: string;
   path: string;
   type?: "website" | "article";
+  noindex?: boolean;
+  publishedTime?: string;
+  modifiedTime?: string;
+  authors?: string[];
+  images?: string[];
 }): Metadata {
   const url = absoluteUrl(path);
-  return {
+  const meta: Metadata = {
     title,
     description,
     alternates: { canonical: url },
@@ -56,13 +74,30 @@ export function pageMetadata({
       siteName: SITE_NAME,
       locale: "fr_FR",
       type,
+      ...(images && images.length > 0 ? { images } : {}),
+      ...(type === "article" && publishedTime
+        ? { publishedTime }
+        : {}),
+      ...(type === "article" && modifiedTime
+        ? { modifiedTime }
+        : {}),
+      ...(type === "article" && authors && authors.length > 0
+        ? { authors }
+        : {}),
     },
     twitter: {
       card: "summary_large_image",
       title,
       description,
+      ...(images && images.length > 0 ? { images } : {}),
     },
   };
+  if (noindex) {
+    // follow: true reste utile pour que Google suive les liens internes vers
+    // d'autres pages legitimement indexables.
+    meta.robots = { index: false, follow: true };
+  }
+  return meta;
 }
 
 /**
@@ -208,5 +243,49 @@ export function listedBondJsonLd(bond: {
         }
       : {}),
     ...(bond.description ? { description: bond.description } : {}),
+  };
+}
+
+/**
+ * Donnees structurees Article / NewsArticle pour les pages editoriales
+ * (actualites entreprises, magazine). Necessaire pour eligibilite Google News /
+ * Top Stories et pour les rich results "Article".
+ */
+export function articleJsonLd(article: {
+  title: string;
+  description: string;
+  path: string;
+  /** ISO 8601, ex. "2026-05-17T10:30:00Z". */
+  publishedTime?: string;
+  modifiedTime?: string;
+  authorName?: string;
+  /** URL absolue de l'image principale (recommande 1200x630). */
+  image?: string;
+  type?: "Article" | "NewsArticle";
+}) {
+  const url = absoluteUrl(article.path);
+  return {
+    "@context": "https://schema.org",
+    "@type": article.type ?? "Article",
+    headline: article.title,
+    description: article.description,
+    mainEntityOfPage: { "@type": "WebPage", "@id": url },
+    url,
+    ...(article.image
+      ? { image: [article.image.startsWith("http") ? article.image : `${SITE_URL}${article.image}`] }
+      : {}),
+    ...(article.publishedTime ? { datePublished: article.publishedTime } : {}),
+    ...(article.modifiedTime ? { dateModified: article.modifiedTime } : {}),
+    ...(article.authorName
+      ? { author: { "@type": "Person", name: article.authorName } }
+      : {}),
+    publisher: {
+      "@type": "Organization",
+      name: SITE_NAME,
+      logo: {
+        "@type": "ImageObject",
+        url: `${SITE_URL}/icon-512.png`,
+      },
+    },
   };
 }

@@ -16,7 +16,8 @@ import {
   getSectionLatestLabel,
 } from "@/lib/tauxLoader";
 import { fmtPct, fmtBp, fmtMdsFCFA, fmtRate } from "@/lib/tauxFormat";
-import { pageMetadata } from "@/lib/seo";
+import { pageMetadata, breadcrumbJsonLd } from "@/lib/seo";
+import JsonLd from "@/components/JsonLd";
 
 export const dynamic = "force-static";
 
@@ -314,6 +315,12 @@ export default async function MarcheMonetairePage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
+      <JsonLd
+        data={breadcrumbJsonLd([
+          { name: "Accueil", path: "/" },
+          { name: "Taux BCEAO & UEMOA" },
+        ])}
+      />
       <Header />
       <Ticker />
 

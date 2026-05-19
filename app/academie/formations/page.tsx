@@ -7,7 +7,8 @@ import {
   totalDurationMinutes,
 } from "@/lib/formations";
 import { listPublishedFormations } from "@/lib/formations/queries";
-import { pageMetadata } from "@/lib/seo";
+import { pageMetadata, breadcrumbJsonLd } from "@/lib/seo";
+import JsonLd from "@/components/JsonLd";
 
 export const metadata = pageMetadata({
   title: "Catalogue de formations — AzimutFinance",
@@ -40,6 +41,13 @@ export default async function Page() {
 
   return (
     <div className="min-h-screen bg-slate-50">
+      <JsonLd
+        data={breadcrumbJsonLd([
+          { name: "Accueil", path: "/" },
+          { name: "Académie", path: "/academie/formations" },
+          { name: "Catalogue de formations" },
+        ])}
+      />
       <Header />
 
       {/* HERO */}

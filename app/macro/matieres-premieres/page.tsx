@@ -21,7 +21,8 @@ import {
 } from "@/lib/commodities";
 import { loadPriceHistory, loadStocks } from "@/lib/dataLoader";
 import { fetchUserRole } from "@/lib/auth/userRole";
-import { pageMetadata } from "@/lib/seo";
+import { pageMetadata, breadcrumbJsonLd } from "@/lib/seo";
+import JsonLd from "@/components/JsonLd";
 
 export const metadata = pageMetadata({
   title: "Matières premières — AzimutFinance",
@@ -140,6 +141,13 @@ export default async function Page() {
 
   return (
     <div className="min-h-screen bg-slate-50">
+      <JsonLd
+        data={breadcrumbJsonLd([
+          { name: "Accueil", path: "/" },
+          { name: "Macro", path: "/macro/pays" },
+          { name: "Matières premières" },
+        ])}
+      />
       <Header />
 
       {/* HERO */}
