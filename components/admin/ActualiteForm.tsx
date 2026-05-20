@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createActualite, updateActualite } from "@/lib/actualites/actions";
 import type { Actualite } from "@/lib/actualites/types";
+import { NEWS_TYPES, NEWS_TYPE_LABELS, type NewsType } from "@/lib/newsTypes";
 
 function fmtSize(bytes: number | null): string {
   if (bytes === null || !isFinite(bytes)) return "—";
@@ -21,6 +22,9 @@ export default function ActualiteForm({
 }) {
   const router = useRouter();
   const [ticker, setTicker] = useState(initial?.ticker ?? "");
+  const [category, setCategory] = useState<NewsType>(
+    initial?.category ?? "communique",
+  );
   const [title, setTitle] = useState(initial?.title ?? "");
   const [excerpt, setExcerpt] = useState(initial?.excerpt ?? "");
   const [body, setBody] = useState(initial?.body ?? "");
@@ -43,6 +47,7 @@ export default function ActualiteForm({
 
     const fd = new FormData();
     fd.append("ticker", ticker.trim().toUpperCase());
+    fd.append("category", category);
     fd.append("title", title.trim());
     fd.append("excerpt", excerpt.trim());
     fd.append("body", body.trim());
@@ -85,7 +90,7 @@ export default function ActualiteForm({
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-[160px_180px_1fr] gap-4">
         <div>
           <label className="block text-[11px] font-medium text-slate-700 uppercase mb-1">
             Ticker BRVM
@@ -98,6 +103,22 @@ export default function ActualiteForm({
             maxLength={20}
             className="w-full text-sm border border-slate-300 rounded px-2 py-1.5 font-mono"
           />
+        </div>
+        <div>
+          <label className="block text-[11px] font-medium text-slate-700 uppercase mb-1">
+            Catégorie
+          </label>
+          <select
+            value={category}
+            onChange={(e) => setCategory(e.target.value as NewsType)}
+            className="w-full text-sm border border-slate-300 rounded px-2 py-1.5 bg-white"
+          >
+            {NEWS_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {NEWS_TYPE_LABELS[t]}
+              </option>
+            ))}
+          </select>
         </div>
         <div>
           <label className="block text-[11px] font-medium text-slate-700 uppercase mb-1">

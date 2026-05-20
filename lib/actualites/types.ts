@@ -1,8 +1,11 @@
 // === Types actualités ===
 
+import type { NewsType } from "@/lib/newsTypes";
+
 export type Actualite = {
   id: string;
   ticker: string;
+  category: NewsType;
   title: string;
   excerpt: string | null;
   body: string;

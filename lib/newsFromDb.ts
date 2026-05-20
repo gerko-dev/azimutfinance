@@ -1,7 +1,13 @@
 import "server-only";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import type { NewsItem } from "./newsTypes";
+import { NEWS_TYPES, type NewsItem, type NewsType } from "./newsTypes";
+
+/** Normalise la categorie DB en NewsType ; repli 'communique' si inconnue. */
+function asNewsType(raw: unknown): NewsType {
+  const v = String(raw ?? "").trim();
+  return (NEWS_TYPES as string[]).includes(v) ? (v as NewsType) : "communique";
+}
 
 /**
  * Charge les actualites publiees depuis la base de donnees (table actualites)
@@ -17,7 +23,7 @@ export async function loadDbNewsByTicker(ticker: string): Promise<NewsItem[]> {
     const supabase = await createSupabaseServerClient();
     const { data, error } = await supabase
       .from("actualites")
-      .select("id, ticker, title, excerpt, body, attachment_name, source_url, published_at")
+      .select("id, ticker, category, title, excerpt, body, attachment_name, source_url, published_at")
       .eq("ticker", ticker.toUpperCase())
       .not("published_at", "is", null)
       .order("published_at", { ascending: false });
@@ -28,7 +34,7 @@ export async function loadDbNewsByTicker(ticker: string): Promise<NewsItem[]> {
       return {
         ticker: String((a as { ticker: string }).ticker).toUpperCase(),
         date: ((a as { published_at: string }).published_at).slice(0, 10),
-        type: "communique" as const,
+        type: asNewsType((a as { category?: string }).category),
         titre: hasAttachment ? `${title} 📎` : title,
         source: "AzimutFinance",
         // URL interne : la fiche titre ouvrira la page detail avec download.

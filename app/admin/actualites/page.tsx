@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/admin/auth";
 import { listAllActualites } from "@/lib/actualites/queries";
 import { fmtDateTime } from "@/components/admin/format";
+import { NEWS_TYPE_LABELS } from "@/lib/newsTypes";
 
 export const dynamic = "force-dynamic";
 
@@ -58,6 +59,7 @@ export default async function ActualitesAdminPage({
             <thead>
               <tr className="text-slate-500 text-[10px] uppercase">
                 <th className="text-left font-medium py-2 pl-4 pr-2">Ticker</th>
+                <th className="text-left font-medium py-2 px-2">Catégorie</th>
                 <th className="text-left font-medium py-2 px-2">Titre</th>
                 <th className="text-left font-medium py-2 px-2">Statut</th>
                 <th className="text-left font-medium py-2 px-2">Pièce jointe</th>
@@ -70,6 +72,11 @@ export default async function ActualitesAdminPage({
                 <tr key={a.id} className="border-t border-slate-100 hover:bg-slate-50">
                   <td className="py-2 pl-4 pr-2 font-mono font-semibold text-slate-900">
                     {a.ticker}
+                  </td>
+                  <td className="py-2 px-2">
+                    <span className="text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800">
+                      {NEWS_TYPE_LABELS[a.category] ?? a.category}
+                    </span>
                   </td>
                   <td className="py-2 px-2 text-slate-900 max-w-md truncate">
                     {a.title}

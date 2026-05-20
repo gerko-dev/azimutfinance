@@ -5,8 +5,15 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getMyAdminLevel } from "@/lib/admin/auth";
 import type { ActionResult, Actualite } from "./types";
 import { STORAGE_BUCKET } from "./types";
+import { NEWS_TYPES, type NewsType } from "@/lib/newsTypes";
 
 const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024; // 20 MB
+
+/** Valide la categorie recue du formulaire ; repli 'communique' si inconnue. */
+function parseCategory(raw: FormDataEntryValue | null): NewsType {
+  const v = String(raw || "").trim();
+  return (NEWS_TYPES as string[]).includes(v) ? (v as NewsType) : "communique";
+}
 
 function sanitizeFilename(name: string): string {
   return name
@@ -46,6 +53,7 @@ export async function createActualite(
   if (!auth.ok) return { ok: false, error: auth.error };
 
   const ticker = String(formData.get("ticker") || "").trim().toUpperCase();
+  const category = parseCategory(formData.get("category"));
   const title = String(formData.get("title") || "").trim();
   const excerpt = String(formData.get("excerpt") || "").trim();
   const body = String(formData.get("body") || "").trim();
@@ -95,6 +103,7 @@ export async function createActualite(
     .from("actualites")
     .insert({
       ticker,
+      category,
       title,
       excerpt: excerpt || null,
       body,
@@ -134,6 +143,7 @@ export async function updateActualite(
   if (!auth.ok) return { ok: false, error: auth.error };
 
   const ticker = String(formData.get("ticker") || "").trim().toUpperCase();
+  const category = parseCategory(formData.get("category"));
   const title = String(formData.get("title") || "").trim();
   const excerpt = String(formData.get("excerpt") || "").trim();
   const body = String(formData.get("body") || "").trim();
@@ -196,6 +206,7 @@ export async function updateActualite(
   // Update DB
   const updateData: Record<string, unknown> = {
     ticker,
+    category,
     title,
     excerpt: excerpt || null,
     body,
