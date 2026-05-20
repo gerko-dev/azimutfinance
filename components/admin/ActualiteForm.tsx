@@ -32,11 +32,15 @@ export default function ActualiteForm({
   const [publish, setPublish] = useState(!!initial?.published_at);
   const [file, setFile] = useState<File | null>(null);
   const [removeAttachment, setRemoveAttachment] = useState(false);
+  const [file2, setFile2] = useState<File | null>(null);
+  const [removeAttachment2, setRemoveAttachment2] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [feedback, setFeedback] = useState<{ ok: boolean; msg: string } | null>(null);
 
   const hasExistingAttachment =
     !!initial?.attachment_path && !removeAttachment && !file;
+  const hasExistingAttachment2 =
+    !!initial?.attachment2_path && !removeAttachment2 && !file2;
 
   function submit() {
     if (!ticker.trim() || !title.trim() || !body.trim()) {
@@ -56,6 +60,10 @@ export default function ActualiteForm({
     if (file) fd.append("attachment", file);
     if (mode === "edit" && removeAttachment && !file) {
       fd.append("remove_attachment", "1");
+    }
+    if (file2) fd.append("attachment2", file2);
+    if (mode === "edit" && removeAttachment2 && !file2) {
+      fd.append("remove_attachment2", "1");
     }
 
     startTransition(async () => {
@@ -174,51 +182,29 @@ export default function ActualiteForm({
         />
       </div>
 
-      <div>
-        <label className="block text-[11px] font-medium text-slate-700 uppercase mb-1">
-          Pièce jointe (PDF, DOCX, image — max 20 Mo)
-        </label>
-        {hasExistingAttachment && initial?.attachment_name && (
-          <div className="text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded px-3 py-2 mb-2 flex items-center justify-between">
-            <span>
-              📎 {initial.attachment_name}{" "}
-              <span className="text-slate-400">
-                ({fmtSize(initial.attachment_size_bytes)})
-              </span>
-            </span>
-            <button
-              type="button"
-              onClick={() => setRemoveAttachment(true)}
-              className="text-[11px] text-rose-700 hover:underline"
-            >
-              Supprimer
-            </button>
-          </div>
-        )}
-        {removeAttachment && initial?.attachment_path && !file && (
-          <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 mb-2 flex items-center justify-between">
-            <span>La pièce jointe sera supprimée à l&apos;enregistrement.</span>
-            <button
-              type="button"
-              onClick={() => setRemoveAttachment(false)}
-              className="text-[11px] text-slate-700 hover:underline"
-            >
-              Annuler
-            </button>
-          </div>
-        )}
-        <input
-          type="file"
-          accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.webp,.txt,.csv"
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          className="text-xs"
-        />
-        {file && (
-          <div className="text-[11px] text-slate-500 mt-1">
-            Sélectionné : {file.name} ({fmtSize(file.size)})
-          </div>
-        )}
-      </div>
+      <AttachmentField
+        label="Pièce jointe principale (PDF, DOCX, image — max 20 Mo)"
+        existingName={initial?.attachment_name ?? null}
+        existingSize={initial?.attachment_size_bytes ?? null}
+        showExisting={hasExistingAttachment}
+        markedForRemoval={!!(removeAttachment && initial?.attachment_path && !file)}
+        onRemoveExisting={() => setRemoveAttachment(true)}
+        onCancelRemove={() => setRemoveAttachment(false)}
+        file={file}
+        onFile={setFile}
+      />
+
+      <AttachmentField
+        label="Pièce jointe secondaire (optionnelle)"
+        existingName={initial?.attachment2_name ?? null}
+        existingSize={initial?.attachment2_size_bytes ?? null}
+        showExisting={hasExistingAttachment2}
+        markedForRemoval={!!(removeAttachment2 && initial?.attachment2_path && !file2)}
+        onRemoveExisting={() => setRemoveAttachment2(true)}
+        onCancelRemove={() => setRemoveAttachment2(false)}
+        file={file2}
+        onFile={setFile2}
+      />
 
       <div className="flex items-center justify-between pt-3 border-t border-slate-100">
         <label className="flex items-center gap-2 text-sm text-slate-700">
@@ -241,6 +227,75 @@ export default function ActualiteForm({
           {isPending ? "Enregistrement…" : mode === "create" ? "Créer" : "Mettre à jour"}
         </button>
       </div>
+    </div>
+  );
+}
+
+/** Champ d'upload d'une pièce jointe (existante remplacable / supprimable). */
+function AttachmentField({
+  label,
+  existingName,
+  existingSize,
+  showExisting,
+  markedForRemoval,
+  onRemoveExisting,
+  onCancelRemove,
+  file,
+  onFile,
+}: {
+  label: string;
+  existingName: string | null;
+  existingSize: number | null;
+  showExisting: boolean;
+  markedForRemoval: boolean;
+  onRemoveExisting: () => void;
+  onCancelRemove: () => void;
+  file: File | null;
+  onFile: (f: File | null) => void;
+}) {
+  return (
+    <div>
+      <label className="block text-[11px] font-medium text-slate-700 uppercase mb-1">
+        {label}
+      </label>
+      {showExisting && existingName && (
+        <div className="text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded px-3 py-2 mb-2 flex items-center justify-between">
+          <span>
+            📎 {existingName}{" "}
+            <span className="text-slate-400">({fmtSize(existingSize)})</span>
+          </span>
+          <button
+            type="button"
+            onClick={onRemoveExisting}
+            className="text-[11px] text-rose-700 hover:underline"
+          >
+            Supprimer
+          </button>
+        </div>
+      )}
+      {markedForRemoval && (
+        <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 mb-2 flex items-center justify-between">
+          <span>La pièce jointe sera supprimée à l&apos;enregistrement.</span>
+          <button
+            type="button"
+            onClick={onCancelRemove}
+            className="text-[11px] text-slate-700 hover:underline"
+          >
+            Annuler
+          </button>
+        </div>
+      )}
+      <input
+        type="file"
+        accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.webp,.txt,.csv"
+        onChange={(e) => onFile(e.target.files?.[0] ?? null)}
+        className="text-xs"
+      />
+      {file && (
+        <div className="text-[11px] text-slate-500 mt-1">
+          Sélectionné : {file.name} ({fmtSize(file.size)})
+        </div>
+      )}
     </div>
   );
 }

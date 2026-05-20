@@ -73,7 +73,21 @@ export default async function ActualitePublicPage({
   // Si brouillon, on n'affiche pas (sauf admin via la page admin)
   if (!a.published_at) notFound();
 
-  const downloadUrl = attachmentPublicUrl(a.attachment_path);
+  // Pièces jointes (principale + secondaire), filtrées sur celles présentes.
+  const attachments = [
+    {
+      url: attachmentPublicUrl(a.attachment_path),
+      name: a.attachment_name,
+      size: a.attachment_size_bytes,
+    },
+    {
+      url: attachmentPublicUrl(a.attachment2_path),
+      name: a.attachment2_name,
+      size: a.attachment2_size_bytes,
+    },
+  ].filter((d): d is { url: string; name: string; size: number | null } =>
+    !!d.url && !!d.name,
+  );
 
   // Articles liés (même ticker, hors le courant)
   const related = (await listPublishedActualites({ ticker: a.ticker, limit: 4 })).filter(
@@ -155,30 +169,39 @@ export default async function ActualitePublicPage({
             </p>
           )}
 
-          {/* Pièce jointe */}
-          {downloadUrl && a.attachment_name && (
-            <div className="mt-8 p-4 md:p-5 border border-slate-200 rounded-lg bg-white">
-              <div className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold mb-2">
-                Document à télécharger
+          {/* Pièces jointes */}
+          {attachments.length > 0 && (
+            <div className="mt-8 space-y-2">
+              <div className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold mb-1">
+                {attachments.length > 1
+                  ? "Documents à télécharger"
+                  : "Document à télécharger"}
               </div>
-              <a
-                href={downloadUrl}
-                download={a.attachment_name}
-                className="flex items-center gap-3 text-slate-900 hover:text-blue-700 group"
-              >
-                <span className="text-2xl">📎</span>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium group-hover:underline">
-                    {a.attachment_name}
-                  </div>
-                  <div className="text-xs text-slate-500">
-                    {fmtSize(a.attachment_size_bytes)}
-                  </div>
+              {attachments.map((doc) => (
+                <div
+                  key={doc.url}
+                  className="p-4 md:p-5 border border-slate-200 rounded-lg bg-white"
+                >
+                  <a
+                    href={doc.url}
+                    download={doc.name}
+                    className="flex items-center gap-3 text-slate-900 hover:text-blue-700 group"
+                  >
+                    <span className="text-2xl">📎</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium group-hover:underline">
+                        {doc.name}
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        {fmtSize(doc.size)}
+                      </div>
+                    </div>
+                    <span className="text-sm text-blue-700 group-hover:underline">
+                      Télécharger ↓
+                    </span>
+                  </a>
                 </div>
-                <span className="text-sm text-blue-700 group-hover:underline">
-                  Télécharger ↓
-                </span>
-              </a>
+              ))}
             </div>
           )}
         </article>

@@ -23,14 +23,16 @@ export async function loadDbNewsByTicker(ticker: string): Promise<NewsItem[]> {
     const supabase = await createSupabaseServerClient();
     const { data, error } = await supabase
       .from("actualites")
-      .select("id, ticker, category, title, excerpt, body, attachment_name, source_url, published_at")
+      .select("id, ticker, category, title, excerpt, body, attachment_name, attachment2_name, source_url, published_at")
       .eq("ticker", ticker.toUpperCase())
       .not("published_at", "is", null)
       .order("published_at", { ascending: false });
     if (error || !data) return [];
     return data.map((a) => {
       const title = String((a as { title: string }).title);
-      const hasAttachment = !!(a as { attachment_name?: string }).attachment_name;
+      const hasAttachment =
+        !!(a as { attachment_name?: string }).attachment_name ||
+        !!(a as { attachment2_name?: string }).attachment2_name;
       return {
         ticker: String((a as { ticker: string }).ticker).toUpperCase(),
         date: ((a as { published_at: string }).published_at).slice(0, 10),

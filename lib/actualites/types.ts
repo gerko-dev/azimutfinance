@@ -12,6 +12,9 @@ export type Actualite = {
   attachment_path: string | null;
   attachment_name: string | null;
   attachment_size_bytes: number | null;
+  attachment2_path: string | null;
+  attachment2_name: string | null;
+  attachment2_size_bytes: number | null;
   source_url: string | null;
   published_at: string | null;
   author_id: string | null;
