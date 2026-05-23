@@ -10,6 +10,7 @@
     "refresh-fund": "python scripts/extract_data_ef.py"
   },
   "dependencies": {
+    "@sparticuz/chromium": "^148.0.0",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.105.0",
     "exceljs": "^4.4.0",
@@ -18,6 +19,7 @@
     "next": "16.2.4",
     "papaparse": "^5.5.3",
     "pdfjs-dist": "^4.10.38",
+    "puppeteer-core": "^25.0.4",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "recharts": "^3.8.1"

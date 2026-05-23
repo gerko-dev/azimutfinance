@@ -46,12 +46,24 @@ const nextConfig: NextConfig = {
   // scraper fails with UNABLE_TO_VERIFY_LEAF_SIGNATURE.
   outputFileTracingIncludes: {
     "/*": ["./certs/**/*"],
+    // @sparticuz/chromium stocke le binaire Chromium (brotli) dans bin/ ;
+    // ces fichiers ne sont pas "importés" donc le tracer ne les inclut pas
+    // seul. On les force pour la route de génération PDF sur Vercel.
+    "/admin/rapports/cotation/pdf": [
+      "./node_modules/@sparticuz/chromium/bin/**",
+      // Images inlinées dans le PDF (logo bandeau + fond dernière page) : lues
+      // via fs au runtime, donc non tracées automatiquement.
+      "./logo/png/logo-horizontal-fond-sombre.png",
+      "./lib/reports/assets/**",
+    ],
   },
   // pdfjs-dist spawns a worker that resolves its sibling pdf.worker.mjs by
   // relative path. Turbopack/webpack hoist the bundle into .next/, which
   // breaks that resolution. Keep pdfjs-dist external so it loads directly
   // from node_modules at runtime.
-  serverExternalPackages: ["pdfjs-dist"],
+  // puppeteer-core / @sparticuz/chromium : externes pour charger le binaire
+  // depuis node_modules au runtime (sinon résolution du chemin cassée).
+  serverExternalPackages: ["pdfjs-dist", "puppeteer-core", "@sparticuz/chromium"],
 
   async headers() {
     return [

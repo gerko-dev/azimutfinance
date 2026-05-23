@@ -44,6 +44,10 @@ next-env.d.ts
 
 # scratch/debug
 tmp_*
+.tmp_ppt/
+
+# rapports générés (artefacts d'export, non versionnés)
+/exports/
 
 # python
 __pycache__/

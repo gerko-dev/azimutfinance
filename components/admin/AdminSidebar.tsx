@@ -66,6 +66,7 @@ const GROUPS: NavGroup[] = [
       { href: "/admin/actualites", label: "Actualités BRVM", icon: "📰" },
       { href: "/admin/formations", label: "Formations", icon: "🎓" },
       { href: "/admin/magazine", label: "Magazine", icon: "📖" },
+      { href: "/admin/rapports", label: "Rapports", icon: "📑" },
       { href: "/admin/data", label: "Fichiers de données", icon: "📁" },
     ],
   },
