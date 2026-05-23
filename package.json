@@ -6,7 +6,8 @@
     "dev": "node --use-system-ca node_modules/next/dist/bin/next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "refresh-fund": "python scripts/extract_data_ef.py"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.2",
