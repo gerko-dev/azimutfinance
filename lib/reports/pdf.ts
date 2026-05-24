@@ -79,3 +79,35 @@ export async function htmlToPdf(
     await browser.close();
   }
 }
+
+/**
+ * Rend un document HTML en image matricielle (PNG ou JPEG), à dimensions fixes.
+ * Le `<body>` doit mesurer exactement `width`×`height` (px CSS) : on capture la
+ * fenêtre entière. `scale` augmente la résolution (deviceScaleFactor).
+ */
+export async function htmlToImage(
+  html: string,
+  opts: {
+    width: number;
+    height: number;
+    format?: "png" | "jpeg";
+    quality?: number;
+    scale?: number;
+  },
+): Promise<Buffer> {
+  const { width, height, format = "png", quality = 92, scale = 2 } = opts;
+  const browser = await launchBrowser();
+  try {
+    const page = await browser.newPage();
+    await page.setViewport({ width, height, deviceScaleFactor: scale });
+    await page.setContent(html, { waitUntil: "load" });
+    const shot = await page.screenshot({
+      type: format,
+      ...(format === "jpeg" ? { quality } : {}),
+      clip: { x: 0, y: 0, width, height },
+    });
+    return Buffer.from(shot);
+  } finally {
+    await browser.close();
+  }
+}

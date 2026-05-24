@@ -134,13 +134,29 @@ export default async function ArticlesAdminPage({
                     <td className="py-2 px-2 text-slate-500 tabular-nums">
                       {fmtDateTime(a.updatedAt)}
                     </td>
-                    <td className="py-2 pr-4 pl-2 text-right">
+                    <td className="py-2 pr-4 pl-2 text-right whitespace-nowrap">
                       <Link
                         href={`/admin/magazine/articles/${a.id}`}
                         className="text-[11px] text-blue-700 hover:underline"
                       >
                         Éditer
                       </Link>
+                      <span className="text-slate-300 mx-1.5">·</span>
+                      <span className="text-[10px] text-slate-500">Flash</span>
+                      <a
+                        href={`/admin/magazine/articles/${a.id}/flash?format=png`}
+                        className="text-[11px] text-blue-700 hover:underline ml-1.5"
+                        title="Générer l'image flash (PNG)"
+                      >
+                        PNG
+                      </a>
+                      <a
+                        href={`/admin/magazine/articles/${a.id}/flash?format=jpeg`}
+                        className="text-[11px] text-blue-700 hover:underline ml-1.5"
+                        title="Générer l'image flash (JPEG)"
+                      >
+                        JPG
+                      </a>
                     </td>
                   </tr>
                 );

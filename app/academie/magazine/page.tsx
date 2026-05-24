@@ -1,9 +1,7 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import Header from "@/components/Header";
 import MagazineCover from "@/components/academie/MagazineCover";
 import NewsletterForm from "@/components/academie/NewsletterForm";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   ARTICLE_CATEGORY_META,
   fmtArticleDate,
@@ -24,15 +22,8 @@ export const metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function Page() {
-  // Magazine reservé aux membres connectés (membre+).
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    redirect("/connexion?redirect=/academie/magazine");
-  }
-
+  // Vitrine du magazine ouverte aux invités. La lecture d'un article ou d'un
+  // numéro reste réservée aux membres connectés (cf. les pages correspondantes).
   const [issues, articles] = await Promise.all([
     listPublishedIssues(),
     listPublishedArticles(),
