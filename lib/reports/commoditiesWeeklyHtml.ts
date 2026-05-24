@@ -30,6 +30,20 @@ const monthTag = (iso: string) => {
   return `${MOIS_ABBR[mm - 1]} ${y.slice(2)}`;
 };
 
+type CommentaryStatus = "ok" | "no_key" | "error";
+
+const NO_KEY_MSG = "Commentaire automatique indisponible (clé API Claude non configurée).";
+const ERROR_MSG =
+  "Commentaire automatique indisponible : la recherche web a échoué ou dépassé le délai imparti. Relancez la génération.";
+
+/** Message de repli honnête pour une MP donnée selon la cause. */
+function commodityFallback(status: CommentaryStatus): string {
+  if (status === "no_key") return NO_KEY_MSG;
+  if (status === "error") return ERROR_MSG;
+  // status "ok" mais ce slug précis manquait dans la réponse du modèle.
+  return "Commentaire indisponible pour cette matière première.";
+}
+
 const CATEGORY: Record<string, { label: string; color: string }> = {
   agri: { label: "Agricole", color: "#16A34A" },
   energy: { label: "Énergie", color: "#334155" },
@@ -205,7 +219,7 @@ function commodityPage(
   page: number,
   total: number,
   asOfFr: string,
-  commentaryAvailable: boolean,
+  status: CommentaryStatus,
 ): string {
   const cat = CATEGORY[c.category] ?? { label: c.category, color: "#475569" };
   const range52 =
@@ -217,11 +231,7 @@ function commodityPage(
 
   const commentHtml = c.commentary
     ? `<div class="comment"><div class="lbl">🔍 Ce qui a bougé cette semaine</div><p>${esc(c.commentary)}</p></div>`
-    : `<div class="comment muted"><div class="lbl">Ce qui a bougé cette semaine</div><p>${
-        commentaryAvailable
-          ? "Commentaire indisponible pour cette matière première."
-          : "Commentaire automatique indisponible (clé API Claude non configurée)."
-      }</p></div>`;
+    : `<div class="comment muted"><div class="lbl">Ce qui a bougé cette semaine</div><p>${esc(commodityFallback(status))}</p></div>`;
 
   return `<section class="page">
   ${banner()}
@@ -300,7 +310,10 @@ export function renderCommoditiesWeeklyHtml(data: CommoditiesWeeklyData): string
     ${
       data.globalCommentary
         ? `<div class="lead"><span class="lbl">🔍 Vue d'ensemble</span>${esc(data.globalCommentary)}</div>`
-        : `<div class="lead"><span class="lbl">Vue d'ensemble</span>Commentaire automatique indisponible (clé API Claude non configurée). Le tableau ci-dessous reste basé sur les données de marché.</div>`
+        : `<div class="lead"><span class="lbl">Vue d'ensemble</span>${esc(
+            (data.commentaryStatus === "no_key" ? NO_KEY_MSG : ERROR_MSG) +
+              " Le tableau ci-dessous reste basé sur les données de marché.",
+          )}</div>`
     }
     <div class="section-title">Récapitulatif — ${data.commodities.length} matières premières</div>
     <table>
@@ -315,7 +328,7 @@ export function renderCommoditiesWeeklyHtml(data: CommoditiesWeeklyData): string
 </section>`;
 
   const pages = data.commodities
-    .map((c, i) => commodityPage(c, 3 + i, total, asOfFr, data.commentaryAvailable))
+    .map((c, i) => commodityPage(c, 3 + i, total, asOfFr, data.commentaryStatus))
     .join("\n");
 
   const sourcesHtml =

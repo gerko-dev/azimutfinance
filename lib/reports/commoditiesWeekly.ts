@@ -69,6 +69,8 @@ export type CommoditiesWeeklyData = {
   globalCommentary: string | null;
   commentaryModel: string | null;
   commentaryAvailable: boolean;
+  /** Cause précise quand les commentaires manquent (message honnête côté PDF). */
+  commentaryStatus: "ok" | "no_key" | "error";
   sources: string[];
 };
 
@@ -171,6 +173,7 @@ export async function getCommoditiesWeeklyData(): Promise<CommoditiesWeeklyData>
     asOf && weekStart ? `du ${frDateShort(weekStart)} au ${frDate(asOf)}` : "";
 
   // Commentaires IA (un seul appel pour toutes les MP).
+  const hasKey = !!process.env.ANTHROPIC_API_KEY;
   let commentary: CommodityCommentary | null = null;
   try {
     commentary = await generateCommodityCommentary({
@@ -205,6 +208,7 @@ export async function getCommoditiesWeeklyData(): Promise<CommoditiesWeeklyData>
     globalCommentary: commentary?.global || null,
     commentaryModel: commentary?.model ?? null,
     commentaryAvailable: commentary !== null,
+    commentaryStatus: commentary ? "ok" : hasKey ? "error" : "no_key",
     sources: commentary?.sources ?? [],
   };
 }

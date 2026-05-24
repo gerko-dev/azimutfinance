@@ -166,7 +166,7 @@ Réponds uniquement par le JSON demandé.`;
   // Budget temps global : au-delà, on abandonne les commentaires (le rapport
   // est tout de même produit). Évite que la route pende indéfiniment si le
   // flux Claude se fige. La route a maxDuration=300 → on borne bien en deçà.
-  const DEADLINE_MS = 210_000;
+  const DEADLINE_MS = 260_000;
   const controller = new AbortController();
   const deadline = setTimeout(() => controller.abort(), DEADLINE_MS);
 
