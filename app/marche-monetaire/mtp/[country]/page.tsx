@@ -11,6 +11,11 @@ import {
 } from "@/components/marche-monetaire/mtpStats";
 import { loadUmoaEmissions } from "@/lib/dataLoader";
 import type { EmissionUMOA } from "@/lib/listedBondsTypes";
+import {
+  umoaCoverageRatio,
+  umoaCoverageBySession,
+  umoaRowCoverage,
+} from "@/lib/listedBondsTypes";
 
 export const dynamic = "force-static";
 
@@ -83,26 +88,34 @@ export default async function CountryMTPPage({ params }: { params: Params }) {
   const meta = COUNTRIES[country];
   if (!meta) notFound();
 
+  // Date d'ADJUDICATION (date de l'opération) plutôt que date de valeur : c'est
+  // la date à laquelle l'émetteur s'est présenté au guichet. `tradeDate` porte
+  // l'adjudication ; on conserve `e.date` (valeur) pour les liens souverains.
+  const adj = (e: EmissionUMOA) => e.tradeDate || e.date;
+
   const all = loadUmoaEmissions();
   const emissions = all
     .filter((e) => e.country === meta.code)
-    .sort((a, b) => b.date.localeCompare(a.date));
+    .sort((a, b) => adj(b).localeCompare(adj(a)));
 
   if (emissions.length === 0) notFound();
 
   // Periode 12 mois glissants
-  const latestDate = new Date(emissions[0].date);
+  const latestDate = new Date(adj(emissions[0]));
   const cutoff = new Date(latestDate);
   cutoff.setMonth(cutoff.getMonth() - 12);
   const cutoffISO = cutoff.toISOString().slice(0, 10);
-  const recent = emissions.filter((e) => e.date >= cutoffISO);
+  const recent = emissions.filter((e) => adj(e) >= cutoffISO);
 
   // KPIs 12 mois
   const totalCount = recent.length;
   const totalAmount = recent.reduce((s, e) => s + e.amount, 0);
-  const totalSubmitted = recent.reduce((s, e) => s + e.amountSubmitted, 0);
-  const totalIssued = recent.reduce((s, e) => s + e.amountIssued, 0);
-  const coverage = totalIssued > 0 ? totalSubmitted / totalIssued : 0;
+  // Couverture = soumis / proposé, le montant proposé n'étant compté qu'une fois
+  // par session (pays, date, montant proposé). Voir umoaCoverageRatio.
+  const coverage = umoaCoverageRatio(recent) ?? 0;
+  // Couverture par session pour l'affichage ligne à ligne (historique complet
+  // de l'émetteur → sessions complètes).
+  const sessionCoverage = umoaCoverageBySession(emissions);
   const yieldAll = weightedAvgYield(recent);
 
   const bat = recent.filter((e) => e.type === "BAT");
@@ -117,7 +130,7 @@ export default async function CountryMTPPage({ params }: { params: Params }) {
   const maxMat = recent.length > 0 ? Math.max(...recent.map((e) => e.maturity)) : 0;
 
   // Position vs UEMOA
-  const allRecentUEMOA = all.filter((e) => e.date >= cutoffISO);
+  const allRecentUEMOA = all.filter((e) => adj(e) >= cutoffISO);
   const totalUEMOAAmount = allRecentUEMOA.reduce((s, e) => s + e.amount, 0);
   const sharePct = totalUEMOAAmount > 0 ? (totalAmount / totalUEMOAAmount) * 100 : 0;
 
@@ -150,7 +163,7 @@ export default async function CountryMTPPage({ params }: { params: Params }) {
     { count: number; amount: number; weightedYieldNum: number }
   >();
   for (const e of emissions) {
-    const year = e.date.slice(0, 4);
+    const year = adj(e).slice(0, 4);
     const stat = yearAcc.get(year) ?? { count: 0, amount: 0, weightedYieldNum: 0 };
     stat.count += 1;
     stat.amount += e.amount;
@@ -167,8 +180,10 @@ export default async function CountryMTPPage({ params }: { params: Params }) {
     .sort((a, b) => b.year.localeCompare(a.year));
   const maxYearAmount = Math.max(...yearRows.map((r) => r.amount), 1);
 
-  // Serie mensuelle : 24 mois glissants pour avoir une vraie tendance
-  const monthlyEmissions = filterRecentMonths(emissions, 24);
+  // Serie mensuelle : 24 mois glissants pour avoir une vraie tendance. On groupe
+  // par date d'adjudication (on réaligne `date` sur `tradeDate` pour ce calcul).
+  const byAuctionDate = emissions.map((e) => ({ ...e, date: adj(e) }));
+  const monthlyEmissions = filterRecentMonths(byAuctionDate, 24);
   const monthly = buildMonthlyPoints(monthlyEmissions);
 
   // Top 30 emissions recentes
@@ -252,7 +267,7 @@ export default async function CountryMTPPage({ params }: { params: Params }) {
             <span className="font-semibold">{sharePct.toFixed(1)} %</span>
           </div>
           <div className="text-xs text-blue-700">
-            Période : {fmtDate(cutoffISO)} → {fmtDate(emissions[0].date)}
+            Période : {fmtDate(cutoffISO)} → {fmtDate(adj(emissions[0]))}
           </div>
         </div>
 
@@ -266,7 +281,7 @@ export default async function CountryMTPPage({ params }: { params: Params }) {
             <KPI label="Montant retenu" value={fmtMillions(totalAmount)} hint="FCFA" />
             <KPI
               label="Couverture"
-              value={`${(coverage * 100).toFixed(0)} %`}
+              value={`${(coverage * 100).toFixed(2)} %`}
               hint="soumis / proposé"
             />
             <KPI label="Rdt pondéré" value={fmtPct(yieldAll)} hint="toutes maturités" />
@@ -417,7 +432,7 @@ export default async function CountryMTPPage({ params }: { params: Params }) {
             <table className="w-full text-sm">
               <thead className="bg-slate-50">
                 <tr>
-                  <Th align="left">Date valeur</Th>
+                  <Th align="left">Date adjud.</Th>
                   <Th align="left">Type</Th>
                   <Th align="left">ISIN</Th>
                   <Th align="left">Échéance</Th>
@@ -436,7 +451,7 @@ export default async function CountryMTPPage({ params }: { params: Params }) {
                     className="border-t border-slate-100 hover:bg-slate-50"
                   >
                     <td className="px-3 py-2 font-mono text-xs text-slate-600 whitespace-nowrap">
-                      {fmtFullDate(e.date)}
+                      {fmtFullDate(adj(e))}
                     </td>
                     <td className="px-3 py-2">
                       <span
@@ -481,9 +496,10 @@ export default async function CountryMTPPage({ params }: { params: Params }) {
                       {fmtMillions(e.amount)}
                     </td>
                     <td className="px-3 py-2 text-right font-mono text-slate-600">
-                      {e.amountIssued > 0
-                        ? `${((e.amountSubmitted / e.amountIssued) * 100).toFixed(0)} %`
-                        : "—"}
+                      {(() => {
+                        const cov = umoaRowCoverage(e, sessionCoverage);
+                        return cov != null ? `${(cov * 100).toFixed(2)} %` : "—";
+                      })()}
                     </td>
                     <td className="px-3 py-2 text-right font-mono text-slate-700">
                       {fmtPct(e.weightedAvgYield)}

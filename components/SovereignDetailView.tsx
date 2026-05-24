@@ -445,8 +445,9 @@ export default function SovereignDetailView({
     }));
   }, [orderedAdjudications, bond.couponRate]);
 
-  const cashCoverage =
-    bond.cashAmount > 0 ? bond.cashSubmitted / bond.cashAmount : 0;
+  // Taux d'absorption = montant retenu / montant soumis (part de la demande servie).
+  const cashAbsorption =
+    bond.cashSubmitted > 0 ? bond.cashAmount / bond.cashSubmitted : 0;
 
   // Variation par rapport au premier round (si multi-rounds)
   const yieldEvolution = useMemo(() => {
@@ -650,9 +651,9 @@ export default function SovereignDetailView({
                   </div>
                 </div>
                 <div className="bg-white rounded-lg border border-slate-200 p-4">
-                  <div className="text-xs text-slate-500 mb-1">Couverture moyenne</div>
+                  <div className="text-xs text-slate-500 mb-1">Taux d&apos;absorption moyen</div>
                   <div className="text-2xl md:text-3xl font-semibold">
-                    {cashCoverage > 0 ? cashCoverage.toFixed(2).replace(".", ",") + "×" : "—"}
+                    {cashAbsorption > 0 ? (cashAbsorption * 100).toFixed(2).replace(".", ",") + " %" : "—"}
                   </div>
                   <div className="text-xs text-slate-500 mt-1">
                     Cash auctions uniquement
@@ -702,9 +703,9 @@ export default function SovereignDetailView({
                       <span className="font-medium">{formatBigFCFA(last.amount)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-500">Couverture</span>
+                      <span className="text-slate-500">Taux d&apos;absorption</span>
                       <span className="font-medium">
-                        {last.coverage.toFixed(2).replace(".", ",")}×
+                        {(last.absorption * 100).toFixed(2).replace(".", ",")} %
                       </span>
                     </div>
                     {last.precisions && (
@@ -1059,7 +1060,7 @@ export default function SovereignDetailView({
                         Retenu
                       </th>
                       <th className="text-right px-2 py-2 font-medium">
-                        Couverture
+                        Absorption
                       </th>
                     </tr>
                   </thead>
@@ -1130,14 +1131,14 @@ export default function SovereignDetailView({
                         <td className="px-2 py-2 text-right">
                           <span
                             className={`text-xs px-1.5 py-0.5 rounded ${
-                              a.coverage >= 1.5
+                              a.absorption >= 0.9
                                 ? "bg-green-50 text-green-700"
-                                : a.coverage >= 1
+                                : a.absorption >= 0.6
                                 ? "bg-blue-50 text-blue-700"
                                 : "bg-amber-50 text-amber-700"
                             }`}
                           >
-                            {a.coverage.toFixed(2).replace(".", ",")}×
+                            {(a.absorption * 100).toFixed(2).replace(".", ",")} %
                           </span>
                         </td>
                       </tr>
@@ -1147,8 +1148,9 @@ export default function SovereignDetailView({
               </div>
               <div className="mt-3 pt-3 border-t border-slate-100 text-xs text-slate-500 leading-relaxed space-y-1">
                 <div>
-                  <strong>Couverture</strong> = montant soumis / montant retenu. Au-dessus
-                  de 1× = sur-souscription. <strong>Taux marginal</strong> = taux le plus
+                  <strong>Taux d&apos;absorption</strong> = montant retenu / montant soumis :
+                  part de la demande effectivement servie par l&apos;État (100 % = tout
+                  le soumis a été retenu). <strong>Taux marginal</strong> = taux le plus
                   élevé accepté à l&apos;adjudication ; <strong>Rendement moyen
                   pondéré</strong> = moyenne pondérée par les montants alloués.
                 </div>
@@ -1583,8 +1585,8 @@ export default function SovereignDetailView({
                   />
                 )}
                 <Row
-                  label="Couverture moyenne (cash)"
-                  value={cashCoverage > 0 ? cashCoverage.toFixed(2).replace(".", ",") + "×" : "—"}
+                  label="Taux d'absorption moyen (cash)"
+                  value={cashAbsorption > 0 ? (cashAbsorption * 100).toFixed(2).replace(".", ",") + " %" : "—"}
                 />
                 <Row
                   label="Rounds"

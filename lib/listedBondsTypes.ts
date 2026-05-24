@@ -962,6 +962,106 @@ export type EmissionUMOA = {
   url: string;
 };
 
+// ==========================================
+// TAUX DE COUVERTURE UMOA-TITRES (soumis / proposé)
+// ==========================================
+//
+// Un État sollicite un montant GLOBAL (« montantM » → amountIssued) qu'il lève
+// via plusieurs instruments le même jour (p. ex. 50 Mds à travers 3 lignes
+// BAT/OAT). Dans le CSV, ce montant proposé est répété À L'IDENTIQUE sur chaque
+// ligne, tandis que montants soumis et retenus diffèrent par ligne. Sommer
+// naïvement amountIssued le surcompte donc (×3 pour 3 lignes) et écrase le taux
+// de couverture.
+//
+// La mesure correcte regroupe les lignes par SESSION d'adjudication
+// (pays, date, montant proposé), ne compte le montant proposé qu'UNE fois par
+// session, et divise la somme de tous les montants soumis par ce total. Toutes
+// les lignes d'une même session partagent ainsi le même taux de couverture.
+
+type CoverageRow = Pick<
+  EmissionUMOA,
+  "country" | "date" | "amountSubmitted" | "amountIssued" | "amount" | "precisions"
+>;
+
+/** Clé de session d'adjudication cash : pays + date + montant proposé. */
+export function umoaSessionKey(e: Pick<EmissionUMOA, "country" | "date" | "amountIssued">): string {
+  return `${e.country}|${e.date}|${e.amountIssued}`;
+}
+
+/**
+ * Taux de couverture agrégé sur un ensemble d'opérations.
+ *
+ * - Adjudication cash : référence = montant proposé, compté UNE seule fois par
+ *   session (pays, date, montant proposé), cf. le commentaire ci-dessus.
+ * - Échange / rachat : le « montant proposé » du CSV est une enveloppe cumulée
+ *   non pertinente (elle écrase le taux). Ces opérations sont mécaniques (le
+ *   montant soumis est servi) : la référence est le montant RETENU, soit une
+ *   couverture = soumis / retenu — 100 % pour un échange où soumis = retenu,
+ *   conformément aux documents officiels UMOA-Titres.
+ *
+ * Renvoie null si aucune référence exploitable.
+ */
+export function umoaCoverageRatio(items: CoverageRow[]): number | null {
+  const proposedBySession = new Map<string, number>();
+  let submitted = 0;
+  let reference = 0;
+  for (const e of items) {
+    if (classifyOperation(e.precisions) === "cash_auction") {
+      if (!(e.amountIssued > 0)) continue;
+      submitted += e.amountSubmitted;
+      proposedBySession.set(umoaSessionKey(e), e.amountIssued);
+    } else {
+      // Échange / rachat : référence = montant retenu (opération mécanique).
+      if (!(e.amount > 0)) continue;
+      submitted += e.amountSubmitted;
+      reference += e.amount;
+    }
+  }
+  for (const v of proposedBySession.values()) reference += v;
+  return reference > 0 ? submitted / reference : null;
+}
+
+/**
+ * Couverture des SESSIONS cash : Map clé de session → ratio soumis/proposé.
+ * Les échanges/rachats n'y figurent pas (leur couverture se calcule par ligne
+ * via umoaRowCoverage). Calculer sur l'historique complet d'un émetteur garantit
+ * des sessions complètes (toutes les lignes d'une session partagent la même date).
+ */
+export function umoaCoverageBySession(items: CoverageRow[]): Map<string, number> {
+  const submittedBySession = new Map<string, number>();
+  const proposedBySession = new Map<string, number>();
+  for (const e of items) {
+    if (classifyOperation(e.precisions) !== "cash_auction") continue;
+    if (!(e.amountIssued > 0)) continue;
+    const key = umoaSessionKey(e);
+    submittedBySession.set(key, (submittedBySession.get(key) ?? 0) + e.amountSubmitted);
+    proposedBySession.set(key, e.amountIssued);
+  }
+  const out = new Map<string, number>();
+  for (const [key, sub] of submittedBySession) {
+    const proposed = proposedBySession.get(key) ?? 0;
+    if (proposed > 0) out.set(key, sub / proposed);
+  }
+  return out;
+}
+
+/**
+ * Taux de couverture d'une ligne pour l'affichage :
+ * - adjudication cash → couverture de SA session (soumis/proposé), identique
+ *   pour tous les instruments d'une même sollicitation ;
+ * - échange / rachat → soumis/retenu (mécanique : 100 % pour un échange).
+ * `cashSessionCoverage` est la Map renvoyée par umoaCoverageBySession.
+ */
+export function umoaRowCoverage(
+  e: CoverageRow,
+  cashSessionCoverage: Map<string, number>,
+): number | null {
+  if (classifyOperation(e.precisions) === "cash_auction") {
+    return cashSessionCoverage.get(umoaSessionKey(e)) ?? null;
+  }
+  return e.amount > 0 ? e.amountSubmitted / e.amount : null;
+}
+
 /**
  * Emission a venir UMOA-Titres : prochaines adjudications avec details connus.
  * Source : data/umoa-emissions-a-venir.csv (scraper UMOA quotidien).
@@ -1327,7 +1427,7 @@ export type SovereignBond = {
     valueDate: string;                        // "Date de valeur"
     amount: number;                           // montant retenu
     amountSubmitted: number;                  // montant soumis
-    coverage: number;                         // ratio soumis / retenu
+    absorption: number;                       // taux d'absorption = retenu / soumis
     yield: number;                            // rendement moyen pondere
     marginalYield: number | null;             // taux marginal
     weightedAvgRate: number | null;           // taux moyen pondere (BAT)
@@ -1496,7 +1596,7 @@ export function aggregateSovereignBonds(emissions: EmissionUMOA[]): SovereignBon
         valueDate: r.date,
         amount: r.amount,
         amountSubmitted: r.amountSubmitted,
-        coverage: r.amount > 0 ? r.amountSubmitted / r.amount : 0,
+        absorption: r.amountSubmitted > 0 ? r.amount / r.amountSubmitted : 0,
         yield: r.weightedAvgYield,
         marginalYield: r.marginalYield,
         weightedAvgRate: r.weightedAvgRate,

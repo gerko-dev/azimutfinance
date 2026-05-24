@@ -1,5 +1,10 @@
 import Link from "next/link";
 import type { EmissionUMOA } from "@/lib/listedBondsTypes";
+import {
+  umoaCoverageRatio,
+  umoaCoverageBySession,
+  umoaRowCoverage,
+} from "@/lib/listedBondsTypes";
 import Flag from "@/components/Flag";
 import MonthlyChart from "./MonthlyChart";
 import { buildMonthlyPoints, sovereignBondHref } from "./mtpStats";
@@ -47,22 +52,29 @@ const MATURITY_BUCKETS = [
 export default function RecapMTP({ emissions }: Props) {
   if (emissions.length === 0) return null;
 
-  // Tri desc par date pour reutilisation
-  const sorted = [...emissions].sort((a, b) => b.date.localeCompare(a.date));
+  // Date d'ADJUDICATION (date de l'opération) plutôt que date de valeur. On garde
+  // `e.date` (valeur) intact pour les liens souverains et le calcul de couverture.
+  const adj = (e: EmissionUMOA) => e.tradeDate || e.date;
 
-  // Filtre 12 mois glissants depuis l'emission la plus recente
-  const latestDate = new Date(sorted[0].date);
+  // Tri desc par date d'adjudication pour reutilisation
+  const sorted = [...emissions].sort((a, b) => adj(b).localeCompare(adj(a)));
+
+  // Filtre 12 mois glissants depuis l'adjudication la plus recente
+  const latestDate = new Date(adj(sorted[0]));
   const cutoff = new Date(latestDate);
   cutoff.setMonth(cutoff.getMonth() - 12);
   const cutoffISO = cutoff.toISOString().slice(0, 10);
-  const recent = sorted.filter((e) => e.date >= cutoffISO);
+  const recent = sorted.filter((e) => adj(e) >= cutoffISO);
 
   // ---- KPIs ----
   const totalCount = recent.length;
   const totalAmount = recent.reduce((s, e) => s + e.amount, 0);
-  const totalSubmitted = recent.reduce((s, e) => s + e.amountSubmitted, 0);
-  const totalIssued = recent.reduce((s, e) => s + e.amountIssued, 0);
-  const coverageRatio = totalIssued > 0 ? totalSubmitted / totalIssued : 0;
+  // Couverture = soumis / proposé, en ne comptant le montant proposé qu'une fois
+  // par session (pays, date, montant proposé). Voir umoaCoverageRatio.
+  const coverageRatio = umoaCoverageRatio(recent) ?? 0;
+  // Couverture par session pour l'affichage ligne à ligne (calcul sur l'historique
+  // complet → sessions complètes).
+  const coverageBySession = umoaCoverageBySession(sorted);
 
   const bat = recent.filter((e) => e.type === "BAT");
   const oat = recent.filter((e) => e.type === "OAT");
@@ -85,21 +97,19 @@ export default function RecapMTP({ emissions }: Props) {
   // ---- Vue par pays ----
   const countryAcc = new Map<
     string,
-    { count: number; amount: number; submitted: number; issued: number; weightedYieldNum: number }
+    { count: number; amount: number; weightedYieldNum: number; items: EmissionUMOA[] }
   >();
   for (const e of recent) {
     const stat = countryAcc.get(e.country) ?? {
       count: 0,
       amount: 0,
-      submitted: 0,
-      issued: 0,
       weightedYieldNum: 0,
+      items: [],
     };
     stat.count += 1;
     stat.amount += e.amount;
-    stat.submitted += e.amountSubmitted;
-    stat.issued += e.amountIssued;
     stat.weightedYieldNum += e.weightedAvgYield * e.amount;
+    stat.items.push(e);
     countryAcc.set(e.country, stat);
   }
   const countryRows = Array.from(countryAcc.entries())
@@ -108,7 +118,7 @@ export default function RecapMTP({ emissions }: Props) {
       label: COUNTRY_LABEL[code]?.label ?? code,
       count: s.count,
       amount: s.amount,
-      coverage: s.issued > 0 ? s.submitted / s.issued : 0,
+      coverage: umoaCoverageRatio(s.items) ?? 0,
       yieldRate: s.amount > 0 ? s.weightedYieldNum / s.amount : 0,
       sharePct: totalAmount > 0 ? (s.amount / totalAmount) * 100 : 0,
     }))
@@ -126,15 +136,15 @@ export default function RecapMTP({ emissions }: Props) {
   });
   const maxMatAmount = Math.max(...maturityRows.map((r) => r.amount), 1);
 
-  // ---- Serie mensuelle pour le graphique ----
-  const monthly = buildMonthlyPoints(recent);
+  // ---- Serie mensuelle pour le graphique (groupée par date d'adjudication) ----
+  const monthly = buildMonthlyPoints(recent.map((e) => ({ ...e, date: adj(e) })));
 
   // ---- 15 dernieres adjudications ----
   const lastAuctions = sorted.slice(0, 15);
 
-  // ---- Periode affichee ----
-  const firstISO = recent[recent.length - 1]?.date ?? "";
-  const lastISO = recent[0]?.date ?? "";
+  // ---- Periode affichee (dates d'adjudication) ----
+  const firstISO = recent[recent.length - 1] ? adj(recent[recent.length - 1]) : "";
+  const lastISO = recent[0] ? adj(recent[0]) : "";
 
   return (
     <section id="recap-mtp" className="scroll-mt-20">
@@ -193,7 +203,7 @@ export default function RecapMTP({ emissions }: Props) {
         <KPI label="Montant retenu" value={fmtMillions(totalAmount)} hint="FCFA" />
         <KPI
           label="Taux de couverture"
-          value={`${(coverageRatio * 100).toFixed(0)} %`}
+          value={`${(coverageRatio * 100).toFixed(2)} %`}
           hint="soumis / proposé"
         />
         <KPI
@@ -295,7 +305,7 @@ export default function RecapMTP({ emissions }: Props) {
                       {r.sharePct.toFixed(1)} %
                     </td>
                     <td className="px-3 py-2 text-right font-mono text-slate-700">
-                      {(r.coverage * 100).toFixed(0)} %
+                      {(r.coverage * 100).toFixed(2)} %
                     </td>
                     <td className="px-3 py-2 text-right font-mono text-slate-700">
                       {fmtPct(r.yieldRate)}
@@ -312,7 +322,7 @@ export default function RecapMTP({ emissions }: Props) {
                   </td>
                   <td className="px-3 py-2 text-right font-mono">100,0 %</td>
                   <td className="px-3 py-2 text-right font-mono">
-                    {(coverageRatio * 100).toFixed(0)} %
+                    {(coverageRatio * 100).toFixed(2)} %
                   </td>
                   <td className="px-3 py-2 text-right font-mono">
                     {fmtPct(weightedYield)}
@@ -418,7 +428,7 @@ export default function RecapMTP({ emissions }: Props) {
                   className="border-t border-slate-100 hover:bg-slate-50"
                 >
                   <td className="px-3 py-2 font-mono text-xs text-slate-600 whitespace-nowrap">
-                    {fmtDate(e.date)}
+                    {fmtDate(adj(e))}
                   </td>
                   <td className="px-3 py-2">
                     <span className="inline-flex items-center gap-1.5">
@@ -465,9 +475,10 @@ export default function RecapMTP({ emissions }: Props) {
                     {fmtMillions(e.amount)}
                   </td>
                   <td className="px-3 py-2 text-right font-mono text-slate-600">
-                    {e.amountIssued > 0
-                      ? `${((e.amountSubmitted / e.amountIssued) * 100).toFixed(0)} %`
-                      : "—"}
+                    {(() => {
+                      const cov = umoaRowCoverage(e, coverageBySession);
+                      return cov != null ? `${(cov * 100).toFixed(2)} %` : "—";
+                    })()}
                   </td>
                   <td className="px-3 py-2 text-right font-mono text-slate-700">
                     {fmtPct(e.weightedAvgYield)}

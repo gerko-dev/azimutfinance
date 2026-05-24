@@ -5,7 +5,7 @@ import type {
   CommodityWeekly,
   LocalPrice,
 } from "./commoditiesWeekly";
-import { logoColorUri } from "./assets";
+import { logoColorUri, bannerLogoUri, lastPageBgUri } from "./assets";
 
 // ── Formatage fr-FR ──────────────────────────────────────────────────────────
 const nf0 = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
@@ -191,8 +191,8 @@ body { font-family: Arial, Helvetica, sans-serif; color: #14171C; -webkit-print-
 .mphead .wk { font-size: 11pt; font-weight: 700; margin-top: 1mm; }
 .mphead .wk .muted { font-size: 7.5pt; color: #8A93A0; font-weight: 400; letter-spacing: .3px; }
 
-/* Graphique principal — absorbe l'espace disponible */
-.chart { flex: 1 1 auto; min-height: 40mm; display: flex; flex-direction: column; }
+/* Graphique principal — hauteur mesurée */
+.chart { flex: none; height: 58mm; display: flex; flex-direction: column; }
 .chart .plot { flex: 1; min-height: 0; border-bottom: 1px solid #E7E9EC; }
 .chart .axis { flex: none; display: flex; justify-content: space-between; font-size: 7pt; color: #8A93A0; padding-top: 1.2mm; }
 
@@ -222,8 +222,8 @@ body { font-family: Arial, Helvetica, sans-serif; color: #14171C; -webkit-print-
 .local .lspark { flex: 1; min-width: 0; }
 .local .lnote { font-size: 7pt; color: #8A93A0; margin-top: 1.5mm; }
 
-/* Analyse (commentaire) */
-.analysis { flex: none; }
+/* Analyse (commentaire) — remplit le bas de page */
+.analysis { flex: 1; min-height: 0; }
 .analysis p { font-family: Georgia, "Times New Roman", serif; font-size: 10.5pt; line-height: 1.62; color: #14171C; text-align: justify; }
 .analysis.muted p { color: #8A93A0; font-style: italic; }
 
@@ -244,21 +244,30 @@ tbody td.name { font-weight: 700; }
 .cmp { flex: 1; min-height: 34mm; border-bottom: 1px solid #E7E9EC; }
 .cmp-axis { flex: none; display: flex; justify-content: space-between; font-size: 7pt; color: #8A93A0; padding-top: 1.2mm; }
 
-/* Cover */
-.cover { flex: 1; display: flex; flex-direction: column; padding: 22mm 20mm 16mm; }
+/* Cover — fond bleu (visuel dernière page), écriture noir & blanc */
+.cover { flex: 1; position: relative; display: flex; flex-direction: column; padding: 22mm 20mm 16mm; background: linear-gradient(150deg, #0A2A5E 0%, #123A72 50%, #1E598E 100%); color: #fff; }
 .cover .top { flex: none; display: flex; align-items: center; justify-content: space-between; }
 .cover .top .logo { height: 11mm; width: auto; }
-.cover .top .ed { font-size: 8pt; letter-spacing: 2.5px; text-transform: uppercase; color: #6B7280; font-weight: 700; }
+.cover .top .ed { font-size: 8pt; letter-spacing: 2.5px; text-transform: uppercase; color: #CBD5E1; font-weight: 700; }
 .cover .hero { flex: 1; display: flex; flex-direction: column; justify-content: center; }
-.cover .kicker { font-size: 10pt; letter-spacing: 4px; text-transform: uppercase; color: #6B7280; font-weight: 700; }
-.cover h1 { font-family: Georgia, serif; font-size: 46pt; line-height: 1.02; font-weight: 700; margin-top: 3mm; }
-.cover .rule { border-bottom: 2.5px solid #14171C; width: 54mm; margin: 8mm 0; }
-.cover .week { font-family: Georgia, serif; font-size: 16pt; color: #14171C; }
+.cover .kicker { font-size: 10pt; letter-spacing: 4px; text-transform: uppercase; color: #CBD5E1; font-weight: 700; }
+.cover h1 { font-family: Georgia, serif; font-size: 46pt; line-height: 1.02; font-weight: 700; margin-top: 3mm; color: #fff; }
+.cover .rule { border-bottom: 2.5px solid #fff; width: 54mm; margin: 8mm 0; }
+.cover .week { font-family: Georgia, serif; font-size: 16pt; color: #fff; }
 .cover .somm { flex: none; }
-.cover .somm .sl { font-size: 7.5pt; letter-spacing: 1.6px; text-transform: uppercase; color: #6B7280; font-weight: 700; border-bottom: 1px solid #14171C; padding-bottom: 1.5mm; margin-bottom: 1mm; }
-.cover .somm .row { display: flex; justify-content: space-between; align-items: center; padding: 1.6mm 0; border-bottom: 1px solid #ECEEF1; font-size: 9.5pt; }
+.cover .somm .sl { font-size: 7.5pt; letter-spacing: 1.6px; text-transform: uppercase; color: #CBD5E1; font-weight: 700; border-bottom: 1px solid rgba(255,255,255,.55); padding-bottom: 1.5mm; margin-bottom: 1mm; }
+.cover .somm .row { display: flex; justify-content: space-between; align-items: center; padding: 1.6mm 0; border-bottom: 1px solid rgba(255,255,255,.18); font-size: 9.5pt; color: #fff; }
 .cover .somm .row .nm { font-weight: 600; }
-.cover .cfoot { flex: none; margin-top: 8mm; border-top: 1px solid #D7DBE0; padding-top: 3mm; display: flex; justify-content: space-between; font-size: 8pt; color: #6B7280; }
+.cover .somm .row .pg { font-weight: 700; color: #fff; }
+.cover .cfoot { flex: none; margin-top: 8mm; border-top: 1px solid rgba(255,255,255,.3); padding-top: 3mm; display: flex; justify-content: space-between; font-size: 8pt; color: #CBD5E1; }
+
+/* Dernière page — visuel de fond du PPT */
+.thanks { flex: 1; background-position: center; background-size: cover; background-repeat: no-repeat; color: #fff; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; text-align: center; padding: 0 24mm 22mm; }
+.contacts { display: flex; gap: 16mm; margin-bottom: 9mm; }
+.contact .ico { font-size: 15pt; }
+.contact .lbl { font-size: 8pt; color: #60A5FA; font-weight: 700; letter-spacing: .5px; margin: 2mm 0 1mm; }
+.contact .val { font-size: 9.5pt; }
+.disclaimer { font-size: 7.5pt; color: #CBD5E1; max-width: 150mm; line-height: 1.5; }
 `;
 
 function mast(): string {
@@ -416,18 +425,19 @@ export function renderCommoditiesWeeklyHtml(data: CommoditiesWeeklyData): string
   const [yy, mm, dd] = data.asOf.split("-");
   const asOfFr = data.asOf ? `${dd}/${mm}/${yy}` : "";
 
-  // Page de garde — éditoriale claire + sommaire chiffré
-  const sommaire = data.commodities
-    .map(
-      (c) =>
-        `<div class="row"><span class="nm"><span class="dot" style="background:${c.color}"></span>${esc(c.name)}</span><span class="num ${cls(c.weekChangePct)}">${tri(c.weekChangePct)}${signedPct(c.weekChangePct)}</span></div>`,
-    )
-    .join("");
+  // Page de garde — sommaire normal avec numéros de page
+  const sommaire = [
+    `<div class="row"><span class="nm">Synthèse de la semaine</span><span class="pg num">2</span></div>`,
+    ...data.commodities.map(
+      (c, i) =>
+        `<div class="row"><span class="nm"><span class="dot" style="background:${c.color}"></span>${esc(c.name)}</span><span class="pg num">${3 + i}</span></div>`,
+    ),
+  ].join("");
 
   const cover = `<section class="page">
   <div class="cover">
     <div class="top">
-      <img class="logo" src="${logoColorUri()}" alt="AzimutFinance">
+      <img class="logo" src="${bannerLogoUri()}" alt="AzimutFinance">
       <span class="ed">Édition hebdomadaire</span>
     </div>
     <div class="hero">
@@ -437,7 +447,7 @@ export function renderCommoditiesWeeklyHtml(data: CommoditiesWeeklyData): string
       <div class="week serif">Semaine ${esc(data.weekLabel)}</div>
     </div>
     <div class="somm">
-      <div class="sl">Au sommaire — variation hebdomadaire</div>
+      <div class="sl">Au sommaire</div>
       ${sommaire}
     </div>
     <div class="cfoot"><span>AzimutFinance</span><span>${esc(asOfFr)}</span></div>
@@ -481,33 +491,16 @@ export function renderCommoditiesWeeklyHtml(data: CommoditiesWeeklyData): string
     .map((c, i) => commodityPage(c, 3 + i, total, asOfFr, data.commentaryStatus))
     .join("\n");
 
-  // Dernière page — note méthodologique + sources, sobre
-  const sourcesHtml =
-    data.sources.length > 0
-      ? `<div style="font-size:7pt;color:#8A93A0;line-height:1.45;margin-top:4mm">Sources web consultées : ${esc(data.sources.slice(0, 14).join(" · "))}</div>`
-      : "";
-
+  // Dernière page — visuel de fond du PPT + contacts (version d'origine)
   const back = `<section class="page">
-  ${mast()}
-  <div class="content">
-    <div class="rowlabel">Méthodologie &amp; avertissement</div>
-    <p class="analysis" style="font-family:Georgia,serif;font-size:10pt;line-height:1.6;text-align:justify">
-      Les cours sont des clôtures quotidiennes des marchés internationaux de référence (ICE, NYMEX, COMEX, Bursa Malaysia, SGX). Les performances sont calculées en glissement à la date d'arrêté. Les prix de référence locaux (APROMAC pour le caoutchouc, Conseil Hévéa-Palmier pour la palme) sont des fixations officielles mensuelles en Côte d'Ivoire. Les commentaires sont produits automatiquement à partir de recherches web et de sources jugées fiables, sans garantie d'exactitude.
-    </p>
-    <p class="analysis" style="font-family:Georgia,serif;font-size:9.5pt;line-height:1.6;color:#6B7280;margin-top:4mm;text-align:justify">
-      Ce document est fourni à titre informatif uniquement et ne constitue ni une offre, ni un conseil, ni une recommandation d'investissement.
-    </p>
-    ${sourcesHtml}
-    <div style="flex:1"></div>
-    <div style="border-top:1.6px solid #14171C;padding-top:3mm;display:flex;justify-content:space-between;align-items:flex-end">
-      <div>
-        <div class="serif" style="font-size:15pt;font-weight:700">AzimutFinance</div>
-        <div style="font-size:8pt;color:#6B7280;margin-top:1mm">contact@azimutfinance.com · +225 07 10 41 12 00 · www.azimutfinance.com</div>
-      </div>
-      <div style="font-size:8pt;color:#6B7280">© ${yy || ""}</div>
+  <div class="thanks" style="background-image:url('${lastPageBgUri()}')">
+    <div class="contacts">
+      <div class="contact"><div class="ico">✉</div><div class="lbl">EMAIL</div><div class="val">contact@azimutfinance.com</div></div>
+      <div class="contact"><div class="ico">☎</div><div class="lbl">TÉLÉPHONE</div><div class="val">+225 07 10 41 12 00</div></div>
+      <div class="contact"><div class="ico">⌂</div><div class="lbl">SITE WEB</div><div class="val">www.azimutfinance.com</div></div>
     </div>
+    <div class="disclaimer">Ce document est fourni à titre informatif uniquement et ne constitue ni une offre ni une recommandation d'investissement. Les données proviennent de sources jugées fiables mais ne sont pas garanties. © ${yy || ""} AzimutFinance — Tous droits réservés.</div>
   </div>
-  ${foot(total, total, asOfFr)}
 </section>`;
 
   return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><style>${STYLE}</style></head><body>

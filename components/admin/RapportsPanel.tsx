@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-type Job = "pdf" | "xlsx" | "weekly" | null;
+type Job = "pdf" | "xlsx" | "weekly" | "mtp" | null;
 
 function filenameFromDisposition(h: string | null, fallback: string): string {
   if (!h) return fallback;
@@ -22,6 +22,12 @@ function stageMessage(job: Job, elapsed: number): string {
     if (elapsed < 6) return "Chargement des cours des matières premières…";
     if (elapsed < 70)
       return "🔍 Recherche web en cours — Claude analyse l'actualité des 7 matières premières…";
+    return "Mise en page et rendu du PDF (Chromium)…";
+  }
+  if (job === "mtp") {
+    if (elapsed < 6) return "Chargement des adjudications UMOA-Titres…";
+    if (elapsed < 70)
+      return "🔍 Recherche web en cours — Claude analyse le marché des titres publics des 8 États…";
     return "Mise en page et rendu du PDF (Chromium)…";
   }
   if (job === "pdf") return "Rendu du PDF en cours (Chromium)…";
@@ -119,7 +125,8 @@ export default function RapportsPanel() {
             </div>
             <div className="text-xs text-blue-600/80 mt-0.5 tabular-nums">
               Temps écoulé&nbsp;: {mmss(elapsed)}
-              {busy === "weekly" && " · cette opération prend généralement 1 à 2 minutes"}
+              {(busy === "weekly" || busy === "mtp") &&
+                " · cette opération prend généralement 1 à 2 minutes"}
             </div>
           </div>
         </div>
@@ -217,6 +224,52 @@ export default function RapportsPanel() {
             className="inline-flex items-center gap-2 bg-slate-900 text-white text-sm font-medium px-4 py-2 rounded hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {busy === "weekly" ? "Génération du PDF…" : "Générer le PDF"}
+          </button>
+        </div>
+
+        <p className="text-xs text-slate-400 mt-3">
+          La génération peut prendre 1 à 2 minutes (recherches web Claude + rendu
+          Chromium). Nécessite la clé <code>ANTHROPIC_API_KEY</code> ; sans elle,
+          le rapport est produit sans commentaires.
+        </p>
+      </div>
+
+      <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-sm">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span aria-hidden className="text-xl">
+                🏛️
+              </span>
+              <h2 className="text-base font-semibold text-slate-900">
+                Hebdo marché des titres publics
+              </h2>
+              <span className="text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">
+                Weekly · A4 portrait
+              </span>
+            </div>
+            <p className="text-sm text-slate-500 mt-1.5">
+              Adjudications UMOA-Titres (BAT &amp; OAT) des 8 États de l&apos;UEMOA :
+              page de garde, synthèse régionale, une page par pays (taux, couverture,
+              maturités, calendrier) et dernière page. Les commentaires de la semaine
+              sont générés par Claude à partir de recherches web.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2.5 mt-4">
+          <button
+            onClick={() =>
+              download(
+                "mtp",
+                "/admin/rapports/mtp/pdf",
+                "Hebdo_Marche_Titres_Publics.pdf",
+              )
+            }
+            disabled={busy !== null}
+            className="inline-flex items-center gap-2 bg-slate-900 text-white text-sm font-medium px-4 py-2 rounded hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {busy === "mtp" ? "Génération du PDF…" : "Générer le PDF"}
           </button>
         </div>
 
