@@ -10,6 +10,7 @@
     "refresh-fund": "python scripts/extract_data_ef.py"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.98.0",
     "@sparticuz/chromium": "^148.0.0",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.105.0",

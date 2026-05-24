@@ -53,17 +53,23 @@ async function launchBrowser(): Promise<Browser> {
 }
 
 /**
- * Rend un document HTML complet en PDF (format A4 paysage, fond imprimé).
- * Le HTML doit embarquer son propre CSS (aucune ressource réseau requise).
+ * Rend un document HTML complet en PDF A4, fond imprimé.
+ * Le HTML doit embarquer son propre CSS (aucune ressource réseau requise) ;
+ * l'orientation est gouvernée par le `@page { size }` du CSS (preferCSSPageSize)
+ * mais on passe aussi `landscape` en repli. Paysage par défaut.
  */
-export async function htmlToPdf(html: string): Promise<Buffer> {
+export async function htmlToPdf(
+  html: string,
+  opts: { landscape?: boolean } = {},
+): Promise<Buffer> {
+  const { landscape = true } = opts;
   const browser = await launchBrowser();
   try {
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: "load" });
     const pdf = await page.pdf({
       format: "A4",
-      landscape: true,
+      landscape,
       printBackground: true,
       preferCSSPageSize: true,
       margin: { top: "0", right: "0", bottom: "0", left: "0" },

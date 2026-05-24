@@ -56,6 +56,11 @@ const nextConfig: NextConfig = {
       "./logo/png/logo-horizontal-fond-sombre.png",
       "./lib/reports/assets/**",
     ],
+    "/admin/rapports/commodities/pdf": [
+      "./node_modules/@sparticuz/chromium/bin/**",
+      "./logo/png/logo-horizontal-fond-sombre.png",
+      "./lib/reports/assets/**",
+    ],
   },
   // pdfjs-dist spawns a worker that resolves its sibling pdf.worker.mjs by
   // relative path. Turbopack/webpack hoist the bundle into .next/, which
