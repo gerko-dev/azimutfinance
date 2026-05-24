@@ -21,6 +21,11 @@ export function bannerLogoUri(): string {
   return pngDataUri("logo/png/logo-horizontal-fond-sombre.png");
 }
 
+/** Logo monochrome marine sur fond transparent, sans baseline — fonds clairs. */
+export function logoColorUri(): string {
+  return pngDataUri("logo/png/logo-mono-marine.png");
+}
+
 /** Visuel de fond de la dernière diapositive du PPT (exporté en PNG). */
 export function lastPageBgUri(): string {
   return pngDataUri("lib/reports/assets/last-page-bg.png");

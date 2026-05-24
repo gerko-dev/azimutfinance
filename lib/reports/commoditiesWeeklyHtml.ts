@@ -1,90 +1,87 @@
 import "server-only";
 
-import type { CommoditiesWeeklyData, CommodityWeekly } from "./commoditiesWeekly";
-import { bannerLogoUri, lastPageBgUri } from "./assets";
+import type {
+  CommoditiesWeeklyData,
+  CommodityWeekly,
+  LocalPrice,
+} from "./commoditiesWeekly";
+import { logoColorUri } from "./assets";
 
 // ── Formatage fr-FR ──────────────────────────────────────────────────────────
 const nf0 = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
+const nf1 = new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const nf2 = new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const num = (n: number) => (Math.abs(n) >= 1000 ? nf0 : nf2).format(n);
+const fcfa = (n: number) => nf0.format(Math.round(n));
 const signedPct = (v: number | null) =>
-  v == null || !isFinite(v) ? "n.d." : (v >= 0 ? "+" : "") + nf2.format(v) + " %";
+  v == null || !isFinite(v) ? "—" : (v >= 0 ? "+" : "") + nf1.format(v) + " %";
 const cls = (v: number | null) =>
   v == null || Math.abs(v) < 1e-9 ? "flat" : v > 0 ? "up" : "down";
-const arrow = (v: number | null) =>
-  v == null || Math.abs(v) < 1e-9 ? "→" : v > 0 ? "▲" : "▼";
+const tri = (v: number | null) =>
+  v == null || Math.abs(v) < 1e-9 ? "" : v > 0 ? "▲ " : "▼ ";
 
 function esc(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 const MOIS_ABBR = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
-const monthTag = (iso: string) => {
-  const [, m, y] = [iso.slice(0, 4), iso.slice(5, 7), iso.slice(0, 4)];
-  void m;
-  const mm = Number(iso.slice(5, 7));
-  return `${MOIS_ABBR[mm - 1]} ${y.slice(2)}`;
+const monthTag = (iso: string) => `${MOIS_ABBR[Number(iso.slice(5, 7)) - 1]} ${iso.slice(2, 4)}`;
+
+const CATEGORY_LABEL: Record<string, string> = {
+  agri: "Agricole",
+  energy: "Énergie",
+  metal: "Métal précieux",
 };
 
 type CommentaryStatus = "ok" | "no_key" | "error";
-
-const NO_KEY_MSG = "Commentaire automatique indisponible (clé API Claude non configurée).";
+const NO_KEY_MSG = "Commentaire automatique indisponible : clé API non configurée.";
 const ERROR_MSG =
   "Commentaire automatique indisponible : la recherche web a échoué ou dépassé le délai imparti. Relancez la génération.";
-
-/** Message de repli honnête pour une MP donnée selon la cause. */
-function commodityFallback(status: CommentaryStatus): string {
+function commentaryFallback(status: CommentaryStatus): string {
   if (status === "no_key") return NO_KEY_MSG;
   if (status === "error") return ERROR_MSG;
-  // status "ok" mais ce slug précis manquait dans la réponse du modèle.
   return "Commentaire indisponible pour cette matière première.";
 }
 
-const CATEGORY: Record<string, { label: string; color: string }> = {
-  agri: { label: "Agricole", color: "#16A34A" },
-  energy: { label: "Énergie", color: "#334155" },
-  metal: { label: "Métal précieux", color: "#CA8A04" },
-};
+// ── Graphiques SVG inline ─────────────────────────────────────────────────────
+let _gid = 0;
+function gid(): string {
+  return "g" + (++_gid).toString(36);
+}
 
-// ── Graphique en aire (SVG inline) ───────────────────────────────────────────
-function areaChart(points: { date: string; value: number }[], color: string, height = "44mm"): string {
+/** Aire de prix, remplit la hauteur de son conteneur (preserveAspectRatio none). */
+function areaChart(points: { date: string; value: number }[], color: string): string {
   if (points.length < 2) return "";
-  const W = 800;
-  const H = 300;
-  const padL = 4;
-  const padR = 4;
-  const padT = 8;
+  const W = 1000;
+  const H = 380;
+  const padT = 10;
   const padB = 4;
   const values = points.map((p) => p.value);
   const min = Math.min(...values);
   const max = Math.max(...values);
   const range = max - min || 1;
-  const innerW = W - padL - padR;
   const innerH = H - padT - padB;
-  const x = (i: number) => padL + (i / (points.length - 1)) * innerW;
+  const x = (i: number) => (i / (points.length - 1)) * W;
   const y = (v: number) => padT + (1 - (v - min) / range) * innerH;
   const line = points.map((p, i) => `${x(i).toFixed(1)},${y(p.value).toFixed(1)}`).join(" ");
   const base = (padT + innerH).toFixed(1);
-  const area = `${padL.toFixed(1)},${base} ${line} ${(padL + innerW).toFixed(1)},${base}`;
-  const gid = "g" + Math.abs(hashStr(color + points.length)).toString(36);
-  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:${height};display:block">
-    <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="${color}" stop-opacity="0.28"/>
+  const area = `0,${base} ${line} ${W},${base}`;
+  const id = gid();
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:100%;display:block">
+    <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${color}" stop-opacity="0.22"/>
       <stop offset="100%" stop-color="${color}" stop-opacity="0.02"/>
     </linearGradient></defs>
-    <polygon points="${area}" fill="url(#${gid})"/>
-    <polyline points="${line}" fill="none" stroke="${color}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+    <polygon points="${area}" fill="url(#${id})"/>
+    <polyline points="${line}" fill="none" stroke="${color}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
   </svg>`;
 }
 
 function sparkline(points: { date: string; value: number }[], color: string): string {
   if (points.length < 2) return "";
-  const W = 200;
-  const H = 48;
+  const W = 220;
+  const H = 46;
   const values = points.map((p) => p.value);
   const min = Math.min(...values);
   const max = Math.max(...values);
@@ -92,126 +89,257 @@ function sparkline(points: { date: string; value: number }[], color: string): st
   const x = (i: number) => (i / (points.length - 1)) * W;
   const y = (v: number) => 3 + (1 - (v - min) / range) * (H - 6);
   const line = points.map((p, i) => `${x(i).toFixed(1)},${y(p.value).toFixed(1)}`).join(" ");
-  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:9mm;display:block">
-    <polyline points="${line}" fill="none" stroke="${color}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:8mm;display:block">
+    <polyline points="${line}" fill="none" stroke="${color}" stroke-width="3" stroke-linejoin="round"/>
   </svg>`;
 }
 
-function hashStr(s: string): number {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h << 5) - h + s.charCodeAt(i);
-  return h;
+/** Saisonnalité : 12 barres (rendement mensuel moyen) autour d'une ligne zéro. */
+function seasonalityChart(avg: (number | null)[]): string {
+  const labels = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"];
+  const vals = avg.map((v) => (v == null || !isFinite(v) ? 0 : v));
+  const maxAbs = Math.max(0.8, ...vals.map((v) => Math.abs(v)));
+  const W = 1000;
+  const H = 150;
+  const mid = H / 2;
+  const slot = W / 12;
+  const bw = slot * 0.56;
+  let bars = "";
+  let lbls = "";
+  for (let i = 0; i < 12; i++) {
+    const v = vals[i];
+    const h = (Math.abs(v) / maxAbs) * (mid - 14);
+    const up = v >= 0;
+    const yTop = up ? mid - h : mid;
+    const cx = i * slot + slot / 2;
+    const color = up ? "#157347" : "#C0392B";
+    bars += `<rect x="${(cx - bw / 2).toFixed(1)}" y="${yTop.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0.5, h).toFixed(1)}" fill="${color}"/>`;
+    lbls += `<text x="${cx.toFixed(1)}" y="${H - 3}" font-size="13" fill="#8A93A0" text-anchor="middle" font-family="Arial">${labels[i]}</text>`;
+  }
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:18mm;display:block">
+    <line x1="0" y1="${mid}" x2="${W}" y2="${mid}" stroke="#CBD2DA" stroke-width="1"/>
+    ${bars}${lbls}
+  </svg>`;
 }
 
-// ── CSS (A4 portrait) ─────────────────────────────────────────────────────────
+/** Performance comparée base 100 sur 1 an : une ligne par MP (couleur propre). */
+function compareChart(commodities: CommodityWeekly[]): string {
+  const series = commodities
+    .map((c) => {
+      const h = c.history1Y;
+      if (h.length < 2 || h[0].value <= 0) return null;
+      const base = h[0].value;
+      return { color: c.color, pts: h.map((p) => (p.value / base) * 100) };
+    })
+    .filter((s): s is { color: string; pts: number[] } => s !== null);
+  if (series.length === 0) return "";
+  const all = series.flatMap((s) => s.pts);
+  const min = Math.min(...all);
+  const max = Math.max(...all);
+  const range = max - min || 1;
+  const W = 1000;
+  const H = 360;
+  const padT = 8;
+  const padB = 8;
+  const innerH = H - padT - padB;
+  const y = (v: number) => padT + (1 - (v - min) / range) * innerH;
+  const x = (i: number, n: number) => (n <= 1 ? 0 : (i / (n - 1)) * W);
+  let lines = "";
+  for (const s of series) {
+    const n = s.pts.length;
+    const d = s.pts.map((v, i) => `${x(i, n).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+    lines += `<polyline points="${d}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" opacity="0.9"/>`;
+  }
+  const y100 = y(100).toFixed(1);
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:100%;display:block">
+    <line x1="0" y1="${y100}" x2="${W}" y2="${y100}" stroke="#B9C0C9" stroke-dasharray="4 4" stroke-width="1"/>
+    ${lines}
+  </svg>`;
+}
+
+// ── CSS (A4 portrait, thème éditorial clair) ──────────────────────────────────
 const STYLE = `
 @page { size: A4 portrait; margin: 0; }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: "Segoe UI", Arial, Helvetica, sans-serif; color: #0F172A; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-.page { width: 210mm; height: 297mm; position: relative; overflow: hidden; background: #fff; page-break-after: always; }
+:root {}
+body { font-family: Arial, Helvetica, sans-serif; color: #14171C; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.serif { font-family: Georgia, "Times New Roman", serif; }
+.page { width: 210mm; height: 297mm; background: #fff; display: flex; flex-direction: column; overflow: hidden; page-break-after: always; }
 .page:last-child { page-break-after: auto; }
 
-/* Bandeau */
-.banner { background: #0A2A5E; color: #fff; padding: 7mm 14mm; display: flex; justify-content: space-between; align-items: center; gap: 6mm; }
-.banner .logo { height: 11mm; width: auto; flex: none; }
-.banner .heading { text-align: right; }
-.banner .heading .t { font-size: 13pt; font-weight: 800; letter-spacing: .4px; }
-.banner .heading .s { font-size: 8.5pt; color: #93C5FD; font-weight: 600; margin-top: .5mm; }
-.accent { height: 1.6mm; background: #2563EB; }
-.content { padding: 8mm 14mm 0; }
-.footer { position: absolute; bottom: 6mm; left: 14mm; right: 14mm; display: flex; justify-content: space-between; font-size: 7.5pt; color: #94A3B8; border-top: 1px solid #E2E8F0; padding-top: 2mm; }
+.mast { flex: none; display: flex; align-items: center; justify-content: space-between; padding: 10mm 16mm 3.5mm; }
+.mast .logo { height: 8.5mm; width: auto; }
+.mast .kicker { font-size: 7.5pt; letter-spacing: 2.5px; text-transform: uppercase; color: #14171C; font-weight: 700; }
+.mast-rule { flex: none; border-bottom: 1.6px solid #14171C; margin: 0 16mm; }
 
-/* Cover */
-.cover { position: absolute; inset: 0; background: #0A2A5E; color: #fff; display: flex; flex-direction: column; padding: 26mm 22mm; }
-.cover::after { content: ""; position: absolute; inset: 0; background: radial-gradient(120% 80% at 80% 110%, rgba(37,99,235,.22), transparent 60%); pointer-events: none; }
-.cover > * { position: relative; z-index: 1; }
-.cover .logo { height: 16mm; width: auto; }
-.cover .mid { margin-top: auto; margin-bottom: auto; }
-.cover .kicker { font-size: 10pt; letter-spacing: 3px; color: #60A5FA; font-weight: 700; text-transform: uppercase; }
-.cover h1 { font-size: 34pt; font-weight: 800; line-height: 1.08; margin: 4mm 0 3mm; }
-.cover .sub { font-size: 13pt; color: #CBD5E1; font-weight: 500; }
-.cover .rule { width: 40mm; height: 3px; background: #2563EB; margin: 8mm 0; }
-.cover .week { display: inline-block; background: rgba(37,99,235,.18); border: 1px solid #2563EB; color: #DBEAFE; font-weight: 700; font-size: 12pt; padding: 2.5mm 7mm; border-radius: 30px; }
-.cover .foot { font-size: 9pt; color: #93A4C4; display: flex; justify-content: space-between; align-items: end; }
+.content { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 6mm 16mm 0; gap: 4mm; }
+
+.foot { flex: none; margin: 0 16mm; border-top: 1px solid #D7DBE0; padding: 2.5mm 0 6mm; display: flex; justify-content: space-between; font-size: 7.5pt; color: #6B7280; }
+
+.eyebrow { font-size: 7.5pt; letter-spacing: 1.6px; text-transform: uppercase; color: #6B7280; font-weight: 700; }
+.rowlabel { font-size: 8pt; letter-spacing: 1.4px; text-transform: uppercase; color: #14171C; font-weight: 700; border-bottom: 1px solid #14171C; padding-bottom: 1.2mm; margin-bottom: 2.5mm; }
+
+.up { color: #157347; } .down { color: #C0392B; } .flat { color: #6B7280; }
+.num { font-variant-numeric: tabular-nums; }
+
+/* En-tête fiche MP */
+.mphead { flex: none; display: flex; align-items: flex-end; justify-content: space-between; gap: 6mm; border-bottom: 1px solid #D7DBE0; padding-bottom: 3mm; }
+.mphead .mpname { font-size: 25pt; font-weight: 700; line-height: 1; }
+.mphead .price { text-align: right; }
+.mphead .px { font-size: 21pt; font-weight: 700; }
+.mphead .px .unit { font-size: 9pt; color: #6B7280; font-weight: 400; }
+.mphead .wk { font-size: 11pt; font-weight: 700; margin-top: 1mm; }
+.mphead .wk .muted { font-size: 7.5pt; color: #8A93A0; font-weight: 400; letter-spacing: .3px; }
+
+/* Graphique principal — absorbe l'espace disponible */
+.chart { flex: 1 1 auto; min-height: 40mm; display: flex; flex-direction: column; }
+.chart .plot { flex: 1; min-height: 0; border-bottom: 1px solid #E7E9EC; }
+.chart .axis { flex: none; display: flex; justify-content: space-between; font-size: 7pt; color: #8A93A0; padding-top: 1.2mm; }
+
+/* Perfs multi-horizons */
+.perf, .metrics { flex: none; }
+.cells { display: flex; }
+.cells .c { flex: 1; text-align: center; padding: 2mm 0; border-right: 1px solid #E7E9EC; }
+.cells .c:last-child { border-right: none; }
+.cells .c .k { font-size: 6.8pt; color: #8A93A0; text-transform: uppercase; letter-spacing: .4px; }
+.cells .c .v { font-size: 10pt; font-weight: 700; margin-top: .6mm; }
+
+.metrics .cells .c { padding: 2.2mm 0; }
+.metrics .cells .c .v { font-size: 9.5pt; }
+
+/* Saisonnalité */
+.seas { flex: none; }
+
+/* Bloc prix local CI */
+.local { flex: none; background: #F4F6F8; border: 1px solid #E1E5EA; padding: 3mm 4mm; }
+.local .lt { font-size: 9pt; font-weight: 700; }
+.local .ls { font-size: 7pt; color: #8A93A0; margin-top: .4mm; }
+.local .lgrid { display: flex; gap: 6mm; margin-top: 2.5mm; align-items: center; }
+.local .lstat { }
+.local .lstat .k { font-size: 6.8pt; color: #8A93A0; text-transform: uppercase; letter-spacing: .3px; }
+.local .lstat .v { font-size: 12pt; font-weight: 700; }
+.local .lstat .s { font-size: 8pt; font-weight: 700; }
+.local .lspark { flex: 1; min-width: 0; }
+.local .lnote { font-size: 7pt; color: #8A93A0; margin-top: 1.5mm; }
+
+/* Analyse (commentaire) */
+.analysis { flex: none; }
+.analysis p { font-family: Georgia, "Times New Roman", serif; font-size: 10.5pt; line-height: 1.62; color: #14171C; text-align: justify; }
+.analysis.muted p { color: #8A93A0; font-style: italic; }
 
 /* Récap */
-.lead { font-size: 9.5pt; line-height: 1.55; color: #1E293B; background: #F8FAFC; border-left: 4px solid #2563EB; border-radius: 6px; padding: 4mm 5mm; margin-bottom: 5mm; }
-.lead .lbl { display: block; font-size: 8pt; font-weight: 800; color: #2563EB; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 1.5mm; }
-.section-title { font-size: 11pt; font-weight: 800; margin: 0 0 2.5mm; color: #0F172A; }
-table { border-collapse: collapse; width: 100%; font-size: 8.8pt; }
-th { background: #0F172A; color: #fff; text-align: left; padding: 2mm 2.5mm; font-size: 7.8pt; font-weight: 700; }
-td { padding: 2mm 2.5mm; border-bottom: 1px solid #E2E8F0; vertical-align: middle; }
-tbody tr:nth-child(even) td { background: #F8FAFC; }
-.num { text-align: right; font-variant-numeric: tabular-nums; }
-.up { color: #16A34A; font-weight: 700; } .down { color: #DC2626; font-weight: 700; } .flat { color: #64748B; }
-.bold { font-weight: 700; }
-.dot { display: inline-block; width: 2.4mm; height: 2.4mm; border-radius: 50%; margin-right: 2mm; vertical-align: middle; box-shadow: inset 0 0 0 1px rgba(15,23,42,.25); }
+.lead { font-family: Georgia, serif; font-size: 11pt; line-height: 1.6; color: #14171C; padding: 1mm 0 4mm; text-align: justify; }
+table { border-collapse: collapse; width: 100%; }
+thead th { font-family: Arial; font-size: 7.4pt; letter-spacing: .4px; text-transform: uppercase; color: #6B7280; font-weight: 700; text-align: right; padding: 0 2.5mm 2mm; border-bottom: 1.4px solid #14171C; }
+thead th.l { text-align: left; }
+tbody td { font-size: 9.4pt; padding: 2.6mm 2.5mm; border-bottom: 1px solid #E7E9EC; text-align: right; }
+tbody td.l { text-align: left; }
+tbody td.name { font-weight: 700; }
+.dot { display: inline-block; width: 2.4mm; height: 2.4mm; border-radius: 50%; margin-right: 2mm; vertical-align: middle; box-shadow: inset 0 0 0 1px rgba(20,23,28,.2); }
 
-/* Page MP */
-.mp-head { display: flex; align-items: baseline; gap: 3mm; border-bottom: 2px solid #E2E8F0; padding-bottom: 3mm; }
-.mp-head h2 { font-size: 19pt; font-weight: 800; }
-.cat { font-size: 7.5pt; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; color: #fff; padding: 1mm 2.5mm; border-radius: 4px; }
-.mp-meta { margin-left: auto; text-align: right; font-size: 8pt; color: #64748B; }
-.priceRow { display: flex; align-items: flex-end; gap: 6mm; margin: 4mm 0; }
-.priceRow .px { font-size: 26pt; font-weight: 800; line-height: 1; }
-.priceRow .unit { font-size: 9pt; color: #64748B; font-weight: 600; }
-.priceRow .wk { font-size: 14pt; font-weight: 800; }
-.priceRow .wklbl { font-size: 7.5pt; color: #94A3B8; text-transform: uppercase; letter-spacing: .4px; font-weight: 700; }
-.chartwrap { border: 1px solid #E2E8F0; border-radius: 8px; padding: 3mm 3mm 1.5mm; background: #F8FAFC; }
-.chartwrap .axis { display: flex; justify-content: space-between; font-size: 7pt; color: #94A3B8; margin-top: .5mm; }
-.statgrid { display: flex; gap: 0; border: 1px solid #E2E8F0; border-radius: 8px; overflow: hidden; margin: 4mm 0; }
-.statgrid .cell { flex: 1; padding: 2.8mm 3mm; border-right: 1px solid #E2E8F0; text-align: center; }
-.statgrid .cell:last-child { border-right: none; }
-.statgrid .k { font-size: 7pt; color: #94A3B8; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; }
-.statgrid .v { font-size: 11pt; font-weight: 800; margin-top: .8mm; }
-.brvm { background: #F1F5F9; border-radius: 8px; padding: 3.5mm 4mm; margin-bottom: 4mm; font-size: 8.6pt; line-height: 1.5; }
-.brvm .lbl { font-size: 7.5pt; font-weight: 800; color: #2563EB; text-transform: uppercase; letter-spacing: .4px; margin-bottom: 1.5mm; }
-.badges { margin-top: 2mm; }
-.badge { display: inline-block; font-size: 7.5pt; font-weight: 700; background: #fff; border: 1px solid #CBD5E1; color: #334155; padding: .8mm 2mm; border-radius: 4px; margin: 0 1.5mm 1.5mm 0; }
-.comment { border: 1px solid #DBEAFE; background: #EFF6FF; border-radius: 8px; padding: 4mm 5mm; }
-.comment .lbl { font-size: 8pt; font-weight: 800; color: #1D4ED8; text-transform: uppercase; letter-spacing: .4px; margin-bottom: 2mm; display: flex; align-items: center; gap: 2mm; }
-.comment p { font-size: 9.5pt; line-height: 1.6; color: #1E293B; }
-.comment.muted { border-color: #E2E8F0; background: #F8FAFC; }
-.comment.muted p { color: #94A3B8; font-style: italic; }
+/* Performance comparée (récap) */
+.cmp-legend { display: flex; flex-wrap: wrap; gap: 1.5mm 5mm; font-size: 7.5pt; color: #4B5563; margin: 1mm 0 1.5mm; }
+.cmp-legend .lg { display: inline-flex; align-items: center; }
+.cmp-legend .lgdot { display: inline-block; width: 2mm; height: 2mm; border-radius: 50%; margin-right: 1.5mm; box-shadow: inset 0 0 0 1px rgba(20,23,28,.2); }
+.cmp { flex: 1; min-height: 34mm; border-bottom: 1px solid #E7E9EC; }
+.cmp-axis { flex: none; display: flex; justify-content: space-between; font-size: 7pt; color: #8A93A0; padding-top: 1.2mm; }
 
-/* Dernière page */
-.thanks { position: absolute; inset: 0; background-position: center; background-size: cover; background-repeat: no-repeat; color: #fff; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; text-align: center; padding: 0 24mm 22mm; }
-.contacts { display: flex; gap: 14mm; margin-bottom: 9mm; }
-.contact .ico { font-size: 15pt; }
-.contact .lbl { font-size: 8pt; color: #60A5FA; font-weight: 700; letter-spacing: .5px; margin: 2mm 0 1mm; }
-.contact .val { font-size: 9.5pt; }
-.disclaimer { font-size: 7.5pt; color: #CBD5E1; max-width: 150mm; line-height: 1.5; }
-.sources { font-size: 6.8pt; color: #64748B; max-width: 150mm; line-height: 1.4; margin-top: 5mm; }
+/* Cover */
+.cover { flex: 1; display: flex; flex-direction: column; padding: 22mm 20mm 16mm; }
+.cover .top { flex: none; display: flex; align-items: center; justify-content: space-between; }
+.cover .top .logo { height: 11mm; width: auto; }
+.cover .top .ed { font-size: 8pt; letter-spacing: 2.5px; text-transform: uppercase; color: #6B7280; font-weight: 700; }
+.cover .hero { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+.cover .kicker { font-size: 10pt; letter-spacing: 4px; text-transform: uppercase; color: #6B7280; font-weight: 700; }
+.cover h1 { font-family: Georgia, serif; font-size: 46pt; line-height: 1.02; font-weight: 700; margin-top: 3mm; }
+.cover .rule { border-bottom: 2.5px solid #14171C; width: 54mm; margin: 8mm 0; }
+.cover .week { font-family: Georgia, serif; font-size: 16pt; color: #14171C; }
+.cover .somm { flex: none; }
+.cover .somm .sl { font-size: 7.5pt; letter-spacing: 1.6px; text-transform: uppercase; color: #6B7280; font-weight: 700; border-bottom: 1px solid #14171C; padding-bottom: 1.5mm; margin-bottom: 1mm; }
+.cover .somm .row { display: flex; justify-content: space-between; align-items: center; padding: 1.6mm 0; border-bottom: 1px solid #ECEEF1; font-size: 9.5pt; }
+.cover .somm .row .nm { font-weight: 600; }
+.cover .cfoot { flex: none; margin-top: 8mm; border-top: 1px solid #D7DBE0; padding-top: 3mm; display: flex; justify-content: space-between; font-size: 8pt; color: #6B7280; }
 `;
 
-function banner(): string {
-  return `<div class="banner">
-    <img class="logo" src="${bannerLogoUri()}" alt="AzimutFinance">
-    <div class="heading"><div class="t">HEBDO MATIÈRES PREMIÈRES</div><div class="s">BRVM · UEMOA — Afrique de l'Ouest</div></div>
-  </div><div class="accent"></div>`;
+function mast(): string {
+  return `<div class="mast">
+    <img class="logo" src="${logoColorUri()}" alt="AzimutFinance">
+    <span class="kicker">Hebdomadaire matières premières</span>
+  </div><div class="mast-rule"></div>`;
 }
 
-function footer(page: number, total: number, asOfFr: string): string {
-  return `<div class="footer"><span>Données arrêtées au ${esc(asOfFr)}</span><span>Page ${page} / ${total} &nbsp;|&nbsp; AzimutFinance</span></div>`;
+function foot(page: number, total: number, asOfFr: string): string {
+  return `<div class="foot"><span>AzimutFinance</span><span>Arrêté au ${esc(asOfFr)} · Page ${page} / ${total}</span></div>`;
 }
 
-function recapRows(commodities: CommodityWeekly[]): string {
-  return commodities
-    .map((c) => {
-      return `<tr>
-      <td class="bold"><span class="dot" style="background:${c.color}"></span>${esc(c.name)}</td>
-      <td class="num">${num(c.last)}</td>
-      <td class="num ${cls(c.weekChangePct)}">${signedPct(c.weekChangePct)}</td>
-      <td class="num ${cls(c.returns.YTD)}">${signedPct(c.returns.YTD)}</td>
-      <td class="num ${cls(c.returns["1A"])}">${signedPct(c.returns["1A"])}</td>
-      <td style="width:26mm">${sparkline(c.history1Y, c.color)}</td>
-    </tr>`;
-    })
+function horizonCells(c: CommodityWeekly): string {
+  const items: [string, number | null][] = [
+    ["1 sem.", c.returns["1S"]],
+    ["1 mois", c.returns["1M"]],
+    ["3 mois", c.returns["3M"]],
+    ["6 mois", c.returns["6M"]],
+    ["YTD", c.returns.YTD],
+    ["1 an", c.returns["1A"]],
+    ["3 ans", c.returns["3A"]],
+    ["5 ans", c.returns["5A"]],
+  ];
+  return items
+    .map(
+      ([k, v]) =>
+        `<div class="c"><div class="k">${k}</div><div class="v num ${cls(v)}">${signedPct(v)}</div></div>`,
+    )
     .join("");
 }
 
-function statCell(k: string, v: string, c?: string): string {
-  return `<div class="cell"><div class="k">${k}</div><div class="v ${c ?? ""}">${v}</div></div>`;
+function metricCells(c: CommodityWeekly): string {
+  const range =
+    c.low52w != null && c.high52w != null ? `${num(c.low52w)} – ${num(c.high52w)}` : "—";
+  const vol = c.volatility1Y != null ? nf1.format(c.volatility1Y) + " %" : "—";
+  const z = c.zScore1Y != null ? (c.zScore1Y >= 0 ? "+" : "") + nf2.format(c.zScore1Y) : "—";
+  const dd = c.drawdownFromHigh5Y != null ? nf1.format(c.drawdownFromHigh5Y) + " %" : "—";
+  return (
+    `<div class="c"><div class="k">Plage 52 sem.</div><div class="v num">${range}</div></div>` +
+    `<div class="c"><div class="k">Volatilité 1 an</div><div class="v num">${vol}</div></div>` +
+    `<div class="c"><div class="k">z-score 1 an</div><div class="v num">${z}</div></div>` +
+    `<div class="c"><div class="k">Drawdown vs PH 5A</div><div class="v num ${cls(c.drawdownFromHigh5Y)}">${dd}</div></div>`
+  );
+}
+
+function localBlock(local: LocalPrice): string {
+  if (local.kind === "apromac") {
+    const spark = sparkline(
+      local.history.slice(-48).map((p) => ({ date: p.date, value: p.value })),
+      "#157347",
+    );
+    const tend = local.tendance
+      ? `<div class="lnote">Tendance ${esc(local.tendance.label)} : ${fcfa(local.tendance.price)} ${esc(local.unit)} (non confirmé)</div>`
+      : "";
+    return `<div class="local">
+      <div class="lt">${esc(local.title)}</div>
+      <div class="ls">${esc(local.source)}</div>
+      <div class="lgrid">
+        <div class="lstat"><div class="k">${esc(local.latestLabel)}</div><div class="v num">${fcfa(local.price)} <span style="font-size:8pt;color:#6B7280">${esc(local.unit)}</span></div></div>
+        <div class="lstat"><div class="k">vs mois préc.</div><div class="s num ${cls(local.vsPrevPct)}">${signedPct(local.vsPrevPct)}</div></div>
+        <div class="lstat"><div class="k">vs déc. N-1</div><div class="s num ${cls(local.vsDecPct)}">${signedPct(local.vsDecPct)}</div></div>
+        <div class="lspark">${spark}</div>
+      </div>
+      ${tend}
+    </div>`;
+  }
+  // chph
+  const spark = sparkline(
+    local.history.map((p) => ({ date: p.date, value: p.huile })),
+    "#CA8A04",
+  );
+  return `<div class="local">
+    <div class="lt">${esc(local.title)}</div>
+    <div class="ls">${esc(local.source)} · ${esc(local.periode || local.latestLabel)}</div>
+    <div class="lgrid">
+      <div class="lstat"><div class="k">Huile brute (${esc(local.latestLabel)})</div><div class="v num">${fcfa(local.huile)} <span style="font-size:8pt;color:#6B7280">F/t</span></div><div class="s num ${cls(local.huileVsPrevPct)}">${signedPct(local.huileVsPrevPct)} <span style="font-weight:400;color:#8A93A0;font-size:7pt">vs M-1</span></div></div>
+      <div class="lstat"><div class="k">Régime palme bord-champ</div><div class="v num">${fcfa(local.regime)} <span style="font-size:8pt;color:#6B7280">F/t</span></div><div class="s num ${cls(local.regimeVsPrevPct)}">${signedPct(local.regimeVsPrevPct)} <span style="font-weight:400;color:#8A93A0;font-size:7pt">vs M-1</span></div></div>
+      <div class="lspark">${spark}</div>
+    </div>
+  </div>`;
 }
 
 function commodityPage(
@@ -221,64 +349,65 @@ function commodityPage(
   asOfFr: string,
   status: CommentaryStatus,
 ): string {
-  const cat = CATEGORY[c.category] ?? { label: c.category, color: "#475569" };
-  const range52 =
-    c.low52w != null && c.high52w != null
-      ? `${num(c.low52w)} – ${num(c.high52w)}`
-      : "n.d.";
   const first = c.history1Y[0];
   const last = c.history1Y[c.history1Y.length - 1];
-
-  const commentHtml = c.commentary
-    ? `<div class="comment"><div class="lbl">🔍 Ce qui a bougé cette semaine</div><p>${esc(c.commentary)}</p></div>`
-    : `<div class="comment muted"><div class="lbl">Ce qui a bougé cette semaine</div><p>${esc(commodityFallback(status))}</p></div>`;
+  const analysis = c.commentary
+    ? `<div class="analysis"><div class="rowlabel">Analyse de la semaine</div><p>${esc(c.commentary)}</p></div>`
+    : `<div class="analysis muted"><div class="rowlabel">Analyse de la semaine</div><p>${esc(commentaryFallback(status))}</p></div>`;
 
   return `<section class="page">
-  ${banner()}
+  ${mast()}
   <div class="content">
-    <div class="mp-head">
-      <h2>${esc(c.name)}</h2>
-      <span class="cat" style="background:${cat.color}">${esc(cat.label)}</span>
-      <div class="mp-meta">${esc(c.exchange)}<br>${esc(c.unit)}</div>
-    </div>
-
-    <div class="priceRow">
+    <div class="mphead">
       <div>
-        <div class="px">${num(c.last)} <span class="unit">${esc(c.unit.replace(/^USD\s*/, "$"))}</span></div>
+        <div class="eyebrow">${esc(CATEGORY_LABEL[c.category] ?? c.category)} · ${esc(c.exchange)}</div>
+        <div class="mpname serif">${esc(c.name)}</div>
       </div>
-      <div style="margin-left:auto;text-align:right">
-        <div class="wklbl">Variation semaine</div>
-        <div class="wk ${cls(c.weekChangePct)}">${arrow(c.weekChangePct)} ${signedPct(c.weekChangePct)}</div>
-      </div>
-    </div>
-
-    <div class="chartwrap">
-      ${areaChart(c.history1Y, c.color, "48mm")}
-      <div class="axis"><span>${first ? monthTag(first.date) : ""}</span><span>${last ? monthTag(last.date) : ""} · 1 an</span></div>
-    </div>
-
-    <div class="statgrid">
-      ${statCell("YTD", signedPct(c.returns.YTD), cls(c.returns.YTD))}
-      ${statCell("1 mois", signedPct(c.returns["1M"]), cls(c.returns["1M"]))}
-      ${statCell("3 mois", signedPct(c.returns["3M"]), cls(c.returns["3M"]))}
-      ${statCell("1 an", signedPct(c.returns["1A"]), cls(c.returns["1A"]))}
-      ${statCell("Volatilité 1A", c.volatility1Y != null ? nf0.format(c.volatility1Y) + " %" : "n.d.")}
-      ${statCell("Plage 52 sem.", range52)}
-    </div>
-
-    <div class="brvm">
-      <div class="lbl">Enjeu BRVM / UEMOA</div>
-      ${esc(c.brvmRelevance)}
-      <div class="badges">
-        ${c.exposedCountries.map((p) => `<span class="badge">${esc(p)}</span>`).join("")}
-        ${c.brvmTickers.map((t) => `<span class="badge" style="border-color:#2563EB;color:#1D4ED8">${esc(t)}</span>`).join("")}
+      <div class="price">
+        <div class="px num">${num(c.last)} <span class="unit">${esc(c.unit)}</span></div>
+        <div class="wk num ${cls(c.weekChangePct)}">${tri(c.weekChangePct)}${signedPct(c.weekChangePct)} <span class="muted">sur la semaine</span></div>
       </div>
     </div>
 
-    ${commentHtml}
+    <div class="chart">
+      <div class="plot">${areaChart(c.history1Y, c.color)}</div>
+      <div class="axis"><span>${first ? monthTag(first.date) : ""}</span><span>Cours quotidien · 12 mois</span><span>${last ? monthTag(last.date) : ""}</span></div>
+    </div>
+
+    <div class="perf">
+      <div class="rowlabel">Performances multi-horizons</div>
+      <div class="cells">${horizonCells(c)}</div>
+    </div>
+
+    <div class="metrics">
+      <div class="cells">${metricCells(c)}</div>
+    </div>
+
+    <div class="seas">
+      <div class="rowlabel">Saisonnalité — rendement mensuel moyen (10 ans)</div>
+      ${seasonalityChart(c.seasonalityAvg)}
+    </div>
+
+    ${c.local ? localBlock(c.local) : ""}
+
+    ${analysis}
   </div>
-  ${footer(page, total, asOfFr)}
+  ${foot(page, total, asOfFr)}
 </section>`;
+}
+
+function recapRows(commodities: CommodityWeekly[]): string {
+  return commodities
+    .map(
+      (c) => `<tr>
+      <td class="l name"><span class="dot" style="background:${c.color}"></span>${esc(c.name)}</td>
+      <td class="num">${num(c.last)}</td>
+      <td class="num ${cls(c.weekChangePct)}">${signedPct(c.weekChangePct)}</td>
+      <td class="num ${cls(c.returns.YTD)}">${signedPct(c.returns.YTD)}</td>
+      <td class="num ${cls(c.returns["1A"])}">${signedPct(c.returns["1A"])}</td>
+    </tr>`,
+    )
+    .join("");
 }
 
 /** Document HTML complet (A4 portrait) du rapport hebdo matières premières. */
@@ -287,65 +416,98 @@ export function renderCommoditiesWeeklyHtml(data: CommoditiesWeeklyData): string
   const [yy, mm, dd] = data.asOf.split("-");
   const asOfFr = data.asOf ? `${dd}/${mm}/${yy}` : "";
 
-  // Page de garde
+  // Page de garde — éditoriale claire + sommaire chiffré
+  const sommaire = data.commodities
+    .map(
+      (c) =>
+        `<div class="row"><span class="nm"><span class="dot" style="background:${c.color}"></span>${esc(c.name)}</span><span class="num ${cls(c.weekChangePct)}">${tri(c.weekChangePct)}${signedPct(c.weekChangePct)}</span></div>`,
+    )
+    .join("");
+
   const cover = `<section class="page">
   <div class="cover">
-    <img class="logo" src="${bannerLogoUri()}" alt="AzimutFinance">
-    <div class="mid">
-      <div class="kicker">Rapport hebdomadaire</div>
-      <h1>Matières<br>premières</h1>
-      <div class="sub">Marché mondial &amp; lecture BRVM / UEMOA</div>
-      <div class="rule"></div>
-      <span class="week">Semaine ${esc(data.weekLabel)}</span>
+    <div class="top">
+      <img class="logo" src="${logoColorUri()}" alt="AzimutFinance">
+      <span class="ed">Édition hebdomadaire</span>
     </div>
-    <div class="foot"><span>AzimutFinance — Données financières BRVM / UEMOA</span><span>${esc(asOfFr)}</span></div>
+    <div class="hero">
+      <div class="kicker">Revue de marché</div>
+      <h1>Matières<br>premières</h1>
+      <div class="rule"></div>
+      <div class="week serif">Semaine ${esc(data.weekLabel)}</div>
+    </div>
+    <div class="somm">
+      <div class="sl">Au sommaire — variation hebdomadaire</div>
+      ${sommaire}
+    </div>
+    <div class="cfoot"><span>AzimutFinance</span><span>${esc(asOfFr)}</span></div>
   </div>
 </section>`;
 
   // Page récap
+  const globalLead = data.globalCommentary
+    ? `<p class="lead">${esc(data.globalCommentary)}</p>`
+    : `<p class="lead">${esc(
+        (data.commentaryStatus === "no_key" ? NO_KEY_MSG : ERROR_MSG) +
+          " Le tableau ci-dessous reste fondé sur les données de marché.",
+      )}</p>`;
+
   const recap = `<section class="page">
-  ${banner()}
+  ${mast()}
   <div class="content">
-    <div class="section-title">Synthèse de la semaine</div>
-    ${
-      data.globalCommentary
-        ? `<div class="lead"><span class="lbl">🔍 Vue d'ensemble</span>${esc(data.globalCommentary)}</div>`
-        : `<div class="lead"><span class="lbl">Vue d'ensemble</span>${esc(
-            (data.commentaryStatus === "no_key" ? NO_KEY_MSG : ERROR_MSG) +
-              " Le tableau ci-dessous reste basé sur les données de marché.",
-          )}</div>`
-    }
-    <div class="section-title">Récapitulatif — ${data.commodities.length} matières premières</div>
+    <div class="rowlabel">Synthèse de la semaine</div>
+    ${globalLead}
+    <div class="rowlabel" style="margin-top:2mm">Récapitulatif — ${data.commodities.length} matières premières</div>
     <table>
       <thead><tr>
-        <th>Matière première</th><th class="num">Dernier</th><th class="num">Semaine</th>
-        <th class="num">YTD</th><th class="num">1 an</th><th>Évolution 1 an</th>
+        <th class="l">Matière première</th><th>Dernier</th><th>Semaine</th><th>YTD</th><th>1 an</th>
       </tr></thead>
       <tbody>${recapRows(data.commodities)}</tbody>
     </table>
+    <div class="rowlabel" style="margin-top:3mm">Performance comparée — base 100 sur 1 an</div>
+    <div class="cmp-legend">${data.commodities
+      .map(
+        (c) =>
+          `<span class="lg"><span class="lgdot" style="background:${c.color}"></span>${esc(c.name)}</span>`,
+      )
+      .join("")}</div>
+    <div class="cmp">${compareChart(data.commodities)}</div>
+    <div class="cmp-axis"><span>${data.commodities[0]?.history1Y[0] ? monthTag(data.commodities[0].history1Y[0].date) : ""}</span><span>base 100</span><span>${esc(asOfFr)}</span></div>
   </div>
-  ${footer(2, total, asOfFr)}
+  ${foot(2, total, asOfFr)}
 </section>`;
 
   const pages = data.commodities
     .map((c, i) => commodityPage(c, 3 + i, total, asOfFr, data.commentaryStatus))
     .join("\n");
 
+  // Dernière page — note méthodologique + sources, sobre
   const sourcesHtml =
     data.sources.length > 0
-      ? `<div class="sources">Sources consultées : ${esc(data.sources.slice(0, 12).join(" · "))}</div>`
+      ? `<div style="font-size:7pt;color:#8A93A0;line-height:1.45;margin-top:4mm">Sources web consultées : ${esc(data.sources.slice(0, 14).join(" · "))}</div>`
       : "";
 
   const back = `<section class="page">
-  <div class="thanks" style="background-image:url('${lastPageBgUri()}')">
-    <div class="contacts">
-      <div class="contact"><div class="ico">✉</div><div class="lbl">EMAIL</div><div class="val">contact@azimutfinance.com</div></div>
-      <div class="contact"><div class="ico">☎</div><div class="lbl">TÉLÉPHONE</div><div class="val">+225 07 10 41 12 00</div></div>
-      <div class="contact"><div class="ico">⌂</div><div class="lbl">SITE WEB</div><div class="val">www.azimutfinance.com</div></div>
-    </div>
-    <div class="disclaimer">Ce document est fourni à titre informatif uniquement et ne constitue ni une offre ni une recommandation d'investissement. Les commentaires sont générés automatiquement à partir de recherches web et de sources jugées fiables, sans garantie d'exactitude. © ${yy || ""} AzimutFinance — Tous droits réservés.</div>
+  ${mast()}
+  <div class="content">
+    <div class="rowlabel">Méthodologie &amp; avertissement</div>
+    <p class="analysis" style="font-family:Georgia,serif;font-size:10pt;line-height:1.6;text-align:justify">
+      Les cours sont des clôtures quotidiennes des marchés internationaux de référence (ICE, NYMEX, COMEX, Bursa Malaysia, SGX). Les performances sont calculées en glissement à la date d'arrêté. Les prix de référence locaux (APROMAC pour le caoutchouc, Conseil Hévéa-Palmier pour la palme) sont des fixations officielles mensuelles en Côte d'Ivoire. Les commentaires sont produits automatiquement à partir de recherches web et de sources jugées fiables, sans garantie d'exactitude.
+    </p>
+    <p class="analysis" style="font-family:Georgia,serif;font-size:9.5pt;line-height:1.6;color:#6B7280;margin-top:4mm;text-align:justify">
+      Ce document est fourni à titre informatif uniquement et ne constitue ni une offre, ni un conseil, ni une recommandation d'investissement.
+    </p>
     ${sourcesHtml}
+    <div style="flex:1"></div>
+    <div style="border-top:1.6px solid #14171C;padding-top:3mm;display:flex;justify-content:space-between;align-items:flex-end">
+      <div>
+        <div class="serif" style="font-size:15pt;font-weight:700">AzimutFinance</div>
+        <div style="font-size:8pt;color:#6B7280;margin-top:1mm">contact@azimutfinance.com · +225 07 10 41 12 00 · www.azimutfinance.com</div>
+      </div>
+      <div style="font-size:8pt;color:#6B7280">© ${yy || ""}</div>
+    </div>
   </div>
+  ${foot(total, total, asOfFr)}
 </section>`;
 
   return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><style>${STYLE}</style></head><body>

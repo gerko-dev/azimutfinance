@@ -9,9 +9,12 @@ import {
   COMMODITIES_BY_SLUG,
   loadCommodityHistory,
   computeCommodityStats,
+  buildSeasonalityMatrix,
   type CommoditySlug,
   type CommodityCategory,
 } from "@/lib/commodities";
+import { computeApromacStats, loadApromacHistory } from "@/lib/apromac";
+import { computeChphPalmeStats, loadChphPalmeHistory } from "@/lib/chphPalme";
 import {
   generateCommodityCommentary,
   type CommodityCommentary,
@@ -27,6 +30,34 @@ export const WEEKLY_SLUGS: CommoditySlug[] = [
   "tsr",
   "sugar",
 ];
+
+/** Prix de référence local (Côte d'Ivoire) selon la filière. */
+export type LocalPrice =
+  | {
+      kind: "apromac";
+      title: string;
+      source: string;
+      latestLabel: string;
+      price: number;
+      unit: string;
+      vsPrevPct: number | null;
+      vsDecPct: number | null;
+      tendance: { label: string; price: number } | null;
+      history: { date: string; value: number; confirme: boolean }[];
+    }
+  | {
+      kind: "chph";
+      title: string;
+      source: string;
+      latestLabel: string;
+      huile: number;
+      regime: number;
+      unit: string;
+      huileVsPrevPct: number | null;
+      regimeVsPrevPct: number | null;
+      periode: string;
+      history: { date: string; huile: number; regime: number }[];
+    };
 
 export type CommodityWeekly = {
   slug: CommoditySlug;
@@ -47,15 +78,23 @@ export type CommodityWeekly = {
     "1S": number | null;
     "1M": number | null;
     "3M": number | null;
+    "6M": number | null;
     YTD: number | null;
     "1A": number | null;
+    "3A": number | null;
+    "5A": number | null;
   };
   high52w: number | null;
   low52w: number | null;
   volatility1Y: number | null;
+  zScore1Y: number | null;
   drawdownFromHigh5Y: number | null;
+  /** Rendements mensuels moyens sur 10 ans (12 valeurs, janv..déc), pour la saisonnalité. */
+  seasonalityAvg: (number | null)[];
   /** Clôtures sur ~1 an pour le graphique (date ISO, valeur). */
   history1Y: { date: string; value: number }[];
+  /** Prix de référence local CI (hévéa/palme) si applicable. */
+  local: LocalPrice | null;
   /** Commentaire IA de la semaine (null si indisponible). */
   commentary: string | null;
 };
@@ -130,6 +169,55 @@ function buildWeekly(slug: CommoditySlug): CommodityWeekly | null {
     .filter((p) => p.date >= oneYearAgo)
     .map((p) => ({ date: p.date, value: p.close }));
 
+  const seasonalityAvg = buildSeasonalityMatrix(slug, 10).monthlyAverages;
+
+  // Prix de référence local CI (hévéa via APROMAC, palme via CHPH).
+  let local: LocalPrice | null = null;
+  if (slug === "tsr") {
+    const a = computeApromacStats();
+    if (a) {
+      local = {
+        kind: "apromac",
+        title: "Prix APROMAC hévéa — Côte d'Ivoire",
+        source: "Référence officielle mensuelle producteurs · eagrici.com",
+        latestLabel: a.latest.moisLabel,
+        price: a.latest.prixApromac,
+        unit: "FCFA/kg",
+        vsPrevPct: a.changeVsPrevPct,
+        vsDecPct: a.changeVsDecPrevYearPct,
+        tendance: a.tendance
+          ? { label: a.tendance.moisLabel, price: a.tendance.prixApromac }
+          : null,
+        history: loadApromacHistory().map((p) => ({
+          date: p.date,
+          value: p.prixApromac,
+          confirme: p.confirme,
+        })),
+      };
+    }
+  } else if (slug === "palmoil") {
+    const c = computeChphPalmeStats();
+    if (c) {
+      local = {
+        kind: "chph",
+        title: "Prix CHPH palmier à huile — Côte d'Ivoire",
+        source: "Fixation Conseil Hévéa-Palmier · conseilheveapalmier.ci",
+        latestLabel: c.latest.moisLabel,
+        huile: c.latest.huileBrute,
+        regime: c.latest.regimePalme,
+        unit: "FCFA/tonne",
+        huileVsPrevPct: c.changeHuileVsPrevPct,
+        regimeVsPrevPct: c.changeRegimeVsPrevPct,
+        periode: c.latest.periodeSource,
+        history: loadChphPalmeHistory().map((p) => ({
+          date: p.date,
+          huile: p.huileBrute,
+          regime: p.regimePalme,
+        })),
+      };
+    }
+  }
+
   return {
     slug,
     name: meta.name,
@@ -149,14 +237,20 @@ function buildWeekly(slug: CommoditySlug): CommodityWeekly | null {
       "1S": weekChangePct ?? stats.returns["1S"],
       "1M": stats.returns["1M"],
       "3M": stats.returns["3M"],
+      "6M": stats.returns["6M"],
       YTD: stats.returns.YTD,
       "1A": stats.returns["1A"],
+      "3A": stats.returns["3A"],
+      "5A": stats.returns["5A"],
     },
     high52w: stats.high52w,
     low52w: stats.low52w,
     volatility1Y: stats.volatility1Y,
+    zScore1Y: stats.zScore1Y,
     drawdownFromHigh5Y: stats.drawdownFromHigh5Y,
+    seasonalityAvg,
     history1Y,
+    local,
     commentary: null,
   };
 }
