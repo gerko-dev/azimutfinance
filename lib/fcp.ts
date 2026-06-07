@@ -336,15 +336,23 @@ export function loadFunds(): Fund[] {
     //     utilise gestionnaire + fundNameKey(nomAumfcp), donc identique à
     //     groupKey si le scraper a bien résolu le matching.
     const bocSnap = bocSnapshots.get(groupKey) ?? null;
-    if (bocSnap && bocSnap.dateActuelle && bocSnap.vlActuelle !== null) {
-      // On ajoute la VL BOC comme observation "latest" seulement si plus
-      // récente que la plus récente obs aumfcp (sinon redondant).
+    if (bocSnap) {
+      // VL quotidienne BOC : on prend `vlActuelle` si elle est publiée, sinon on
+      // retombe sur `vlPrecedente`. Certaines SGO (p. ex. NSIA / AURORE) ne
+      // renseignent pas toujours la VL du jour ; la « précédente » (quelques
+      // jours) reste bien plus fraîche que le dernier trimestre AUMFCP et évite
+      // d'afficher une VL périmée de plusieurs mois.
+      const bocVL = bocSnap.vlActuelle ?? bocSnap.vlPrecedente;
+      const bocDate =
+        bocSnap.vlActuelle !== null ? bocSnap.dateActuelle : bocSnap.datePrecedente;
+      // On n'ajoute cette observation que si elle est plus récente que la plus
+      // récente obs aumfcp (sinon redondant).
       const lastAumfcpDate = obs.length > 0 ? obs[obs.length - 1].date : "";
-      if (bocSnap.dateActuelle > lastAumfcpDate) {
+      if (bocVL !== null && bocDate && bocDate > lastAumfcpDate) {
         const lastObsCat = obs.length > 0 ? obs[obs.length - 1] : null;
         obs.push({
-          date: bocSnap.dateActuelle,
-          vl: bocSnap.vlActuelle,
+          date: bocDate,
+          vl: bocVL,
           aum: null,
           kind: "latest",
           categorie: lastObsCat?.categorie ?? "Diversifié",
