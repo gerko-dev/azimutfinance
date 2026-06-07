@@ -81,6 +81,35 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+
+  // Redirections permanentes (308) gerees au niveau edge Vercel — preferables
+  // au `redirect()` dans une page server component (qui sort un 307 temporaire,
+  // ce que Google garde longtemps dans son index sous "Page avec redirection").
+  // Toutes ces routes ont ete deplacees dans la zone /pros lors de la refonte.
+  async redirects() {
+    return [
+      {
+        source: "/outils/ytm",
+        destination: "/pros/ytm",
+        permanent: true,
+      },
+      {
+        source: "/outils/screener",
+        destination: "/pros/screener",
+        permanent: true,
+      },
+      {
+        source: "/outils/screener-fcp",
+        destination: "/pros/screener-fcp",
+        permanent: true,
+      },
+      {
+        source: "/pros/terminal",
+        destination: "/pros",
+        permanent: true,
+      },
+    ];
+  },
 };
 
 export default nextConfig;
