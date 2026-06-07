@@ -35,7 +35,11 @@ export default function JoinSeasonButton({
         disabled={isPending}
         className="w-full text-base bg-slate-900 hover:bg-slate-700 text-white font-medium py-3 rounded transition disabled:opacity-50"
       >
-        {isPending ? "Inscription en cours…" : `Rejoindre la saison · ${formatFCFA(initialCapital)} FCFA virtuels`}
+        {isPending
+          ? "Inscription en cours…"
+          : initialCapital > 0
+            ? `Rejoindre la saison · ${formatFCFA(initialCapital)} FCFA virtuels`
+            : "Rejoindre la saison"}
       </button>
       {error && (
         <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded px-3 py-2">

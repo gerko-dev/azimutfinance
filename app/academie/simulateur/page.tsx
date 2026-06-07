@@ -134,7 +134,7 @@ export default async function Page() {
                 {
                   n: "1",
                   t: "Recevez un capital virtuel",
-                  d: "À l'ouverture de chaque saison, chaque participant démarre avec le même capital en FCFA virtuels.",
+                  d: "Au lancement de la Course à l'introduction, le pool d'actions BRVM est réparti entre les inscrits : chacun démarre avec le même capital virtuel.",
                 },
                 {
                   n: "2",
@@ -366,8 +366,18 @@ export default async function Page() {
               Rejoignez la saison en cours
             </h1>
             <p className="text-sm text-slate-600 mt-3 max-w-xl mx-auto leading-relaxed">
-              Vous recevrez {fmtFCFA(season.initial_capital)} FCFA virtuels pour acheter et vendre
-              des actions cotées à la BRVM jusqu&apos;au {fmtDateFr(season.ends_at)}.
+              {season.initial_capital > 0 ? (
+                <>
+                  Vous recevrez {fmtFCFA(season.initial_capital)} FCFA virtuels pour acheter et
+                  vendre des actions cotées à la BRVM jusqu&apos;au {fmtDateFr(season.ends_at)}.
+                </>
+              ) : (
+                <>
+                  Votre capital de départ sera défini au lancement de la Course à
+                  l&apos;introduction — identique pour tous les inscrits — puis vous investirez sur
+                  les actions cotées à la BRVM jusqu&apos;au {fmtDateFr(season.ends_at)}.
+                </>
+              )}
             </p>
             <div className="mt-6 max-w-md mx-auto">
               <JoinSeasonButton

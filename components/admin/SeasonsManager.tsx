@@ -17,6 +17,11 @@ import {
 import type { AdminSeason } from "@/lib/admin/types";
 import { fmtDate, fmtFCFA, fmtNumber } from "./format";
 
+// Capital initial passé au RPC à la création. Valeur purement technique : le
+// capital réel est recalculé au lancement de la Course (pool ÷ inscrits) et
+// écrase cette valeur. On ne l'affiche pas tant que la saison n'a pas démarré.
+const PLACEHOLDER_INITIAL_CAPITAL = 0;
+
 export default function SeasonsManager({ seasons }: { seasons: AdminSeason[] }) {
   const router = useRouter();
   const [showForm, setShowForm] = useState(false);
@@ -40,7 +45,6 @@ export default function SeasonsManager({ seasons }: { seasons: AdminSeason[] }) 
     d.setDate(d.getDate() + 67);
     return d.toISOString().slice(0, 10);
   });
-  const [capital, setCapital] = useState(10_000_000);
   const [feePct, setFeePct] = useState(1);
   const [feedback, setFeedback] = useState<{ ok: boolean; msg: string } | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -87,7 +91,12 @@ export default function SeasonsManager({ seasons }: { seasons: AdminSeason[] }) 
         registrationEndsAt,
         startsAt,
         endsAt,
-        initialCapital: capital,
+        // Le capital initial n'est PAS choisi à la création : il est calculé au
+        // lancement de la Course à l'introduction (valeur du pool flottant ÷
+        // nombre d'inscrits, cf. openSeasonAction). On passe ici une valeur
+        // placeholder car le RPC admin_create_season_v2 exige le paramètre ;
+        // elle sera écrasée au lancement.
+        initialCapital: PLACEHOLDER_INITIAL_CAPITAL,
         feePct: feePct / 100,
       });
       if (res.ok) {
@@ -362,34 +371,24 @@ export default function SeasonsManager({ seasons }: { seasons: AdminSeason[] }) 
             </div>
           </fieldset>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[11px] font-medium text-slate-700 uppercase mb-1">
-                Capital initial (FCFA)
-              </label>
-              <input
-                type="number"
-                value={capital}
-                step={1_000_000}
-                min={100_000}
-                onChange={(e) => setCapital(Math.max(0, Number(e.target.value) || 0))}
-                className="w-full text-sm border border-slate-300 rounded px-2 py-1.5 tabular-nums"
-              />
-            </div>
-            <div>
-              <label className="block text-[11px] font-medium text-slate-700 uppercase mb-1">
-                Frais par transaction (%)
-              </label>
-              <input
-                type="number"
-                value={feePct}
-                step={0.1}
-                min={0}
-                max={5}
-                onChange={(e) => setFeePct(Math.max(0, Number(e.target.value) || 0))}
-                className="w-full text-sm border border-slate-300 rounded px-2 py-1.5 tabular-nums"
-              />
-            </div>
+          <div>
+            <label className="block text-[11px] font-medium text-slate-700 uppercase mb-1">
+              Frais par transaction (%)
+            </label>
+            <input
+              type="number"
+              value={feePct}
+              step={0.1}
+              min={0}
+              max={5}
+              onChange={(e) => setFeePct(Math.max(0, Number(e.target.value) || 0))}
+              className="w-full text-sm border border-slate-300 rounded px-2 py-1.5 tabular-nums"
+            />
+            <p className="text-[11px] text-slate-500 mt-1.5">
+              Le capital initial n&apos;est pas saisi ici : il est calculé
+              automatiquement au lancement de la Course à l&apos;introduction
+              (valeur du pool flottant répartie entre les inscrits).
+            </p>
           </div>
           <button
             onClick={submit}
@@ -437,7 +436,13 @@ export default function SeasonsManager({ seasons }: { seasons: AdminSeason[] }) 
                     </div>
                   </td>
                   <td className="py-2 px-2 text-right tabular-nums text-slate-900">
-                    {fmtFCFA(s.initial_capital)}
+                    {s.initial_capital > 0 ? (
+                      fmtFCFA(s.initial_capital)
+                    ) : (
+                      <span className="text-slate-400" title="Défini au lancement de la Course">
+                        —
+                      </span>
+                    )}
                   </td>
                   <td className="py-2 px-2 text-right tabular-nums text-slate-700">
                     {(s.transaction_fee_pct * 100).toFixed(2).replace(".", ",")} %

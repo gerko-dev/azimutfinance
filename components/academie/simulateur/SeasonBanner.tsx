@@ -35,7 +35,11 @@ export default function SeasonBanner({
           <h2 className="text-xl md:text-2xl font-bold mt-1">{season.name}</h2>
           <div className="text-[11px] text-slate-300 mt-1">
             Du {fmtDateFr(season.starts_at)} au {fmtDateFr(season.ends_at)} · capital initial{" "}
-            <span className="font-semibold text-white">{fmtFCFA(season.initial_capital)} FCFA</span>{" "}
+            <span className="font-semibold text-white">
+              {season.initial_capital > 0
+                ? `${fmtFCFA(season.initial_capital)} FCFA`
+                : "défini au lancement de la Course"}
+            </span>{" "}
             · frais {(season.transaction_fee_pct * 100).toFixed(2).replace(".", ",")} % par
             transaction
           </div>
