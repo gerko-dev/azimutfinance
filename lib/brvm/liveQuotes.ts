@@ -26,7 +26,10 @@ export const BROWSER_HEADERS = {
 } as const;
 
 /** Fallback : Node.js https module (force IPv4, contourne les bugs undici sur Windows). */
-export function fetchViaHttps(url: string, timeoutMs = 15_000): Promise<{ status: number; body: string }> {
+// Timeout court (4s) : on prefere echouer vite et reutiliser le cache CSV
+// plutot que de bloquer Googlebot 15s par tentative (cf. TTL_FAIL_MS dans
+// liveBonds.ts pour la mise en cache des echecs).
+export function fetchViaHttps(url: string, timeoutMs = 4_000): Promise<{ status: number; body: string }> {
   return new Promise((resolve, reject) => {
     const req = https.get(
       url,
@@ -266,7 +269,9 @@ export function getLastBrvmDiag() {
 export async function tryFetchPrimary(url: string): Promise<{ status: number; body: string }> {
   const res = await fetch(url, {
     headers: BROWSER_HEADERS,
-    signal: AbortSignal.timeout(15_000),
+    // Timeout court : si BRVM ne repond pas en 4s, on bascule sur le
+    // fallback https. Total pire cas SSR = 8s au lieu de 30s (15+15).
+    signal: AbortSignal.timeout(4_000),
     cache: "no-store",
     redirect: "follow",
   });

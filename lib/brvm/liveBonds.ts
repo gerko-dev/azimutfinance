@@ -22,7 +22,11 @@ import {
 
 const BRVM_URL = "https://www.brvm.org/fr/cours-obligations/0";
 const TTL_OK_MS = 5 * 60 * 1000;
-const TTL_FAIL_MS = 30 * 1000;
+// En cas d'echec BRVM, on cache l'absence de donnees 5 min au lieu de 30 s.
+// Sinon chaque requete (notamment Googlebot crawlant 198 obligations a la
+// suite) declenche un nouveau fetch qui retimeoute pour 30 s : crawl
+// budget cuit, pages marquees "Detectee, non indexee" dans GSC.
+const TTL_FAIL_MS = 5 * 60 * 1000;
 
 export type BrvmLiveBondQuote = {
   code: string;
