@@ -28,11 +28,14 @@ const SECURITY_HEADERS = [
     value:
       "camera=(), microphone=(), geolocation=(), payment=(), usb=(), magnetometer=(), accelerometer=(), gyroscope=()",
   },
-  // Demande explicite aux bots IA de ne pas utiliser ces pages pour
-  // l'entrainement, l'indexation IA, l'extraction d'images.
+  // Directives X-Robots-Tag pour les moteurs de recherche : on autorise
+  // explicitement les snippets et previews d'images larges. L'opt-out IA
+  // (Google-Extended, GPTBot, ClaudeBot, etc.) est gere via robots.txt
+  // — noai/noimageai ne sont PAS reconnus par Google et polluaient
+  // inutilement l'entete (cf. /admin/seo).
   {
     key: "X-Robots-Tag",
-    value: "noai, noimageai, max-snippet:-1, max-image-preview:large",
+    value: "max-snippet:-1, max-image-preview:large",
   },
   // Indique a Cloudflare/Vercel que la reponse contient des donnees
   // sensibles a ne pas partager dans les CDN publics (best-effort).

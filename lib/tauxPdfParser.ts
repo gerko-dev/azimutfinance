@@ -459,7 +459,9 @@ function parse_4(pages: PdfPage[], bulletinLatest: string, source: string): Pars
 
   for (const line of page.lines) {
     if (!line.items.length) continue;
-    const head = line.items[0].str.trim();
+    // Le bulletin marque les pays/zones aux données estimées avec un suffixe
+    // "(*)" (ex. "UEMOA (*)", "Guinée-Bissau (*)"). On le retire avant lookup.
+    const head = line.items[0].str.trim().replace(/\s*\(\*\)\s*$/, "").trim();
     const country = countryMap[head];
     if (!country) continue;
     const cells = cellsByColumn(line.items.slice(1), anchors);

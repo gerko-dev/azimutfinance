@@ -135,6 +135,28 @@ export async function proxy(request: NextRequest) {
     );
   }
 
+  const { pathname } = request.nextUrl;
+
+  // ─── 0bis. Court-circuit pour visiteurs anonymes ─────────────────────
+  // Sans aucun cookie Supabase, inutile d'instancier le client et de
+  // poser Cache-Control: private (ce que fait @supabase/ssr des qu'il
+  // touche aux cookies). Cela bloquait toute mise en cache Vercel CDN
+  // pour Googlebot et signalait du contenu "personnalise" sur des pages
+  // publiques — desavantage SEO majeur.
+  //
+  // On ne saute que si la route n'est pas protegee : pour /compte ou
+  // /bienvenue, on doit verifier l'absence reelle de session (un cookie
+  // peut etre present mais invalide cote serveur).
+  const hasSupabaseCookie = request.cookies
+    .getAll()
+    .some((c) => c.name.startsWith("sb-"));
+  const isProtectedRoute =
+    pathname.startsWith("/compte") || pathname.startsWith("/bienvenue");
+
+  if (!hasSupabaseCookie && !isProtectedRoute) {
+    return NextResponse.next({ request });
+  }
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -163,8 +185,6 @@ export async function proxy(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
-  const { pathname } = request.nextUrl;
 
   // Routes protegees : redirige vers /connexion si pas de session
   if (
