@@ -369,7 +369,16 @@
       "Bash(break)",
       "Read(//c/Users/hp/Downloads/**)",
       "Bash(set -e)",
-      "PowerShell(npx eslint lib/reports/pdf.ts lib/reports/assets.ts lib/magazine/flashCard.ts \"app/admin/magazine/articles/[id]/flash/route.ts\" app/admin/magazine/articles/page.tsx; if \\($?\\) { \"ESLINT OK\" })"
+      "PowerShell(npx eslint lib/reports/pdf.ts lib/reports/assets.ts lib/magazine/flashCard.ts \"app/admin/magazine/articles/[id]/flash/route.ts\" app/admin/magazine/articles/page.tsx; if \\($?\\) { \"ESLINT OK\" })",
+      "Bash(echo \"push exit: $?\")",
+      "PowerShell(npx eslint components/admin/AdminSidebar.tsx; if \\($?\\) { \"ESLINT OK\" })",
+      "PowerShell($out = npx tsc --noEmit -p tsconfig.json 2>&1; $src = $out | Where-Object { $_ -match 'AdminSidebar' }; if \\($src\\) { $src } else { \"NO ADMINSIDEBAR ERRORS\" })",
+      "PowerShell(npx eslint components/admin/AdminSidebar.tsx; if \\($?\\) { \"ESLINT OK\" }; $out = npx tsc --noEmit -p tsconfig.json 2>&1; $src = $out | Where-Object { $_ -match 'AdminSidebar' }; if \\($src\\) { $src } else { \"NO ADMINSIDEBAR ERRORS\" })",
+      "PowerShell(npx eslint components/admin/SeasonsManager.tsx; if \\($?\\) { \"ESLINT OK\" }; $out = npx tsc --noEmit -p tsconfig.json 2>&1; $src = $out | Where-Object { $_ -match 'SeasonsManager' }; if \\($src\\) { $src } else { \"NO SEASONSMANAGER ERRORS\" })",
+      "PowerShell(npx eslint app/academie/simulateur/page.tsx; if \\($?\\) { \"ESLINT OK\" }; $out = npx tsc --noEmit -p tsconfig.json 2>&1; $src = $out | Where-Object { $_ -match 'simulateur' }; if \\($src\\) { $src } else { \"NO SIMULATEUR ERRORS\" })",
+      "PowerShell(npx eslint app/academie/simulateur/page.tsx components/academie/simulateur/SeasonBanner.tsx components/academie/simulateur/JoinSeasonButton.tsx; if \\($?\\) { \"ESLINT OK\" }; $out = npx tsc --noEmit -p tsconfig.json 2>&1; $src = $out | Where-Object { $_ -match 'simulateur|SeasonBanner|JoinSeason' }; if \\($src\\) { $src } else { \"NO ERRORS\" })",
+      "PowerShell(New-NetFirewallRule *)",
+      "PowerShell(Set-NetConnectionProfile *)"
     ]
   }
 }

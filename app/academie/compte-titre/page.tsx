@@ -185,22 +185,24 @@ export default async function ComptesTitresPage() {
           </h3>
           <ul className="text-xs text-slate-600 space-y-1.5 leading-relaxed">
             <li>
-              <strong>1. Créez un compte</strong> par broker / intermédiaire. Renseignez la date
-              d&apos;ouverture et vos frais par défaut (courtage, taxes).
+              <strong>1. Créez un compte</strong>{" "}
+              par broker / intermédiaire. Renseignez la date d&apos;ouverture et
+              vos frais par défaut (courtage, taxes).
             </li>
             <li>
-              <strong>2. Saisissez vos transactions</strong> au fil de l&apos;eau : dépôts,
-              retraits, achats, ventes, dividendes, frais, splits. Le ticker auto-suggère le
-              nom et le dernier cours connu.
+              <strong>2. Saisissez vos transactions</strong>{" "}
+              au fil de l&apos;eau : dépôts, retraits, achats, ventes,
+              dividendes, frais, splits. Le ticker auto-suggère le nom et le
+              dernier cours connu.
             </li>
             <li>
-              <strong>3. Consultez le dashboard</strong> : valeur totale, P&amp;L latente et
-              réalisée, courbe de valorisation, positions, allocation par classe d&apos;actif et
-              secteur.
+              <strong>3. Consultez le dashboard</strong>{" "}: valeur totale,
+              P&amp;L latente et réalisée, courbe de valorisation, positions,
+              allocation par classe d&apos;actif et secteur.
             </li>
             <li>
-              <strong>Vos données sont privées</strong> — protégées par RLS Supabase et visibles
-              uniquement par vous.
+              <strong>Vos données sont privées</strong>{" "}— protégées par RLS
+              Supabase et visibles uniquement par vous.
             </li>
           </ul>
         </section>
