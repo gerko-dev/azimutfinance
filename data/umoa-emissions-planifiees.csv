@@ -1,9 +1,43 @@
 pays;titreES;instrument;precisions;dateOperation;montantM;etat;url
+Sénégal;;;;2026-07-31;70000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-du-senegal-du-31-07-2026-2/
+Côte d'Ivoire;;;;2026-09-15;60000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-de-la-cote-divoire-du-15-09-2026/
+Togo;;;;2026-09-18;35000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-du-togo-du-18-09-2026/
+Togo;;;;2026-09-04;25000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-du-togo-du-04-09-2026/
+Togo;;;;2026-08-07;35000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-du-togo-du-07-08-2026/
+Sénégal;;;;2026-09-28;60000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-du-senegal-du-25-09-2026/
+Sénégal;;;;2026-09-11;100000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-du-senegal-du-11-09-2026/
+Sénégal;;;;2026-08-28;60000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-du-senegal-du-28-08-2026/
+Sénégal;;;;2026-08-14;165000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-du-senegal-du-14-08-2026/
+Niger;;;;2026-09-24;20000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-du-niger-du-24-09-2026/
+Niger;;;;2026-09-10;20000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-du-niger-du-10-09-2026/
+Niger;;;;2026-08-27;20000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-du-niger-du-27-08-2026/
+Niger;;;;2026-08-13;20000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-du-niger-du-13-08-2026/
+Mali;;;;2026-09-30;50000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-du-mali-du-30-09-2026/
+Mali;;;;2026-09-16;47270;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-du-mali-du-16-09-2026/
+Mali;;;;2026-09-02;50000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-du-mali-du-02-09-2026/
+Mali;;;;2026-08-24;70000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-du-mali-du-24-08-2026/
+Mali;;;;2026-08-19;50000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-du-mali-du-19-08-2026/
+Guinée Bissau;;;;2026-09-28;15000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-de-la-guinee-bissau-du-28-09-2026/
+Guinée Bissau;;;;2026-09-08;15000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-de-la-guinee-bissau-du-08-09-2026/
+Guinée Bissau;;;;2026-08-11;15000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-de-la-guinee-bissau-du-11-08-2026/
+Côte d'Ivoire;;;;2026-09-29;60000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-de-la-cote-divoire-du-29-09-2026/
+Côte d'Ivoire;;;;2026-09-22;60000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-de-la-cote-divoire-du-22-09-2026/
+Côte d'Ivoire;;;;2026-09-01;60000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-de-la-cote-divoire-du-01-09-2026/
+Côte d'Ivoire;;;;2026-08-25;50000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-de-la-cote-divoire-du-25-08-2026/
+Côte d'Ivoire;;;;2026-08-18;50000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-de-la-cote-divoire-du-18-08-2026/
+Burkina Faso;;;;2026-09-23;50000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-du-burkina-faso-du-23-09-2026/
+Burkina Faso;;;;2026-09-09;50000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-du-burkina-faso-du-09-09-2026/
+Burkina Faso;;;;2026-08-26;45000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-du-burkina-faso-du-26-08-2026/
+Burkina Faso;;;;2026-08-12;45000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-du-burkina-faso-du-12-08-2026/
+Bénin;;;;2026-07-17;40000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-du-benin-du-17-09-2026/
+Bénin;;;;2026-09-03;40000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-du-benin-du-03-09-2026/
+Bénin;;;;2026-08-20;50000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-du-benin-du-20-08-2026/
+Bénin;;;;2026-08-06;50000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-du-benin-du-06-08-2026/
+Mali;;;;2026-08-05;50000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-du-mali-du-05-08-2026/
+Côte d'Ivoire;;;;2026-08-04;50000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-de-la-cote-divoire-du-04-08-2026/
 Sénégal;;;;2026-07-31;70000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-du-senegal-du-31-07-2026/
 Niger;;;;2026-07-30;20000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-du-niger-du-30-07-2026/
-Burkina Faso;;;;2026-07-29;38500;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-du-burkina-faso-du-29-07-2026/
-Côte d'Ivoire;;;;2026-07-28;80000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-de-la-cote-divoire-du-28-07-2026/
+Burkina Faso;;;;2026-07-29;40000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-du-burkina-faso-du-29-07-2026/
+Côte d'Ivoire;;;;2026-07-28;65000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-de-la-cote-divoire-du-28-07-2026/
 Togo;;;;2026-07-24;30000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-du-togo-du-24-07-2026/
-Mali;;;;2026-07-22;40000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-du-mali-du-22-07-2026/
-Côte d'Ivoire;;;;2026-07-21;80000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-de-la-cote-divoire-du-21-07-2026/
 Niger;;;;2026-07-16;35000;réalisée;https://www.umoatitres.org/fr/emission/emission-simultanee-de-bons-et-dobligations-du-tresor-du-niger-du-16-07-2026/
