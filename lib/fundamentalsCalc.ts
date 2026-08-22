@@ -483,6 +483,14 @@ export type LiveRatios = {
   nbTitres: number;
   /** Dernier résultat net disponible. */
   resultatNet: number;
+  /** Exercice du BPA servant au PER. Les fondamentaux ne sont pas publiés au
+   *  même rythme selon les sociétés : sans ce millésime, un PER sur comptes
+   *  2023 se lit comme un PER sur comptes 2026. */
+  perExercice: number | null;
+  /** Exercice du DPA retenu pour le rendement. Peut être antérieur à
+   *  `perExercice` quand le dernier exercice n'a pas encore de dividende
+   *  (fallback ci-dessous) — le rendement affiché est alors historique. */
+  dpaExercice: number | null;
 };
 
 /**
@@ -508,10 +516,12 @@ export function computeLiveRatios(
   // dividende, on remonte jusqu'au premier DPA > 0 pour calculer un
   // rendement stable. Cf. cas CBIBF 2025 publie en S1 avant l'AG.
   let effectiveDpa = r.dpa;
+  let dpaExercice: number | null = effectiveDpa > 0 ? r.exercice : null;
   if (effectiveDpa <= 0) {
     for (let i = list.length - 2; i >= 0; i--) {
       if (list[i].dpa > 0) {
         effectiveDpa = list[i].dpa;
+        dpaExercice = list[i].exercice;
         break;
       }
     }
@@ -530,6 +540,8 @@ export function computeLiveRatios(
     dpa: effectiveDpa,
     nbTitres: r.nbTitres,
     resultatNet: r.resultatNet,
+    perExercice: per !== null ? r.exercice : null,
+    dpaExercice: dividendYield !== null ? dpaExercice : null,
   };
 }
 

@@ -105,7 +105,7 @@ type Props = {
     totalActions: number;
     totalCapitalization: number;
     totalVolume: number;
-    averagePer: number;
+    medianPer: number;
     averageYield: number;
     bySector: Record<string, number>;
     byCountry: Record<string, number>;
@@ -139,6 +139,37 @@ type SortKey =
   | "per"
   | "yieldPct";
 type SortOrder = "asc" | "desc";
+
+/**
+ * Millesime des comptes derriere un PER ou un rendement. Les societes de la
+ * cote ne publient pas au meme rythme : sans cette mention, le PER d'UNILEVER
+ * (comptes 2023) se lit comme celui d'ORANGE (comptes 2026). Au-dela d'un
+ * exercice de retard, l'exposant passe en ambre.
+ */
+function FiscalYear({
+  year,
+  kind,
+}: {
+  year: number | null;
+  kind: "per" | "yield";
+}) {
+  if (!year) return null;
+  const stale = year < new Date().getFullYear() - 1;
+  const label =
+    kind === "per"
+      ? `Calculé sur les comptes de l'exercice ${year}`
+      : `Dernier dividende connu : exercice ${year}`;
+  return (
+    <sup
+      title={label}
+      className={`ml-0.5 text-[9px] font-normal tabular-nums ${
+        stale ? "text-amber-600" : "text-slate-400"
+      }`}
+    >
+      {year}
+    </sup>
+  );
+}
 
 const PAGE_SIZE = 20;
 
@@ -1013,14 +1044,24 @@ export default function ActionsBRVMView({
                       {a.capitalization > 0 ? formatBigFCFA(a.capitalization) : "—"}
                     </td>
                     <td className="px-3 py-3 text-right hidden lg:table-cell">
-                      {a.hasPer && a.per > 0
-                        ? a.per.toFixed(1).replace(".", ",")
-                        : "—"}
+                      {a.hasPer && a.per > 0 ? (
+                        <>
+                          {a.per.toFixed(1).replace(".", ",")}
+                          <FiscalYear year={a.perYear} kind="per" />
+                        </>
+                      ) : (
+                        "—"
+                      )}
                     </td>
                     <td className="px-3 py-3 text-right hidden lg:table-cell">
-                      {a.hasYield && a.yieldPct > 0
-                        ? `${a.yieldPct.toFixed(2).replace(".", ",")}%`
-                        : "—"}
+                      {a.hasYield && a.yieldPct > 0 ? (
+                        <>
+                          {`${a.yieldPct.toFixed(2).replace(".", ",")}%`}
+                          <FiscalYear year={a.yieldYear} kind="yield" />
+                        </>
+                      ) : (
+                        "—"
+                      )}
                     </td>
                   </tr>
                 ))}

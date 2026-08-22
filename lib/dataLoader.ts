@@ -1033,16 +1033,29 @@ export function loadMultipleIndicesHistory(
 }
 
 /**
+ * Au-dela de ce delai sans nouveau point, on considere que l'historique CSV
+ * n'est plus alimente et qu'il ne peut plus servir de reference a un cours
+ * live. 30 jours couvre largement une interruption de scrape ou une longue
+ * suspension de cotation, sans laisser passer une serie abandonnee.
+ */
+const MAX_HISTORY_STALE_DAYS = 30;
+
+/**
  * Calcule la performance Year-To-Date d'un indice (ou titre) :
  * variation entre `currentValue` et la derniere valeur observee dans
  * l'historique CSV au plus tard le 31/12 de l'annee precedente.
  *
  * Si le 31/12 est non cote (week-end/ferie), on prend le dernier jour
- * de cotation avant cette date.
+ * de cotation avant cette date. C'est volontaire : pour un titre peu
+ * liquide, le dernier cours traite EST la bonne reference (cf. SEMC, sans
+ * cotation du 07/11 au 31/12/2025).
  *
  * Renvoie `null` si :
  *   - l'historique ne contient pas de point dans la fenetre
  *     (cas typique d'un nouvel indice)
+ *   - l'historique CSV n'a plus ete alimente depuis plus de
+ *     MAX_HISTORY_STALE_DAYS : la reference et `currentValue` ne sont plus
+ *     comparables (cf. BRVM-SP avant reconstitution depuis le BOC)
  *   - le CSV est sur une echelle differente du `currentValue`
  *     (rebasing d'indice par BRVM detecte par un ecart abrupt entre la
  *     derniere valeur CSV et la valeur live) — dans ce cas l'appelant
@@ -1059,10 +1072,24 @@ export function computeYtdPct(
   const history = loadIndexHistory(code);
   if (history.length === 0) return null;
 
+  const lastCsvPoint = history[history.length - 1];
+
+  // Garde-fou fraicheur : `currentValue` vient d'une source live, la reference
+  // vient du CSV. Si le CSV a cesse d'etre alimente, les deux ne decrivent plus
+  // la meme realite et le "YTD" devient une performance sur plusieurs annees.
+  // Cas rencontre : BRVM-SP, serie morte au 29/01/2025, affichait +185,89 %
+  // la ou la BRVM publiait +168,89 %. On renonce plutot que de publier un
+  // chiffre faux — l'appelant affiche alors "n.d.".
+  const staleDays =
+    (Date.now() - Date.parse(`${lastCsvPoint.date}T00:00:00Z`)) / 86_400_000;
+  if (!Number.isFinite(staleDays) || staleDays > MAX_HISTORY_STALE_DAYS) {
+    return null;
+  }
+
   // Detection rebasing : si la derniere valeur CSV diffère du live d'un
   // facteur > 3x, le CSV est sur une echelle obsolete (changement de base
   // officiel BRVM). Le YTD calcule serait absurde, on abandonne.
-  const lastCsvValue = history[history.length - 1].value;
+  const lastCsvValue = lastCsvPoint.value;
   if (lastCsvValue > 0) {
     const liveVsCsv = currentValue / lastCsvValue;
     if (liveVsCsv > 3 || liveVsCsv < 1 / 3) return null;
@@ -1253,6 +1280,11 @@ export type ActionRow = {
   yieldPct: number;
   hasPer: boolean;
   hasYield: boolean;
+  /** Exercice des comptes derriere le PER (null si pas de PER). */
+  perYear: number | null;
+  /** Exercice du dividende derriere le rendement (null si pas de rendement).
+   *  Peut etre anterieur a perYear : cf. fallback DPA dans computeLiveRatios. */
+  yieldYear: number | null;
 };
 
 /**
@@ -1290,8 +1322,16 @@ function buildActionRow(
     capitalization,
     per,
     yieldPct,
+    // Pas de borne haute sur le PER, volontairement : un PER de 748 (UNILEVER,
+    // 640 MFCFA de resultat 2023 pour 52 200 FCFA le titre) est exact et
+    // informatif — il dit que la societe ne gagne presque rien au regard de sa
+    // valorisation. Le masquer afficherait "donnee indisponible", ce qui est
+    // faux. La borne sur le rendement, elle, se justifie : au-dela de 50 % on
+    // est quasi toujours face a un DPA mal parse ou un cours perime.
     hasPer: per > 0,
     hasYield: yieldPct > 0 && yieldPct < 50,
+    perYear: ratios?.perExercice ?? null,
+    yieldYear: ratios?.dpaExercice ?? null,
   };
 }
 
@@ -1355,7 +1395,12 @@ export function getActionsMarketStats(actions: ActionRow[]): {
   totalActions: number;
   totalCapitalization: number;
   totalVolume: number;
-  averagePer: number;
+  /** MEDIANE, pas moyenne. Une distribution de multiples est fortement
+   *  asymetrique : la moyenne des PER du marche ressort a 88,5 contre une
+   *  mediane de 20,0, tiree par deux societes en creux de cycle (UNILEVER,
+   *  SICOR). La mediane decrit le marche, la moyenne decrit les valeurs
+   *  extremes. */
+  medianPer: number;
   averageYield: number;
   bySector: Record<string, number>;
   byCountry: Record<string, number>;
@@ -1363,9 +1408,16 @@ export function getActionsMarketStats(actions: ActionRow[]): {
   const totalCapitalization = actions.reduce((s, a) => s + a.capitalization, 0);
   const totalVolume = actions.reduce((s, a) => s + a.volume, 0);
 
-  const validPer = actions.filter((a) => a.hasPer && a.per > 0);
-  const averagePer =
-    validPer.length > 0 ? validPer.reduce((s, a) => s + a.per, 0) / validPer.length : 0;
+  const sortedPer = actions
+    .filter((a) => a.hasPer && a.per > 0)
+    .map((a) => a.per)
+    .sort((x, y) => x - y);
+  const medianPer =
+    sortedPer.length === 0
+      ? 0
+      : sortedPer.length % 2 === 1
+        ? sortedPer[(sortedPer.length - 1) / 2]
+        : (sortedPer[sortedPer.length / 2 - 1] + sortedPer[sortedPer.length / 2]) / 2;
 
   const validYield = actions.filter((a) => a.hasYield && a.yieldPct > 0);
   const averageYield =
@@ -1387,7 +1439,7 @@ export function getActionsMarketStats(actions: ActionRow[]): {
     totalActions: actions.length,
     totalCapitalization,
     totalVolume,
-    averagePer,
+    medianPer,
     averageYield,
     bySector,
     byCountry,

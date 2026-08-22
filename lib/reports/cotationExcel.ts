@@ -52,7 +52,7 @@ export async function buildCotationExcel(
     ["Actions cotées (séance)", data.session.liveListedCount],
     ["Capitalisation totale (Md FCFA)", Number((stats.totalCapitalization / 1e9).toFixed(1))],
     ["Volume du jour (titres)", stats.totalVolume],
-    ["PER moyen", Number(stats.averagePer.toFixed(2))],
+    ["PER médian", Number(stats.medianPer.toFixed(2))],
     ["Rendement moyen (%)", Number(stats.averageYield.toFixed(2))],
     ["BRVM Composite", Number(comp.latestValue.toFixed(2))],
     ["Variation Composite (%)", Number(comp.variationPct.toFixed(2))],
