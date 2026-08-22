@@ -7,11 +7,11 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
   Legend,
   ScatterChart,
   Scatter,
 } from "recharts";
+import { ResponsiveContainer } from "@/components/ui/ChartContainer";
 import CountryFlag from "./CountryFlag";
 import LivePriceBadge from "./LivePriceBadge";
 import type { ActionRow, RiskReturnPoint } from "@/lib/dataLoader";

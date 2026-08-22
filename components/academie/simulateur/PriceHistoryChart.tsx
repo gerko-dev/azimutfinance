@@ -5,11 +5,11 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
+import { ResponsiveContainer } from "@/components/ui/ChartContainer";
 
 type Point = { date: string; value: number };
 

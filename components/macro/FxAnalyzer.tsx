@@ -8,10 +8,10 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
   Legend,
   ReferenceLine,
 } from "recharts";
+import { ResponsiveContainer } from "@/components/ui/ChartContainer";
 import type { FxSlug, ReturnHorizon } from "@/lib/fx";
 
 type StatRow = {

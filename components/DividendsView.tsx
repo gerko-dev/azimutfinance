@@ -12,8 +12,8 @@ import {
   Tooltip,
   Legend,
   ReferenceLine,
-  ResponsiveContainer,
 } from "recharts";
+import { ResponsiveContainer } from "@/components/ui/ChartContainer";
 import type { FundRatios } from "@/lib/fundamentals";
 import type { UserRole } from "@/lib/auth/userRole";
 import MemberGateDialog from "./MemberGateDialog";

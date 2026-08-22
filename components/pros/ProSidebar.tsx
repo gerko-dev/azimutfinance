@@ -22,6 +22,10 @@ const NAV: NavSection[] = [
   {
     label: "Marchés",
     items: [
+      { label: "Actions BRVM", href: "/pros/actions" },
+      { label: "Obligations cotées", href: "/pros/obligations" },
+      { label: "Souverains UMOA-Titres", href: "/pros/souverains" },
+      { label: "FCP", href: "/pros/fcp" },
       { label: "Synthèse de clôture", href: "/pros/marche", soon: true },
       { label: "Carte de marché", href: "/pros/heatmap", soon: true },
       { label: "Calendrier financier", href: "/pros/calendrier", soon: true },
@@ -64,6 +68,7 @@ const NAV: NavSection[] = [
     items: [
       { label: "Place de marché OTC", href: "/pros/otc" },
       { label: "API & exports", href: "/pros/api" },
+      { label: "Fund management", href: "/pros/fund-management" },
       { label: "Reporting", href: "/pros/reporting", soon: true },
     ],
   },

@@ -4,11 +4,11 @@ import { useMemo } from "react";
 import {
   Area,
   ComposedChart,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
+import { ResponsiveContainer } from "@/components/ui/ChartContainer";
 import type { OrderBookSnapshot } from "@/lib/simulator/types";
 
 const fmtNum = (n: number) => n.toLocaleString("fr-FR");

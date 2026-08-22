@@ -8,9 +8,9 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
   Legend,
 } from "recharts";
+import { ResponsiveContainer } from "@/components/ui/ChartContainer";
 import MemberGateDialog from "./MemberGateDialog";
 import type { UserRole } from "@/lib/auth/userRole";
 

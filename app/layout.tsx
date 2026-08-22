@@ -12,14 +12,19 @@ import {
   webSiteJsonLd,
 } from "@/lib/seo";
 
+// Repli explicite : si Geist ne peut pas être téléchargé (réseau / Google Fonts
+// bloqué), on retombe sur des polices système de métriques comparables plutôt
+// que sur un défaut serif surdimensionné.
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
+  fallback: ["system-ui", "-apple-system", "Segoe UI", "Roboto", "Helvetica Neue", "Arial", "sans-serif"],
 });
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+  fallback: ["ui-monospace", "SFMono-Regular", "Menlo", "Consolas", "Liberation Mono", "monospace"],
 });
 
 const TITLE = "AzimutFinance — Le portail des marchés financiers UEMOA (BRVM)";

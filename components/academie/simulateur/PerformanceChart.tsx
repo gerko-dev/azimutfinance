@@ -4,11 +4,11 @@ import {
   Bar,
   BarChart,
   Cell,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
+import { ResponsiveContainer } from "@/components/ui/ChartContainer";
 import type { Attribution } from "@/lib/simulator/performance";
 import { fmtFCFAPlain as fmtFCFA } from "@/lib/format";
 

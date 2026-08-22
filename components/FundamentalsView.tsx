@@ -10,9 +10,9 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
   Legend,
 } from "recharts";
+import { ResponsiveContainer } from "@/components/ui/ChartContainer";
 import type { FundRatios, FundTitre, StatementLine, FormatEtats } from "@/lib/fundamentals";
 import type { UserRole } from "@/lib/auth/userRole";
 import MemberGateDialog from "./MemberGateDialog";

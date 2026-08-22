@@ -6,11 +6,11 @@ import {
   CartesianGrid,
   Legend,
   Line,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
+import { ResponsiveContainer } from "@/components/ui/ChartContainer";
 import type { EquityPoint } from "@/lib/comptetitre/types";
 import { fmtFCFA } from "./format";
 

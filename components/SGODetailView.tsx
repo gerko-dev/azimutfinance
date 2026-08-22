@@ -9,7 +9,6 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
   Legend,
   ComposedChart,
   Bar,
@@ -19,6 +18,7 @@ import {
   Pie,
   Cell,
 } from "recharts";
+import { ResponsiveContainer } from "@/components/ui/ChartContainer";
 
 // ==========================================
 // TYPES

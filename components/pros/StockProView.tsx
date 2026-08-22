@@ -11,20 +11,41 @@ import {
   XAxis,
   YAxis,
   Tooltip,
-  ResponsiveContainer,
   ReferenceLine,
-  BarChart,
-  Bar,
-  Cell,
 } from "recharts";
+import { ResponsiveContainer } from "@/components/ui/ChartContainer";
 import type {
   ReturnsMatrix,
   RiskMetrics,
   AdvancedStatsSnapshot,
   MonthlyReturn,
+  Quadrant,
 } from "@/lib/stockStats";
-import type { FundRatios, StatementLine } from "@/lib/fundamentals";
+import type {
+  FundRatios,
+  StatementLine,
+  FundTitre,
+  PeriodicStatements,
+} from "@/lib/fundamentals";
 import type { ListedBond } from "@/lib/listedBondsTypes";
+import type { PriceTarget } from "@/lib/priceTarget";
+import type { PriceVolumePoint } from "@/lib/technicalAnalysis";
+import ProTechnicalTab from "./tabs/ProTechnicalTab";
+import ProAnticipationTab from "./tabs/ProAnticipationTab";
+import ProDividendsTab from "./tabs/ProDividendsTab";
+import ProHistoryTab from "./tabs/ProHistoryTab";
+import ProStatsTab from "./tabs/ProStatsTab";
+import ProFundamentalsTab from "./tabs/ProFundamentalsTab";
+
+type ProTab =
+  | "overview"
+  | "stats"
+  | "fundamentals"
+  | "technical"
+  | "anticipation"
+  | "dividends"
+  | "history"
+  | "news";
 
 // ─── TYPES ────────────────────────────────────────────────────────────
 
@@ -84,20 +105,25 @@ type Statement = {
   bilanPassif: StatementLine[];
   compteResultat: StatementLine[];
   flux: StatementLine[];
+  periodic: PeriodicStatements;
 };
 
 type Props = {
   stock: StockShape;
   priceHistory: PricePoint[];
+  priceHistoryWithVolume: PriceVolumePoint[];
   ohlcHistory: OhlcPoint[];
   brvmcHistory: PricePoint[];
   sectorIndex: { code: string; name: string; history: PricePoint[] } | null;
   returnsMatrix: ReturnsMatrix;
   riskMetrics: RiskMetrics;
   advancedStats: AdvancedStatsSnapshot;
+  quadrant: Quadrant | null;
+  priceTarget: PriceTarget | null;
   peers: Peer[];
   peerSparklines: Record<string, PricePoint[]>;
   issuerBonds: ListedBond[];
+  fundTitre: FundTitre | null;
   ratios: FundRatios[];
   statements: Statement;
   news: NewsItem[];
@@ -232,30 +258,58 @@ function findWorstDrawdowns(
   return segments.sort((a, b) => a.drawdown - b.drawdown).slice(0, topN);
 }
 
+// ─── PERIODES (graphique OHLC) ────────────────────────────────────────
+
+type Period = "1M" | "3M" | "6M" | "1A" | "3A" | "5A" | "Max";
+const PERIODS: Period[] = ["1M", "3M", "6M", "1A", "3A", "5A", "Max"];
+
+function filterOhlcByPeriod(ohlc: OhlcPoint[], period: Period): OhlcPoint[] {
+  if (period === "Max" || ohlc.length === 0) return ohlc;
+  const cutoff = new Date(ohlc[ohlc.length - 1].timestamp);
+  switch (period) {
+    case "1M": cutoff.setMonth(cutoff.getMonth() - 1); break;
+    case "3M": cutoff.setMonth(cutoff.getMonth() - 3); break;
+    case "6M": cutoff.setMonth(cutoff.getMonth() - 6); break;
+    case "1A": cutoff.setFullYear(cutoff.getFullYear() - 1); break;
+    case "3A": cutoff.setFullYear(cutoff.getFullYear() - 3); break;
+    case "5A": cutoff.setFullYear(cutoff.getFullYear() - 5); break;
+  }
+  const cutoffTs = cutoff.getTime();
+  return ohlc.filter((p) => p.timestamp >= cutoffTs);
+}
+
 // ─── COMPONENT ───────────────────────────────────────────────────────
 
 export default function StockProView(props: Props) {
   const {
     stock,
     priceHistory,
+    priceHistoryWithVolume,
     ohlcHistory,
     brvmcHistory,
     sectorIndex,
     returnsMatrix,
     riskMetrics,
     advancedStats,
+    quadrant,
+    priceTarget,
     peers,
     peerSparklines,
     issuerBonds,
+    fundTitre,
     ratios,
     statements,
     news,
     livePrice,
   } = props;
 
-  const [tab, setTab] = useState<
-    "vue" | "cotation" | "risque" | "fundamentaux" | "pairs" | "news"
-  >("vue");
+  const [tab, setTab] = useState<ProTab>("overview");
+  const [klPeriod, setKlPeriod] = useState<Period>("1A");
+
+  const filteredOhlc = useMemo(
+    () => filterOhlcByPeriod(ohlcHistory, klPeriod),
+    [ohlcHistory, klPeriod],
+  );
 
   // ─── Pre-calculs ────────────────────────────────────────────────────
   const drawdownSeries = useMemo(
@@ -273,12 +327,6 @@ export default function StockProView(props: Props) {
       ? (stock.price - stock.low52w) / (stock.high52w - stock.low52w)
       : null;
 
-  // Last 30 sessions (cotation tab)
-  const last30Sessions = useMemo(
-    () => ohlcHistory.slice(-30).reverse(),
-    [ohlcHistory],
-  );
-
   return (
     <div className="space-y-3 -mt-2 -mb-2">
       {/* ═══ HEADER STICKY ═══════════════════════════════════════════ */}
@@ -287,11 +335,13 @@ export default function StockProView(props: Props) {
       {/* ═══ TABS ════════════════════════════════════════════════════ */}
       <div className="flex items-center gap-1 border-b border-slate-800 -mx-4 px-4 md:-mx-6 md:px-6 overflow-x-auto">
         {[
-          { id: "vue", label: "Vue" },
-          { id: "cotation", label: "Cotation" },
-          { id: "risque", label: "Risque" },
-          { id: "fundamentaux", label: "Fondamentaux" },
-          { id: "pairs", label: "Pairs" },
+          { id: "overview", label: "Vue d'ensemble" },
+          { id: "stats", label: "Statistiques" },
+          { id: "fundamentals", label: "Fondamentaux" },
+          { id: "technical", label: "Technique" },
+          { id: "anticipation", label: "Anticipation" },
+          { id: "dividends", label: "Dividendes" },
+          { id: "history", label: "Historique" },
           { id: "news", label: "Actualités" },
         ].map((t) => (
           <button
@@ -310,19 +360,38 @@ export default function StockProView(props: Props) {
       </div>
 
       {/* ═══ TAB CONTENT ═════════════════════════════════════════════ */}
-      {tab === "vue" && (
+      {tab === "overview" && (
         <div className="grid grid-cols-12 gap-3">
           {/* Chart KLine */}
-          <Panel className="col-span-12 lg:col-span-8" title="Cours OHLC" subtitle={`${ohlcHistory.length} séances`}>
+          <Panel className="col-span-12 lg:col-span-8" title="Cours OHLC" subtitle={`${filteredOhlc.length} séances`}>
             {ohlcHistory.length > 0 ? (
-              <KlineChart
-                data={ohlcHistory}
-                code={stock.code}
-                name={stock.name}
-                theme="dark"
-                height={460}
-                pricePrecision={0}
-              />
+              <>
+                <div className="flex flex-wrap gap-1 px-3 pt-2.5">
+                  {PERIODS.map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setKlPeriod(p)}
+                      aria-pressed={klPeriod === p}
+                      className={`px-2 py-0.5 text-[11px] rounded border transition ${
+                        klPeriod === p
+                          ? "bg-blue-600/20 text-blue-300 border-blue-500/40"
+                          : "border-slate-700 text-slate-400 hover:bg-slate-800"
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+                <KlineChart
+                  data={filteredOhlc}
+                  code={stock.code}
+                  name={stock.name}
+                  theme="dark"
+                  height={430}
+                  pricePrecision={0}
+                />
+              </>
             ) : (
               <div className="h-[420px]">
                 <EmptyMessage>Aucun historique disponible.</EmptyMessage>
@@ -447,89 +516,73 @@ export default function StockProView(props: Props) {
           >
             <NewsList items={news.slice(0, 5)} />
           </Panel>
-        </div>
-      )}
 
-      {tab === "cotation" && (
-        <div className="grid grid-cols-12 gap-3">
-          <Panel className="col-span-12 lg:col-span-8" title="30 dernières séances">
-            <SessionsTable rows={last30Sessions} />
-          </Panel>
-          <Panel className="col-span-12 lg:col-span-4" title="Récap cotation">
-            <div className="grid grid-cols-2 gap-x-3 gap-y-2 p-3 text-xs">
-              <Kpi label="Dernier cours" value={fmtInt(stock.price)} unit="FCFA" />
-              <Kpi
-                label="Variation J"
-                value={fmtPctRaw(stock.changePercent)}
-                tone={stock.changePercent}
-              />
-              <Kpi label="Variation FCFA" value={fmtInt(stock.change)} unit="FCFA" tone={stock.change} />
-              <Kpi label="Volume J" value={stock.hasVolume ? fmtInt(stock.volume) : "—"} />
-              <Kpi label="Capi. boursière" value={fmtFCFA(stock.capitalization)} unit="FCFA" />
-              <Kpi label="Titres en circulation" value={fmtFCFA(stock.sharesOutstanding)} />
-              <Kpi
-                label="ISIN"
-                value={stock.isin || "—"}
-              />
-              <Kpi label="Secteur" value={stock.sector || "—"} />
-              <Kpi label="Pays" value={stock.country || "—"} />
-              {sectorIndex && (
+          {/* Identite / a propos */}
+          <Panel className="col-span-12" title="À propos" subtitle={stock.code}>
+            <div className="p-3 space-y-3">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-2 text-xs">
+                <Kpi label="ISIN" value={stock.isin || "—"} />
+                <Kpi label="Secteur" value={stock.sector || "—"} />
+                <Kpi label="Pays" value={stock.country || "—"} />
+                {sectorIndex && (
+                  <Kpi label="Indice sectoriel" value={sectorIndex.code} />
+                )}
+                <Kpi label="Titres en circulation" value={fmtFCFA(stock.sharesOutstanding)} />
                 <Kpi
-                  label="Indice sectoriel"
-                  value={sectorIndex.code}
+                  label="Flottant"
+                  value={stock.float > 0 ? fmtPctRaw(stock.float * 100, 1) : "—"}
                 />
+              </div>
+              {stock.description && (
+                <p className="text-xs text-slate-400 leading-relaxed border-t border-slate-700 pt-3">
+                  {stock.description}
+                </p>
               )}
             </div>
           </Panel>
         </div>
       )}
 
-      {tab === "risque" && (
-        <div className="grid grid-cols-12 gap-3">
-          <Panel className="col-span-12 lg:col-span-6" title="VaR & Expected Shortfall" subtitle="Log-returns quotidiens, fenêtre complète">
-            <RiskTable risk={advancedStats.risk} />
-          </Panel>
-          <Panel className="col-span-12 lg:col-span-6" title="Statistiques avancées">
-            <AdvancedRiskStats
-              risk={advancedStats.risk}
-              regression={advancedStats.regression}
-              descriptive={advancedStats.descriptive}
-            />
-          </Panel>
-          <Panel className="col-span-12 lg:col-span-7" title="Distribution des rendements" subtitle="Histogramme 30 bins">
-            <DistributionChart bins={advancedStats.histogram} />
-          </Panel>
-          <Panel className="col-span-12 lg:col-span-5" title="Test de normalité" subtitle="Jarque-Bera">
-            <NormalityPanel normality={advancedStats.normality} />
-          </Panel>
-          <Panel className="col-span-12" title="Drawdown historique" subtitle="vs all-time high cumulés depuis cotation">
-            <DrawdownPanel series={drawdownSeries} worst={worstDD} full />
-          </Panel>
-        </div>
+      {tab === "stats" && (
+        <ProStatsTab
+          ticker={stock.code}
+          priceHistory={priceHistory}
+          brvmcHistory={brvmcHistory}
+          quadrant={quadrant}
+        />
       )}
 
-      {tab === "fundamentaux" && (
-        <div className="grid grid-cols-12 gap-3">
-          <Panel className="col-span-12" title="Ratios fondamentaux" subtitle={`${ratios.length} exercice${ratios.length > 1 ? "s" : ""} disponibles`}>
-            <RatiosTable ratios={ratios} />
-          </Panel>
-          {statements.exercices.length > 0 && (
-            <>
-              <Panel className="col-span-12 lg:col-span-6" title="Compte de résultat (synthèse)" subtitle={`Exercices ${statements.exercices.join(" · ")}`}>
-                <StatementTable rows={statements.compteResultat.slice(0, 10)} years={statements.exercices} />
-              </Panel>
-              <Panel className="col-span-12 lg:col-span-6" title="Bilan actif (synthèse)" subtitle={`Exercices ${statements.exercices.join(" · ")}`}>
-                <StatementTable rows={statements.bilanActif.slice(0, 10)} years={statements.exercices} />
-              </Panel>
-            </>
-          )}
-        </div>
+      {tab === "fundamentals" && (
+        <ProFundamentalsTab
+          ticker={stock.code}
+          fundTitre={fundTitre}
+          ratios={ratios}
+          statements={statements}
+        />
       )}
 
-      {tab === "pairs" && (
-        <Panel className="col-span-12" title="Pairs du secteur" subtitle={stock.sector || "—"}>
-          <PeersTable peers={peers} sparklines={peerSparklines} />
-        </Panel>
+      {tab === "technical" && (
+        <ProTechnicalTab ticker={stock.code} history={priceHistoryWithVolume} />
+      )}
+
+      {tab === "anticipation" && (
+        <ProAnticipationTab ticker={stock.code} target={priceTarget} />
+      )}
+
+      {tab === "dividends" && (
+        <ProDividendsTab
+          ticker={stock.code}
+          currentPrice={stock.price}
+          ratios={ratios}
+        />
+      )}
+
+      {tab === "history" && (
+        <ProHistoryTab
+          ticker={stock.code}
+          history={priceHistoryWithVolume}
+          ohlcHistory={ohlcHistory}
+        />
       )}
 
       {tab === "news" && (
@@ -790,7 +843,7 @@ function Sparkline({ points }: { points: PricePoint[] }) {
 
 function MonthlyHeatmap({ data }: { data: MonthlyReturn[] }) {
   if (data.length === 0) {
-    return <EmptyMessage>Pas assez d'historique.</EmptyMessage>;
+    return <EmptyMessage>Pas assez d&apos;historique.</EmptyMessage>;
   }
   const years = Array.from(new Set(data.map((d) => d.year))).sort((a, b) => b - a).slice(0, 6);
   const byYearMonth = new Map<string, number>();
@@ -1021,278 +1074,3 @@ function NewsList({ items, full = false }: { items: NewsItem[]; full?: boolean }
   );
 }
 
-// ─── SESSIONS ─────────────────────────────────────────────────────────
-
-function SessionsTable({ rows }: { rows: OhlcPoint[] }) {
-  if (rows.length === 0) return <EmptyMessage>Aucune séance.</EmptyMessage>;
-  return (
-    <div className="max-h-96 overflow-y-auto">
-      <table className="w-full text-xs">
-        <thead className="sticky top-0 bg-slate-800/95 backdrop-blur">
-          <tr className="text-[10px] uppercase tracking-wider text-slate-500 border-b border-slate-700">
-            <th className="px-3 py-1.5 text-left">Date</th>
-            <th className="px-2 py-1.5 text-right">Ouv</th>
-            <th className="px-2 py-1.5 text-right">+ Haut</th>
-            <th className="px-2 py-1.5 text-right">+ Bas</th>
-            <th className="px-2 py-1.5 text-right">Clôture</th>
-            <th className="px-2 py-1.5 text-right">Var %</th>
-            <th className="px-2 py-1.5 text-right">Volume</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r, i) => {
-            const prev = rows[i + 1];
-            const varPct = prev ? r.close / prev.close - 1 : null;
-            return (
-              <tr key={r.timestamp} className="border-b border-slate-800 last:border-0 hover:bg-slate-800/30">
-                <td className="px-3 py-1 font-mono text-slate-400">
-                  {new Date(r.timestamp).toISOString().slice(0, 10)}
-                </td>
-                <td className="px-2 py-1 text-right font-mono tabular-nums text-slate-300">{fmtInt(r.open)}</td>
-                <td className="px-2 py-1 text-right font-mono tabular-nums text-slate-300">{fmtInt(r.high)}</td>
-                <td className="px-2 py-1 text-right font-mono tabular-nums text-slate-300">{fmtInt(r.low)}</td>
-                <td className="px-2 py-1 text-right font-mono tabular-nums text-slate-200">{fmtInt(r.close)}</td>
-                <td className={`px-2 py-1 text-right font-mono tabular-nums ${colorFor(varPct)}`}>{fmtPct(varPct)}</td>
-                <td className="px-2 py-1 text-right font-mono tabular-nums text-slate-400">{fmtInt(r.volume ?? 0)}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-// ─── RISK TABLES ──────────────────────────────────────────────────────
-
-function RiskTable({ risk }: { risk: AdvancedStatsSnapshot["risk"] }) {
-  if (!risk) {
-    return <EmptyMessage>Pas assez d&apos;historique (&lt; 30 séances).</EmptyMessage>;
-  }
-  return (
-    <div className="p-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
-      <Kpi label="VaR 95% (hist.)" value={fmtPct(-risk.varHistorical95)} />
-      <Kpi label="VaR 99% (hist.)" value={fmtPct(-risk.varHistorical99)} />
-      <Kpi label="VaR 95% (param.)" value={fmtPct(-risk.varParametric95)} />
-      <Kpi label="VaR 99% (param.)" value={fmtPct(-risk.varParametric99)} />
-      <Kpi label="CVaR 95%" value={fmtPct(-risk.cvar95)} />
-      <Kpi label="CVaR 99%" value={fmtPct(-risk.cvar99)} />
-      <Kpi label="Pire séance" value={fmtPct(risk.worstDay)} tone={risk.worstDay} />
-      <Kpi label="Meilleure séance" value={fmtPct(risk.bestDay)} tone={risk.bestDay} />
-    </div>
-  );
-}
-
-function AdvancedRiskStats({
-  risk,
-  regression,
-  descriptive,
-}: {
-  risk: AdvancedStatsSnapshot["risk"];
-  regression: AdvancedStatsSnapshot["regression"];
-  descriptive: AdvancedStatsSnapshot["descriptive"];
-}) {
-  return (
-    <div className="p-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
-      <Kpi
-        label="Sortino"
-        value={risk?.sortinoRatio != null ? fmt2(risk.sortinoRatio) : "—"}
-      />
-      <Kpi
-        label="Calmar"
-        value={risk?.calmarRatio != null ? fmt2(risk.calmarRatio) : "—"}
-      />
-      <Kpi
-        label="% séances positives"
-        value={risk ? fmtPct(risk.positiveDays) : "—"}
-      />
-      <Kpi
-        label="Downside deviation"
-        value={risk ? fmtPct(risk.downsideDeviation) : "—"}
-      />
-      <Kpi
-        label="Alpha annualisé"
-        value={regression?.alpha != null ? fmtPct(regression.alpha) : "—"}
-        tone={regression?.alpha}
-      />
-      <Kpi
-        label="Beta (régr.)"
-        value={regression?.beta != null ? fmt2(regression.beta) : "—"}
-      />
-      <Kpi
-        label="R² vs BRVMC"
-        value={regression?.rSquared != null ? fmt2(regression.rSquared) : "—"}
-      />
-      <Kpi
-        label="Skewness"
-        value={descriptive?.skewness != null ? fmt2(descriptive.skewness) : "—"}
-      />
-      <Kpi
-        label="Kurtosis (excès)"
-        value={descriptive?.excessKurtosis != null ? fmt2(descriptive.excessKurtosis) : "—"}
-      />
-      <Kpi
-        label="Moyenne quotidienne"
-        value={descriptive?.mean != null ? fmtPct(descriptive.mean, 3) : "—"}
-      />
-    </div>
-  );
-}
-
-function DistributionChart({ bins }: { bins: AdvancedStatsSnapshot["histogram"] }) {
-  if (bins.length === 0) {
-    return <EmptyMessage>Pas assez de données.</EmptyMessage>;
-  }
-  return (
-    <div className="h-64 p-2">
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={bins}>
-          <XAxis
-            dataKey="binStart"
-            tick={{ fontSize: 10, fill: "#94a3b8" }}
-            tickFormatter={(v) => `${(v * 100).toFixed(1)}%`}
-          />
-          <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} width={28} />
-          <Tooltip
-            contentStyle={{
-              background: "#1e293b",
-              border: "1px solid #334155",
-              fontSize: 11,
-            }}
-            labelFormatter={(label) => `Bin: ${(Number(label) * 100).toFixed(2)}%`}
-            formatter={(v) => [String(v), "Fréquence"]}
-          />
-          <Bar dataKey="count" isAnimationActive={false}>
-            {bins.map((b, i) => (
-              <Cell key={i} fill={b.binStart >= 0 ? "#34d399" : "#f87171"} fillOpacity={0.7} />
-            ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
-function NormalityPanel({
-  normality,
-}: {
-  normality: AdvancedStatsSnapshot["normality"];
-}) {
-  if (!normality) {
-    return <EmptyMessage>Pas assez de données.</EmptyMessage>;
-  }
-  return (
-    <div className="p-3 space-y-2 text-xs">
-      <div className="grid grid-cols-2 gap-x-3 gap-y-2">
-        <Kpi label="Jarque-Bera" value={fmt2(normality.jbStatistic)} />
-        <Kpi label="p-value" value={fmt2(normality.pValue)} />
-      </div>
-      <div
-        className={`mt-2 p-2 rounded border text-[11px] ${
-          normality.isNormal5
-            ? "bg-emerald-900/20 border-emerald-700/40 text-emerald-300"
-            : "bg-amber-900/20 border-amber-700/40 text-amber-300"
-        }`}
-      >
-        {normality.isNormal5
-          ? "Distribution compatible avec la loi normale (p > 5%)."
-          : "Distribution non-normale (p < 5%) — queues épaisses ou asymétrie."}
-      </div>
-    </div>
-  );
-}
-
-// ─── RATIOS ───────────────────────────────────────────────────────────
-
-function RatiosTable({ ratios }: { ratios: FundRatios[] }) {
-  if (ratios.length === 0) {
-    return <EmptyMessage>Aucun fondamental disponible.</EmptyMessage>;
-  }
-  const exercices = ratios.map((r) => r.exercice);
-  const rows: Array<{ label: string; getter: (r: FundRatios) => number | null; isPct?: boolean; isCurrency?: boolean }> = [
-    { label: "Chiffre d'affaires", getter: (r) => r.ca, isCurrency: true },
-    { label: "Résultat net", getter: (r) => r.resultatNet, isCurrency: true },
-    { label: "Total actif", getter: (r) => r.totalActif, isCurrency: true },
-    { label: "Capitaux propres", getter: (r) => r.capitauxPropres, isCurrency: true },
-    { label: "Marge nette", getter: (r) => r.margeNette, isPct: true },
-    { label: "Marge opérationnelle", getter: (r) => r.margeOperationnelle, isPct: true },
-    { label: "ROE", getter: (r) => r.roe, isPct: true },
-    { label: "ROA", getter: (r) => r.roa, isPct: true },
-    { label: "Gearing", getter: (r) => r.gearing, isPct: true },
-    { label: "Autonomie financière", getter: (r) => r.autonomieFinanciere, isPct: true },
-    { label: "Solvabilité", getter: (r) => r.solvabilite, isPct: true },
-    { label: "Capi. boursière", getter: (r) => r.capiBoursiere, isCurrency: true },
-    { label: "DPA", getter: (r) => r.dpa, isCurrency: true },
-  ];
-  return (
-    <div className="max-h-[500px] overflow-y-auto">
-      <table className="w-full text-xs">
-        <thead className="sticky top-0 bg-slate-800/95 backdrop-blur">
-          <tr className="text-[10px] uppercase tracking-wider text-slate-500 border-b border-slate-700">
-            <th className="px-3 py-1.5 text-left">Indicateur</th>
-            {exercices.map((y) => (
-              <th key={y} className="px-2 py-1.5 text-right font-mono">{y}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.label} className="border-b border-slate-800 last:border-0">
-              <td className="px-3 py-1 text-slate-400">{row.label}</td>
-              {ratios.map((r) => {
-                const v = row.getter(r);
-                return (
-                  <td key={r.exercice} className="px-2 py-1 text-right font-mono tabular-nums text-slate-200">
-                    {v == null
-                      ? "—"
-                      : row.isPct
-                        ? fmtPct(v)
-                        : row.isCurrency
-                          ? fmtFCFA(v)
-                          : fmt2(v)}
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function StatementTable({
-  rows,
-  years,
-}: {
-  rows: StatementLine[];
-  years: number[];
-}) {
-  if (rows.length === 0) return <EmptyMessage>Aucune donnée.</EmptyMessage>;
-  return (
-    <div className="max-h-96 overflow-y-auto">
-      <table className="w-full text-xs">
-        <thead className="sticky top-0 bg-slate-800/95 backdrop-blur">
-          <tr className="text-[10px] uppercase tracking-wider text-slate-500 border-b border-slate-700">
-            <th className="px-3 py-1.5 text-left">Ligne</th>
-            {years.map((y) => (
-              <th key={y} className="px-2 py-1.5 text-right font-mono">{y}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, idx) => (
-            <tr key={`${row.codePoste}-${idx}`} className="border-b border-slate-800 last:border-0">
-              <td className="px-3 py-1 text-slate-400 truncate max-w-[280px]">{row.libelle}</td>
-              {years.map((y) => (
-                <td key={y} className="px-2 py-1 text-right font-mono tabular-nums text-slate-200">
-                  {fmtFCFA(row.values[y])}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}

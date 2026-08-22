@@ -16,10 +16,10 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
   Legend,
   Line,
 } from "recharts";
+import { ResponsiveContainer } from "@/components/ui/ChartContainer";
 import type {
   SovereignBondLite,
   EmissionUMOAFuture,

@@ -4,11 +4,11 @@ import { useMemo, useState } from "react";
 import {
   Bar,
   BarChart,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
+import { ResponsiveContainer } from "@/components/ui/ChartContainer";
 import type { Candle } from "@/lib/simulator/queries";
 
 const fmtNum = (n: number) => n.toLocaleString("fr-FR");

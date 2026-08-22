@@ -12,11 +12,11 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
   ReferenceLine,
   ComposedChart,
   Cell,
 } from "recharts";
+import { ResponsiveContainer } from "@/components/ui/ChartContainer";
 import type {
   ReturnsMatrix,
   RiskMetrics,

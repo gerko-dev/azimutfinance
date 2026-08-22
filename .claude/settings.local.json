@@ -378,7 +378,25 @@
       "PowerShell(npx eslint app/academie/simulateur/page.tsx; if \\($?\\) { \"ESLINT OK\" }; $out = npx tsc --noEmit -p tsconfig.json 2>&1; $src = $out | Where-Object { $_ -match 'simulateur' }; if \\($src\\) { $src } else { \"NO SIMULATEUR ERRORS\" })",
       "PowerShell(npx eslint app/academie/simulateur/page.tsx components/academie/simulateur/SeasonBanner.tsx components/academie/simulateur/JoinSeasonButton.tsx; if \\($?\\) { \"ESLINT OK\" }; $out = npx tsc --noEmit -p tsconfig.json 2>&1; $src = $out | Where-Object { $_ -match 'simulateur|SeasonBanner|JoinSeason' }; if \\($src\\) { $src } else { \"NO ERRORS\" })",
       "PowerShell(New-NetFirewallRule *)",
-      "PowerShell(Set-NetConnectionProfile *)"
+      "PowerShell(Set-NetConnectionProfile *)",
+      "PowerShell(Get-NetFirewallRule *)",
+      "PowerShell(npx tsc --noEmit -p tsconfig.json 2>&1 | Select-Object -First 40)",
+      "PowerShell($out = npx tsc --noEmit -p tsconfig.json 2>&1; $all = $out | Select-String -Pattern \"error TS\"; \"TOTAL errors: $\\($all.Count\\)\"; \"Non-.next errors:\"; $all | Where-Object { $_ -notmatch '\\\\.next' })",
+      "PowerShell(npx eslint components/pros/tabs/ProFundamentalsTab.tsx; \"eslint exit: $LASTEXITCODE\")",
+      "Bash(sort -t'|' -k1 -n)",
+      "Bash(sort -t'|' -k1)",
+      "Bash(npx --no-install tsx -e \"import\\('./lib/dataLoader.ts'\\).then\\(m=>{console.log\\('ABJC:', !!m.getStockDetails\\('ABJC'\\)\\); console.log\\('SNTS:', !!m.getStockDetails\\('SNTS'\\)\\);}\\).catch\\(e=>console.error\\('ERR',e.message\\)\\)\")",
+      "Bash(ls scripts/)",
+      "Bash(ls obligations-cotees*)",
+      "Bash(wc -l obligations-cotees.csv)",
+      "Bash(wc -l emissions.csv)",
+      "Bash(grep -qiE \"ready|started|localhost:3000|Error\" \"/c/Users/hp/AppData/Local/Temp/claude/C--Users-hp-GerKo-azimutfinance/953c770b-bd2d-4ad5-a1e2-e412e15c003d/tasks/bv5zrw8zh.output\")",
+      "Read(//c/Users/hp/AppData/Local/Temp/claude/C--Users-hp-GerKo-azimutfinance/953c770b-bd2d-4ad5-a1e2-e412e15c003d/tasks/**)",
+      "PowerShell(try { $r = Invoke-WebRequest -Uri \"http://localhost:3000/pros\" -UseBasicParsing -MaximumRedirection 0 -ErrorAction Stop; \"STATUS: $\\($r.StatusCode\\)\"; $r.Content.Substring\\(0,[Math]::Min\\(800,$r.Content.Length\\)\\) } catch { \"ERR STATUS: $\\($_.Exception.Response.StatusCode.value__\\)\"; $_.Exception.Message })",
+      "Bash(git -C /c/Users/hp/GerKo/azimutfinance status --porcelain)",
+      "PowerShell(foreach \\($p in @\\(\"/pros\",\"/pros/ytm\",\"/pros/screener\",\"/pros/actions\",\"/\"\\)\\) { try { $r = Invoke-WebRequest -Uri \"http://localhost:3000$p\" -UseBasicParsing -MaximumRedirection 0 -ErrorAction Stop; \"$p -> $\\($r.StatusCode\\)\" } catch { \"$p -> ERR $\\($_.Exception.Response.StatusCode.value__\\)\" } })",
+      "PowerShell($env:Path = \"C:\\\\Program Files\\\\nodejs;\" + $env:Path; node \"C:\\\\Users\\\\BROU~1.KOU\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-brou-kouame-Desktop-Project-azimutfinance\\\\581757fd-592a-4d21-8645-91bd80593685\\\\scratchpad\\\\read-inv.mjs\" \"C:\\\\Users\\\\brou.kouame\\\\Desktop\\\\Project\\\\azimutfinance\\\\Inventaire du FCP NSIA FONDS DIVERSIFIE au 2262026.xlsx\")",
+      "PowerShell($env:Path = \"C:\\\\Program Files\\\\nodejs;\" + $env:Path; node \"_tmp_read_inv.mjs\" \"Inventaire du FCP NSIA FONDS DIVERSIFIE au 2262026.xlsx\")"
     ]
   }
 }

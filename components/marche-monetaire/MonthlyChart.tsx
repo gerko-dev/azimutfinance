@@ -8,9 +8,9 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
   Legend,
 } from "recharts";
+import { ResponsiveContainer } from "@/components/ui/ChartContainer";
 
 export type MonthlyPoint = {
   month: string; // YYYY-MM

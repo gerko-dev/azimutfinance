@@ -13,10 +13,10 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
   Legend,
   ReferenceLine,
 } from "recharts";
+import { ResponsiveContainer } from "@/components/ui/ChartContainer";
 
 // ==========================================
 // TYPES PROPS (alignés sur app/fcp/[slug]/page.tsx)

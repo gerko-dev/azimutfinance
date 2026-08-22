@@ -12,17 +12,21 @@ import {
   loadAllActionsEnriched,
   loadMultipleIndicesHistory,
   loadListedBonds,
+  buildRiskReturnDataset,
 } from "@/lib/dataLoader";
 import {
   computeReturnsMatrix,
   computeRiskMetrics,
   computeAdvancedStats,
+  computeQuadrant,
 } from "@/lib/stockStats";
 import {
   getFundTitre,
   getStatement,
+  getPeriodicStatements,
 } from "@/lib/fundamentals";
 import { computeRatiosByTicker, computeLiveRatios } from "@/lib/fundamentalsCalc";
+import { computePriceTarget } from "@/lib/priceTarget";
 import { loadDbNewsByTicker } from "@/lib/newsFromDb";
 
 // Pro Terminal : meme pipeline que /titre/[code] mais layout plus dense et
@@ -191,7 +195,19 @@ export default async function StockProPage({
       ? getStatement(codeUpper, "Compte_Resultat", exercices)
       : [],
     flux: fundTitre ? getStatement(codeUpper, "Tableau_Flux", exercices) : [],
+    periodic: fundTitre
+      ? getPeriodicStatements(codeUpper)
+      : { exercices: [], metrics: [] },
   };
+
+  // ─── Classification quadrant + anticipation de cours ──────────────────
+  // Sur le Pro Terminal, l'anticipation est toujours calculee (acces complet).
+  const riskReturn = buildRiskReturnDataset();
+  const quadrant = computeQuadrant(codeUpper, riskReturn.points);
+  const priceTarget =
+    stock.price > 0
+      ? computePriceTarget(codeUpper, stock.price, priceHistory, allActions)
+      : null;
 
   // ─── Actus ────────────────────────────────────────────────────────────
   const news = await loadDbNewsByTicker(codeUpper);
@@ -200,15 +216,19 @@ export default async function StockProPage({
     <StockProView
       stock={stock}
       priceHistory={priceHistory}
+      priceHistoryWithVolume={priceHistoryFull}
       ohlcHistory={ohlcHistory}
       brvmcHistory={brvmcHistory}
       sectorIndex={sectorIndex}
       returnsMatrix={returnsMatrix}
       riskMetrics={riskMetrics}
       advancedStats={advancedStats}
+      quadrant={quadrant}
+      priceTarget={priceTarget}
       peers={peers}
       peerSparklines={peerSparklines}
       issuerBonds={issuerBonds}
+      fundTitre={fundTitre}
       ratios={ratios}
       statements={statements}
       news={news}

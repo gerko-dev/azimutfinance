@@ -9,9 +9,9 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
   Legend,
 } from "recharts";
+import { ResponsiveContainer } from "@/components/ui/ChartContainer";
 import type { CategoryFundRow, CategoryManagerRow, DispersionRow } from "@/app/fcp/categorie/[slug]/page";
 
 // Helpers

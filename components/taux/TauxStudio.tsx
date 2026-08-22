@@ -8,10 +8,10 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
   Legend,
   ReferenceLine,
 } from "recharts";
+import { ResponsiveContainer } from "@/components/ui/ChartContainer";
 import type { SeriesPoint, TauxRow, TauxSeries } from "@/lib/tauxTypes";
 import type { SeriesDescriptor } from "@/lib/tauxLoader";
 import {

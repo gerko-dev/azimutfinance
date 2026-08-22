@@ -6,7 +6,7 @@
 //
 // Source uniques (loaders deja existants) :
 //   - loadStocks()           : actions BRVM            -> /titre/<code>
-//   - loadListedBonds()      : obligations cotees      -> /obligation/<isin>
+//   - loadListedBonds()      : obligations cotees      -> /pros/obligation/<isin>
 //   - loadUmoaEmissions()    : souverains non cotes    -> /marches/souverains-non-cotes?isin=<isin>
 //   - loadFunds()            : OPCVM / FCP             -> /fcp/<id>
 //   - FX_PAIRS               : paires de change        -> /macro/devises/<slug>
@@ -126,7 +126,9 @@ function buildIndex(): ProSearchResult[] {
         kind: "listed-bond",
         label: name,
         sublabel: `${isin}${sublabel ? " · " + sublabel : ""}`,
-        href: `/obligation/${encodeURIComponent(isin)}`,
+        // Pointe vers la fiche obligation pro (terminal self-contained), comme
+        // les actions vers /pros/titre, plutot que la fiche publique.
+        href: `/pros/obligation/${encodeURIComponent(isin)}`,
         haystack: normalizeForSearch(
           [isin, name, issuer, country, b.code || "", b.sector || ""].join(" "),
         ),
