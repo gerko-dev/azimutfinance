@@ -7,12 +7,12 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
   Cell,
   Legend,
   Line,
   ScatterChart,
 } from "recharts";
+import { ResponsiveContainer } from "@/components/ui/ChartContainer";
 import type { ListedBond, ListedBondPrice } from "@/lib/listedBondsTypes";
 import { getBondYTMFromLatest } from "@/lib/listedBondsTypes";
 

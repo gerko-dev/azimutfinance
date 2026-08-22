@@ -183,6 +183,48 @@ export type FundRatios = {
   levierFinancier: number | null;
 };
 
+// Niveau hiérarchique d'une ligne d'état financier, dérivé de `typeValeur`
+// (+ code_poste pour les totaux généraux). Sert au rendu (3 designs distincts :
+// sous-total < total de section < total général) et à l'export Excel.
+export type StatementLevel =
+  | "total-general" // TOTAL GÉNÉRAL actif/passif, variation nette de trésorerie
+  | "total" // total de section (TOTAL ACTIF IMMOBILISÉ, flux d'investissement…)
+  | "sous-total" // agrégat intermédiaire (IMMOBILISATIONS CORPORELLES, FTCP…)
+  | "solde" // solde intermédiaire de gestion (SIG) du compte de résultat
+  | "produit" // produit (compte de résultat)
+  | "charge" // charge (compte de résultat)
+  | "detail"; // poste élémentaire
+
+// Codes des totaux généraux : stylés comme niveau le plus haut, distinct des
+// totaux de section. (Les flux n'ont pas de "TOTAL GÉNÉRAL" littéral : la
+// variation nette de trésorerie en tient lieu.)
+const GRAND_TOTAL_CODES = new Set([
+  "BIL_TOTAL_ACTIF",
+  "BIL_TOTAL_PASSIF",
+  "TFT_VAR_TRES",
+]);
+
+/** Classe une ligne d'état financier selon son `type_valeur` et son code. */
+export function classifyStatementLine(
+  typeValeur: string,
+  codePoste: string,
+): StatementLevel {
+  switch (typeValeur) {
+    case "Total":
+      return GRAND_TOTAL_CODES.has(codePoste) ? "total-general" : "total";
+    case "SousTotal":
+      return "sous-total";
+    case "SIG":
+      return "solde";
+    case "Produit":
+      return "produit";
+    case "Charge":
+      return "charge";
+    default:
+      return "detail";
+  }
+}
+
 // Ligne d'état financier (Bilan / CR / Flux)
 export type StatementLine = {
   codePoste: string;
@@ -190,6 +232,7 @@ export type StatementLine = {
   libelleCourt: string;
   ordre: number;
   typeValeur: string;
+  niveau: StatementLevel;
   values: Record<number, number>; // exercice → valeur
 };
 
@@ -309,10 +352,124 @@ export function getStatement(
       libelleCourt: p.libelleCourt,
       ordre: p.ordre,
       typeValeur: p.typeValeur,
+      niveau: classifyStatementLine(p.typeValeur, p.codePoste),
       values,
     });
   }
 
   lines.sort((a, b) => a.ordre - b.ordre);
   return lines;
+}
+
+// === États financiers périodiques (publications infra-annuelles) ===
+//
+// Les sociétés cotées publient des données cumulées en cours d'exercice :
+// T1 (3 mois), S1 (6 mois), 9M (9 mois), puis l'Annuel (12 mois). DB_Valeurs
+// ne porte ces publications que pour quelques soldes du compte de résultat
+// (CA/PNB, résultat d'exploitation, résultat net). `getStatement` les ignore
+// volontairement (filtre "Annuel") ; ce loader les expose à part.
+
+// Périodes intra-annuelles cumulées + l'annuel, en ordre chronologique.
+export const PERIODIC_PERIODS = ["T1", "S1", "9M", "Annuel"] as const;
+export type PeriodKey = (typeof PERIODIC_PERIODS)[number];
+
+// Libellé court d'affichage de chaque période.
+export const PERIOD_LABELS: Record<PeriodKey, string> = {
+  T1: "T1",
+  S1: "S1",
+  "9M": "9M",
+  Annuel: "Année",
+};
+
+export type PeriodicMetric = {
+  codePoste: string;
+  libelle: string;
+  ordre: number;
+  // exercice → (période → valeur en FCFA)
+  values: Record<number, Partial<Record<PeriodKey, number>>>;
+};
+
+export type PeriodicStatements = {
+  // Exercices ayant au moins une publication infra-annuelle, ordre croissant.
+  exercices: number[];
+  // Soldes disponibles en publication périodique, ordonnés selon DB_Postes.
+  metrics: PeriodicMetric[];
+};
+
+const EMPTY_PERIODIC: PeriodicStatements = { exercices: [], metrics: [] };
+
+function isPeriodKey(s: string): s is PeriodKey {
+  return (PERIODIC_PERIODS as readonly string[]).includes(s);
+}
+
+/**
+ * Retourne les états financiers périodiques (T1/S1/9M + Annuel) d'un ticker.
+ * Ne conserve que les soldes effectivement publiés en infra-annuel ; chaque
+ * solde inclut aussi sa valeur annuelle (pour la comparaison cumul → exercice
+ * plein). Vide si le titre est inconnu ou sans publication infra-annuelle.
+ */
+export function getPeriodicStatements(ticker: string): PeriodicStatements {
+  const t = ticker.toUpperCase();
+  const titre = getFundTitre(t);
+  if (!titre) return EMPTY_PERIODIC;
+
+  const allValeurs = loadFundValeurs();
+  const allPostes = loadFundPostes();
+
+  // Méta du poste restreinte au format du titre (+ Commun).
+  const posteByCode = new Map<string, FundPoste>();
+  for (const p of allPostes) {
+    if (p.formatEtats !== titre.formatEtats && p.formatEtats !== "Commun") continue;
+    if (!posteByCode.has(p.codePoste)) posteByCode.set(p.codePoste, p);
+  }
+
+  // code → exercice → période → valeur. On collecte aussi l'Annuel, mais on
+  // ne retient que les codes/exercices porteurs d'au moins une période
+  // infra-annuelle.
+  const byCode = new Map<
+    string,
+    Record<number, Partial<Record<PeriodKey, number>>>
+  >();
+  const interimExercices = new Set<number>();
+  const interimCodes = new Set<string>();
+
+  for (const v of allValeurs) {
+    if (v.ticker.trim().toUpperCase() !== t) continue;
+    const periode = v.periode?.trim() ?? "";
+    if (!isPeriodKey(periode)) continue;
+    const code = v.code_poste.trim();
+    if (!posteByCode.has(code)) continue;
+    const ex = num(v.exercice);
+    if (!ex) continue;
+
+    let perEx = byCode.get(code);
+    if (!perEx) {
+      perEx = {};
+      byCode.set(code, perEx);
+    }
+    (perEx[ex] ??= {})[periode] = num(v.valeur);
+
+    if (periode !== "Annuel") {
+      interimExercices.add(ex);
+      interimCodes.add(code);
+    }
+  }
+
+  const metrics: PeriodicMetric[] = [];
+  for (const code of interimCodes) {
+    const p = posteByCode.get(code);
+    if (!p) continue;
+    metrics.push({
+      codePoste: code,
+      libelle: p.libelleLong,
+      ordre: p.ordre,
+      values: byCode.get(code) ?? {},
+    });
+  }
+  metrics.sort((a, b) => a.ordre - b.ordre);
+
+  if (metrics.length === 0) return EMPTY_PERIODIC;
+
+  const exercices = [...interimExercices].sort((a, b) => a - b);
+  return { exercices, metrics };
 }

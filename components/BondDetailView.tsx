@@ -10,9 +10,9 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
   ReferenceLine,
 } from "recharts";
+import { ResponsiveContainer } from "@/components/ui/ChartContainer";
 import type {
   ListedBond,
   ListedBondPrice,

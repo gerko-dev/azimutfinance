@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { LineChart, Line, ResponsiveContainer, YAxis } from "recharts";
+import { LineChart, Line, YAxis } from "recharts";
+import { ResponsiveContainer } from "@/components/ui/ChartContainer";
 import LivePriceBadge from "./LivePriceBadge";
 import IndicesEvolutionChart, {
   type IndicesEvolutionSeries,

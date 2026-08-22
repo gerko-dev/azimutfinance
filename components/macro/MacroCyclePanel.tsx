@@ -4,7 +4,6 @@ import {
   CartesianGrid,
   Cell,
   ReferenceLine,
-  ResponsiveContainer,
   Scatter,
   ScatterChart,
   Tooltip,
@@ -12,6 +11,7 @@ import {
   YAxis,
   ZAxis,
 } from "recharts";
+import { ResponsiveContainer } from "@/components/ui/ChartContainer";
 import { COUNTRY_BY_CODE, type MacroCountryCode } from "@/lib/macroTypes";
 import { COUNTRY_COLORS } from "./macroColors";
 import {

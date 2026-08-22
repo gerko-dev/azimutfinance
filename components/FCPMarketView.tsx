@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Treemap,
-  ResponsiveContainer,
   AreaChart,
   Area,
   XAxis,
@@ -14,6 +13,7 @@ import {
   Tooltip,
   Legend,
 } from "recharts";
+import { ResponsiveContainer } from "@/components/ui/ChartContainer";
 import type { FundCard, CategoryStat, PeriodKey } from "@/app/marches/fcp/page";
 
 // ==========================================

@@ -1,23 +1,23 @@
 ﻿code_poste,libelle_long,libelle_court,categorie,format_etats,ordre,type_valeur
-BIL_IMMO_INCORP,IMMOBILISATIONS INCORPORELLES,IMMOBILISATIONS INCORPORELLES,Bilan_Actif,SYSCOHADA,67,Detail
+BIL_IMMO_INCORP,IMMOBILISATIONS INCORPORELLES,IMMOBILISATIONS INCORPORELLES,Bilan_Actif,SYSCOHADA,67,SousTotal
 BIL_A_FRAIS_DE_DVELOPPEMENT_ET_DE_PROSPECTION,Frais de développement et de prospection,Frais de développement et de prospection,Bilan_Actif,SYSCOHADA,68,Detail
 BIL_A_BREVETS_LICENCES_LOGICIELS_ET_DROITS_SIM,"Brevets, licences, logiciels et droits similaires","Brevets, licences, logiciels et droits similaires",Bilan_Actif,SYSCOHADA,69,Detail
 BIL_A_FONDS_COMMERCIAL_ET_DROIT_AU_BAIL,Fonds commercial et droit au bail,Fonds commercial et droit au bail,Bilan_Actif,SYSCOHADA,70,Detail
 BIL_A_AUTRES_IMMOBILISATIONS_INCORPORELLES,Autres immobilisations incorporelles,Autres immobilisations incorporelles,Bilan_Actif,SYSCOHADA,71,Detail
-BIL_IMMO_CORP,IMMOBILISATIONS CORPORELLES,IMMOBILISATIONS CORPORELLES,Bilan_Actif,SYSCOHADA,72,Detail
+BIL_IMMO_CORP,IMMOBILISATIONS CORPORELLES,IMMOBILISATIONS CORPORELLES,Bilan_Actif,SYSCOHADA,72,SousTotal
 BIL_A_TERRAINS_DONT_PLACEMENT_NET,Terrains dont Placement Net :,Terrains dont Placement Net :,Bilan_Actif,SYSCOHADA,73,Detail
 BIL_A_BTIMENTS_DONT_PLACEMENT_NET,Bâtiments dont Placement Net :,Bâtiments dont Placement Net :,Bilan_Actif,SYSCOHADA,74,Detail
 BIL_A_AMNAGEMENTS_AGENCEMENTS_ET_INSTALLATIONS,"Aménagements, agencements et installations","Aménagements, agencements et installations",Bilan_Actif,SYSCOHADA,75,Detail
 BIL_A_MATRIEL_MOBILIER_ET_ACTIFS_BIOLOGIQUES,"Matériel, mobilier et actifs biologiques","Matériel, mobilier et actifs biologiques",Bilan_Actif,SYSCOHADA,76,Detail
 BIL_A_MATRIEL_DE_TRANSPORT,Matériel de transport,Matériel de transport,Bilan_Actif,SYSCOHADA,77,Detail
-BIL_IMMO_AVANCES,AVANCES ET ACOMPTES VERSES SUR IMMOBILISATIONS,AVANCES ET ACOMPTES VERSES SUR IMMOBILISATIONS,Bilan_Actif,SYSCOHADA,78,Detail
-BIL_IMMO_FIN,IMMOBILISATIONS FINANCIERES,IMMOBILISATIONS FINANCIERES,Bilan_Actif,SYSCOHADA,79,Detail
+BIL_IMMO_AVANCES,AVANCES ET ACOMPTES VERSES SUR IMMOBILISATIONS,AVANCES ET ACOMPTES VERSES SUR IMMOBILISATIONS,Bilan_Actif,SYSCOHADA,78,SousTotal
+BIL_IMMO_FIN,IMMOBILISATIONS FINANCIERES,IMMOBILISATIONS FINANCIERES,Bilan_Actif,SYSCOHADA,79,SousTotal
 BIL_A_TITRES_DE_PARTICIPATION,Titres de participation,Titres de participation,Bilan_Actif,SYSCOHADA,80,Detail
 BIL_A_AUTRES_IMMOBILISATIONS_FINANCIRES,Autres immobilisations financières,Autres immobilisations financières,Bilan_Actif,SYSCOHADA,81,Detail
 BIL_TOTAL_IMMOB,TOTAL ACTIF IMMOBILISE,TOTAL ACTIF IMMOBILISE,Bilan_Actif,SYSCOHADA,82,Total
 BIL_A_ACTIF_CIRCULANT_HAO,Actif circulant HAO,Actif circulant HAO,Bilan_Actif,SYSCOHADA,83,Detail
 BIL_STOCKS,Stocks et en cours,Stocks et en cours,Bilan_Actif,SYSCOHADA,84,Detail
-BIL_TOTAL_CREANCES,CREANCES ET EMPLOIS ASSIMILES,CREANCES ET EMPLOIS ASSIMILES,Bilan_Actif,SYSCOHADA,85,Detail
+BIL_TOTAL_CREANCES,CREANCES ET EMPLOIS ASSIMILES,CREANCES ET EMPLOIS ASSIMILES,Bilan_Actif,SYSCOHADA,85,SousTotal
 BIL_FOURN_AVANCES,Fournisseurs avances versées,Fournisseurs avances versées,Bilan_Actif,SYSCOHADA,86,Detail
 BIL_CLIENTS,Clients,Clients,Bilan_Actif,SYSCOHADA,87,Detail
 BIL_A_AUTRES_CRANCES,Autres créances,Autres créances,Bilan_Actif,SYSCOHADA,88,Detail
@@ -105,25 +105,25 @@ TFT_VARIATION_D_ACTIF_CIRCULANT_HAO,Variation d'actif circulant HAO,Variation d'
 TFT_VARIATION_DES_STOCKS,Variation des stocks,Variation des stocks,Tableau_Flux,SYSCOHADA,176,Detail
 TFT_VARIATION_DES_CRANCES,Variation des créances,Variation des créances,Tableau_Flux,SYSCOHADA,177,Detail
 TFT_VARIATION_DU_PASSIF_CIRCULANT,Variation du passif circulant,Variation du passif circulant,Tableau_Flux,SYSCOHADA,178,Detail
-TFT_FTO,Variation du BF lié aux activités opérationnelles,Variation du BF lié aux activités opérationnelles,Tableau_Flux,SYSCOHADA,179,Detail
+TFT_FTO,Variation du BF lié aux activités opérationnelles,Variation du BF lié aux activités opérationnelles,Tableau_Flux,SYSCOHADA,179,SousTotal
 TFT_FTO,Flux de trésorerie provenant des activités opérationnelles,Flux de trésorerie provenant des activités opérationnelles,Tableau_Flux,SYSCOHADA,180,Detail
 TFT_DCAISSEMENTS_LIS_AUX_ACQUISITIONS_D_IMMO,Décaissements liés aux acquisitions d'immobilisations incorporelles,Décaissements liés aux acquisitions d'immobilisations incorporelles,Tableau_Flux,SYSCOHADA,181,Detail
 TFT_DCAISSEMENTS_LIS_AUX_ACQUISITIONS_D_IMMO,Décaissements liés aux acquisitions d'immobilisations corporelles,Décaissements liés aux acquisitions d'immobilisations corporelles,Tableau_Flux,SYSCOHADA,182,Detail
 TFT_DCAISSEMENTS_LIS_AUX_ACQUISITIONS_D_IMMO,Décaissements liés aux acquisitions d'immobilisations financières,Décaissements liés aux acquisitions d'immobilisations financières,Tableau_Flux,SYSCOHADA,183,Detail
 TFT_ENCAISSEMENTS_LIS_AUX_CESSIONS_DIMMOBILI,Encaissements liés aux cessions d’immobilisations incorporelles et corporelles,Encaissements liés aux cessions d’immobilisations incorporelles et corporelles,Tableau_Flux,SYSCOHADA,184,Detail
 TFT_ENCAISSEMENTS_LIS_AUX_CESSIONS_DIMMOBILI,Encaissements liés aux cessions d’immobilisations financières,Encaissements liés aux cessions d’immobilisations financières,Tableau_Flux,SYSCOHADA,185,Detail
-TFT_FLUX_DE_TRSORERIE_PROVENANT_DES_ACTIVITS,Flux de trésorerie provenant des activités d’investissement,Flux de trésorerie provenant des activités d’investissement,Tableau_Flux,SYSCOHADA,186,Detail
+TFT_FLUX_DE_TRSORERIE_PROVENANT_DES_ACTIVITS,Flux de trésorerie provenant des activités d’investissement,Flux de trésorerie provenant des activités d’investissement,Tableau_Flux,SYSCOHADA,186,Total
 TFT_AUGMENTATIONS_DE_CAPITAL_PAR_APPORTS_NOU,Augmentations de capital par apports nouveaux,Augmentations de capital par apports nouveaux,Tableau_Flux,SYSCOHADA,187,Detail
 TFT_SUBVENTIONS_D_INVESTISSEMENT_REUES,Subventions d'investissement reçues,Subventions d'investissement reçues,Tableau_Flux,SYSCOHADA,188,Detail
 TFT_PRLVEMENTS_SUR_LE_CAPITAL,Prélèvements sur le capital,Prélèvements sur le capital,Tableau_Flux,SYSCOHADA,189,Detail
-TFT_FTCP,Flux de trésorerie provenant des capitaux propres,FTCP,Tableau_Flux,SYSCOHADA,191,Detail
+TFT_FTCP,Flux de trésorerie provenant des capitaux propres,FTCP,Tableau_Flux,SYSCOHADA,191,SousTotal
 TFT_EMPRUNTS,Emprunts,Emprunts,Tableau_Flux,SYSCOHADA,192,Detail
 TFT_AUTRES_DETTES_FINANCIRES_DIVERSES,Autres dettes financières diverses,Autres dettes financières diverses,Tableau_Flux,SYSCOHADA,193,Detail
 TFT_REMBOURSEMENTS_DES_EMPRUNTS_ET_AUTRES_DE,Remboursements des emprunts et autres dettes financières,Remboursements des emprunts et autres dettes financières,Tableau_Flux,SYSCOHADA,194,Detail
-TFT_FTCE,Flux de trésorerie provenant des capitaux étrangers,Flux de trésorerie provenant des capitaux étrangers,Tableau_Flux,SYSCOHADA,195,Detail
-TFT_FTF,Flux de trésorerie provenant des activités de financement,Flux de trésorerie provenant des activités de financement,Tableau_Flux,SYSCOHADA,196,Detail
-TFT_VAR_TRES,VARIATION DE LA TRÉSORERIE NETTE DE LA PÉRIODE,VARIATION DE LA TRÉSORERIE NETTE DE LA PÉRIODE,Tableau_Flux,SYSCOHADA,197,Detail
-TFT_TRES_NETTE,Trésorerie nette au 31 Décembre,Trésorerie nette au 31 Décembre,Tableau_Flux,SYSCOHADA,198,Detail
+TFT_FTCE,Flux de trésorerie provenant des capitaux étrangers,Flux de trésorerie provenant des capitaux étrangers,Tableau_Flux,SYSCOHADA,195,SousTotal
+TFT_FTF,Flux de trésorerie provenant des activités de financement,Flux de trésorerie provenant des activités de financement,Tableau_Flux,SYSCOHADA,196,Total
+TFT_VAR_TRES,VARIATION DE LA TRÉSORERIE NETTE DE LA PÉRIODE,VARIATION DE LA TRÉSORERIE NETTE DE LA PÉRIODE,Tableau_Flux,SYSCOHADA,197,Total
+TFT_TRES_NETTE,Trésorerie nette au 31 Décembre,Trésorerie nette au 31 Décembre,Tableau_Flux,SYSCOHADA,198,Total
 BIL_CAISSE_BC,CAISSE BANQUE CENTRALE CCP,CAISSE BANQUE CENTRALE CCP,Bilan_Actif,Bancaire,67,Detail
 BIL_A_EFFETS_PUBLICS_ET_VALEURS_ASSIMILEES,EFFETS PUBLICS ET VALEURS ASSIMILEES,EFFETS PUBLICS ET VALEURS ASSIMILEES,Bilan_Actif,Bancaire,68,Detail
 BIL_CREANCES_BANC,CREANCES BANCAIRES ET ASSIMILEES,CREANCES BANCAIRES ET ASSIMILEES,Bilan_Actif,Bancaire,69,Detail
@@ -147,7 +147,7 @@ BIL_P_AUTRES_PASSIFS,AUTRES PASSIFS,AUTRES PASSIFS,Bilan_Passif,Bancaire,88,Deta
 BIL_P_COMPTES_DE_REGULARISATION,COMPTES DE REGULARISATION,COMPTES DE REGULARISATION,Bilan_Passif,Bancaire,89,Detail
 BIL_P_PROVISIONS,PROVISIONS,PROVISIONS,Bilan_Passif,Bancaire,90,Detail
 BIL_P_EMPRUNTS_ET_TITRES_EMIS_SUBORDONNES,EMPRUNTS ET TITRES EMIS SUBORDONNES,EMPRUNTS ET TITRES EMIS SUBORDONNES,Bilan_Passif,Bancaire,91,Detail
-BIL_TOTAL_CP,CAPITAUX PROPRES,CAPITAUX PROPRES,Bilan_Passif,Bancaire,92,Detail
+BIL_TOTAL_CP,CAPITAUX PROPRES,CAPITAUX PROPRES,Bilan_Passif,Bancaire,92,SousTotal
 BIL_CAPITAL,CAPITAL SOUSCRIT,CAPITAL SOUSCRIT,Bilan_Passif,Bancaire,93,Detail
 BIL_PRIMES,PRIMES LIEES AU CAPITAL,PRIMES LIEES AU CAPITAL,Bilan_Passif,Bancaire,94,Detail
 BIL_RESERVES,RESERVES,RESERVES,Bilan_Passif,Bancaire,95,Detail

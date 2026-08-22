@@ -229,11 +229,11 @@ export default async function ProDashboard() {
         <div className="space-y-4">
           <Card title="Raccourcis">
             <div className="grid grid-cols-2 gap-2 p-3">
-              <QuickLink href="/marches/actions" label="Actions BRVM" />
+              <QuickLink href="/pros/actions" label="Actions BRVM" />
               <QuickLink href="/marches/obligations" label="Obligations" />
               <QuickLink href="/marches/fcp" label="FCP / OPCVM" />
-              <QuickLink href="/outils/ytm" label="Simulateur YTM" />
-              <QuickLink href="/outils/screener" label="Screener" />
+              <QuickLink href="/pros/ytm" label="Simulateur YTM" />
+              <QuickLink href="/pros/screener" label="Screener" />
               <QuickLink href="/marche-monetaire" label="Taux BCEAO" />
             </div>
           </Card>
@@ -452,7 +452,7 @@ function MoversTable({ rows }: { rows: ActionRow[] }) {
             <tr key={r.code} className="border-b border-slate-800 last:border-0">
               <td className="px-3 py-1.5">
                 <Link
-                  href={`/titre/${r.code}`}
+                  href={`/pros/titre/${r.code}`}
                   className="font-mono text-slate-200 hover:text-blue-300"
                 >
                   {r.code}
@@ -490,7 +490,7 @@ function VolumeTable({ rows }: { rows: ActionRow[] }) {
           <tr key={r.code} className="border-b border-slate-800 last:border-0">
             <td className="px-3 py-1.5">
               <Link
-                href={`/titre/${r.code}`}
+                href={`/pros/titre/${r.code}`}
                 className="font-mono text-slate-200 hover:text-blue-300"
               >
                 {r.code}

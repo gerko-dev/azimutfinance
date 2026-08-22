@@ -24,8 +24,8 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
 } from "recharts";
+import { ResponsiveContainer } from "@/components/ui/ChartContainer";
 
 import type {
   ReturnsMatrix,

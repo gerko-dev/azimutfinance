@@ -8,7 +8,6 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
   Legend,
   BarChart,
   Bar,
@@ -16,6 +15,7 @@ import {
   ComposedChart,
   ReferenceLine,
 } from "recharts";
+import { ResponsiveContainer } from "@/components/ui/ChartContainer";
 import CountryFlag from "@/components/CountryFlag";
 import { COUNTRY_TO_FLAG, COUNTRY_SHORT } from "@/lib/tauxTypes";
 import type { SeriesPoint, TauxSeries } from "@/lib/tauxTypes";

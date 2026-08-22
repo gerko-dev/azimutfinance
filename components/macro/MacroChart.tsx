@@ -11,12 +11,12 @@ import {
   Line,
   LineChart,
   ReferenceLine,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
   Cell,
 } from "recharts";
+import { ResponsiveContainer } from "@/components/ui/ChartContainer";
 
 export type ChartSeries = {
   key: string;

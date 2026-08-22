@@ -11,10 +11,10 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
   ReferenceLine,
   ReferenceArea,
 } from "recharts";
+import { ResponsiveContainer } from "@/components/ui/ChartContainer";
 import {
   buildIndicatorSeries,
   detectPivotLevels,

@@ -4,9 +4,9 @@ import {
   Cell,
   Pie,
   PieChart,
-  ResponsiveContainer,
   Tooltip,
 } from "recharts";
+import { ResponsiveContainer } from "@/components/ui/ChartContainer";
 import {
   SECURITY_TYPE_LABELS,
   type AccountSnapshot,

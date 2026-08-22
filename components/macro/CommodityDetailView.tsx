@@ -11,9 +11,9 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
   ReferenceLine,
 } from "recharts";
+import { ResponsiveContainer } from "@/components/ui/ChartContainer";
 
 type Period = "1M" | "3M" | "6M" | "YTD" | "1A" | "3A" | "5A" | "MAX";
 

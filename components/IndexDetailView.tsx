@@ -14,10 +14,10 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
   Legend,
   Customized,
 } from "recharts";
+import { ResponsiveContainer } from "@/components/ui/ChartContainer";
 import ChartDrawingToolbar from "./charting/ChartDrawingToolbar";
 import ChartDrawingsLayer from "./charting/ChartDrawingsLayer";
 import {

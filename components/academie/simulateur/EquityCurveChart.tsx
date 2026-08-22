@@ -5,11 +5,11 @@ import {
   AreaChart,
   CartesianGrid,
   ReferenceLine,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
+import { ResponsiveContainer } from "@/components/ui/ChartContainer";
 import { fmtDateFr, fmtFCFA } from "./format";
 
 export default function EquityCurveChart({
