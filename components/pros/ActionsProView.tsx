@@ -106,7 +106,7 @@ type Props = {
     totalActions: number;
     totalCapitalization: number;
     totalVolume: number;
-    averagePer: number;
+    medianPer: number;
     averageYield: number;
     bySector: Record<string, number>;
     byCountry: Record<string, number>;
@@ -468,13 +468,13 @@ export default function ActionsProView({
           sub="titres échangés"
         />
         <Kpi
-          label="PER moyen"
+          label="PER médian"
           value={
-            marketStats.averagePer > 0
-              ? marketStats.averagePer.toFixed(1).replace(".", ",")
+            marketStats.medianPer > 0
+              ? marketStats.medianPer.toFixed(1).replace(".", ",")
               : "—"
           }
-          sub="hors valeurs extrêmes"
+          sub="médiane du marché"
         />
         <Kpi
           label="Rendement moyen"
