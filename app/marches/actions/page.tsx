@@ -104,6 +104,7 @@ export default async function Page() {
       <ActionsBRVMView
         actions={actions}
         marketStats={marketStats}
+        marketActivity={indicesSnapshot.activity}
         liveListedCount={liveListedCount}
         topGainers={topGainers}
         topLosers={topLosers}

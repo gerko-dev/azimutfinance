@@ -214,6 +214,21 @@ export function loadStockByCode(code: string): StockRow | undefined {
 }
 
 /**
+ * ISIN d'une action depuis titres.csv. La colonne porte parfois la sentinelle
+ * "0" (cas BICB, dont l'ISIN n'est pas publie par la BRVM) : on la traite comme
+ * une absence plutot que de la laisser fuiter jusqu'a l'UI, ou elle s'afficherait
+ * comme un identifiant valide. Cf. le contournement historique
+ * `s.isin !== "0"` dans app/pros/fund-management/portfolio-match.ts.
+ */
+function cleanIsin(raw: string | undefined): string {
+  const v = (raw ?? "").trim();
+  if (!v || v === "0" || v === "-" || v === "--" || v.toUpperCase() === "NC") {
+    return "";
+  }
+  return v;
+}
+
+/**
  * Champs STATIQUES d'une action depuis titres.csv (identité + structure du
  * capital). Les champs dynamiques — price / change / changePercent / volume /
  * per / yield — sont volontairement renvoyés à 0 / false : ils ne doivent plus
@@ -238,7 +253,7 @@ export function getStockDetails(code: string) {
     name: s.name?.trim() || "",
     sector: s.sector?.trim() || "",
     country: s.country?.trim() || "",
-    isin: s.isin?.trim() || "",
+    isin: cleanIsin(s.isin),
     description: s.description?.trim() || "",
     // Dynamiques : remplis par la page depuis le live / Sika / ratios.
     price: 0,
@@ -1315,7 +1330,7 @@ function buildActionRow(
     name: s.name?.trim() || "",
     sector: s.sector?.trim() || "",
     country: s.country?.trim() || "",
-    isin: s.isin?.trim() || "",
+    isin: cleanIsin(s.isin),
     price,
     changePercent,
     volume,

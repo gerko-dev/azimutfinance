@@ -15,7 +15,7 @@ import { ResponsiveContainer } from "@/components/ui/ChartContainer";
 import CountryFlag from "./CountryFlag";
 import LivePriceBadge from "./LivePriceBadge";
 import type { ActionRow, RiskReturnPoint } from "@/lib/dataLoader";
-import type { BrvmLiveIndex } from "@/lib/brvm/liveIndices";
+import type { BrvmLiveIndex, BrvmMarketActivity } from "@/lib/brvm/liveIndices";
 import type { UserRole } from "@/lib/auth/userRole";
 
 // === HELPERS ===
@@ -110,6 +110,8 @@ type Props = {
     bySector: Record<string, number>;
     byCountry: Record<string, number>;
   };
+  /** Chiffres officiels BRVM de la seance. null si le scrape a echoue. */
+  marketActivity: BrvmMarketActivity | null;
   liveListedCount: number;
   topGainers: ActionRow[];
   topLosers: ActionRow[];
@@ -185,6 +187,7 @@ const QUADRANT_LABELS: Record<Quadrant, string> = {
 export default function ActionsBRVMView({
   actions,
   marketStats,
+  marketActivity,
   liveListedCount,
   topGainers,
   topLosers,
@@ -428,16 +431,38 @@ export default function ActionsBRVMView({
             <div className="bg-white rounded-lg border border-slate-200 p-4">
               <div className="text-xs text-slate-500 mb-1">Capitalisation</div>
               <div className="text-2xl md:text-3xl font-semibold">
-                {formatBigFCFA(marketStats.totalCapitalization)}
+                {formatBigFCFA(
+                  marketActivity?.capitalisationActions ??
+                    marketStats.totalCapitalization,
+                )}
               </div>
-              <div className="text-xs text-slate-400 mt-1">total marché</div>
+              <div className="text-xs text-slate-400 mt-1">
+                {marketActivity?.capitalisationActions
+                  ? "compartiment actions, source BRVM"
+                  : "total marché"}
+              </div>
             </div>
+            {/* Le nombre de titres echanges n'a pas de sens agrege : additionner
+                des lignes a 66 FCFA (ETIT) et a 39 000 FCFA (SGBC) donne un
+                compteur ou ETIT pese 82 % du volume pour 3,5 % de l'activite
+                reelle. On affiche le montant transige publie par la BRVM, et on
+                ne retombe sur le nombre de titres que s'il est indisponible. */}
             <div className="bg-white rounded-lg border border-slate-200 p-4">
-              <div className="text-xs text-slate-500 mb-1">Volume quotidien</div>
-              <div className="text-2xl md:text-3xl font-semibold">
-                {formatFCFA(marketStats.totalVolume)}
+              <div className="text-xs text-slate-500 mb-1">
+                {marketActivity?.valeurTransactions
+                  ? "Valeur échangée"
+                  : "Volume quotidien"}
               </div>
-              <div className="text-xs text-slate-400 mt-1">titres échangés</div>
+              <div className="text-2xl md:text-3xl font-semibold">
+                {marketActivity?.valeurTransactions
+                  ? formatBigFCFA(marketActivity.valeurTransactions)
+                  : formatFCFA(marketStats.totalVolume)}
+              </div>
+              <div className="text-xs text-slate-400 mt-1">
+                {marketActivity?.valeurTransactions
+                  ? `sur la séance · ${formatFCFA(marketStats.totalVolume)} titres`
+                  : "titres échangés"}
+              </div>
             </div>
           </div>
         </div>

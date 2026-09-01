@@ -44,11 +44,27 @@ export type BrvmLiveIndex = {
   ytdPct: number;
 };
 
+/**
+ * Bloc "Activites du marche" de la page indices. Chiffres officiels BRVM de
+ * la seance — a preferer a toute reconstitution maison : la valeur transigee
+ * n'est pas derivable de nos donnees (on n'a que des volumes en titres) et la
+ * capitalisation officielle tient compte du flottant reel.
+ */
+export type BrvmMarketActivity = {
+  /** Montant total echange sur la seance, en FCFA. */
+  valeurTransactions: number | null;
+  /** Capitalisation du compartiment actions, en FCFA. */
+  capitalisationActions: number | null;
+  /** Capitalisation du compartiment obligataire, en FCFA. */
+  capitalisationObligations: number | null;
+};
+
 export type BrvmIndicesSnapshot = {
   fetchedAt: string;
   sessionLabel: string | null;
   isClosed: boolean | null;
   indices: BrvmLiveIndex[];
+  activity: BrvmMarketActivity;
 };
 
 // =============================================================================
@@ -132,6 +148,51 @@ function findIndicesSections(html: string): Array<{
     else if (lower.includes("total return")) category = "totalreturn";
     if (!category) continue;
     out.push({ category, innerHtml: segment });
+  }
+  return out;
+}
+
+/**
+ * Extrait le bloc "Activites du marche" : un tableau a deux colonnes
+ * (libelle, montant en FCFA). On matche sur le libelle plutot que sur la
+ * position, l'ordre des lignes n'etant pas garanti.
+ */
+function parseMarketActivity(html: string): BrvmMarketActivity {
+  const out: BrvmMarketActivity = {
+    valeurTransactions: null,
+    capitalisationActions: null,
+    capitalisationObligations: null,
+  };
+
+  const norm = (s: string) =>
+    s
+      .toUpperCase()
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  for (const table of html.match(/<table[^>]*>[^]*?<\/table>/gi) ?? []) {
+    if (!/Activit/i.test(table)) continue;
+    const rowRegex = /<tr[^>]*>([^]*?)<\/tr>/gi;
+    let rm: RegExpExecArray | null;
+    while ((rm = rowRegex.exec(table)) !== null) {
+      const cells = rm[1].match(/<td[^>]*>[^]*?<\/td>/gi);
+      if (!cells || cells.length < 2) continue;
+      const label = norm(stripTags(cells[0]));
+      const value = parseFrenchNumber(stripTags(cells[1]).replace(/FCFA/i, ""));
+      if (!Number.isFinite(value)) continue;
+      if (label.includes("VALEUR DES TRANSACTIONS")) {
+        out.valeurTransactions = value;
+      } else if (label.includes("CAPITALISATION") && label.includes("ACTION")) {
+        out.capitalisationActions = value;
+      } else if (
+        label.includes("CAPITALISATION") &&
+        label.includes("OBLIGATION")
+      ) {
+        out.capitalisationObligations = value;
+      }
+    }
   }
   return out;
 }
@@ -220,11 +281,17 @@ export function getLastBrvmIndicesDiag() {
 }
 
 async function fetchBrvmIndicesRaw(): Promise<BrvmIndicesSnapshot> {
+  const emptyActivity: BrvmMarketActivity = {
+    valeurTransactions: null,
+    capitalisationActions: null,
+    capitalisationObligations: null,
+  };
   const empty: BrvmIndicesSnapshot = {
     fetchedAt: new Date().toISOString(),
     sessionLabel: null,
     isClosed: null,
     indices: [],
+    activity: emptyActivity,
   };
   lastDiag = { status: null, htmlLength: 0, errorMessage: null, count: 0 };
 
@@ -303,6 +370,7 @@ async function fetchBrvmIndicesRaw(): Promise<BrvmIndicesSnapshot> {
     sessionLabel: session.label,
     isClosed: session.isClosed,
     indices,
+    activity: parseMarketActivity(html),
   };
 }
 
