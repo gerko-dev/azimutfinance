@@ -173,6 +173,66 @@ function FiscalYear({
   );
 }
 
+/**
+ * Rendement du dividende. Trois situations que le simple tiret confondait :
+ *
+ *  1. rendement courant → valeur + millesime de l'exercice ;
+ *  2. rendement hors norme (au-dela de 50 %, ecarte des agregats et des tris)
+ *     → valeur affichee en ambre, signalee par un asterisque. On ne prejuge
+ *     PAS de la cause : distribution exceptionnelle (FILTISAC, 1 726,55 FCFA
+ *     au titre de 2024 sur cession d'actifs HAO), retour de capital, cours
+ *     perime ou saisie erronee. La masquer ferait perdre une information
+ *     reelle ; l'afficher sans reserve la ferait lire comme un rendement
+ *     courant ;
+ *  3. aucun dividende connu → tiret, avec la raison au survol.
+ */
+function DividendYield({ row }: { row: ActionRow }) {
+  const pct = row.yieldPct.toFixed(2).replace(".", ",");
+  const dpa = row.dpa
+    ? `${Math.round(row.dpa).toLocaleString("fr-FR").replace(/,/g, " ")} FCFA`
+    : null;
+
+  if (row.hasYield && row.yieldPct > 0) {
+    return (
+      <>
+        {pct}%
+        <FiscalYear year={row.yieldYear} kind="yield" />
+      </>
+    );
+  }
+
+  if (row.yieldPct > 0) {
+    const detail = [
+      dpa && `Dividende de ${dpa} par action`,
+      row.yieldYear && `au titre de l'exercice ${row.yieldYear}`,
+    ]
+      .filter(Boolean)
+      .join(" ");
+    return (
+      <span
+        className="text-amber-600"
+        title={
+          `${detail ? detail + ", soit " : "Rendement de "}${pct} % du cours. ` +
+          `Au-delà des niveaux ordinaires : écarté du rendement courant et des ` +
+          `moyennes. Peut relever d'une distribution exceptionnelle, d'un retour ` +
+          `de capital, ou d'une donnée à vérifier.`
+        }
+      >
+        {pct}%<span className="ml-0.5 text-[10px] font-normal">*</span>
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className="text-slate-400"
+      title="Aucun dividende renseigné pour cette société dans les états financiers."
+    >
+      —
+    </span>
+  );
+}
+
 const PAGE_SIZE = 20;
 
 type Quadrant = "cashcow" | "hiddengem" | "defensive" | "speculative";
@@ -1079,14 +1139,7 @@ export default function ActionsBRVMView({
                       )}
                     </td>
                     <td className="px-3 py-3 text-right hidden lg:table-cell">
-                      {a.hasYield && a.yieldPct > 0 ? (
-                        <>
-                          {`${a.yieldPct.toFixed(2).replace(".", ",")}%`}
-                          <FiscalYear year={a.yieldYear} kind="yield" />
-                        </>
-                      ) : (
-                        "—"
-                      )}
+                      <DividendYield row={a} />
                     </td>
                   </tr>
                 ))}

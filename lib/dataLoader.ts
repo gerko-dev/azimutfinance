@@ -1300,6 +1300,9 @@ export type ActionRow = {
   /** Exercice du dividende derriere le rendement (null si pas de rendement).
    *  Peut etre anterieur a perYear : cf. fallback DPA dans computeLiveRatios. */
   yieldYear: number | null;
+  /** Dividende par action retenu, en FCFA. Sert a qualifier un rendement
+   *  ecarte comme non recurrent. */
+  dpa: number | null;
 };
 
 /**
@@ -1308,6 +1311,13 @@ export type ActionRow = {
  * PER / rendement sont recalculés sur ce cours via computeLiveRatios, et la
  * capitalisation = nbTitres × cours courant si les fondamentaux sont dispo.
  */
+/**
+ * Au-dela de ce rendement, on ne considere plus le dividende comme recurrent.
+ * Voir le commentaire dans buildActionRow : le seuil ecarte aussi bien les
+ * erreurs de saisie que les distributions exceptionnelles legitimes.
+ */
+const RECURRING_YIELD_MAX_PCT = 50;
+
 function buildActionRow(
   s: StockRow,
   code: string,
@@ -1341,12 +1351,20 @@ function buildActionRow(
     // 640 MFCFA de resultat 2023 pour 52 200 FCFA le titre) est exact et
     // informatif — il dit que la societe ne gagne presque rien au regard de sa
     // valorisation. Le masquer afficherait "donnee indisponible", ce qui est
-    // faux. La borne sur le rendement, elle, se justifie : au-dela de 50 % on
-    // est quasi toujours face a un DPA mal parse ou un cours perime.
+    // faux.
     hasPer: per > 0,
-    hasYield: yieldPct > 0 && yieldPct < 50,
+    // `hasYield` ne dit pas "la donnee est bonne" mais "ce rendement est
+    // representatif du courant". Au-dela de 50 % on sort du dividende
+    // ordinaire, sans que la cause soit determinable ici : distribution
+    // exceptionnelle bien reelle (FILTISAC, 1 726,55 FCFA au titre de 2024
+    // pour un cours de ~2 155, soit 80 %, sur cession d'actifs HAO), retour
+    // de capital, cours perime ou saisie erronee. Le drapeau sert donc a
+    // exclure la valeur des agregats et des tris, PAS a la cacher : l'UI
+    // l'affiche signalee, en laissant le lecteur juger.
+    hasYield: yieldPct > 0 && yieldPct < RECURRING_YIELD_MAX_PCT,
     perYear: ratios?.perExercice ?? null,
     yieldYear: ratios?.dpaExercice ?? null,
+    dpa: ratios?.dpa && ratios.dpa > 0 ? ratios.dpa : null,
   };
 }
 
