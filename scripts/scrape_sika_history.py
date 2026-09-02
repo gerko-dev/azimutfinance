@@ -116,7 +116,12 @@ INDICES: list[tuple[str, str]] = [
     ("BRVM-EN", ""),   # Energie
     ("BRVM-IN", ""),   # Industriels
     ("BRVM-SF", ""),   # Services Financiers
-    ("BRVM-SP", ""),   # Services Publics
+    # BRVM-SP volontairement absent : Sikafinance ne publie pas cet indice
+    # (teste sous 10 variantes de ticker, toutes en "nodata") et ne renvoie
+    # qu'une fenetre de janvier 2025. Comme ce script REECRIT chaque fichier
+    # integralement, l'inclure retronquait BRVM-SP.csv a 20 lignes a chaque
+    # passage, effacant l'historique reconstitue depuis les BOC. Cet indice
+    # est alimente par scripts/update_index_history_live.py.
     ("BRVM-TEL", ""),  # Telecommunications
 ]
 
@@ -235,6 +240,26 @@ def scrape_ticker(
 
     sorted_dates = sorted(rows.keys(), key=parse_dmy)
     out_path = out_dir / f"{ticker_full}.csv"
+
+    # Garde-fou anti-troncature. Le fichier est reecrit integralement : si la
+    # source se tarit (ticker retire, renomme, ou API qui ne remonte plus qu'une
+    # fenetre partielle), un scrape "reussi" mais incomplet effacerait
+    # silencieusement des annees d'historique. On refuse d'ecrire un fichier
+    # nettement plus court que l'existant. Cas vecu : BRVM-SP, ramene de 403 a
+    # 20 lignes a chaque passage parce que Sika ne publie plus cet indice.
+    if out_path.exists():
+        try:
+            with out_path.open(encoding="utf-8-sig") as f:
+                existing = max(0, sum(1 for _ in f) - 1)
+        except OSError:
+            existing = 0
+        if existing > 20 and len(sorted_dates) < existing * 0.9:
+            return (
+                ticker_full,
+                len(sorted_dates),
+                f"IGNORE : {len(sorted_dates)} lignes scrapees contre {existing} "
+                f"existantes — fichier conserve (source incomplete ?)",
+            )
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     with out_path.open("w", encoding="utf-8", newline="") as f:
