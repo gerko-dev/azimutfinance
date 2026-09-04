@@ -24,7 +24,7 @@ export const PAYMENT_METHODS: PaymentMethodConfig[] = [
   {
     code: "wave",
     label: "Wave",
-    phone: "+225 07 10 41 12 00",
+    phone: "+225 07 78 88 62 25",
     beneficiary: "AzimutFinance",
     fees: "0% pour le payeur",
     enabled: true,
@@ -32,7 +32,7 @@ export const PAYMENT_METHODS: PaymentMethodConfig[] = [
   {
     code: "orange_money",
     label: "Orange Money",
-    phone: "+225 07 10 41 12 00",
+    phone: "+225 07 78 88 62 25",
     beneficiary: "AzimutFinance",
     fees: "Frais opérateur standard",
     enabled: true,

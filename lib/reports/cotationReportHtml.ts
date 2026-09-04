@@ -279,7 +279,7 @@ export function renderCotationReportHtml(data: CotationReportData): string {
   <div class="thanks" style="background-image:url('${lastPageBgUri()}')">
     <div class="contacts">
       <div class="contact"><div class="ico">✉</div><div class="lbl">EMAIL</div><div class="val">contact@azimutfinance.com</div></div>
-      <div class="contact"><div class="ico">☎</div><div class="lbl">TÉLÉPHONE</div><div class="val">+225 07 10 41 12 00</div></div>
+      <div class="contact"><div class="ico">☎</div><div class="lbl">TÉLÉPHONE</div><div class="val">+225 07 78 88 62 25</div></div>
       <div class="contact"><div class="ico">⌂</div><div class="lbl">SITE WEB</div><div class="val">www.azimutfinance.com</div></div>
     </div>
     <div class="disclaimer">Ce document est fourni à titre informatif uniquement et ne constitue ni une offre ni une recommandation d'investissement. Les données proviennent de sources jugées fiables mais ne sont pas garanties. © ${yy} AzimutFinance — Tous droits réservés.</div>
