@@ -74,7 +74,9 @@ FCP_CSV = DATA_DIR / "fcp.csv"
 # scripts/scrape_brvm_bond_prices.py (clean + dirty price) ; les colonnes
 # volume / transactions sont completees ici le soir, une fois le BOC publie.
 PRICES_CSV = DATA_DIR / "obligations-cotees-prix.csv"
-PRICE_COLUMNS = ["isin", "date", "cleanPrice", "dirtyPrice", "volume", "transactions"]
+PRICE_COLUMNS = [
+    "isin", "date", "cleanPrice", "dirtyPrice", "volume", "valeurTransigee",
+]
 # Referentiel OPCVM pour enrichissement (gestionnaire canonique + type + categorie).
 # Encode Latin-1 (Excel FR), separateur ";".
 AUMFCP_CSV = DATA_DIR / "fcp" / "aumfcp.csv"
@@ -461,6 +463,89 @@ def write_boc_status_csv(
     )
 
 
+_NUM_HEAD_RE = re.compile(r"^\d{1,3}([.,]\d+)?$")
+_NUM_GROUP_RE = re.compile(r"^\d{3}$")
+_NUM_LAST_RE = re.compile(r"^\d{3}([.,]\d+)?$")
+
+
+def _to_number(groups: list[str]) -> float:
+    """['5', '899.50'] -> 5899.5"""
+    return float("".join(groups).replace(",", "."))
+
+
+def _all_splits(tokens: list[str], n: int) -> list[list[int]]:
+    """Tous les decoupages valides de `tokens` en n nombres a groupement par 3.
+
+    "5 950 6 000 6 000 10 60 000" -> [[5950, 6000, 6000, 10, 60000], ...]
+    """
+    if n == 0:
+        return [[]] if not tokens else []
+    res: list[list[int]] = []
+    for take in range(1, len(tokens) + 1):
+        head = tokens[:take]
+        if not _NUM_HEAD_RE.match(head[0]):
+            break
+        # Les groupes intermediaires font exactement 3 chiffres ; seul le
+        # DERNIER peut porter une decimale — "5 899.50" au BOC du 29/07/2026.
+        # Sans cette tolerance, une ligne a cours decimal fait echouer tout le
+        # decoupage et le code retombe sur le chemin fautif.
+        if any(not _NUM_GROUP_RE.match(t) for t in head[1:-1]):
+            break
+        if len(head) > 1 and not _NUM_LAST_RE.match(head[-1]):
+            break
+        # "000" n'ouvre pas un nombre : un groupe de milliers ne peut pas etre
+        # en tete. Sans cette regle les decoupages se multiplient inutilement.
+        if len(head[0]) > 1 and head[0].startswith("0"):
+            break
+        for rest in _all_splits(tokens[take:], n - 1):
+            res.append([_to_number(head)] + rest)
+    return res
+
+
+def _split_numbers(tokens: list[str], n: int) -> list[int] | None:
+    """Decoupage UNIQUE en n nombres, ou None s'il y a ambiguite."""
+    cands = _all_splits(tokens, n)
+    return cands[0] if len(cands) == 1 else None
+
+
+def _pick_quote(tokens: list[str], nominal: float) -> list[int] | None:
+    """Decoupe "cours x3 + volume + montant" colles en espaces simples.
+
+    L'unicite du decoupage ne suffit pas : "3 150 3 150 3 150 38 119 700"
+    admet [38][119 700] ET [38 119][700]. On tranche par le PRIX IMPLICITE,
+    montant / volume, qui doit tomber dans la fourchette de la seance :
+
+        119 700 / 38     = 3 150   <- coherent avec les cours du jour
+        700 / 38 119     = 0,018   <- absurde
+
+    On ne peut pas exiger montant = volume x cours de cloture : le montant
+    reflete le cours moyen pondere de la seance. ORGT.O2 au 10/07/2026 traite
+    10 946 titres pour 64 711 400 FCFA, soit 5 912 de moyenne, entre la veille
+    (5 850) et la cloture (6 200). D'ou une fourchette large plutot qu'une
+    egalite.
+    """
+    best, best_err = None, None
+    for c in _all_splits(tokens, 5):
+        prec, jour, ref, vol, val = c
+        if nominal and not (0.1 * nominal <= jour <= 5 * nominal):
+            continue
+        if vol <= 0:
+            # Pas d'echange : montant nul attendu.
+            if val == 0:
+                return c
+            continue
+        implicite = val / vol
+        lo = min(prec, jour, ref) * 0.8
+        hi = max(prec, jour, ref) * 1.25
+        if not (lo <= implicite <= hi):
+            continue
+        err = abs(implicite - jour) / max(jour, 1)
+        if best_err is None or err < best_err:
+            best, best_err = c, err
+    return best
+
+
+
 def extract_bond_volumes(text: str) -> dict[str, tuple[float, float]]:
     """Pour chaque mnemonique de la table principale, extrait (volume, valeur
     transigee). NC / SP / non parsable -> (0.0, 0.0). On ne garde que la
@@ -490,9 +575,31 @@ def extract_bond_volumes(text: str) -> dict[str, tuple[float, float]]:
             out[sym] = (0.0, 0.0)
             continue
 
-        # Les colonnes sont separees par 2+ espaces ; au sein d'un nombre il n'y
-        # a qu'un espace simple. Volume et Valeur = 2 dernieres colonnes.
+        # Les colonnes sont NORMALEMENT separees par 2+ espaces, un nombre
+        # n'utilisant qu'un espace simple pour ses milliers. Volume et Valeur
+        # sont alors les deux dernieres cellules.
         cells = [c for c in re.split(r"\s{2,}", prefix.strip()) if c]
+
+        # Mais le BOC colle parfois toute la ligne en espaces simples :
+        #
+        #   ORGT.O2 ... 5 000   5 950 6 000 6 000 10 60 000   121,12 S ...
+        #               ^VN     ^prec ^jour ^ref  ^vol ^montant
+        #
+        # La derniere cellule porte alors CINQ nombres. Prendre "l'avant
+        # derniere cellule" y donnait le NOMINAL comme volume (5 000 au lieu
+        # de 10) et un montant concatene de 19 chiffres. Ce defaut avait
+        # corrompu 43 des 1 156 seances traitees de
+        # data/obligations-cotees-prix.csv — soit 3,7 % des seules lignes
+        # portant une information d'echange.
+        if cells:
+            nominal = 0.0
+            if len(cells) >= 2:
+                nominal = parse_french_number(cells[-2]) or 0.0
+            inline = _pick_quote(cells[-1].split(), nominal)
+            if inline is not None:
+                out[sym] = (float(inline[3]), float(inline[4]))
+                continue
+
         if len(cells) >= 2:
             volume = parse_french_number(cells[-2])
             valeur = parse_french_number(cells[-1])

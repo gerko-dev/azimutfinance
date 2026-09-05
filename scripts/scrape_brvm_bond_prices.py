@@ -53,7 +53,9 @@ HEADERS = {
 }
 
 # Schema fige du CSV de sortie (cf. ListedBondPriceRow dans lib/dataLoader.ts).
-PRICE_COLUMNS = ["isin", "date", "cleanPrice", "dirtyPrice", "volume", "transactions"]
+PRICE_COLUMNS = [
+    "isin", "date", "cleanPrice", "dirtyPrice", "volume", "valeurTransigee",
+]
 
 # Convention BRVM : nominal d'origine par titre.
 INITIAL_NOMINAL_PER_TITRE = 10_000
