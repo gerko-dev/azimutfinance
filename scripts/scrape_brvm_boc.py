@@ -20,6 +20,10 @@ Sorties :
     - data/obligations-cotees.csv : maj colonne nominalValue (avec --merge)
     - data/obligations-cotees-prix.csv : backfill volume + transactions des
       lignes du jour (avec --merge) — cf. scrape_brvm_bond_prices.py
+    - data/obligations-cotees-boc-statut.csv : statut de chaque mnemonique au
+      BOC — "cotee" (ligne de cotation reelle) ou "annoncee" (avis de premiere
+      cotation, donc avant le premier echange). Alimente le controle de
+      coherence de /admin/sources.
 
 Dependances :
     pip install requests pypdf
@@ -38,6 +42,7 @@ import io
 import json
 import re
 import sys
+import unicodedata
 from collections import Counter
 from datetime import date, timedelta
 from pathlib import Path
@@ -371,6 +376,89 @@ BOND_TAIL_RE = re.compile(
     r"\s\d{1,4}[.,]\d+\s+[AST]\s+\d{1,4}[.,]\d+\s+"
     r"\d{1,2}-[^\s-]+-\d{2,4}\s+(?:IF|AC|ACD)\b"
 )
+
+
+# Avis de premiere cotation : "... (EOS.O34), ... (EOS.O37) - Premiere cotation
+# le 08 septembre 2026". C'est le signal UTILE pour alimenter le referentiel :
+# il arrive AVANT que l'obligation ne traite, donc avec de l'avance.
+MOIS_FR = {
+    "janvier": 1, "fevrier": 2, "fevrier": 2, "mars": 3, "avril": 4, "mai": 5,
+    "juin": 6, "juillet": 7, "aout": 8, "septembre": 9, "octobre": 10,
+    "novembre": 11, "decembre": 12,
+}
+NOTICE_SYMBOL_RE = re.compile(r"\(([A-Z]{2,7}\.(?:O|S)\d{1,3})\)")
+NOTICE_RE = re.compile(
+    r"Premi[eè]re\s+cotation\s+le\s+(\d{1,2})\s+([A-Za-zà-ÿ]+)\s+(\d{4})",
+    re.IGNORECASE,
+)
+
+
+def _strip_accents(s: str) -> str:
+    return "".join(
+        c for c in unicodedata.normalize("NFD", s)
+        if unicodedata.category(c) != "Mn"
+    )
+
+
+def extract_first_listing_notices(text: str) -> dict[str, str]:
+    """{mnemonique: date ISO de premiere cotation} depuis les avis du BOC.
+
+    Les mnemoniques appartiennent a l'avis qui les SUIT. La fenetre de
+    recherche est donc bornee a la fin de l'avis precedent : sans cela un avis
+    absorbe les mnemoniques de son voisin (cas du BOC du 03/09/2026, ou les
+    quatre EOS etaient attribuees a l'avis des TPBF).
+    """
+    flat = re.sub(r"\s+", " ", text)
+    out: dict[str, str] = {}
+    prev_end = 0
+    for m in NOTICE_RE.finditer(flat):
+        mois = _strip_accents(m.group(2)).lower()
+        num = MOIS_FR.get(mois)
+        if not num:
+            prev_end = m.end()
+            continue
+        iso = f"{int(m.group(3)):04d}-{num:02d}-{int(m.group(1)):02d}"
+        start = max(prev_end, m.start() - 800)
+        for code in NOTICE_SYMBOL_RE.findall(flat[start : m.start()]):
+            # Un meme titre peut etre annonce plusieurs jours ; on garde la
+            # date la plus tardive, qui est la programmation en vigueur.
+            if code not in out or iso > out[code]:
+                out[code] = iso
+        prev_end = m.end()
+    return out
+
+
+def write_boc_status_csv(
+    quoted: list[str], notices: dict[str, str], boc_date: date
+) -> None:
+    """data/obligations-cotees-boc-statut.csv : etat de chaque mnemonique au BOC.
+
+    statut = "cotee"   ligne de cotation reelle dans OBLIGATIONS CLASSIQUES
+             "annoncee" avis de premiere cotation, pas encore negociee
+
+    Remplace l'usage detourne de obligations-cotees-vn-boc.csv, qui listait des
+    mnemoniques reperes n'importe ou dans le PDF : il ratait 3 des 4 emissions
+    annoncees le 04/09/2026 et qualifiait la quatrieme de "cotee" a tort.
+    """
+    rows: list[tuple[str, str, str]] = []
+    for c in sorted(set(quoted)):
+        rows.append((c, "cotee", ""))
+    for c, iso in sorted(notices.items()):
+        if c not in quoted:
+            rows.append((c, "annoncee", iso))
+
+    path = DATA_DIR / "obligations-cotees-boc-statut.csv"
+    with path.open("w", encoding="utf-8", newline="") as f:
+        w = csv.writer(f, delimiter=";")
+        w.writerow(["code", "statut", "premiereCotation", "bocDate"])
+        for c, st, iso in rows:
+            w.writerow([c, st, iso, boc_date.isoformat()])
+    print(
+        f"\nStatut BOC : {sum(1 for r in rows if r[1] == 'cotee')} cotees, "
+        f"{sum(1 for r in rows if r[1] == 'annoncee')} annoncees "
+        f"-> {path.name}",
+        file=sys.stderr,
+    )
 
 
 def extract_bond_volumes(text: str) -> dict[str, tuple[float, float]]:
@@ -1108,6 +1196,22 @@ def main() -> int:
         print(
             "Synthese marche obligataire non extraite — JSON inchange.",
             file=sys.stderr,
+        )
+
+    # === Statut BOC de chaque mnemonique -> referentiel ===
+    # Deux signaux distincts, et c'est la distinction qui compte :
+    #  - "cotee"    ligne de cotation reelle (extract_bond_volumes) ;
+    #  - "annoncee" avis de premiere cotation, donc AVANT le premier echange.
+    # Le second donne de l'avance pour saisir la ligne au referentiel.
+    try:
+        write_boc_status_csv(
+            list(bond_volumes.keys()),
+            extract_first_listing_notices(text),
+            boc_date,
+        )
+    except Exception as e:  # ne doit jamais faire echouer le reste du BOC
+        print(
+            f"Statut BOC non ecrit ({type(e).__name__}: {e}).", file=sys.stderr
         )
 
     # === FCP (derniere page) + enrichissement aumfcp ===

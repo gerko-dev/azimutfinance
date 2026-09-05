@@ -71,21 +71,49 @@ export default async function SourcesPage() {
           </p>
         )}
 
+        {/* Cotees sans etre au referentiel : la saisie a ete oubliee, la ligne
+            traite deja. */}
         {bocCheck.quotedButMissing.length > 0 && (
-          <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3">
-            <div className="text-sm font-medium text-amber-800">
+          <div className="mt-3 rounded-md border border-orange-300 bg-orange-50 p-3">
+            <div className="text-sm font-medium text-orange-900">
               {bocCheck.quotedButMissing.length} obligation
-              {bocCheck.quotedButMissing.length > 1 ? "s" : ""} cotée
+              {bocCheck.quotedButMissing.length > 1 ? "s" : ""} déjà cotée
               {bocCheck.quotedButMissing.length > 1 ? "s" : ""} au BOC, absente
               {bocCheck.quotedButMissing.length > 1 ? "s" : ""} du référentiel
             </div>
-            <p className="text-xs text-amber-700 mt-1">
-              Nouvelles émissions à saisir — aucun script ne crée de ligne
-              automatiquement.
+            <p className="text-xs text-orange-800 mt-1">
+              Ces lignes se négocient déjà : la saisie a été manquée.
             </p>
-            <p className="mt-2 text-xs font-mono text-amber-900">
+            <p className="mt-2 text-xs font-mono text-orange-900">
               {bocCheck.quotedButMissing.join(" · ")}
             </p>
+          </div>
+        )}
+
+        {/* Annoncees : le signal le plus utile, il precede le premier echange. */}
+        {bocCheck.announcedButMissing.length > 0 && (
+          <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3">
+            <div className="text-sm font-medium text-amber-800">
+              {bocCheck.announcedButMissing.length} nouvelle
+              {bocCheck.announcedButMissing.length > 1 ? "s" : ""} émission
+              {bocCheck.announcedButMissing.length > 1 ? "s" : ""} annoncée
+              {bocCheck.announcedButMissing.length > 1 ? "s" : ""} au BOC
+            </div>
+            <p className="text-xs text-amber-700 mt-1">
+              Avis de première cotation : à saisir dans{" "}
+              <code>data/obligations-cotees.csv</code> avant la date indiquée.
+              Aucun script ne crée de ligne automatiquement.
+            </p>
+            <ul className="mt-2 space-y-0.5">
+              {bocCheck.announcedButMissing.map((a) => (
+                <li key={a.code} className="text-xs text-amber-900">
+                  <code className="font-mono">{a.code}</code>
+                  {a.firstListing && (
+                    <> — première cotation le {a.firstListing}</>
+                  )}
+                </li>
+              ))}
+            </ul>
           </div>
         )}
       </section>

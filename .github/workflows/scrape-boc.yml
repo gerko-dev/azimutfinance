@@ -75,16 +75,16 @@ jobs:
       - name: Show diff stats
         run: |
           echo "=== Files modified ==="
-          git status --short data/obligations-cotees.csv data/obligations-cotees-vn-boc.csv data/obligations-cotees-boc-synthese.json data/fcp.csv data/obligations-cotees-prix.csv || true
+          git status --short data/obligations-cotees.csv data/obligations-cotees-vn-boc.csv data/obligations-cotees-boc-synthese.json data/fcp.csv data/obligations-cotees-prix.csv data/obligations-cotees-boc-statut.csv || true
           echo ""
           echo "=== Diff summary ==="
-          git diff --stat data/obligations-cotees.csv data/obligations-cotees-vn-boc.csv data/obligations-cotees-boc-synthese.json data/fcp.csv data/obligations-cotees-prix.csv || true
+          git diff --stat data/obligations-cotees.csv data/obligations-cotees-vn-boc.csv data/obligations-cotees-boc-synthese.json data/fcp.csv data/obligations-cotees-prix.csv data/obligations-cotees-boc-statut.csv || true
 
       - name: Commit & push if changed
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/obligations-cotees.csv data/obligations-cotees-vn-boc.csv data/obligations-cotees-boc-synthese.json data/fcp.csv data/obligations-cotees-prix.csv
+          git add data/obligations-cotees.csv data/obligations-cotees-vn-boc.csv data/obligations-cotees-boc-synthese.json data/fcp.csv data/obligations-cotees-prix.csv data/obligations-cotees-boc-statut.csv
           if git diff --staged --quiet; then
             echo "Aucun changement a commiter."
             exit 0

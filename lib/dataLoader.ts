@@ -376,45 +376,67 @@ function normalizeAmortizationType(value: string): "IF" | "AC" | "ACD" {
 
 type BocVnRow = { code: string; valeurNominale: string; bocDate: string };
 
+type BocStatutRow = {
+  code: string;
+  statut: string;
+  premiereCotation: string;
+  bocDate: string;
+};
+
 export type ListedBondsBocCheck = {
-  /** Date du BOC de reference (celle portee par le CSV de VN). */
+  /** Date du BOC de reference. */
   bocDate: string | null;
   quotedCount: number;
   baseCount: number;
   /**
-   * Lignes que la base declare echues alors que le BOC les cote encore.
-   * C'est un detecteur d'erreur de saisie sur `maturityDate` : la BRVM ne cote
-   * pas une obligation remboursee, donc toute divergence vient de la base.
-   * Cas rencontre : TPCI.O29, saisi 19/04/2026 au lieu de 19/10/2026 — six
-   * mois d'ecart sur l'emission ET l'echeance.
+   * Lignes que la base declare echues alors que le BOC les COTE encore.
+   * Detecteur d'erreur de saisie sur `maturityDate` : la BRVM ne cote pas une
+   * obligation remboursee, donc la divergence vient de la base. Cas rencontre :
+   * TPCI.O29, saisi 19/04/2026 au lieu de 19/10/2026.
    */
   maturedButQuoted: { code: string; name: string; maturityDate: string }[];
-  /** Cotees au BOC mais absentes du referentiel : nouvelles emissions a saisir. */
+  /** Cotees au BOC mais absentes du referentiel : saisie oubliee. */
   quotedButMissing: string[];
+  /**
+   * Annoncees par un avis "Premiere cotation le ..." et pas encore au
+   * referentiel. C'est le signal le plus utile : il arrive AVANT le premier
+   * echange, donc avec de l'avance pour saisir la ligne.
+   */
+  announcedButMissing: { code: string; firstListing: string }[];
 };
 
 /**
  * Rapproche le referentiel obligataire du dernier BOC.
  *
- * S'appuie sur data/obligations-cotees-vn-boc.csv, produit chaque soir par
- * scripts/scrape_brvm_boc.py : y figurer signifie "cotee au BOC de cette date".
- * Aucun telechargement supplementaire n'est donc necessaire.
+ * S'appuie sur data/obligations-cotees-boc-statut.csv, ecrit chaque soir par
+ * scripts/scrape_brvm_boc.py, qui distingue deux etats : "cotee" (ligne de
+ * cotation reelle) et "annoncee" (avis de premiere cotation).
+ *
+ * La version precedente lisait obligations-cotees-vn-boc.csv, dont
+ * l'extracteur repere des mnemoniques n'importe ou dans le PDF : il ratait
+ * trois des quatre emissions annoncees le 04/09/2026 et qualifiait la
+ * quatrieme de "cotee" alors qu'elle ne devait traiter que le 08/09.
  */
 export function checkListedBondsVsBoc(
   asOf: Date = new Date(),
 ): ListedBondsBocCheck {
   const bonds = loadListedBonds();
   const quoted = new Set<string>();
+  const announced = new Map<string, string>();
   let bocDate: string | null = null;
   try {
-    for (const r of parseCSV<BocVnRow>("obligations-cotees-vn-boc.csv")) {
-      const code = r.code?.trim();
-      if (code) quoted.add(code.toUpperCase());
+    for (const r of parseCSV<BocStatutRow>("obligations-cotees-boc-statut.csv")) {
+      const code = r.code?.trim().toUpperCase();
+      if (!code) continue;
+      if (r.statut?.trim() === "cotee") quoted.add(code);
+      else if (r.statut?.trim() === "annoncee") {
+        announced.set(code, r.premiereCotation?.trim() ?? "");
+      }
       const d = r.bocDate?.trim();
       if (d && (!bocDate || d > bocDate)) bocDate = d;
     }
   } catch {
-    // fichier absent ou illisible : on renvoie un constat vide plutot qu'une erreur
+    // fichier absent ou illisible : constat vide plutot qu'une erreur
   }
 
   const byCode = new Set(bonds.map((b) => b.code.trim().toUpperCase()));
@@ -435,6 +457,14 @@ export function checkListedBondsVsBoc(
       }))
       .sort((a, b) => a.maturityDate.localeCompare(b.maturityDate)),
     quotedButMissing: [...quoted].filter((c) => !byCode.has(c)).sort(),
+    announcedButMissing: [...announced.entries()]
+      .filter(([c]) => !byCode.has(c))
+      .map(([code, firstListing]) => ({ code, firstListing }))
+      .sort(
+        (a, b) =>
+          a.firstListing.localeCompare(b.firstListing) ||
+          a.code.localeCompare(b.code),
+      ),
   };
 }
 
