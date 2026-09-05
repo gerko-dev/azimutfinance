@@ -161,6 +161,7 @@ type Props = {
 
 type Tab =
   | "overview"
+  | "prices"
   | "quotations"
   | "cashflow"
   | "risk"
@@ -635,6 +636,96 @@ export default function BondDetailView({
     return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date));
   }, [theoreticalHistory, priceHistory]);
 
+  // === ONGLET COURS : serie observee, issue de obligations-cotees-prix.csv ===
+  // On distingue une SEANCE COTEE (volume > 0, une transaction a eu lieu) d'une
+  // simple cotation indicative. Sur le marche obligataire BRVM, tres peu
+  // liquide, moins de 4 % des lignes portent un volume : afficher le prix sans
+  // cette distinction laisserait croire a une cotation quotidienne active.
+  const priceSeries = useMemo(() => {
+    return [...priceHistory]
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map((p) => ({
+        date: p.date,
+        cleanPrice: p.cleanPrice,
+        dirtyPrice: p.dirtyPrice > 0 ? p.dirtyPrice : null,
+        volume: p.volume,
+        traded: p.volume > 0,
+      }));
+  }, [priceHistory]);
+
+  // Nominal par titre a une date donnee — indispensable pour comparer deux
+  // cours dans le temps, mais SEULEMENT sur les titres en mode N.
+  //
+  // Deux modes d'amortissement coexistent, et ils se comportent a l'oppose :
+  //   mode N  le nominal PAR TITRE decroit, le cours suit mecaniquement.
+  //           EOM.O5 : 6 000 -> 4 000, cours 6 000 -> 4 000. Lire -33 % serait
+  //           faux, la performance reelle est nulle.
+  //   mode T  c'est le NOMBRE DE TITRES qui diminue, la face reste a 10 000
+  //           et le cours ne bouge pas. EOS.O10 : nominal restant 9 000 ->
+  //           8 000 mais cours stable a 10 000. Diviser par l'encours y
+  //           fabriquerait un gain fictif de +12,5 %.
+  //
+  // On s'appuie donc sur les evenements uniquement en mode N. En mode T le
+  // denominateur reste la valeur faciale, comme le fait deja
+  // computeCurrentNominalPerTitre.
+  const nominalAt = useMemo(() => {
+    if (bond.amortizationMode === "T" || bond.amortizationType === "IF") {
+      return () => bond.nominalValue;
+    }
+    const steps = events
+      .filter(
+        (e) =>
+          (e.eventType === "amortissement" || e.eventType === "remboursement") &&
+          e.outstandingAfter > 0,
+      )
+      .map((e) => ({ date: e.date, nominal: e.outstandingAfter }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+    return (date: string) => {
+      let n = bond.nominalValue;
+      for (const s of steps) {
+        if (s.date <= date) n = s.nominal;
+        else break;
+      }
+      return n > 0 ? n : bond.nominalValue;
+    };
+  }, [events, bond.nominalValue, bond.amortizationMode, bond.amortizationType]);
+
+  const priceStats = useMemo(() => {
+    if (priceSeries.length === 0) return null;
+    const first = priceSeries[0];
+    const last = priceSeries[priceSeries.length - 1];
+    const traded = priceSeries.filter((p) => p.traded);
+    const closes = priceSeries.map((p) => p.cleanPrice).filter((v) => v > 0);
+
+    // Variation en pourcentage DU NOMINAL, seule mesure comparable dans le
+    // temps sur un titre amortissable.
+    const nomFirst = nominalAt(first.date);
+    const nomLast = nominalAt(last.date);
+    const pctFirst = nomFirst > 0 ? first.cleanPrice / nomFirst : null;
+    const pctLast = nomLast > 0 ? last.cleanPrice / nomLast : null;
+
+    return {
+      first,
+      last,
+      sessions: priceSeries.length,
+      tradedSessions: traded.length,
+      lastTraded: traded.length > 0 ? traded[traded.length - 1] : null,
+      totalVolume: traded.reduce((s, p) => s + p.volume, 0),
+      min: closes.length ? Math.min(...closes) : 0,
+      max: closes.length ? Math.max(...closes) : 0,
+      nomFirst,
+      nomLast,
+      amortized: Math.abs(nomLast - nomFirst) > 0.01,
+      pctLast,
+      change:
+        pctFirst && pctLast ? (pctLast - pctFirst) / pctFirst : null,
+      rawChange:
+        first.cleanPrice > 0
+          ? (last.cleanPrice - first.cleanPrice) / first.cleanPrice
+          : null,
+    };
+  }, [priceSeries, nominalAt]);
+
   const hasObservedPrices = priceHistory.length > 0;
   const liveCleanPrice =
     livePrice && Number.isFinite(livePrice.currentPrice) && livePrice.currentPrice > 0
@@ -840,6 +931,7 @@ export default function BondDetailView({
             {(
               [
                 { id: "overview", label: "Vue d'ensemble", tier: "guest" },
+                { id: "prices", label: "Cours", tier: "member" },
                 { id: "quotations", label: "Pricing", tier: "premium" },
                 { id: "cashflow", label: "Échéancier & flux", tier: "member" },
                 { id: "risk", label: "Risque & analytics", tier: "premium" },
@@ -1052,6 +1144,270 @@ export default function BondDetailView({
         {/* ============================================================ */}
         {/* ONGLET COTATIONS                                               */}
         {/* ============================================================ */}
+        {activeTab === "prices" && (
+          <>
+            {priceStats === null ? (
+              <section className="bg-white rounded-lg border border-slate-200 p-10 text-center">
+                <div className="text-3xl mb-3">📉</div>
+                <h3 className="text-lg font-medium text-slate-900 mb-2">
+                  Aucun cours enregistré
+                </h3>
+                <p className="text-sm text-slate-500 max-w-md mx-auto">
+                  La collecte des cours obligataires a démarré le 20 avril 2026.
+                  Cette ligne n&apos;y figure pas encore — elle vient d&apos;être
+                  admise à la cote, ou n&apos;est plus cotée.
+                </p>
+              </section>
+            ) : (
+              <>
+                <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+                    <div>
+                      <div className="text-xs text-slate-500 mb-1">Dernier cours</div>
+                      <div className="text-xl md:text-2xl font-semibold">
+                        {formatFCFA(priceStats.last.cleanPrice)}
+                      </div>
+                      <div className="text-xs text-slate-400 mt-0.5">
+                        au {formatDate(priceStats.last.date)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-500 mb-1">
+                        Variation sur la période
+                      </div>
+                      <div
+                        className={`text-xl md:text-2xl font-semibold ${
+                          priceStats.change === null
+                            ? "text-slate-400"
+                            : priceStats.change > 0
+                              ? "text-emerald-600"
+                              : priceStats.change < 0
+                                ? "text-rose-600"
+                                : "text-slate-600"
+                        }`}
+                      >
+                        {priceStats.change === null
+                          ? "—"
+                          : formatPctSigned(priceStats.change * 100)}
+                      </div>
+                      <div className="text-xs text-slate-400 mt-0.5">
+                        depuis le {formatDateShort(priceStats.first.date)}
+                        {priceStats.amortized && (
+                          <span className="block text-amber-600">
+                            hors amortissement
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-500 mb-1">
+                        Amplitude observée
+                      </div>
+                      <div className="text-xl md:text-2xl font-semibold tabular-nums">
+                        {formatFCFA(priceStats.min)} – {formatFCFA(priceStats.max)}
+                      </div>
+                      <div className="text-xs text-slate-400 mt-0.5">
+                        {priceStats.sessions} séances
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-500 mb-1">
+                        Séances avec transaction
+                      </div>
+                      <div className="text-xl md:text-2xl font-semibold">
+                        {priceStats.tradedSessions}
+                      </div>
+                      <div className="text-xs text-slate-400 mt-0.5">
+                        {priceStats.totalVolume > 0
+                          ? `${formatFCFA(priceStats.totalVolume)} titres échangés`
+                          : "aucun échange"}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Le marche obligataire BRVM est tres peu liquide : sans
+                      cette mention, un cours quotidien se lit comme une
+                      cotation active alors qu'il est le plus souvent
+                      indicatif. */}
+                  {/* Sur un titre amortissable, la chute du cours reflete le
+                      remboursement du capital, pas une moins-value. On l'explique
+                      plutot que de laisser lire une variation trompeuse. */}
+                  {priceStats.amortized && (
+                    <p className="mt-4 text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded px-3 py-2">
+                      Le nominal par titre est passé de{" "}
+                      <b>{formatFCFA(priceStats.nomFirst)}</b> à{" "}
+                      <b>{formatFCFA(priceStats.nomLast)}</b> FCFA sur la période :
+                      une partie du capital a été remboursée. La variation
+                      ci-dessus est calculée en pourcentage du nominal restant,
+                      la seule mesure comparable dans le temps. En cours bruts,
+                      elle ressortirait à{" "}
+                      {priceStats.rawChange === null
+                        ? "—"
+                        : formatPctSigned(priceStats.rawChange * 100)}
+                      , ce qui refléterait l&apos;amortissement et non la
+                      performance.
+                    </p>
+                  )}
+
+                  {priceStats.tradedSessions === 0 ? (
+                    <p className="mt-4 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                      Aucune transaction sur la période. Les cours affichés sont
+                      des cotations indicatives, sans échange en face.
+                    </p>
+                  ) : (
+                    priceStats.lastTraded && (
+                      <p className="mt-4 text-xs text-slate-500">
+                        Dernier échange le{" "}
+                        <b>{formatDate(priceStats.lastTraded.date)}</b> —{" "}
+                        {formatFCFA(priceStats.lastTraded.volume)} titres à{" "}
+                        {formatFCFA(priceStats.lastTraded.cleanPrice)} FCFA. Les
+                        autres séances sont des cotations indicatives.
+                      </p>
+                    )
+                  )}
+                </section>
+
+                <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6 mt-4">
+                  <h3 className="text-base font-medium mb-1">
+                    📈 Historique des cours
+                  </h3>
+                  <p className="text-xs text-slate-500 mb-4">
+                    Prix pied de coupon. Les points marqués correspondent aux
+                    séances où un échange a eu lieu.
+                  </p>
+                  <div className="h-72 md:h-80">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <ComposedChart data={priceSeries}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <XAxis
+                          dataKey="date"
+                          tickFormatter={formatDateShort}
+                          tick={{ fontSize: 11 }}
+                          minTickGap={40}
+                        />
+                        <YAxis
+                          domain={["dataMin - 100", "dataMax + 100"]}
+                          tick={{ fontSize: 11 }}
+                          tickFormatter={(v: number) => formatFCFA(v)}
+                          width={70}
+                        />
+                        <Tooltip
+                          labelFormatter={(d) => formatDate(String(d))}
+                          formatter={(value, name) => {
+                            const v = Number(value ?? 0);
+                            if (!isFinite(v)) return ["—", name];
+                            if (name === "volume") {
+                              return [formatFCFA(v) + " titres", "Volume"];
+                            }
+                            return [
+                              formatFCFA(v) + " FCFA",
+                              name === "cleanPrice"
+                                ? "Cours pied de coupon"
+                                : "Prix plein coupon",
+                            ];
+                          }}
+                        />
+                        <ReferenceLine
+                          y={bond.nominalValue}
+                          stroke="#94a3b8"
+                          strokeDasharray="4 4"
+                          label={{
+                            value: "Nominal",
+                            position: "insideTopRight",
+                            fontSize: 10,
+                            fill: "#64748b",
+                          }}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="cleanPrice"
+                          stroke="#2563eb"
+                          strokeWidth={2}
+                          dot={(props) => {
+                            const { cx, cy, payload, index } = props;
+                            if (!payload?.traded) {
+                              return <g key={`d-${index}`} />;
+                            }
+                            return (
+                              <circle
+                                key={`d-${index}`}
+                                cx={cx}
+                                cy={cy}
+                                r={3.5}
+                                fill="#2563eb"
+                                stroke="#fff"
+                                strokeWidth={1}
+                              />
+                            );
+                          }}
+                          activeDot={{ r: 5 }}
+                          isAnimationActive={false}
+                        />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
+                </section>
+
+                <section className="bg-white rounded-lg border border-slate-200 mt-4 overflow-hidden">
+                  <div className="p-4 md:p-6 pb-3">
+                    <h3 className="text-base font-medium">Détail des séances</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Les 60 dernières, de la plus récente à la plus ancienne.
+                    </p>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-50 text-slate-500 text-xs">
+                        <tr>
+                          <th className="text-left px-4 py-2 font-medium">Date</th>
+                          <th className="text-right px-4 py-2 font-medium">
+                            Pied de coupon
+                          </th>
+                          <th className="text-right px-4 py-2 font-medium hidden md:table-cell">
+                            Plein coupon
+                          </th>
+                          <th className="text-right px-4 py-2 font-medium">Volume</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[...priceSeries]
+                          .reverse()
+                          .slice(0, 60)
+                          .map((p) => (
+                            <tr
+                              key={p.date}
+                              className="border-t border-slate-100 hover:bg-slate-50"
+                            >
+                              <td className="px-4 py-2">{formatDate(p.date)}</td>
+                              <td className="px-4 py-2 text-right tabular-nums">
+                                {formatFCFA(p.cleanPrice)}
+                              </td>
+                              <td className="px-4 py-2 text-right tabular-nums hidden md:table-cell text-slate-500">
+                                {p.dirtyPrice ? formatFCFA2(p.dirtyPrice) : "—"}
+                              </td>
+                              <td className="px-4 py-2 text-right tabular-nums">
+                                {p.traded ? (
+                                  formatFCFA(p.volume)
+                                ) : (
+                                  <span
+                                    className="text-slate-400"
+                                    title="Cotation indicative : aucun échange cette séance."
+                                  >
+                                    —
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              </>
+            )}
+          </>
+        )}
+
         {activeTab === "quotations" && (
           <>
             <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">

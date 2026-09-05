@@ -328,7 +328,7 @@ type ListedBondPriceRow = {
   cleanPrice: string;
   dirtyPrice: string;
   volume: string;
-  transactions: string;
+  valeurTransigee: string;
 };
 
 function parseDate(s: string): Date {
@@ -563,7 +563,7 @@ export function loadListedBondPrices(): ListedBondPrice[] {
     cleanPrice: parseNum(r.cleanPrice),
     dirtyPrice: parseNum(r.dirtyPrice),
     volume: parseNum(r.volume),
-    transactions: parseNum(r.transactions),
+    valeurTransigee: parseNum(r.valeurTransigee),
   }));
 }
 

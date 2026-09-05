@@ -57,7 +57,7 @@ export default async function Page() {
       cleanPrice: q.currentPrice,
       dirtyPrice: q.currentPrice + (q.couponCouru || 0),
       volume: 0,
-      transactions: 0,
+      valeurTransigee: 0,
     });
   }
 

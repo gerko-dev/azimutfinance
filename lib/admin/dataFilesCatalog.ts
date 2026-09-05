@@ -49,7 +49,7 @@ export type DataFileMeta = {
  * Ils n'ont plus besoin d'import manuel : on les masque de la page admin Data.
  *  - obligations-cotees.csv / obligations-cotees-vn-boc.csv / fcp.csv → scrape-boc
  *  - obligations-cotees-prix.csv → scrape-brvm-bond-prices (snapshot 15h) +
- *    backfill volume/transactions par scrape-boc
+ *    backfill volume/valeurTransigee par scrape-boc
  *  - commodities + FX → scrape-investing
  *  - umoa-emissions-* → scrape-umoa-emissions
  *  - apromac.csv → scrape-apromac
@@ -61,7 +61,7 @@ export const AUTO_SCRAPED_FILES: ReadonlySet<string> = new Set([
   "obligations-cotees.csv",
   "obligations-cotees-vn-boc.csv",
   "fcp.csv",
-  // scrape-brvm-bond-prices (snapshot 15h) + backfill volume/transactions par scrape-boc
+  // scrape-brvm-bond-prices (snapshot 15h) + backfill volume/valeurTransigee par scrape-boc
   "obligations-cotees-prix.csv",
   // scrape-investing — commodities
   "Cacao.csv",

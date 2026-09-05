@@ -94,7 +94,10 @@ export type ListedBondPrice = {
   cleanPrice: number;
   dirtyPrice: number;
   volume: number;
-  transactions: number;
+  /** Montant transige sur la seance, en FCFA. Anciennement nomme
+   *  `transactions`, ce qui laissait croire a un nombre d'operations :
+   *  le champ a toujours porte un MONTANT (cf. backfill_bond_prices). */
+  valeurTransigee: number;
 };
 
 export type ListedBondEvent = {
