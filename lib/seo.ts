@@ -4,6 +4,7 @@
 // par defaut et les donnees structurees (JSON-LD).
 
 import type { Metadata } from "next";
+import { bondHref } from "@/lib/listedBondsTypes";
 
 /** Domaine de production (cf. memoire projet). Sans slash final.
  *
@@ -221,7 +222,7 @@ export function listedBondJsonLd(bond: {
     "@context": "https://schema.org",
     "@type": "FinancialProduct",
     name: bond.name,
-    url: absoluteUrl(`/obligation/${bond.isin}`),
+    url: absoluteUrl(bondHref(bond)),
     category: "Obligation cotée BRVM",
     identifier: {
       "@type": "PropertyValue",

@@ -4,6 +4,7 @@ import { useState, useMemo, useCallback, useEffect } from "react";
 import Link from "next/link";
 import type { ListedBond, ListedBondEvent } from "@/lib/listedBondsTypes";
 import CountryFlag from "./CountryFlag";
+import { bondHref } from "@/lib/listedBondsTypes";
 
 type Props = {
   bonds: ListedBond[];
@@ -728,7 +729,7 @@ export default function BondsEventsCalendar({
                   return (
                     <li key={i}>
                       <Link
-                        href={`/obligation/${e.isin}`}
+                        href={bondHref(b ?? { isin: e.isin })}
                         className="block px-4 md:px-5 py-3 hover:bg-blue-50/40 transition"
                       >
                         <div className="flex items-start gap-2.5">

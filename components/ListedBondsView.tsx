@@ -11,6 +11,7 @@ import type {
 import { getBondYTMFromLatest } from "@/lib/listedBondsTypes";
 import type { UserRole } from "@/lib/auth/userRole";
 import CountryFlag from "./CountryFlag";
+import { bondHref, isBondMatured } from "@/lib/listedBondsTypes";
 
 // === HELPERS DE FORMATAGE ===
 function formatFCFA(value: number): string {
@@ -172,6 +173,8 @@ type EnrichedBond = ListedBond & {
   ytm: number;
   latestPrice: ListedBondPrice | null;
   maturityTime: number;
+  /** Echeance passee : la ligne reste listee mais est signalee comme remboursee. */
+  isMatured: boolean;
   searchHaystack: string;
 };
 
@@ -231,6 +234,7 @@ export default function ListedBondsView({
         ytm,
         latestPrice,
         maturityTime,
+        isMatured: isBondMatured(bond),
         searchHaystack,
       };
     });
@@ -677,7 +681,7 @@ const BondsTable = memo(function BondsTable({
             >
               <td className="px-3 md:px-4 py-3">
                 <Link
-                  href={`/obligation/${b.isin}`}
+                  href={bondHref(b)}
                   className="flex items-center gap-2 hover:text-blue-700"
                 >
                   {b.greenBond && (
@@ -758,9 +762,20 @@ const BondsTable = memo(function BondsTable({
               </td>
               <td className="px-3 md:px-4 py-3 text-right">
                 <div className="text-sm">{formatDate(b.maturityDate)}</div>
-                <div className="text-xs text-slate-500">
-                  {b.yearsToMaturity.toFixed(1)} ans
-                </div>
+                {/* Une ligne echue afficherait une duree residuelle negative
+                    ("-0,4 ans"), illisible. On montre son statut a la place. */}
+                {b.isMatured ? (
+                  <span
+                    className="inline-block mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-200 text-slate-600"
+                    title="Obligation remboursée : elle reste consultable pour son historique, mais n'est plus cotée."
+                  >
+                    Échue
+                  </span>
+                ) : (
+                  <div className="text-xs text-slate-500">
+                    {b.yearsToMaturity.toFixed(1)} ans
+                  </div>
+                )}
               </td>
               <td className="px-3 md:px-4 py-3 text-right hidden md:table-cell">
                 {b.rating ? (

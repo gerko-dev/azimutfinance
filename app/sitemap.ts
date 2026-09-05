@@ -3,6 +3,7 @@ import { absoluteUrl } from "@/lib/seo";
 import { loadStocks, loadListedBonds } from "@/lib/dataLoader";
 import { loadFunds } from "@/lib/fcp";
 import { GLOSSAIRE } from "@/lib/glossaire";
+import { bondHref } from "@/lib/listedBondsTypes";
 
 // Note : les ~2500 pages /souverain/[id] (adjudications UMOA-Titres, en grande
 // partie historiques) ne sont volontairement PAS listees ici — elles diluent le
@@ -86,7 +87,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   // Obligations cotees — /obligation/[isin]
   const obligations = safeBlock("obligations", () =>
     loadListedBonds().map((b) => ({
-      url: absoluteUrl(`/obligation/${b.isin}`),
+      url: absoluteUrl(bondHref(b)),
       lastModified: now,
       changeFrequency: "weekly" as const,
       priority: 0.6,

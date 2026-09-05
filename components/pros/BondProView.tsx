@@ -18,6 +18,7 @@ import { ResponsiveContainer } from "@/components/ui/ChartContainer";
 import CountryFlag from "../CountryFlag";
 import LivePriceBadge from "../LivePriceBadge";
 import type { ListedBond } from "@/lib/listedBondsTypes";
+import { bondHref } from "@/lib/listedBondsTypes";
 
 // ============================================================================
 // TYPES
@@ -227,7 +228,7 @@ export default function BondProView({ data }: { data: BondProData }) {
               variant="dark"
             />
             <Link
-              href={`/obligation/${bond.isin}`}
+              href={bondHref(bond)}
               className="text-[11px] px-2.5 py-1 rounded-md border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-600 transition"
               title="Voir la fiche publique"
             >
@@ -514,7 +515,7 @@ function SyntheseTab({
             {similarBonds.map((s) => (
               <Link
                 key={s.isin}
-                href={`/pros/obligation/${s.isin}`}
+                href={`/pros${bondHref(s)}`}
                 className="flex items-center justify-between px-4 py-2.5 hover:bg-slate-800/40 transition text-sm"
               >
                 <div className="min-w-0">

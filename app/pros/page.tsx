@@ -21,6 +21,7 @@ import {
 } from "@/lib/tauxLoader";
 import { computeFxStats } from "@/lib/fx";
 import { pageMetadata } from "@/lib/seo";
+import { bondHref } from "@/lib/listedBondsTypes";
 
 export const metadata = pageMetadata({
   title: "Tableau de bord — Pro Terminal",
@@ -323,7 +324,7 @@ export default async function ProDashboard() {
                       return (
                         <li key={`${e.isin}-${e.date}-${idx}`} className="flex items-center justify-between gap-2">
                           <Link
-                            href={`/obligation/${e.isin}`}
+                            href={bondHref(bond ?? { isin: e.isin })}
                             className="truncate text-slate-300 hover:text-blue-300 min-w-0"
                           >
                             {bond?.name || e.isin}

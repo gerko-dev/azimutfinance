@@ -16,6 +16,7 @@ import { ResponsiveContainer } from "@/components/ui/ChartContainer";
 import CountryFlag from "../CountryFlag";
 import LivePriceBadge from "../LivePriceBadge";
 import type { MarketStats } from "@/lib/listedBondsTypes";
+import { bondHref } from "@/lib/listedBondsTypes";
 
 // ============================================================================
 // TYPES
@@ -650,7 +651,7 @@ export default function ObligationsProView({
                   >
                     <td className="px-3 py-2.5">
                       <Link
-                        href={`/pros/obligation/${b.isin}`}
+                        href={`/pros${bondHref(b)}`}
                         className="flex items-center gap-1.5 group"
                       >
                         {b.greenBond && (

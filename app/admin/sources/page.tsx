@@ -1,4 +1,5 @@
 import { requireAdmin } from "@/lib/admin/auth";
+import { checkListedBondsVsBoc } from "@/lib/dataLoader";
 
 export const dynamic = "force-dynamic";
 
@@ -8,6 +9,7 @@ export const metadata = {
 
 export default async function SourcesPage() {
   await requireAdmin(1);
+  const bocCheck = checkListedBondsVsBoc();
 
   return (
     <div className="space-y-6">
@@ -22,6 +24,71 @@ export default async function SourcesPage() {
           reste — sources tierces, scrapers, formules — est documenté ici pour le super-admin.
         </p>
       </div>
+
+      {/* =====================================================================
+          0. COHERENCE REFERENTIEL OBLIGATAIRE <-> BOC
+          Rapprochement quotidien, sans telechargement : data/obligations-
+          cotees-vn-boc.csv est produit chaque soir par scrape_brvm_boc.py, et
+          y figurer signifie "cotee au BOC de cette date".
+      ===================================================================== */}
+      <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-5">
+        <div className="flex items-baseline justify-between flex-wrap gap-2 mb-1">
+          <h2 className="text-base font-semibold text-slate-900">
+            Cohérence référentiel obligataire ↔ BOC
+          </h2>
+          <span className="text-xs text-slate-500">
+            BOC du {bocCheck.bocDate ?? "—"} · {bocCheck.quotedCount} cotées ·{" "}
+            {bocCheck.baseCount} en base
+          </span>
+        </div>
+
+        {bocCheck.maturedButQuoted.length > 0 ? (
+          <div className="mt-3 rounded-md border border-rose-200 bg-rose-50 p-3">
+            <div className="text-sm font-medium text-rose-800">
+              {bocCheck.maturedButQuoted.length} obligation
+              {bocCheck.maturedButQuoted.length > 1 ? "s" : ""} déclarée
+              {bocCheck.maturedButQuoted.length > 1 ? "s" : ""} échue
+              {bocCheck.maturedButQuoted.length > 1 ? "s" : ""} mais toujours cotée
+              {bocCheck.maturedButQuoted.length > 1 ? "s" : ""} au BOC
+            </div>
+            <p className="text-xs text-rose-700 mt-1">
+              La BRVM ne cote pas une ligne remboursée : la date d&apos;échéance
+              du référentiel est donc fausse. Corriger{" "}
+              <code>data/obligations-cotees.csv</code>.
+            </p>
+            <ul className="mt-2 space-y-1">
+              {bocCheck.maturedButQuoted.map((b) => (
+                <li key={b.code} className="text-xs text-rose-900">
+                  <code className="font-mono">{b.code}</code> — échéance saisie{" "}
+                  {b.maturityDate} — {b.name}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <p className="mt-3 text-xs text-slate-500">
+            Aucune obligation échue en base n&apos;est encore cotée au BOC.
+          </p>
+        )}
+
+        {bocCheck.quotedButMissing.length > 0 && (
+          <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3">
+            <div className="text-sm font-medium text-amber-800">
+              {bocCheck.quotedButMissing.length} obligation
+              {bocCheck.quotedButMissing.length > 1 ? "s" : ""} cotée
+              {bocCheck.quotedButMissing.length > 1 ? "s" : ""} au BOC, absente
+              {bocCheck.quotedButMissing.length > 1 ? "s" : ""} du référentiel
+            </div>
+            <p className="text-xs text-amber-700 mt-1">
+              Nouvelles émissions à saisir — aucun script ne crée de ligne
+              automatiquement.
+            </p>
+            <p className="mt-2 text-xs font-mono text-amber-900">
+              {bocCheck.quotedButMissing.join(" · ")}
+            </p>
+          </div>
+        )}
+      </section>
 
       {/* =====================================================================
           1. INSTITUTIONS OFFICIELLES (visibles dans l'UI publique)

@@ -15,6 +15,50 @@ export type AmortizationType = "IF" | "AC" | "ACD";
  */
 export type AmortizationMode = "T" | "N";
 
+/**
+ * Une obligation est echue quand sa date de maturite est passee. On le derive
+ * de `maturityDate` plutot que d'ajouter une colonne au CSV : la donnee est
+ * deja la, toujours juste, et aucune maintenance n'est requise le jour du
+ * remboursement.
+ *
+ * Le referentiel conserve volontairement les lignes echues — historique des
+ * prix, evenements passes, portefeuilles anterieurs y renvoient. Elles doivent
+ * donc rester accessibles, mais clairement signalees : au 05/09/2026, 11 des
+ * 216 lignes sont remboursees, dont TPCI.O29 depuis 139 jours.
+ */
+export function isBondMatured(
+  bond: { maturityDate?: string | null },
+  asOf: Date = new Date(),
+): boolean {
+  if (!bond.maturityDate) return false;
+  const t = Date.parse(bond.maturityDate);
+  return Number.isFinite(t) && t < asOf.getTime();
+}
+
+/**
+ * URL canonique de la fiche d'une obligation cotee.
+ *
+ * On route par MNEMONIQUE et non par ISIN. L'ISIN n'est pas une cle fiable
+ * dans obligations-cotees.csv : quatre lignes portent la sentinelle "NC"
+ * (FDFINBF.O3, FEPTC.O4, FEPTC.O5, FEPTC.O6), faute d'ISIN publie. Router par
+ * ISIN les faisait toutes pointer vers /obligation/NC, donc afficher la meme
+ * fiche, et le sitemap declarait quatre fois la meme adresse.
+ *
+ * Le mnemonique, lui, est unique sur les 216 lignes du referentiel et sert
+ * deja de cle dans le BOC. La route /obligation/[isin] accepte les deux
+ * formes, l'ancien lien par ISIN reste donc valide.
+ *
+ * Repli sur l'ISIN si le mnemonique manque, pour ne jamais produire une URL
+ * vide.
+ */
+export function bondHref(bond: {
+  code?: string | null;
+  isin?: string | null;
+}): string {
+  const key = (bond.code || "").trim() || (bond.isin || "").trim();
+  return `/obligation/${encodeURIComponent(key)}`;
+}
+
 export type ListedBond = {
   isin: string;
   code: string;
@@ -72,7 +116,10 @@ export type ListedBondEvent = {
 };
 
 export type MarketStats = {
+  /** Nombre d'obligations ACTIVES (echues exclues). */
   totalBonds: number;
+  /** Nombre de lignes echues, conservees au referentiel mais hors agregats. */
+  maturedBonds: number;
   totalOutstanding: number;
   weightedYield: number;
   averageDuration: number;

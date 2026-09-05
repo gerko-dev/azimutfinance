@@ -13,6 +13,7 @@ import {
   buildTheoreticalPriceHistory,
   calculateSignatureSpread,
   getBondYTMFromLatest,
+  bondHref,
 } from "@/lib/listedBondsTypes";
 import {
   getBrvmBondQuote,
@@ -41,7 +42,7 @@ export async function generateMetadata({
   return pageMetadata({
     title: `${bond.name} (${bond.isin}) — Obligation cotée BRVM`,
     description: `Fiche obligation ${bond.name} émise par ${bond.issuer} — ${bond.country} : cotation BRVM, rendement à maturité, prix théorique, échéancier d'amortissement et événements.`,
-    path: `/obligation/${bond.isin}`,
+    path: bondHref(bond),
   });
 }
 

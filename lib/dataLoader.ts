@@ -287,7 +287,10 @@ import type {
   MarketStats,
   BocSynthese,
 } from "./listedBondsTypes";
-import { computeCurrentNominalPerTitre } from "./listedBondsTypes";
+import {
+  computeCurrentNominalPerTitre,
+  isBondMatured,
+} from "./listedBondsTypes";
 
 type ListedBondCSVRow = {
   isin: string;
@@ -372,6 +375,68 @@ function normalizeAmortizationType(value: string): "IF" | "AC" | "ACD" {
 }
 
 type BocVnRow = { code: string; valeurNominale: string; bocDate: string };
+
+export type ListedBondsBocCheck = {
+  /** Date du BOC de reference (celle portee par le CSV de VN). */
+  bocDate: string | null;
+  quotedCount: number;
+  baseCount: number;
+  /**
+   * Lignes que la base declare echues alors que le BOC les cote encore.
+   * C'est un detecteur d'erreur de saisie sur `maturityDate` : la BRVM ne cote
+   * pas une obligation remboursee, donc toute divergence vient de la base.
+   * Cas rencontre : TPCI.O29, saisi 19/04/2026 au lieu de 19/10/2026 — six
+   * mois d'ecart sur l'emission ET l'echeance.
+   */
+  maturedButQuoted: { code: string; name: string; maturityDate: string }[];
+  /** Cotees au BOC mais absentes du referentiel : nouvelles emissions a saisir. */
+  quotedButMissing: string[];
+};
+
+/**
+ * Rapproche le referentiel obligataire du dernier BOC.
+ *
+ * S'appuie sur data/obligations-cotees-vn-boc.csv, produit chaque soir par
+ * scripts/scrape_brvm_boc.py : y figurer signifie "cotee au BOC de cette date".
+ * Aucun telechargement supplementaire n'est donc necessaire.
+ */
+export function checkListedBondsVsBoc(
+  asOf: Date = new Date(),
+): ListedBondsBocCheck {
+  const bonds = loadListedBonds();
+  const quoted = new Set<string>();
+  let bocDate: string | null = null;
+  try {
+    for (const r of parseCSV<BocVnRow>("obligations-cotees-vn-boc.csv")) {
+      const code = r.code?.trim();
+      if (code) quoted.add(code.toUpperCase());
+      const d = r.bocDate?.trim();
+      if (d && (!bocDate || d > bocDate)) bocDate = d;
+    }
+  } catch {
+    // fichier absent ou illisible : on renvoie un constat vide plutot qu'une erreur
+  }
+
+  const byCode = new Set(bonds.map((b) => b.code.trim().toUpperCase()));
+
+  return {
+    bocDate,
+    quotedCount: quoted.size,
+    baseCount: bonds.length,
+    maturedButQuoted: bonds
+      .filter(
+        (b) =>
+          isBondMatured(b, asOf) && quoted.has(b.code.trim().toUpperCase()),
+      )
+      .map((b) => ({
+        code: b.code,
+        name: b.name,
+        maturityDate: b.maturityDate,
+      }))
+      .sort((a, b) => a.maturityDate.localeCompare(b.maturityDate)),
+    quotedButMissing: [...quoted].filter((c) => !byCode.has(c)).sort(),
+  };
+}
 
 /** VN scrapees du BOC officiel BRVM (cf. scripts/scrape_brvm_boc.py).
  *  Memoize : le fichier ne change qu'une fois par jour apres scrape. */
@@ -536,32 +601,46 @@ export function loadBocSynthese(): BocSynthese | null {
   return null;
 }
 
+/**
+ * KPIs du marche obligataire cote — RESTREINTS aux lignes ACTIVES.
+ *
+ * Les obligations echues restent au referentiel (historique de prix,
+ * evenements, portefeuilles anterieurs y renvoient) mais fausseraient les
+ * agregats : au 05/09/2026, 11 lignes remboursees portaient encore
+ * 148,6 Mds FCFA d'encours theorique, et leur `yearsToMaturity` NEGATIVE
+ * tirait la duree moyenne vers le bas (5,41 ans au lieu de 5,47).
+ *
+ * Meme parti pris que getSovereignMarketStats pour les souverains non cotes.
+ */
 export function getMarketStats(bonds: ListedBond[]): MarketStats {
-  const totalBonds = bonds.length;
-  const totalOutstanding = bonds.reduce((sum, b) => sum + b.outstanding, 0);
+  const actifs = bonds.filter((b) => !isBondMatured(b));
+  const totalBonds = actifs.length;
+  const maturedBonds = bonds.length - actifs.length;
+  const totalOutstanding = actifs.reduce((sum, b) => sum + b.outstanding, 0);
   const weightedYield =
     totalOutstanding > 0
-      ? bonds.reduce((sum, b) => sum + b.couponRate * b.outstanding, 0) /
+      ? actifs.reduce((sum, b) => sum + b.couponRate * b.outstanding, 0) /
         totalOutstanding
       : 0;
   const averageDuration =
     totalOutstanding > 0
-      ? bonds.reduce((sum, b) => sum + b.yearsToMaturity * b.outstanding, 0) /
+      ? actifs.reduce((sum, b) => sum + b.yearsToMaturity * b.outstanding, 0) /
         totalOutstanding
       : 0;
 
-  const byCountry = bonds.reduce((acc, b) => {
+  const byCountry = actifs.reduce((acc, b) => {
     acc[b.country] = (acc[b.country] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
 
-  const byType = bonds.reduce((acc, b) => {
+  const byType = actifs.reduce((acc, b) => {
     acc[b.issuerType] = (acc[b.issuerType] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
 
   return {
     totalBonds,
+    maturedBonds,
     totalOutstanding,
     weightedYield,
     averageDuration,

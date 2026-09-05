@@ -36,6 +36,7 @@ import ProDividendsTab from "./tabs/ProDividendsTab";
 import ProHistoryTab from "./tabs/ProHistoryTab";
 import ProStatsTab from "./tabs/ProStatsTab";
 import ProFundamentalsTab from "./tabs/ProFundamentalsTab";
+import { bondHref } from "@/lib/listedBondsTypes";
 
 type ProTab =
   | "overview"
@@ -1024,7 +1025,7 @@ function IssuerBondsTable({ bonds }: { bonds: ListedBond[] }) {
           <tr key={b.isin} className="border-b border-slate-800 last:border-0 hover:bg-slate-800/30">
             <td className="px-3 py-1.5">
               <Link
-                href={`/obligation/${b.isin}`}
+                href={bondHref(b)}
                 className="font-mono text-slate-200 hover:text-blue-300"
               >
                 {b.isin}

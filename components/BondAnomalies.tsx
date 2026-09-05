@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import type { ListedBond, ListedBondPrice } from "@/lib/listedBondsTypes";
 import { getBondYTMFromLatest } from "@/lib/listedBondsTypes";
+import { bondHref } from "@/lib/listedBondsTypes";
 
 type EnrichedBond = ListedBond & {
   ytm: number;
@@ -244,7 +245,7 @@ export default function BondAnomalies({ bonds, prices, limit = null }: Props) {
           {filteredAnomalies.map((a, i) => (
             <Link
               key={i}
-              href={`/obligation/${a.bond.isin}`}
+              href={bondHref(a.bond)}
               className={`block p-3 rounded-md border text-sm hover:shadow-sm transition ${
                 a.severity === "watch_high"
                   ? "bg-blue-50 border-blue-200 hover:border-blue-300"

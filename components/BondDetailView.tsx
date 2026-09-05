@@ -31,6 +31,7 @@ import CountryFlag from "./CountryFlag";
 import LivePriceBadge from "./LivePriceBadge";
 import MemberGateDialog from "./MemberGateDialog";
 import AddToWatchlistButton from "./watchlist/AddToWatchlistButton";
+import { bondHref, isBondMatured } from "@/lib/listedBondsTypes";
 
 // === HELPERS DE FORMATAGE ===
 function formatFCFA(value: number): string {
@@ -177,6 +178,7 @@ export default function BondDetailView({
   userRole,
 }: Props) {
   const isMember = userRole !== null;
+  const matured = isBondMatured(bond);
   const isPremium = userRole === "premium" || userRole === "pro";
   const isPro = userRole === "pro";
   const [premiumGateOpen, setPremiumGateOpen] = useState(false);
@@ -696,6 +698,20 @@ export default function BondDetailView({
       <div className="bg-white border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 md:px-6 pt-4 md:pt-5">
           <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4 mb-4">
+            {/* Une obligation remboursee reste consultable : historique de prix,
+                evenements passes et portefeuilles anterieurs y renvoient. Mais
+                rien ne le signalait, et ses indicateurs vivants (rendement,
+                prix theorique, duree residuelle) n'ont plus de sens. */}
+            {matured && (
+              <div className="mb-4 rounded-md border border-slate-300 bg-slate-100 px-4 py-3 text-sm text-slate-700">
+                <b>Obligation échue.</b> Elle est arrivée à maturité le{" "}
+                {formatDate(bond.maturityDate)} et a été remboursée. Cette fiche
+                reste accessible pour son historique ; le rendement, le prix
+                théorique et la durée résiduelle affichés ci-dessous ne sont plus
+                d&apos;actualité.
+              </div>
+            )}
+
             <div className="flex gap-4 items-start">
               <div className="mt-1">
                 <CountryFlag country={bond.country} size={28} />
@@ -716,6 +732,11 @@ export default function BondDetailView({
                   {bond.callable && (
                     <span className="text-xs px-2 py-0.5 bg-amber-100 text-amber-700 rounded font-medium">
                       📞 Callable
+                    </span>
+                  )}
+                  {matured && (
+                    <span className="text-xs px-2 py-0.5 bg-slate-700 text-white rounded font-medium">
+                      Échue
                     </span>
                   )}
                 </div>
@@ -1772,7 +1793,7 @@ export default function BondDetailView({
                     {similarBonds.map((b) => (
                       <Link
                         key={b.isin}
-                        href={`/obligation/${b.isin}`}
+                        href={bondHref(b)}
                         className="block p-2.5 rounded-md border border-slate-200 hover:border-blue-300 hover:bg-blue-50/30 transition"
                       >
                         <div className="text-sm font-medium truncate">{b.name}</div>
