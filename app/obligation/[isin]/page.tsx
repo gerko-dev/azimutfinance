@@ -66,7 +66,8 @@ export default async function Page({
   const allPrices = loadListedBondPrices();
   const priceHistory = allPrices.filter((p) => p.isin === isinUpper);
 
-  const events = loadListedBondEvents().filter((e) => e.isin === isinUpper);
+  // Filtrage sur le MNEMONIQUE : quatre lignes partagent l'ISIN "NC".
+  const events = loadListedBondEvents().filter((e) => e.code === bond.code);
 
   // Cours en direct depuis BRVM (cache 5 min, mise a jour BRVM toutes les 15 min).
   // Le code mnemonique BRVM matche le champ `code` du CSV (ex "EOM.O10").

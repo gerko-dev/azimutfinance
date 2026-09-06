@@ -31,10 +31,10 @@ export default async function Page() {
         <BondsPaywallSection
           breadcrumb="Courbe des taux"
           title="Courbe des taux BRVM"
-          description="YTM actuariel par durée résiduelle, droite de régression calibrée sur la base de votre choix : États UEMOA, marché global, par pays ou par type d'émetteur."
+          description="YTM actuariel par durée résiduelle, avec un repère de groupe calibré sur la base de votre choix : États UEMOA, marché global, par pays ou par type d'émetteur."
           features={[
             "YTM actuariel pour chaque obligation cotée",
-            "Régression calibrable : États UEMOA, marché global, par pays ou type",
+            "Repère calibrable : États UEMOA, marché global, par pays ou type",
             "Filtrage par pays et type pour comparer signatures",
             "Mise à jour automatique avec les cours BRVM scrapés à la clôture",
           ]}
@@ -87,8 +87,8 @@ export default async function Page() {
             Courbe des taux BRVM
           </h1>
           <p className="text-sm md:text-base text-slate-300 max-w-3xl">
-            YTM actuariel par durée résiduelle. La régression vous permet de
-            visualiser la prime des signatures privées par rapport aux courbes
+            YTM actuariel par durée résiduelle. Le repère de groupe vous
+            permet de situer la prime des signatures privées par rapport aux
             souveraines de référence.
           </p>
         </div>

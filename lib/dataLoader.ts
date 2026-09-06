@@ -493,9 +493,58 @@ function loadBocNominalValues(): Map<string, number> {
   return m;
 }
 
+type AmortScheduleRow = {
+  code: string;
+  date: string;
+  nominalApres: string;
+};
+
+let _amortSchedCache: Map<string, { date: string; nominalApres: number }[]> | null =
+  null;
+
+/**
+ * Echeanciers d'amortissement SAISIS depuis les notices d'emission, pour les
+ * titres dont le profil ne se deduit d'aucune formule (degressif, tranches
+ * inegales). Cle = mnemonique et non ISIN : quatre lignes du referentiel
+ * partagent l'ISIN "NC".
+ */
+function loadAmortizationSchedules(): Map<
+  string,
+  { date: string; nominalApres: number }[]
+> {
+  if (_amortSchedCache) return _amortSchedCache;
+  const m = new Map<string, { date: string; nominalApres: number }[]>();
+  const filePath = join(DATA_DIR, "obligations-cotees-amortissements.csv");
+  if (!existsSync(filePath)) {
+    _amortSchedCache = m;
+    return m;
+  }
+  try {
+    for (const r of parseCSV<AmortScheduleRow>(
+      "obligations-cotees-amortissements.csv",
+    )) {
+      const code = r.code?.trim();
+      const date = normalizeDateISO(r.date);
+      if (!code || !date) continue;
+      const nominalApres = parseNum(r.nominalApres, -1);
+      if (nominalApres < 0) continue;
+      const arr = m.get(code) ?? [];
+      arr.push({ date, nominalApres });
+      m.set(code, arr);
+    }
+    for (const arr of m.values())
+      arr.sort((a, b) => a.date.localeCompare(b.date));
+  } catch {
+    // pas grave : on retombe sur le bareme calcule
+  }
+  _amortSchedCache = m;
+  return m;
+}
+
 export function loadListedBonds(): ListedBond[] {
   const rows = parseCSV<ListedBondCSVRow>("obligations-cotees.csv");
   const bocVn = loadBocNominalValues();
+  const amortSchedules = loadAmortizationSchedules();
   return rows
     .filter((r) => r.isin?.trim())
     .map((r) => {
@@ -514,7 +563,26 @@ export function loadListedBonds(): ListedBond[] {
     // Sinon fallback sur le calcul auto depuis les dates + mode + INITIAL=10 000.
     // La colonne `nominalValue` du CSV obligations-cotees.csv est ignoree.
     const code = r.code?.trim() || "";
+    const amortizationSchedule = amortSchedules.get(code);
+
+    // Priorite : echeancier saisi (notice d'emission) > VN relevee au BOC >
+    // calcul automatique. L'echeancier passe devant le BOC parce qu'il est
+    // date : il donne la VN a n'importe quelle date passee, la ou le BOC ne
+    // fournit qu'un instantane du jour.
+    const vnFromSchedule = amortizationSchedule?.length
+      ? (() => {
+          const todayIso = new Date().toISOString().slice(0, 10);
+          let n = 10000;
+          for (const st of amortizationSchedule) {
+            if (st.date < todayIso) n = st.nominalApres;
+            else break;
+          }
+          return n;
+        })()
+      : undefined;
+
     const nominalValue =
+      vnFromSchedule ??
       bocVn.get(code) ??
       computeCurrentNominalPerTitre({
         amortizationType,
@@ -535,6 +603,7 @@ export function loadListedBonds(): ListedBond[] {
       sector: r.sector?.trim() || "",
       currency: r.currency?.trim() || "XOF",
       nominalValue,
+      amortizationSchedule,
       totalIssued: parseNum(r.totalIssued),
       outstanding: parseNum(r.outstanding),
       couponRate: parseNum(r.couponRate) / 100,
@@ -828,6 +897,119 @@ export function loadUmoaEmissions(): import("./listedBondsTypes").EmissionUMOA[]
     });
 
   return _emissionsCache;
+}
+
+// === UMOA-Titres : COURBES DE TAUX ZERO-COUPON ===
+//
+// Produites hors ligne par scripts/build_umoa_yield_curves.py, qui applique la
+// note de l'Agence UMOA-Titres (positionnement par duree de vie moyenne,
+// conversion post-comptee des BAT, demembrement des OAT, lissage
+// Nelson-Siegel-Svensson). Le calcul reste hors du rendu : le demembrement et
+// le balayage de tau1 sont trop lourds pour etre refaits a chaque requete.
+export type PilierCourbeUMOA = {
+  /** Maturite du pilier, en annees. */
+  t: number;
+  /** Libelle au format de la grille publiee : « 3 mois », « 5 ans ». */
+  label: string;
+  /** Taux zero-coupon extrait des adjudications, en pourcentage. */
+  zc: number;
+  /** Meme pilier apres lissage par la fonctionnelle, en pourcentage. */
+  lisse: number;
+  /** « BAT », « OAT », « OAT (rendement) » ou « interpolé ». */
+  source: string;
+};
+
+export type CourbeUMOA = {
+  pays: string;
+  /** Date de l'adjudication la plus recente ayant nourri la courbe. */
+  dateReference: string;
+  piliers: PilierCourbeUMOA[];
+  /** Parametres de la fonctionnelle, pour retracer la courbe continue. */
+  beta: [number, number, number, number];
+  tau1: number;
+  tau2: number;
+  /** Ecart-type des residus du lissage, en points de base. */
+  residuPb: number;
+};
+
+let _courbesUmoaCache: Record<string, CourbeUMOA> | null = null;
+
+export function loadUmoaCourbesTaux(): Record<string, CourbeUMOA> {
+  if (_courbesUmoaCache !== null) return _courbesUmoaCache;
+
+  type Row = {
+    pays: string;
+    dateReference: string;
+    maturiteAnnees: string;
+    maturiteLibelle: string;
+    zeroCoupon: string;
+    apresLissage: string;
+    source: string;
+    beta0: string;
+    beta1: string;
+    beta2: string;
+    beta3: string;
+    tau1: string;
+    tau2: string;
+    residuPb: string;
+  };
+
+  const out: Record<string, CourbeUMOA> = {};
+  for (const r of parseCSV<Row>("umoa-courbes-taux.csv", ";")) {
+    const pays = (r.pays || "").trim();
+    // parseNumOrNull et non parseNum : ce dernier retombe sur 0 en cas
+    // d'echec, ce qui ferait entrer une ligne illisible comme un pilier a
+    // 0 an et 0 % au lieu de l'ecarter.
+    const t = parseNumOrNull(r.maturiteAnnees);
+    const zc = parseNumOrNull(r.zeroCoupon);
+    const lisse = parseNumOrNull(r.apresLissage);
+    if (!pays || t === null || !(t > 0) || zc === null || lisse === null)
+      continue;
+
+    if (!out[pays]) {
+      out[pays] = {
+        pays,
+        dateReference: (r.dateReference || "").trim(),
+        piliers: [],
+        beta: [
+          parseNum(r.beta0),
+          parseNum(r.beta1),
+          parseNum(r.beta2),
+          parseNum(r.beta3),
+        ],
+        // Defauts non nuls : un tau a zero ferait diverger la fonctionnelle.
+        tau1: parseNum(r.tau1, 1),
+        tau2: parseNum(r.tau2, 3),
+        residuPb: parseNum(r.residuPb),
+      };
+    }
+    out[pays].piliers.push({
+      t,
+      label: (r.maturiteLibelle || "").trim(),
+      // Le fichier porte des taux decimaux, l'interface raisonne en points de
+      // pourcentage comme partout ailleurs sur le site.
+      zc: zc * 100,
+      lisse: lisse * 100,
+      source: (r.source || "").trim(),
+    });
+  }
+
+  for (const c of Object.values(out)) c.piliers.sort((a, b) => a.t - b.t);
+
+  _courbesUmoaCache = out;
+  return _courbesUmoaCache;
+}
+
+/** Fonctionnelle de Nelson-Siegel-Svensson evaluee en t (annees), en %. */
+export function evalueCourbeUMOA(courbe: CourbeUMOA, t: number): number {
+  if (!(t > 0)) return courbe.beta[0] * 100;
+  const x1 = t / courbe.tau1;
+  const x2 = t / courbe.tau2;
+  const f1 = x1 < 1e-8 ? 1 : (1 - Math.exp(-x1)) / x1;
+  const f2 = f1 - Math.exp(-x1);
+  const g = x2 < 1e-8 ? 1 : (1 - Math.exp(-x2)) / x2;
+  const [b0, b1, b2, b3] = courbe.beta;
+  return (b0 + b1 * f1 + b2 * f2 + b3 * (g - Math.exp(-x2))) * 100;
 }
 
 // === UMOA-Titres : Emissions A VENIR (calendrier 30 jours environ) ===

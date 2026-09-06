@@ -52,13 +52,11 @@ function KpiCard({
   label,
   value,
   sub,
-  icon,
   accent,
 }: {
   label: string;
   value: string | number;
   sub: string;
-  icon: string;
   accent: KpiAccent;
 }) {
   const a = KPI_ACCENT[accent];
@@ -68,15 +66,7 @@ function KpiCard({
         className={`absolute left-0 top-0 bottom-0 w-1 ${a.bar}`}
         aria-hidden
       />
-      <div className="flex items-center gap-2 mb-1">
-        <span
-          className={`flex items-center justify-center w-6 h-6 rounded-md text-sm ${a.chip}`}
-          aria-hidden
-        >
-          {icon}
-        </span>
-        <div className="text-xs text-slate-500">{label}</div>
-      </div>
+      <div className="text-xs text-slate-500 mb-1">{label}</div>
       <div className="text-2xl md:text-3xl font-semibold text-slate-900 tabular-nums">
         {value}
       </div>
@@ -377,42 +367,36 @@ export default function ListedBondsView({
             return (
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4 mt-6">
                 <KpiCard
-                  icon="📋"
                   accent="blue"
                   label="Obligations cotées"
                   value={bondsCountValue}
                   sub={boc?.bondsCount != null ? bocDateSub! : "sur la BRVM"}
                 />
                 <KpiCard
-                  icon="💼"
                   accent="amber"
                   label="Encours total"
                   value={formatBigFCFA(encoursValue)}
                   sub={bocDateSub ?? "tous émetteurs"}
                 />
                 <KpiCard
-                  icon="💰"
                   accent="emerald"
                   label="Coupon moyen"
                   value={`${(stats.weightedYield * 100).toFixed(2)}%`}
                   sub="moyenne pondérée"
                 />
                 <KpiCard
-                  icon="⏱️"
                   accent="violet"
                   label="Durée moyenne"
                   value={`${stats.averageDuration.toFixed(1)} ans`}
                   sub="moyenne pondérée"
                 />
                 <KpiCard
-                  icon="📊"
                   accent="indigo"
                   label="Volume échangé"
                   value={boc ? formatFCFA(boc.volumeEchange) : "—"}
                   sub={bocDateSub ?? "—"}
                 />
                 <KpiCard
-                  icon="💸"
                   accent="rose"
                   label="Valeur transigée"
                   value={boc ? formatBigFCFA(boc.valeurTransigee) : "—"}

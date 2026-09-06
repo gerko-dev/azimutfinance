@@ -55,7 +55,8 @@ export default async function BondProPage({
   const observedPrices = loadListedBondPrices()
     .filter((p) => p.isin === isinUpper)
     .sort((a, b) => a.date.localeCompare(b.date));
-  const events = loadListedBondEvents().filter((e) => e.isin === isinUpper);
+  // Filtrage sur le MNEMONIQUE : quatre lignes partagent l'ISIN "NC".
+  const events = loadListedBondEvents().filter((e) => e.code === bond.code);
   const emissions = loadUmoaEmissions();
 
   const [liveQuote, brvmSnapshot] = await Promise.all([

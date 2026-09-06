@@ -4,7 +4,7 @@ import Link from "next/link";
 import BondAnomalies from "@/components/BondAnomalies";
 import BondsPaywallSection from "@/components/BondsPaywallSection";
 import BondsRelatedLinks from "@/components/BondsRelatedLinks";
-import { loadListedBonds } from "@/lib/dataLoader";
+import { loadListedBonds, loadListedBondPrices } from "@/lib/dataLoader";
 import { getBrvmBondsSnapshot } from "@/lib/brvm/liveBonds";
 import { fetchUserRole } from "@/lib/auth/userRole";
 import type { ListedBondPrice } from "@/lib/listedBondsTypes";
@@ -44,18 +44,33 @@ export default async function Page() {
   }
 
   const bonds = loadListedBonds().filter((b) => b.yearsToMaturity > 0);
+
+  // Le detecteur a besoin d'un PRIX pour chaque ligne : sans lui,
+  // getBondYTMFromLatest retombe sur le taux de coupon et l'outil compare des
+  // caracteristiques d'emission au lieu de rendements de marche. Le snapshot
+  // live seul ne suffit pas — il revient parfois vide hors seance. On part
+  // donc de l'historique BOC, et le live ne fait que rafraichir ce qu'il
+  // couvre. On ne transmet qu'une ligne par titre : passer les 31 000
+  // cotations au composant client alourdirait la page pour rien.
+  const derniere = new Map<string, ListedBondPrice>();
+  for (const p of loadListedBondPrices()) {
+    const cur = derniere.get(p.isin);
+    if (!cur || p.date > cur.date) derniere.set(p.isin, p);
+  }
+
   const brvmSnapshot = await getBrvmBondsSnapshot();
   const liveDate = brvmSnapshot.fetchedAt.slice(0, 10);
   const codeToIsin = new Map<string, string>();
   for (const b of bonds) {
     if (b.code) codeToIsin.set(b.code.toUpperCase(), b.isin);
   }
-  const prices: ListedBondPrice[] = [];
   for (const q of brvmSnapshot.quotes) {
     const isin = codeToIsin.get(q.code);
     if (!isin) continue;
-    if (!Number.isFinite(q.currentPrice)) continue;
-    prices.push({
+    if (!Number.isFinite(q.currentPrice) || q.currentPrice <= 0) continue;
+    const cur = derniere.get(isin);
+    if (cur && cur.date > liveDate) continue;
+    derniere.set(isin, {
       isin,
       date: liveDate,
       cleanPrice: q.currentPrice,
@@ -64,6 +79,8 @@ export default async function Page() {
       valeurTransigee: 0,
     });
   }
+
+  const prices: ListedBondPrice[] = Array.from(derniere.values());
 
   return (
     <div className="min-h-screen bg-slate-50">

@@ -1,16 +1,19 @@
 import Header from "@/components/Header";
-import Link from "next/link";
 import Ticker from "@/components/Ticker";
+import Link from "next/link";
 import BondsEventsCalendar from "@/components/BondsEventsCalendar";
 import BondsPaywallSection from "@/components/BondsPaywallSection";
-import BondsRelatedLinks from "@/components/BondsRelatedLinks";
-import { loadListedBonds, loadListedBondEvents } from "@/lib/dataLoader";
+import { loadUmoaEmissions } from "@/lib/dataLoader";
+import {
+  aggregateSovereignBonds,
+  buildSovereignEvents,
+} from "@/lib/listedBondsTypes";
 import { fetchUserRole } from "@/lib/auth/userRole";
 import { pageMetadata } from "@/lib/seo";
 
 export const metadata = pageMetadata({
-  title: "Calendrier obligataire BRVM — AzimutFinance",
-  path: "/marches/obligations/calendrier",
+  title: "Calendrier obligataire souverain — AzimutFinance",
+  path: "/marches/souverains-non-cotes/calendrier",
 });
 
 export const dynamic = "force-dynamic";
@@ -27,13 +30,13 @@ export default async function Page() {
         <Ticker />
         <BondsPaywallSection
           breadcrumb="Calendrier"
-          title="Calendrier obligataire BRVM"
-          description="12 mois de coupons, amortissements et remboursements à venir, planifiés pour vos arbitrages de portefeuille."
+          title="Calendrier obligataire souverain"
+          description="12 mois de coupons, amortissements et remboursements des titres souverains UMOA-Titres, pour préparer vos échéances de trésorerie."
           features={[
-            "Coupons projetés par obligation sur 12 mois glissants",
-            "Amortissements partiels (IF / AC / ACD) et remboursement final",
-            "Calls anticipés et adjudications souveraines",
-            "Liens directs vers la fiche de chaque obligation",
+            "Coupons annuels projetés sur le capital restant dû",
+            "Amortissements linéaires, différé d'amortissement pris en compte",
+            "Remboursement final des OAT et échéance des BAT",
+            "Liens directs vers la fiche de chaque ligne souveraine",
           ]}
           isMember={isMember}
         />
@@ -41,13 +44,9 @@ export default async function Page() {
     );
   }
 
-  const bonds = loadListedBonds();
-  const allEvents = loadListedBondEvents();
-
-  // Fenetre transmise : 90 jours en arriere → +365 jours. Le passe n'est pas
-  // affiche par defaut ; il est envoye pour que le bouton "Inclure le passe
-  // recent" n'ait pas a recharger la page. 90 jours couvrent un trimestre de
-  // coupons, ce qu'un gerant relit couramment, sans alourdir la charge utile.
+  // Meme fenetre que le calendrier des obligations cotees : 90 jours en
+  // arriere pour alimenter le bouton "Inclure le passe recent" sans recharger,
+  // et 12 mois en avant.
   const now = new Date();
   const today = new Date(now);
   today.setHours(0, 0, 0, 0);
@@ -60,16 +59,19 @@ export default async function Page() {
   const startISO = toISO(past);
   const endISO = toISO(end);
 
-  const events = allEvents
-    .filter((e) => e.date >= startISO && e.date <= endISO)
-    .sort((a, b) => a.date.localeCompare(b.date));
+  // L'echeancier souverain n'est pas saisi : il se deduit des caracteristiques
+  // d'emission (coupon annuel sur capital restant du, amortissement lineaire
+  // avec differe, ou in fine).
+  const { bonds, events } = buildSovereignEvents(
+    aggregateSovereignBonds(loadUmoaEmissions()),
+    startISO,
+    endISO,
+  );
 
   return (
     <div className="min-h-screen bg-slate-50">
       <Header />
       <Ticker />
-      {/* Le titre appartient a la page : le calendrier sert aussi le gisement
-          souverain, qui a son propre en-tete. */}
       <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-b border-slate-800">
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10">
           <div className="text-xs md:text-sm text-slate-400 mb-2">
@@ -78,24 +80,25 @@ export default async function Page() {
             </Link>
             <span className="mx-2 text-slate-500">›</span>
             <Link
-              href="/marches/obligations"
+              href="/marches/souverains-non-cotes"
               className="hover:text-white transition"
             >
-              Obligations cotées
+              Souverains UMOA-Titres
             </Link>
             <span className="mx-2 text-slate-500">›</span>
             <span className="text-slate-200">Calendrier obligataire</span>
           </div>
           <h1 className="text-2xl md:text-3xl font-semibold mb-2 text-white">
-            Calendrier obligataire BRVM
+            Calendrier obligataire souverain
           </h1>
           <p className="text-sm md:text-base text-slate-300 max-w-3xl">
-            Coupons, amortissements et remboursements des obligations cotées sur
-            12 mois glissants.
+            Coupons, amortissements et remboursements des titres souverains
+            UMOA-Titres sur 12 mois glissants.
             {events.length > 0 && (
               <>
                 {" "}
-                {events.length} événement{events.length > 1 ? "s" : ""}.
+                {events.length} événement{events.length > 1 ? "s" : ""} sur{" "}
+                {bonds.length} ligne{bonds.length > 1 ? "s" : ""}.
               </>
             )}
           </p>
@@ -107,10 +110,8 @@ export default async function Page() {
         startDate={startISO}
         endDate={endISO}
         todayISO={todayISO}
+        hrefBase="/souverain"
       />
-      <div className="max-w-7xl mx-auto px-4 md:px-6 pb-8 md:pb-10">
-        <BondsRelatedLinks current="calendrier" />
-      </div>
     </div>
   );
 }

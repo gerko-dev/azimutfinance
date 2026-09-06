@@ -533,7 +533,7 @@ export default function ActionsBRVMView({
         {liveIndices.length > 0 && (
           <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
             <div className="flex justify-between items-baseline flex-wrap gap-2 mb-4">
-              <h2 className="text-lg md:text-xl font-semibold">📈 Indices BRVM</h2>
+              <h2 className="text-lg md:text-xl font-semibold">Indices BRVM</h2>
               <Link
                 href="/marches/indices"
                 className="text-xs text-blue-700 hover:text-blue-900"
@@ -584,7 +584,7 @@ export default function ActionsBRVMView({
         {/* ====== TOP MOVERS ====== */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
-            <h3 className="text-base font-medium mb-3 text-green-700">🚀 Hausses du jour</h3>
+            <h3 className="text-base font-medium mb-3 text-green-700">Hausses du jour</h3>
             <div className="space-y-2">
               {topGainers.length === 0 ? (
                 <div className="text-sm text-slate-400 text-center py-4">
@@ -617,7 +617,7 @@ export default function ActionsBRVMView({
           </section>
 
           <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
-            <h3 className="text-base font-medium mb-3 text-red-700">📉 Baisses du jour</h3>
+            <h3 className="text-base font-medium mb-3 text-red-700">Baisses du jour</h3>
             <div className="space-y-2">
               {topLosers.length === 0 ? (
                 <div className="text-sm text-slate-400 text-center py-4">
@@ -657,7 +657,7 @@ export default function ActionsBRVMView({
             <div className="flex justify-between items-start flex-wrap gap-2 mb-3">
               <div>
                 <h2 className="text-lg md:text-xl font-semibold">
-                  🎯 Rendement dividende vs Volatilité
+                  Rendement dividende vs Volatilité
                 </h2>
                 <p className="text-xs md:text-sm text-slate-500 mt-1">
                   Couleur = secteur · Volatilité 12 mois (Act/252)

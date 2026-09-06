@@ -3,6 +3,10 @@
 #   - data/umoa-emissions-a-venir.csv    (prochaines emissions)
 #   - data/umoa-emissions-planifiees.csv (calendrier annuel)
 #
+# Puis reconstruit les courbes de taux zero-coupon des Etats a partir des
+# adjudications fraichement collectees :
+#   - data/umoa-courbes-taux.csv
+#
 # Cron : 2 passes par jour :
 #   - 08h00 UTC : rafraichissement matinal pour les calendriers prochaines emissions
 #   - 19h00 UTC : apres cloture des adjudications UMOA
@@ -48,6 +52,12 @@ jobs:
       - name: Scrape UMOA-Titres
         run: python scripts/scrape_umoa_emissions.py
 
+      # Les courbes derivent des adjudications : elles se reconstruisent dans
+      # la foulee, pour que le site n'ait qu'un fichier a lire au lieu de
+      # refaire le demembrement a chaque requete.
+      - name: Reconstruire les courbes de taux
+        run: python scripts/build_umoa_yield_curves.py
+
       - name: Show diff stats
         run: |
           echo "=== Files modified ==="
@@ -76,7 +86,7 @@ jobs:
           fi
           DATE_TAG=$(date -u +%Y-%m-%d)
           git commit \
-            -m "chore(data): refresh UMOA-Titres emissions ${DATE_TAG}" \
+            -m "chore(data): refresh UMOA-Titres emissions + courbes ${DATE_TAG}" \
             -m "Mise a jour automatique via GitHub Actions (workflow scrape-umoa-emissions)." \
             -m "Source : umoatitres.org, page emissions-professionnels-3."
           # Retry pour gerer les pushs concurrents avec d'autres workflows

@@ -86,6 +86,13 @@ export type ListedBond = {
   greenBond: boolean;
   description: string;
   yearsToMaturity: number;
+  /** Echeancier d'amortissement SAISI, issu de la notice d'emission.
+   *  Present uniquement pour les titres dont le profil ne se deduit d'aucune
+   *  formule — amortissement degressif, tranches inegales, remboursement
+   *  final differencie. Quand il existe, il prime sur tout calcul.
+   *  Chaque ligne = nominal restant PAR TITRE apres la tombee de cette date.
+   *  Cf. data/obligations-cotees-amortissements.csv. */
+  amortizationSchedule?: { date: string; nominalApres: number }[];
 };
 
 export type ListedBondPrice = {
@@ -102,6 +109,10 @@ export type ListedBondPrice = {
 
 export type ListedBondEvent = {
   isin: string;
+  /** Mnemonique BRVM. Indispensable pour identifier l'obligation : quatre
+   *  lignes du referentiel partagent l'ISIN "NC", et un filtrage par ISIN
+   *  leur servait l'union de leurs quatre echeanciers. */
+  code: string;
   date: string;
   /** "amortissement" = tranche intermediaire ; "remboursement" = paiement final */
   eventType:
@@ -190,10 +201,21 @@ function generateCouponDates(
 ): Date[] {
   const dates: Date[] = [];
   const monthsPerPeriod = 12 / frequency;
-  const current = new Date(maturityDate);
-  while (current.getTime() > issueDate.getTime()) {
-    dates.unshift(new Date(current));
-    current.setUTCMonth(current.getUTCMonth() - monthsPerPeriod);
+
+  // On remonte depuis l'echeance en ANCRANT le jour du mois. Un simple
+  // setUTCMonth(mois - 6) deborde des que le mois vise est plus court :
+  // partant du 31/10, JS demande un "31 avril" et rend le 1er mai — apres
+  // quoi toute la serie reste collee au 1er, et une periode-souche d'un jour
+  // apparait en tete. FCAGS.O1 y gagnait un coupon fantome de 2,06 FCFA.
+  const anchorDay = maturityDate.getUTCDate();
+  const y = maturityDate.getUTCFullYear();
+  const m0 = maturityDate.getUTCMonth();
+  for (let k = 0; k < 2000; k++) {
+    const m = m0 - monthsPerPeriod * k;
+    const lastOfMonth = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+    const d = new Date(Date.UTC(y, m, Math.min(anchorDay, lastOfMonth)));
+    if (d.getTime() <= issueDate.getTime()) break;
+    dates.unshift(d);
   }
   return dates;
 }
@@ -639,12 +661,88 @@ function daysBetweenDates(from: Date, to: Date): number {
  *  - N = nb total de dates d'amort = dates de coupon de firstAmortizationDate
  *    a maturity inclus, ecartees de 12/freq mois.
  */
+type ScheduleCashflow = {
+  date: string;
+  type: "coupon" | "amortissement" | "remboursement";
+  amount: number;
+  outstandingAfter: number;
+};
+
+/**
+ * Genere l'echeancier complet a partir de l'amortissement SAISI
+ * (bond.amortizationSchedule), sans aucune formule.
+ *
+ * Raison d'etre : certains gisements amortissent selon un plan negocie qui
+ * n'obeit a aucune regle. FBOAD.O2 retire 1 500 par titre quatre fois, puis
+ * 1 000, puis 600 cinq fois. Aucun couple (type, frequence) ne l'engendre —
+ * 10 000 / 1 500 n'est meme pas entier. On saisit donc le plan tel quel.
+ *
+ * Conventions conservees a l'identique du moteur calcule :
+ *  - coupon ACT/365 sur le capital restant du EN DEBUT de periode ;
+ *  - premiere periode comptee depuis la date d'emission ;
+ *  - "remboursement" pour le flux qui solde le titre, "amortissement" sinon.
+ */
+function cashflowsFromSchedule(bond: ListedBond): ScheduleCashflow[] {
+  const sched = [...(bond.amortizationSchedule ?? [])].sort((a, b) =>
+    a.date.localeCompare(b.date),
+  );
+  if (sched.length === 0) return [];
+
+  // Une date d'emission illisible ne doit PAS faire perdre l'echeancier : le
+  // capital amorti n'en depend pas, seule la duree de la premiere periode de
+  // coupon en depend. On emet donc tout, en sautant ce seul coupon-la —
+  // plutot que de retomber sur un bareme calcule qui, lui, serait faux de
+  // bout en bout (une VN affichee a 10 000 au lieu de 5 500, par exemple).
+  const issueDate = parseISODate(bond.issueDate);
+  const issueOk = !isNaN(issueDate.getTime());
+
+  const out: ScheduleCashflow[] = [];
+  let outstanding = INITIAL_NOMINAL_PER_TITRE;
+  let prevDate: Date | null = issueOk ? issueDate : null;
+
+  for (const step of sched) {
+    const d = parseISODate(step.date);
+    if (isNaN(d.getTime())) continue;
+    const days = prevDate ? daysBetweenDates(prevDate, d) : 0;
+
+    const coupon = (outstanding * bond.couponRate * days) / 365;
+    if (coupon > 0.01) {
+      out.push({
+        date: step.date,
+        type: "coupon",
+        amount: coupon,
+        outstandingAfter: outstanding,
+      });
+    }
+
+    const amort = outstanding - step.nominalApres;
+    if (amort > 0.01) {
+      out.push({
+        date: step.date,
+        type: step.nominalApres <= 0.01 ? "remboursement" : "amortissement",
+        amount: amort,
+        outstandingAfter: step.nominalApres,
+      });
+    }
+
+    outstanding = step.nominalApres;
+    prevDate = d;
+  }
+  return out;
+}
+
 export function getBondCashflows(bond: ListedBond): {
   date: string;
   type: "coupon" | "amortissement" | "remboursement";
   amount: number;
   outstandingAfter: number;
 }[] {
+  // Un echeancier saisi prime sur toute reconstruction.
+  if (bond.amortizationSchedule?.length) {
+    const todayIso = new Date().toISOString().slice(0, 10);
+    return cashflowsFromSchedule(bond).filter((cf) => cf.date > todayIso);
+  }
+
   const issueDate = parseISODate(bond.issueDate);
   const maturityDate = parseISODate(bond.maturityDate);
   const today = new Date();
@@ -784,6 +882,12 @@ export function getBondPastCashflows(bond: ListedBond): {
   amount: number;
   outstandingAfter: number;
 }[] {
+  // Un echeancier saisi prime sur toute reconstruction.
+  if (bond.amortizationSchedule?.length) {
+    const todayIso = new Date().toISOString().slice(0, 10);
+    return cashflowsFromSchedule(bond).filter((cf) => cf.date <= todayIso);
+  }
+
   const issueDate = parseISODate(bond.issueDate);
   const maturityDate = parseISODate(bond.maturityDate);
   const today = new Date();
@@ -943,6 +1047,7 @@ export function generateBondLifecycleEvents(bond: ListedBond): ListedBondEvent[]
 
     events.push({
       isin: bond.isin,
+      code: bond.code,
       date: cf.date,
       eventType: cf.type,
       amount: round2(cf.amount),
@@ -1423,6 +1528,9 @@ export type SovereignBond = {
   // Caracteristiques (issues du 1er round)
   nominalValue: number;          // 1 000 000 pour BAT, 10 000 pour OAT
   maturity: number;              // en annees
+  /** Duree de vie moyenne a l'emission, en annees. Abscisse retenue par
+   *  la methodologie UMOA-Titres pour positionner un titre sur la courbe. */
+  dvm: number;
   maturityDate: string;          // ISO date d'echeance
   firstIssueDate: string;        // date de valeur du 1er round
   lastIssueDate: string;         // date de valeur du dernier round
@@ -1497,6 +1605,9 @@ export type SovereignBondLite = {
   country: string;
   type: "OAT" | "BAT";
   maturity: number;
+  /** Duree de vie moyenne a l'emission, en annees. Abscisse retenue par
+   *  la methodologie UMOA-Titres pour positionner un titre sur la courbe. */
+  dvm: number;
   lastIssueDate: string;       // date de valeur du dernier round
   lastTradeDate: string;       // date d'adjudication du dernier round cash
   lastUrl: string;             // lien UMOA-Titres du dernier round cash
@@ -1511,6 +1622,7 @@ export type SovereignBondLite = {
 export function toLite(b: SovereignBond): SovereignBondLite {
   return {
     id: b.id,
+    dvm: b.dvm,
     isin: b.isin,
     country: b.country,
     type: b.type,
@@ -1528,6 +1640,38 @@ export function toLite(b: SovereignBond): SovereignBondLite {
  * Agrege les emissions UMOA-Titres par ISIN (pour les OAT) et par adjudication
  * individuelle (pour les BAT). Filtre les lignes aberrantes.
  */
+/**
+ * Duree de vie moyenne (DVM) d'un titre souverain, en annees.
+ *
+ * Methodologie Agence UMOA-Titres ("Courbes de taux des emetteurs du MTP",
+ * section IV.a) : les OAT sont positionnees sur la courbe par leur DVM a
+ * l'emission et non par leur maturite affichee, afin de tenir compte des
+ * titres amortissables et des reouvertures.
+ *
+ * Deux profils existent dans le gisement :
+ *  - In Fine : le capital est rembourse en une fois a l'echeance, la DVM
+ *    egale donc la maturite. Un differe n'y change rien.
+ *  - Lineaire : le capital est rembourse par tranches egales aux echeances
+ *    annuelles suivant le differe, soit les annees D+1 a M. La moyenne de ces
+ *    dates vaut (D + 1 + M) / 2.
+ *
+ * Exemple : une OAT 5 ans lineaire avec un differe de 1 an rembourse aux
+ * annees 2, 3, 4 et 5 — DVM de 3,5 ans, soit 1,5 an de moins que sa maturite
+ * affichee. La placer a 5 ans sur une courbe surestime sa duration.
+ */
+export function dureeVieMoyenne(
+  maturityYears: number,
+  graceYears: number,
+  amortizationType: "Linéaire" | "In Fine" | null,
+): number {
+  if (!(maturityYears > 0)) return 0;
+  if (amortizationType !== "Linéaire") return maturityYears;
+  const d = Number.isFinite(graceYears) && graceYears > 0 ? graceYears : 0;
+  // Un differe superieur a la maturite ne laisserait aucune tranche.
+  if (d >= maturityYears) return maturityYears;
+  return (d + 1 + maturityYears) / 2;
+}
+
 export function aggregateSovereignBonds(emissions: EmissionUMOA[]): SovereignBond[] {
   // Filtre des aberrations
   const valid = emissions.filter((e) => {
@@ -1619,6 +1763,11 @@ export function aggregateSovereignBonds(emissions: EmissionUMOA[]): SovereignBon
       type: first.type,
       nominalValue: nominalFor(first.type),
       maturity: first.maturity,
+      dvm: dureeVieMoyenne(
+        first.maturity,
+        first.graceYears,
+        first.amortizationType,
+      ),
       maturityDate: first.maturityDate,
       firstIssueDate: first.date,
       lastIssueDate,
@@ -2197,4 +2346,160 @@ export function calculateInterCountrySpreads(
   }
 
   return rows.sort((a, b) => a.ytm - b.ytm);
+}
+// =============================================================================
+// ECHEANCIER SOUVERAIN (UMOA-Titres)
+//
+// Meme outil que le calendrier des obligations cotees, applique au gisement
+// souverain : coupons, amortissements et remboursement final. La difference
+// tient a la source de l'echeancier — une obligation cotee a ses evenements
+// saisis au referentiel, un titre souverain n'a que ses caracteristiques
+// d'emission, dont l'echeancier se deduit.
+// =============================================================================
+
+/** Ce que le calendrier a besoin de savoir d'un titre pour l'afficher. */
+export type SovereignCalendarBond = {
+  /** Cle de rapprochement avec les evenements, et segment d'URL. */
+  code: string;
+  isin: string;
+  name: string;
+  country: string;
+};
+
+/** Lien vers la fiche d'un titre souverain. */
+export function sovereignHref(bond: {
+  code?: string | null;
+  isin?: string | null;
+}): string {
+  const key = (bond.code || "").trim() || (bond.isin || "").trim();
+  return `/souverain/${encodeURIComponent(key)}`;
+}
+
+/**
+ * Reconstruit l'echeancier des titres souverains sur une fenetre donnee.
+ *
+ * Les titres souverains ne portent pas d'echeancier saisi : on le deduit des
+ * caracteristiques d'emission. Conventions UMOA-Titres retenues :
+ *
+ *  - BAT : interets precomptes, pas de coupon. Un seul flux, le remboursement
+ *    du nominal a l'echeance.
+ *  - OAT : coupon ANNUEL, calcule sur le capital restant du. Les dates sont
+ *    ancrees sur le jour de l'echeance et remontees d'annee en annee jusqu'a
+ *    la date de jouissance, comme pour les obligations cotees.
+ *  - Amortissement lineaire : le capital est rembourse en tranches egales des
+ *    annees D+1 a M, ou D est le differe. La derniere tranche est classee
+ *    "remboursement" et non "amortissement", pour que le calendrier distingue
+ *    la fin de vie du titre d'un simple flux intermediaire.
+ *  - In Fine (ou type inconnu) : capital rembourse en une fois a l'echeance.
+ *
+ * Les montants sont exprimes PAR TITRE, comme ceux du calendrier cote.
+ */
+export function buildSovereignEvents(
+  bonds: SovereignBond[],
+  fromISO: string,
+  toISO: string,
+): { bonds: SovereignCalendarBond[]; events: ListedBondEvent[] } {
+  const events: ListedBondEvent[] = [];
+  const retenus: SovereignCalendarBond[] = [];
+
+  for (const b of bonds) {
+    if (!b.maturityDate || b.maturityDate < fromISO) continue;
+
+    const maturite = parseISODate(b.maturityDate);
+    const jouissance = parseISODate(b.firstIssueDate);
+    if (isNaN(maturite.getTime())) continue;
+
+    const nominal = b.nominalValue > 0 ? b.nominalValue : 10_000;
+    const annee = b.maturityDate.slice(0, 4);
+    const nom = `${b.type} ${b.countryName}${annee ? ` · échéance ${annee}` : ""}`;
+    const propres: ListedBondEvent[] = [];
+
+    if (b.type === "BAT" || !b.couponRate || b.couponRate <= 0) {
+      // Un BAT est precompte : l'investisseur touche le nominal, un point.
+      propres.push({
+        isin: b.isin,
+        code: b.id,
+        date: b.maturityDate,
+        eventType: "remboursement",
+        amount: nominal,
+        description: `Remboursement du nominal — ${nom}`,
+        outstandingAfter: 0,
+      });
+    } else {
+      // Sans date de jouissance lisible, on ne peut pas borner la serie de
+      // coupons : le titre est laisse de cote plutot que de produire un
+      // echeancier arbitraire.
+      if (isNaN(jouissance.getTime())) continue;
+
+      const dates = generateCouponDates(jouissance, maturite, 1);
+      const n = dates.length;
+      if (n === 0) continue;
+
+      const lineaire = b.amortizationType === "Linéaire";
+      const differe = lineaire
+        ? Math.min(Math.max(0, Math.round(b.graceYears || 0)), n - 1)
+        : n - 1;
+      const tranches = n - differe;
+      const amortissement = lineaire ? nominal / tranches : nominal;
+
+      let restant = nominal;
+      for (let i = 0; i < n; i++) {
+        // generateCouponDates construit ses dates en UTC : toISOString ne
+        // decale donc pas d'un jour.
+        const dateISO = dates[i].toISOString().slice(0, 10);
+        const dernier = i === n - 1;
+        const coupon = restant * b.couponRate;
+
+        if (coupon > 0) {
+          propres.push({
+            isin: b.isin,
+            code: b.id,
+            date: dateISO,
+            eventType: "coupon",
+            amount: coupon,
+            description: `Coupon ${(b.couponRate * 100)
+              .toFixed(2)
+              .replace(".", ",")} % sur ${Math.round(
+              restant,
+            ).toLocaleString("fr-FR")} FCFA de capital restant dû`,
+            outstandingAfter: restant,
+          });
+        }
+
+        const capital = lineaire ? (i >= differe ? amortissement : 0) : dernier ? nominal : 0;
+        if (capital > 0) {
+          restant = Math.max(0, restant - capital);
+          propres.push({
+            isin: b.isin,
+            code: b.id,
+            date: dateISO,
+            eventType: dernier ? "remboursement" : "amortissement",
+            amount: capital,
+            description: dernier
+              ? `Remboursement final — ${nom}`
+              : `Amortissement linéaire — capital restant dû ${Math.round(
+                  restant,
+                ).toLocaleString("fr-FR")} FCFA`,
+            outstandingAfter: restant,
+          });
+        }
+      }
+    }
+
+    const dansLaFenetre = propres.filter(
+      (e) => e.date >= fromISO && e.date <= toISO,
+    );
+    if (dansLaFenetre.length === 0) continue;
+
+    events.push(...dansLaFenetre);
+    retenus.push({
+      code: b.id,
+      isin: b.isin,
+      name: nom,
+      country: b.country,
+    });
+  }
+
+  events.sort((a, b) => a.date.localeCompare(b.date));
+  return { bonds: retenus, events };
 }

@@ -27,7 +27,9 @@ import {
   priceFromYtm,
 } from "@/lib/listedBondsTypes";
 import type { UserRole } from "@/lib/auth/userRole";
+import { commissionsMarche } from "@/lib/bondFees";
 import CountryFlag from "./CountryFlag";
+import BondHistoryView from "./BondHistoryView";
 import LivePriceBadge from "./LivePriceBadge";
 import MemberGateDialog from "./MemberGateDialog";
 import AddToWatchlistButton from "./watchlist/AddToWatchlistButton";
@@ -161,12 +163,12 @@ type Props = {
 
 type Tab =
   | "overview"
-  | "prices"
   | "quotations"
   | "cashflow"
   | "risk"
   | "simulator"
-  | "characteristics";
+  | "characteristics"
+  | "history";
 
 export default function BondDetailView({
   bond,
@@ -198,6 +200,34 @@ export default function BondDetailView({
   }
 
   const [activeTab, setActiveTab] = useState<Tab>("overview");
+  /** Fenetre visible du graphique de cours, en jours. null = tout. */
+  const [priceRange, setPriceRange] = useState<number | null>(180);
+  /** Onglet Pricing : fenetre affichee et courbes activees. La serie
+   *  theorique est hebdomadaire et remonte loin — sans selecteur, les
+   *  derniers mois sont ecrases par plusieurs annees d'historique. */
+  const [quotationsRange, setQuotationsRange] = useState<number | null>(null);
+  const [showTheoretical, setShowTheoretical] = useState(true);
+  const [showObserved, setShowObserved] = useState(true);
+  const [quotationsUnit, setQuotationsUnit] = useState<"fcfa" | "pct">(
+    // Meme raison que sur le graphique de la vue d'ensemble : sur un titre
+    // amortissable, la courbe en FCFA decroche a chaque tombee de capital
+    // sans que le marche ait bouge.
+    bond.amortizationMode === "N" && bond.amortizationType !== "IF"
+      ? "pct"
+      : "fcfa",
+  );
+  /** Unite du graphique : FCFA, ou pourcentage de la valeur nominale.
+   *  Sur un titre amortissable, seul le pourcentage rend la serie
+   *  comparable dans le temps — en FCFA la courbe decroche a chaque
+   *  tombee de capital sans que le marche ait bouge. */
+  const [priceUnit, setPriceUnit] = useState<"fcfa" | "pct">(
+    // Sur un titre dont le nominal par titre decroit, la courbe en FCFA
+    // decroche a chaque tombee de capital sans que le marche ait bouge. On
+    // ouvre donc en pourcentage, quitte a ce que le lecteur bascule.
+    bond.amortizationMode === "N" && bond.amortizationType !== "IF"
+      ? "pct"
+      : "fcfa",
+  );
 
   // Émetteur souverain : l'écart vs courbe UMOA-Titres du pays n'est pas une
   // prime de risque crédit (l'État est comparé à lui-même), mais une prime de
@@ -288,10 +318,17 @@ export default function BondDetailView({
   const [simMode, setSimMode] = useState<"price" | "ytm">("ytm");
   const [simDate, setSimDate] = useState<Date>(operationDate);
   // Frais en pourcentage du dirty price (conventions place BRVM/UEMOA).
-  const [feeBRVM, setFeeBRVM] = useState<number>(0.0375);
-  const [feeDCBR, setFeeDCBR] = useState<number>(0.1);
+  /** Frais de l'intermediaire : propres a chaque SGI, donc saisissables.
+   *  Les commissions BRVM et DC/BR, elles, sont reglementees et calculees
+   *  par commissionsMarche() — les rendre editables laisserait croire
+   *  qu'elles se negocient. */
   const [feeSGI, setFeeSGI] = useState<number>(0.15);
   const [feeTPS, setFeeTPS] = useState<number>(10); // % applique sur le frais SGI
+
+  /** Parametres de l'operation simulee. */
+  const [simSide, setSimSide] = useState<"achat" | "vente">("achat");
+  const [simQty, setSimQty] = useState<number>(1000);
+  const [simQtyInput, setSimQtyInput] = useState<string>("1000");
 
   const simMetrics = useMemo(() => {
     if (simMode === "price") {
@@ -649,6 +686,7 @@ export default function BondDetailView({
         cleanPrice: p.cleanPrice,
         dirtyPrice: p.dirtyPrice > 0 ? p.dirtyPrice : null,
         volume: p.volume,
+        valeurTransigee: p.valeurTransigee,
         traded: p.volume > 0,
       }));
   }, [priceHistory]);
@@ -678,17 +716,54 @@ export default function BondDetailView({
           (e.eventType === "amortissement" || e.eventType === "remboursement") &&
           e.outstandingAfter > 0,
       )
-      .map((e) => ({ date: e.date, nominal: e.outstandingAfter }))
+      .map((e) => ({
+        date: e.date,
+        nominal: e.outstandingAfter,
+        amount: e.amount,
+      }))
       .sort((a, b) => a.date.localeCompare(b.date));
+
+    // Convention BRVM : TOUTE obligation cotee est emise a 10 000 FCFA par
+    // titre. Le bareme part donc de cette face, et on ne la recale surtout
+    // pas. Si le palier calcule pour aujourd'hui ne retombe pas sur
+    // bond.nominalValue (nominal restant courant, tenu au referentiel), c'est
+    // la FICHE de l'obligation qui est fausse — calendrier d'amortissement mal
+    // renseigne. Un recalage rendrait la courbe jolie en dissimulant l'erreur.
+    const initial =
+      steps.length > 0 ? steps[0].nominal + steps[0].amount : bond.nominalValue;
+    // Comparaison STRICTE : le nouveau nominal ne s'applique qu'a
+    // partir de la seance SUIVANT la tombee. Verifie sur les cours BRVM —
+    // TPCI.O47 cote 4 100 jusqu'au 16/06/2026 inclus (jour de la tombee
+    // 4 000 -> 2 000) puis 2 050 le 17/06. Avec un "<=" on divisait 4 100 par
+    // 2 000 et la serie affichait 205 % le jour meme, exactement le decrochage
+    // que ce mode est cense supprimer.
     return (date: string) => {
-      let n = bond.nominalValue;
+      let n = initial;
       for (const s of steps) {
-        if (s.date <= date) n = s.nominal;
+        if (s.date < date) n = s.nominal;
         else break;
       }
       return n > 0 ? n : bond.nominalValue;
     };
   }, [events, bond.nominalValue, bond.amortizationMode, bond.amortizationType]);
+
+  const visiblePriceSeries = useMemo(() => {
+    let base = priceSeries;
+    if (priceRange !== null && priceSeries.length > 0) {
+      const last = priceSeries[priceSeries.length - 1].date;
+      const d = new Date(last + "T00:00:00Z");
+      d.setUTCDate(d.getUTCDate() - priceRange);
+      const from = d.toISOString().slice(0, 10);
+      base = priceSeries.filter((p) => p.date >= from);
+    }
+    return base.map((p) => {
+      const nom = nominalAt(p.date);
+      return {
+        ...p,
+        pctNominal: nom > 0 ? (p.cleanPrice / nom) * 100 : null,
+      };
+    });
+  }, [priceSeries, priceRange, nominalAt]);
 
   const priceStats = useMemo(() => {
     if (priceSeries.length === 0) return null;
@@ -696,6 +771,18 @@ export default function BondDetailView({
     const last = priceSeries[priceSeries.length - 1];
     const traded = priceSeries.filter((p) => p.traded);
     const closes = priceSeries.map((p) => p.cleanPrice).filter((v) => v > 0);
+
+    // Amplitude en POURCENTAGE DU NOMINAL. Sur un titre amortissable, un
+    // min-max en FCFA melange deux regimes : TPCI.O40 affichait "2 000 -
+    // 4 000", qui ne dit rien du marche mais tout de l'amortissement. En
+    // pourcentage du nominal restant, les deux bornes redeviennent
+    // comparables.
+    const pcts = priceSeries
+      .map((p) => {
+        const n = nominalAt(p.date);
+        return n > 0 && p.cleanPrice > 0 ? p.cleanPrice / n : null;
+      })
+      .filter((v): v is number => v !== null);
 
     // Variation en pourcentage DU NOMINAL, seule mesure comparable dans le
     // temps sur un titre amortissable.
@@ -713,6 +800,8 @@ export default function BondDetailView({
       totalVolume: traded.reduce((s, p) => s + p.volume, 0),
       min: closes.length ? Math.min(...closes) : 0,
       max: closes.length ? Math.max(...closes) : 0,
+      minPct: pcts.length ? Math.min(...pcts) : null,
+      maxPct: pcts.length ? Math.max(...pcts) : null,
       nomFirst,
       nomLast,
       amortized: Math.abs(nomLast - nomFirst) > 0.01,
@@ -734,23 +823,64 @@ export default function BondDetailView({
 
   // Domaine Y calé sur l'enveloppe réelle des séries + lignes de référence,
   // avec 2 % de marge haut/bas pour ne pas coller les courbes aux bords.
+  /** Fenetre affichee de l'onglet Pricing. On borne a partir du DERNIER
+   *  point de la serie et non d'aujourd'hui : le prix theorique est
+   *  hebdomadaire et peut s'arreter plusieurs jours avant, auquel cas une
+   *  fenetre calee sur le jour courant renverrait un graphique vide. */
+  const visibleQuotations = useMemo(() => {
+    if (quotationsRange === null || quotationsSeries.length === 0) {
+      return quotationsSeries;
+    }
+    const last = quotationsSeries[quotationsSeries.length - 1].date;
+    const d = new Date(last + "T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() - quotationsRange);
+    const from = d.toISOString().slice(0, 10);
+    return quotationsSeries.filter((r) => r.date >= from);
+  }, [quotationsSeries, quotationsRange]);
+
+  /** Les memes points, rapportes au nominal restant a leur date. */
+  const quotationsWithPct = useMemo(
+    () =>
+      visibleQuotations.map((r) => {
+        const nom = nominalAt(r.date);
+        return {
+          ...r,
+          pctTheoretical:
+            nom > 0 && r.theoretical !== null ? (r.theoretical / nom) * 100 : null,
+          pctObserved:
+            nom > 0 && r.observed !== null ? (r.observed / nom) * 100 : null,
+        };
+      }),
+    [visibleQuotations, nominalAt],
+  );
+
   const quotationsYDomain = useMemo<[number, number]>(() => {
-    const values: number[] = [bond.nominalValue];
-    if (liveCleanPrice !== null) values.push(liveCleanPrice);
-    for (const r of quotationsSeries) {
-      if (r.theoretical !== null && Number.isFinite(r.theoretical)) {
-        values.push(r.theoretical);
-      }
-      if (r.observed !== null && Number.isFinite(r.observed)) {
-        values.push(r.observed);
-      }
+    const pct = quotationsUnit === "pct";
+    const values: number[] = [pct ? 100 : bond.nominalValue];
+    if (liveCleanPrice !== null) {
+      values.push(
+        pct ? (liveCleanPrice / bond.nominalValue) * 100 : liveCleanPrice,
+      );
+    }
+    for (const r of quotationsWithPct) {
+      const t = pct ? r.pctTheoretical : r.theoretical;
+      const o = pct ? r.pctObserved : r.observed;
+      if (showTheoretical && t !== null && Number.isFinite(t)) values.push(t);
+      if (showObserved && o !== null && Number.isFinite(o)) values.push(o);
     }
     if (values.length === 0) return [0, bond.nominalValue * 1.1];
     const min = Math.min(...values);
     const max = Math.max(...values);
     const span = Math.max(max - min, 1);
     return [min - span * 0.02, max + span * 0.02];
-  }, [quotationsSeries, liveCleanPrice, bond.nominalValue]);
+  }, [
+    quotationsWithPct,
+    quotationsUnit,
+    showTheoretical,
+    showObserved,
+    liveCleanPrice,
+    bond.nominalValue,
+  ]);
 
   // === STRESS TEST TAUX (Risque & analytics) ===
   // Variation prix ≈ -ModDur × Δy × P + 0.5 × Convex × Δy² × P
@@ -777,6 +907,111 @@ export default function BondDetailView({
       };
     });
   }, [marketMetrics, marketPrice]);
+
+  // === VARIATION VS SEANCE PRECEDENTE ===
+  // Meme lecture que sur la fiche action : dernier cours (live s'il existe,
+  // sinon derniere cloture) rapporte a la cloture de la seance d'AVANT.
+  //
+  // Deux precautions propres a l'obligataire :
+  //  - la reference est la derniere cloture STRICTEMENT anterieure a la
+  //    seance courante ; quand le live porte la meme date que la derniere
+  //    cloture BOC, on remonte donc bien d'une seance au lieu de comparer
+  //    un cours a lui-meme ;
+  //  - les deux termes sont rapportes au nominal restant. Sans cela, une
+  //    tombee de capital tombant entre les deux seances se lirait comme un
+  //    decrochage — FBOAD.O2 affichait -21 % le 21/05/2026 alors que le
+  //    marche n'avait pas bouge.
+  const sessionChange = useMemo(() => {
+    if (priceSeries.length === 0) return null;
+    const jour = operationDate.toISOString().slice(0, 10);
+
+    const anterieures = priceSeries.filter((p) => p.date < jour);
+    const ref = anterieures.length > 0 ? anterieures[anterieures.length - 1] : null;
+    if (!ref) return null;
+
+    const courant =
+      liveCleanPrice !== null
+        ? { date: jour, cleanPrice: liveCleanPrice }
+        : priceSeries[priceSeries.length - 1];
+    if (courant.date === ref.date || !(courant.cleanPrice > 0)) return null;
+
+    const nomRef = nominalAt(ref.date);
+    const nomCourant = nominalAt(courant.date);
+    if (!(nomRef > 0) || !(nomCourant > 0)) return null;
+
+    const pctRef = ref.cleanPrice / nomRef;
+    const pctCourant = courant.cleanPrice / nomCourant;
+    if (!(pctRef > 0)) return null;
+
+    return {
+      refDate: ref.date,
+      delta: courant.cleanPrice - ref.cleanPrice,
+      change: (pctCourant - pctRef) / pctRef,
+      // Un amortissement entre les deux seances rend l'ecart en FCFA
+      // ininterpretable : on n'affiche alors que le pourcentage.
+      amorti: Math.abs(nomCourant - nomRef) > 0.01,
+    };
+  }, [priceSeries, operationDate, liveCleanPrice, nominalAt]);
+
+  /** Decompte complet de l'operation simulee : de la quantite au montant
+   *  reellement regle, puis au rendement une fois les frais payes.
+   *
+   *  Le rendement net est le seul chiffre qui reponde a la question de
+   *  l'investisseur : sur une ligne courte, des frais de 0,3 % amputent le
+   *  YTM de plus de 30 points de base — un ecart qui change le classement
+   *  de deux lignes voisines. */
+  const dealTicket = useMemo(() => {
+    if (!simMetrics || !(simQty > 0)) return null;
+
+    const clean = simMetrics.cleanPrice;
+    const couru = simMetrics.accruedInterest;
+    const dirty = clean + couru;
+
+    const montantBrut = simQty * clean;
+    const couruTotal = simQty * couru;
+    const montantNegocie = simQty * dirty;
+
+    const com = commissionsMarche(montantNegocie);
+    const sgi = (feeSGI / 100) * montantNegocie;
+    const tps = (feeTPS / 100) * sgi;
+    const fraisTotal = com.total + sgi + tps;
+
+    const regle =
+      simSide === "achat"
+        ? montantNegocie + fraisTotal
+        : montantNegocie - fraisTotal;
+
+    const dirtyEffectif = regle / simQty;
+    const cleanEffectif = dirtyEffectif - couru;
+    const netMetrics =
+      cleanEffectif > 0 ? computeMetrics(bond, simDate, cleanEffectif) : null;
+
+    return {
+      clean,
+      couru,
+      dirty,
+      montantBrut,
+      couruTotal,
+      montantNegocie,
+      com,
+      sgi,
+      tps,
+      fraisTotal,
+      fraisPct: montantNegocie > 0 ? fraisTotal / montantNegocie : 0,
+      regle,
+      dirtyEffectif,
+      cleanEffectif,
+      ytmNet: netMetrics?.ytm ?? null,
+      ytmBrut: simMetrics.ytm,
+    };
+  }, [simMetrics, simQty, simSide, feeSGI, feeTPS, bond, simDate]);
+
+  // === COULEUR DE LA COURBE ===
+  // Meme regle que la fiche action : la courbe prend la couleur du sens
+  // de la seance — vert a la hausse, rouge a la baisse. Definie ici pour
+  // venir APRES sessionChange, dont elle depend.
+  const chartColor =
+    (sessionChange?.change ?? 0) >= 0 ? "#16a34a" : "#dc2626";
 
   // === VARIATION DU PRIX MARCHE ===
   const marketDelta = marketPrice - bond.nominalValue;
@@ -892,7 +1127,44 @@ export default function BondDetailView({
                 FCFA (prix pied de coupon)
               </span>
             </div>
-            <div className={`font-medium ${marketUp ? "text-red-600" : "text-green-600"}`}>
+            {/* Variation vs seance precedente, comme sur la fiche action.
+                formatPctSigned attend un RATIO : elle multiplie deja par 100. */}
+            {sessionChange && (
+              <div
+                className={`font-medium ${
+                  sessionChange.change > 0
+                    ? "text-emerald-600"
+                    : sessionChange.change < 0
+                      ? "text-rose-600"
+                      : "text-slate-600"
+                }`}
+              >
+                {sessionChange.amorti ? (
+                  <span className="text-base md:text-lg">
+                    {formatPctSigned(sessionChange.change)}
+                  </span>
+                ) : (
+                  <>
+                    <span className="text-base md:text-lg">
+                      {sessionChange.delta > 0 ? "+" : ""}
+                      {formatFCFA2(sessionChange.delta)}
+                    </span>
+                    <span className="text-sm ml-1">
+                      ({formatPctSigned(sessionChange.change)})
+                    </span>
+                  </>
+                )}
+                <span className="text-xs text-slate-400 ml-2">
+                  vs {formatDateShort(sessionChange.refDate)}
+                  {sessionChange.amorti && " · hors amortissement"}
+                </span>
+              </div>
+            )}
+            {/* Meme convention que le reste du site : hausse en vert.
+                Ce bloc etait inverse (rouge au-dessus du pair), ce qui
+                affichait une meme variation en vert sur une action et en
+                rouge sur une obligation. */}
+            <div className={`font-medium ${marketUp ? "text-green-600" : "text-red-600"}`}>
               <span className="text-base md:text-lg">
                 {marketUp ? "+" : ""}
                 {formatFCFA2(marketDelta)}
@@ -931,11 +1203,11 @@ export default function BondDetailView({
             {(
               [
                 { id: "overview", label: "Vue d'ensemble", tier: "guest" },
-                { id: "prices", label: "Cours", tier: "member" },
                 { id: "quotations", label: "Pricing", tier: "premium" },
                 { id: "cashflow", label: "Échéancier & flux", tier: "member" },
                 { id: "risk", label: "Risque & analytics", tier: "premium" },
-                { id: "simulator", label: "Simulateur", tier: "member" },
+                { id: "simulator", label: "Simulateur", tier: "premium" },
+                { id: "history", label: "Historique de cours", tier: "guest" },
                 { id: "characteristics", label: "Caractéristiques", tier: "member" },
               ] as Array<{
                 id: Tab;
@@ -992,6 +1264,265 @@ export default function BondDetailView({
         {/* ============================================================ */}
         {activeTab === "overview" && (
           <>
+            {/* Cours — remonte de l'ancien onglet dedie, en tete de la vue
+                d'ensemble. Sur une ligne sans historique on n'affiche RIEN
+                plutot qu'un encart vide : en tete de page il repousserait les
+                metriques sans rien apprendre. L'onglet Historique porte deja
+                son propre message pour ce cas. */}
+            {priceStats !== null && (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
+                {/* Graphique — gabarit de la fiche action : deux tiers de la
+                    largeur, la carte de donnees occupant le tiers restant. */}
+                <div className="lg:col-span-2 bg-white rounded-lg border border-slate-200 p-4 md:p-6">
+                  <div className="flex justify-between items-center mb-3 flex-wrap gap-2">
+                    <div>
+                      <h3 className="text-base font-medium">Historique du cours</h3>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {visiblePriceSeries.length} séances · Source : BOC BRVM
+                      </p>
+                    </div>
+                    <div className="flex gap-1.5 text-xs flex-wrap">
+                      {[
+                        { l: "1M", d: 30 },
+                        { l: "3M", d: 90 },
+                        { l: "6M", d: 180 },
+                        { l: "Tout", d: null },
+                      ].map((r) => (
+                        <button
+                          key={r.l}
+                          onClick={() => setPriceRange(r.d)}
+                          className={`px-2.5 py-1 rounded border ${
+                            priceRange === r.d
+                              ? "bg-blue-50 text-blue-700 border-blue-200"
+                              : "border-slate-200 hover:bg-slate-50"
+                          }`}
+                        >
+                          {r.l}
+                        </button>
+                      ))}
+                      <span className="self-center text-slate-300">|</span>
+                      {[
+                        { l: "FCFA", u: "fcfa" as const },
+                        { l: "% VN", u: "pct" as const },
+                      ].map((m) => (
+                        <button
+                          key={m.u}
+                          onClick={() => setPriceUnit(m.u)}
+                          className={`px-2.5 py-1 rounded border ${
+                            priceUnit === m.u
+                              ? "bg-blue-50 text-blue-700 border-blue-200"
+                              : "border-slate-200 hover:bg-slate-50"
+                          }`}
+                        >
+                          {m.l}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="h-64 md:h-72">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <ComposedChart data={visiblePriceSeries}>
+                        <defs>
+                          <linearGradient
+                            id="bondGradient"
+                            x1="0"
+                            y1="0"
+                            x2="0"
+                            y2="1"
+                          >
+                            <stop
+                              offset="0%"
+                              stopColor={chartColor}
+                              stopOpacity={0.25}
+                            />
+                            <stop
+                              offset="100%"
+                              stopColor={chartColor}
+                              stopOpacity={0}
+                            />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <XAxis
+                          dataKey="date"
+                          stroke="#94a3b8"
+                          fontSize={11}
+                          tickFormatter={(date) => {
+                            const d = new Date(date);
+                            return d.toLocaleDateString("fr-FR", {
+                              day: "2-digit",
+                              month: "2-digit",
+                              year: "2-digit",
+                            });
+                          }}
+                        />
+                        <YAxis
+                          stroke="#94a3b8"
+                          fontSize={11}
+                          domain={
+                            priceUnit === "pct"
+                              ? ["dataMin - 2", "dataMax + 2"]
+                              : ["dataMin - 100", "dataMax + 100"]
+                          }
+                          tickFormatter={(v) =>
+                            priceUnit === "pct"
+                              ? `${Number(v).toFixed(0)} %`
+                              : formatFCFA(Number(v))
+                          }
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: "white",
+                            border: "1px solid #e2e8f0",
+                            borderRadius: "6px",
+                            fontSize: "12px",
+                          }}
+                          formatter={(value, name) => {
+                            const v = Number(value ?? 0);
+                            if (!isFinite(v)) return ["—", name];
+                            if (name === "pctNominal") {
+                              return [
+                                v.toFixed(2).replace(".", ",") + " %",
+                                "Cours en % de la VN",
+                              ];
+                            }
+                            return [formatFCFA(v) + " FCFA", "Cours"];
+                          }}
+                          labelFormatter={(date) =>
+                            new Date(date as string).toLocaleDateString("fr-FR", {
+                              day: "2-digit",
+                              month: "2-digit",
+                              year: "2-digit",
+                            })
+                          }
+                        />
+                        <ReferenceLine
+                          y={priceUnit === "pct" ? 100 : bond.nominalValue}
+                          stroke="#94a3b8"
+                          strokeDasharray="4 4"
+                          label={{
+                            value:
+                              priceUnit === "pct" ? "Pair (100 %)" : "Nominal",
+                            position: "insideTopRight",
+                            fontSize: 10,
+                            fill: "#64748b",
+                          }}
+                        />
+                        <Area
+                          type="monotone"
+                          dataKey={
+                            priceUnit === "pct" ? "pctNominal" : "cleanPrice"
+                          }
+                          stroke={chartColor}
+                          strokeWidth={2}
+                          fill="url(#bondGradient)"
+                        />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Bandeau sous le graphique, a la place des statistiques
+                      52 semaines de la fiche action. */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4 pt-4 border-t border-slate-100">
+                    <div>
+                      <div className="text-xs text-slate-500">Plus haut</div>
+                      <div className="text-sm font-medium">
+                        {priceStats.amortized && priceStats.maxPct !== null
+                          ? (priceStats.maxPct * 100)
+                              .toFixed(1)
+                              .replace(".", ",") + " %"
+                          : formatFCFA(priceStats.max)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-500">Plus bas</div>
+                      <div className="text-sm font-medium">
+                        {priceStats.amortized && priceStats.minPct !== null
+                          ? (priceStats.minPct * 100)
+                              .toFixed(1)
+                              .replace(".", ",") + " %"
+                          : formatFCFA(priceStats.min)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-500">
+                        Séances avec échange
+                      </div>
+                      <div className="text-sm font-medium">
+                        {priceStats.tradedSessions} / {priceStats.sessions}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-500">Volume échangé</div>
+                      <div className="text-sm font-medium">
+                        {priceStats.totalVolume > 0
+                          ? formatFCFA(priceStats.totalVolume) + " titres"
+                          : "—"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Carte donnees cles, a droite comme sur la fiche action. */}
+                <div className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
+                  <h3 className="text-base font-medium mb-4">Données clés</h3>
+                  <dl className="space-y-3 text-sm">
+                    <div className="flex justify-between">
+                      <dt className="text-slate-500">Nominal actuel</dt>
+                      <dd className="font-medium">
+                        {formatFCFA(bond.nominalValue)} FCFA
+                      </dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-slate-500">Coupon</dt>
+                      <dd className="font-medium">
+                        {(bond.couponRate * 100).toFixed(2).replace(".", ",")}% ·{" "}
+                        {bond.couponFrequency}/an
+                      </dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-slate-500">Encours</dt>
+                      <dd className="font-medium">
+                        {formatFCFA(bond.outstanding)} FCFA
+                      </dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-slate-500">Échéance</dt>
+                      <dd className="font-medium">
+                        {formatDateShort(bond.maturityDate)}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between pt-3 border-t border-slate-100">
+                      <dt className="text-slate-500">Dernier échange</dt>
+                      <dd className="font-medium">
+                        {priceStats.lastTraded
+                          ? formatDateShort(priceStats.lastTraded.date)
+                          : "aucun"}
+                      </dd>
+                    </div>
+                    {priceStats.lastTraded && (
+                      <div className="flex justify-between">
+                        <dt className="text-slate-500">Volume ce jour-là</dt>
+                        <dd className="font-medium">
+                          {formatFCFA(priceStats.lastTraded.volume)} titres
+                        </dd>
+                      </div>
+                    )}
+                  </dl>
+
+                  {/* Le marche obligataire BRVM est tres peu liquide : sans
+                      cette mention, un cours quotidien se lit comme une
+                      cotation active alors qu'il est le plus souvent
+                      indicatif. */}
+                  <p className="text-xs text-slate-500 mt-4 pt-3 border-t border-slate-100">
+                    {priceStats.tradedSessions === 0
+                      ? "Aucune transaction sur la période : les cours affichés sont des cotations indicatives, sans échange en face."
+                      : "Les séances sans échange portent une cotation indicative, reportée de la veille."}
+                  </p>
+                </div>
+              </div>
+            )}
             {marketMetrics && (
               <section>
                 <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
@@ -1040,7 +1571,7 @@ export default function BondDetailView({
               {/* Coupon couru / prochain coupon */}
               {marketMetrics && (
                 <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
-                  <h3 className="text-base font-medium mb-3">💰 Prochain coupon</h3>
+                  <h3 className="text-base font-medium mb-3">Prochain coupon</h3>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-slate-500">Date</span>
@@ -1100,7 +1631,7 @@ export default function BondDetailView({
 
               {/* Prix vs nominal */}
               <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
-                <h3 className="text-base font-medium mb-3">📊 Prix vs nominal</h3>
+                <h3 className="text-base font-medium mb-3">Prix vs nominal</h3>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-slate-500">Prix marché</span>
@@ -1113,7 +1644,7 @@ export default function BondDetailView({
                   <div className="flex justify-between pt-2 border-t border-slate-100">
                     <span className="text-slate-500">Écart</span>
                     <span
-                      className={`font-medium ${marketUp ? "text-red-700" : "text-green-700"}`}
+                      className={`font-medium ${marketUp ? "text-green-700" : "text-red-700"}`}
                     >
                       {marketUp ? "+" : ""}
                       {marketDeltaPct.toFixed(2).replace(".", ",")}%
@@ -1144,290 +1675,117 @@ export default function BondDetailView({
         {/* ============================================================ */}
         {/* ONGLET COTATIONS                                               */}
         {/* ============================================================ */}
-        {activeTab === "prices" && (
-          <>
-            {priceStats === null ? (
-              <section className="bg-white rounded-lg border border-slate-200 p-10 text-center">
-                <div className="text-3xl mb-3">📉</div>
-                <h3 className="text-lg font-medium text-slate-900 mb-2">
-                  Aucun cours enregistré
-                </h3>
-                <p className="text-sm text-slate-500 max-w-md mx-auto">
-                  La collecte des cours obligataires a démarré le 20 avril 2026.
-                  Cette ligne n&apos;y figure pas encore — elle vient d&apos;être
-                  admise à la cote, ou n&apos;est plus cotée.
-                </p>
-              </section>
-            ) : (
-              <>
-                <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-                    <div>
-                      <div className="text-xs text-slate-500 mb-1">Dernier cours</div>
-                      <div className="text-xl md:text-2xl font-semibold">
-                        {formatFCFA(priceStats.last.cleanPrice)}
-                      </div>
-                      <div className="text-xs text-slate-400 mt-0.5">
-                        au {formatDate(priceStats.last.date)}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-slate-500 mb-1">
-                        Variation sur la période
-                      </div>
-                      <div
-                        className={`text-xl md:text-2xl font-semibold ${
-                          priceStats.change === null
-                            ? "text-slate-400"
-                            : priceStats.change > 0
-                              ? "text-emerald-600"
-                              : priceStats.change < 0
-                                ? "text-rose-600"
-                                : "text-slate-600"
-                        }`}
-                      >
-                        {priceStats.change === null
-                          ? "—"
-                          : formatPctSigned(priceStats.change * 100)}
-                      </div>
-                      <div className="text-xs text-slate-400 mt-0.5">
-                        depuis le {formatDateShort(priceStats.first.date)}
-                        {priceStats.amortized && (
-                          <span className="block text-amber-600">
-                            hors amortissement
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-slate-500 mb-1">
-                        Amplitude observée
-                      </div>
-                      <div className="text-xl md:text-2xl font-semibold tabular-nums">
-                        {formatFCFA(priceStats.min)} – {formatFCFA(priceStats.max)}
-                      </div>
-                      <div className="text-xs text-slate-400 mt-0.5">
-                        {priceStats.sessions} séances
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-slate-500 mb-1">
-                        Séances avec transaction
-                      </div>
-                      <div className="text-xl md:text-2xl font-semibold">
-                        {priceStats.tradedSessions}
-                      </div>
-                      <div className="text-xs text-slate-400 mt-0.5">
-                        {priceStats.totalVolume > 0
-                          ? `${formatFCFA(priceStats.totalVolume)} titres échangés`
-                          : "aucun échange"}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Le marche obligataire BRVM est tres peu liquide : sans
-                      cette mention, un cours quotidien se lit comme une
-                      cotation active alors qu'il est le plus souvent
-                      indicatif. */}
-                  {/* Sur un titre amortissable, la chute du cours reflete le
-                      remboursement du capital, pas une moins-value. On l'explique
-                      plutot que de laisser lire une variation trompeuse. */}
-                  {priceStats.amortized && (
-                    <p className="mt-4 text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded px-3 py-2">
-                      Le nominal par titre est passé de{" "}
-                      <b>{formatFCFA(priceStats.nomFirst)}</b> à{" "}
-                      <b>{formatFCFA(priceStats.nomLast)}</b> FCFA sur la période :
-                      une partie du capital a été remboursée. La variation
-                      ci-dessus est calculée en pourcentage du nominal restant,
-                      la seule mesure comparable dans le temps. En cours bruts,
-                      elle ressortirait à{" "}
-                      {priceStats.rawChange === null
-                        ? "—"
-                        : formatPctSigned(priceStats.rawChange * 100)}
-                      , ce qui refléterait l&apos;amortissement et non la
-                      performance.
-                    </p>
-                  )}
-
-                  {priceStats.tradedSessions === 0 ? (
-                    <p className="mt-4 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
-                      Aucune transaction sur la période. Les cours affichés sont
-                      des cotations indicatives, sans échange en face.
-                    </p>
-                  ) : (
-                    priceStats.lastTraded && (
-                      <p className="mt-4 text-xs text-slate-500">
-                        Dernier échange le{" "}
-                        <b>{formatDate(priceStats.lastTraded.date)}</b> —{" "}
-                        {formatFCFA(priceStats.lastTraded.volume)} titres à{" "}
-                        {formatFCFA(priceStats.lastTraded.cleanPrice)} FCFA. Les
-                        autres séances sont des cotations indicatives.
-                      </p>
-                    )
-                  )}
-                </section>
-
-                <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6 mt-4">
-                  <h3 className="text-base font-medium mb-1">
-                    📈 Historique des cours
-                  </h3>
-                  <p className="text-xs text-slate-500 mb-4">
-                    Prix pied de coupon. Les points marqués correspondent aux
-                    séances où un échange a eu lieu.
-                  </p>
-                  <div className="h-72 md:h-80">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <ComposedChart data={priceSeries}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                        <XAxis
-                          dataKey="date"
-                          tickFormatter={formatDateShort}
-                          tick={{ fontSize: 11 }}
-                          minTickGap={40}
-                        />
-                        <YAxis
-                          domain={["dataMin - 100", "dataMax + 100"]}
-                          tick={{ fontSize: 11 }}
-                          tickFormatter={(v: number) => formatFCFA(v)}
-                          width={70}
-                        />
-                        <Tooltip
-                          labelFormatter={(d) => formatDate(String(d))}
-                          formatter={(value, name) => {
-                            const v = Number(value ?? 0);
-                            if (!isFinite(v)) return ["—", name];
-                            if (name === "volume") {
-                              return [formatFCFA(v) + " titres", "Volume"];
-                            }
-                            return [
-                              formatFCFA(v) + " FCFA",
-                              name === "cleanPrice"
-                                ? "Cours pied de coupon"
-                                : "Prix plein coupon",
-                            ];
-                          }}
-                        />
-                        <ReferenceLine
-                          y={bond.nominalValue}
-                          stroke="#94a3b8"
-                          strokeDasharray="4 4"
-                          label={{
-                            value: "Nominal",
-                            position: "insideTopRight",
-                            fontSize: 10,
-                            fill: "#64748b",
-                          }}
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="cleanPrice"
-                          stroke="#2563eb"
-                          strokeWidth={2}
-                          dot={(props) => {
-                            const { cx, cy, payload, index } = props;
-                            if (!payload?.traded) {
-                              return <g key={`d-${index}`} />;
-                            }
-                            return (
-                              <circle
-                                key={`d-${index}`}
-                                cx={cx}
-                                cy={cy}
-                                r={3.5}
-                                fill="#2563eb"
-                                stroke="#fff"
-                                strokeWidth={1}
-                              />
-                            );
-                          }}
-                          activeDot={{ r: 5 }}
-                          isAnimationActive={false}
-                        />
-                      </ComposedChart>
-                    </ResponsiveContainer>
-                  </div>
-                </section>
-
-                <section className="bg-white rounded-lg border border-slate-200 mt-4 overflow-hidden">
-                  <div className="p-4 md:p-6 pb-3">
-                    <h3 className="text-base font-medium">Détail des séances</h3>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Les 60 dernières, de la plus récente à la plus ancienne.
-                    </p>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead className="bg-slate-50 text-slate-500 text-xs">
-                        <tr>
-                          <th className="text-left px-4 py-2 font-medium">Date</th>
-                          <th className="text-right px-4 py-2 font-medium">
-                            Pied de coupon
-                          </th>
-                          <th className="text-right px-4 py-2 font-medium hidden md:table-cell">
-                            Plein coupon
-                          </th>
-                          <th className="text-right px-4 py-2 font-medium">Volume</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {[...priceSeries]
-                          .reverse()
-                          .slice(0, 60)
-                          .map((p) => (
-                            <tr
-                              key={p.date}
-                              className="border-t border-slate-100 hover:bg-slate-50"
-                            >
-                              <td className="px-4 py-2">{formatDate(p.date)}</td>
-                              <td className="px-4 py-2 text-right tabular-nums">
-                                {formatFCFA(p.cleanPrice)}
-                              </td>
-                              <td className="px-4 py-2 text-right tabular-nums hidden md:table-cell text-slate-500">
-                                {p.dirtyPrice ? formatFCFA2(p.dirtyPrice) : "—"}
-                              </td>
-                              <td className="px-4 py-2 text-right tabular-nums">
-                                {p.traded ? (
-                                  formatFCFA(p.volume)
-                                ) : (
-                                  <span
-                                    className="text-slate-400"
-                                    title="Cotation indicative : aucun échange cette séance."
-                                  >
-                                    —
-                                  </span>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
-              </>
-            )}
-          </>
+        {activeTab === "history" && (
+          <BondHistoryView
+            code={bond.code}
+            history={priceSeries}
+            nominalAt={nominalAt}
+            amortized={priceStats?.amortized ?? false}
+            userRole={userRole}
+          />
         )}
 
         {activeTab === "quotations" && (
-          <>
-            <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
-              <div className="flex justify-between items-start mb-4 flex-wrap gap-2">
-                <div>
-                  <h3 className="text-base font-medium">📈 Historique du prix théorique</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    {hasObservedPrices
-                      ? `${priceHistory.length} cotations observées + ${theoreticalHistory.length} points théoriques`
-                      : `${theoreticalHistory.length} points théoriques hebdomadaires`}
-                  </p>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
+            <div className="lg:col-span-2 bg-white rounded-lg border border-slate-200 p-4 md:p-6">
+              <div className="flex justify-between items-start mb-3 flex-wrap gap-2">
+                <h3 className="text-base font-medium">
+                  Historique du prix théorique
+                </h3>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex gap-1.5 text-xs flex-wrap">
+                    {[
+                      { l: "1M", d: 30 },
+                      { l: "3M", d: 90 },
+                      { l: "6M", d: 180 },
+                      { l: "1A", d: 365 },
+                      { l: "3A", d: 1095 },
+                      { l: "Tout", d: null },
+                    ].map((r) => (
+                      <button
+                        key={r.l}
+                        onClick={() => setQuotationsRange(r.d)}
+                        className={`px-2.5 py-1 rounded border ${
+                          quotationsRange === r.d
+                            ? "bg-blue-50 text-blue-700 border-blue-200"
+                            : "border-slate-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        {r.l}
+                      </button>
+                    ))}
+                    <span className="self-center text-slate-300">|</span>
+                    {[
+                      { l: "FCFA", u: "fcfa" as const },
+                      { l: "% VN", u: "pct" as const },
+                    ].map((m) => (
+                      <button
+                        key={m.u}
+                        onClick={() => setQuotationsUnit(m.u)}
+                        className={`px-2.5 py-1 rounded border ${
+                          quotationsUnit === m.u
+                            ? "bg-blue-50 text-blue-700 border-blue-200"
+                            : "border-slate-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        {m.l}
+                      </button>
+                    ))}
+                  </div>
+                  <span className="text-[10px] md:text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
+                    EXCLUSIVITÉ AZIMUT
+                  </span>
                 </div>
-                <span className="text-[10px] md:text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
-                  EXCLUSIVITÉ AZIMUT
-                </span>
               </div>
-              {quotationsSeries.length > 0 ? (
-                <div className="h-72 md:h-80">
+
+              {/* Bascules de courbes, sur le modele des toggles de benchmark
+                  de la fiche action : on peut retirer une serie pour lire
+                  l'autre seule. */}
+              <div className="flex flex-wrap gap-2 mb-3">
+                <button
+                  type="button"
+                  onClick={() => setShowTheoretical(!showTheoretical)}
+                  aria-pressed={showTheoretical}
+                  className={`text-xs px-2.5 py-1 rounded-md border transition ${
+                    showTheoretical
+                      ? "border-purple-300 bg-purple-50 text-purple-800"
+                      : "border-slate-200 text-slate-500 bg-slate-50 hover:bg-white"
+                  }`}
+                >
+                  <span
+                    className="inline-block w-2 h-2 rounded-full mr-1.5 align-middle"
+                    style={{
+                      backgroundColor: showTheoretical ? "#9333ea" : "#cbd5e1",
+                    }}
+                  />
+                  Prix théorique
+                </button>
+                {hasObservedPrices && (
+                  <button
+                    type="button"
+                    onClick={() => setShowObserved(!showObserved)}
+                    aria-pressed={showObserved}
+                    className={`text-xs px-2.5 py-1 rounded-md border transition ${
+                      showObserved
+                        ? "border-blue-300 bg-blue-50 text-blue-800"
+                        : "border-slate-200 text-slate-500 bg-slate-50 hover:bg-white"
+                    }`}
+                  >
+                    <span
+                      className="inline-block w-2 h-2 rounded-full mr-1.5 align-middle"
+                      style={{
+                        backgroundColor: showObserved ? "#2563eb" : "#cbd5e1",
+                      }}
+                    />
+                    Prix observé
+                  </button>
+                )}
+              </div>
+
+              {quotationsWithPct.length > 0 ? (
+                <div className="h-64 md:h-72">
                   <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={quotationsSeries}>
+                    <ComposedChart data={quotationsWithPct}>
                       <defs>
                         <linearGradient id="bondPrice" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="0%" stopColor="#9333ea" stopOpacity={0.25} />
@@ -1439,14 +1797,25 @@ export default function BondDetailView({
                         dataKey="date"
                         stroke="#94a3b8"
                         fontSize={11}
-                        tickFormatter={(d) => formatDateShort(d as string)}
+                        tickFormatter={(date) => {
+                          const d = new Date(date);
+                          return d.toLocaleDateString("fr-FR", {
+                            day: "2-digit",
+                            month: "2-digit",
+                            year: "2-digit",
+                          });
+                        }}
                       />
                       <YAxis
                         stroke="#94a3b8"
                         fontSize={11}
                         domain={quotationsYDomain}
                         allowDataOverflow={false}
-                        tickFormatter={(v) => formatFCFA(Number(v))}
+                        tickFormatter={(v) =>
+                          quotationsUnit === "pct"
+                            ? `${Number(v).toFixed(0)} %`
+                            : formatFCFA(Number(v))
+                        }
                       />
                       <Tooltip
                         contentStyle={{
@@ -1462,16 +1831,33 @@ export default function BondDetailView({
                             return [formatFCFA2(v) + " FCFA", "Prix théorique"];
                           if (name === "observed")
                             return [formatFCFA2(v) + " FCFA", "Prix observé"];
+                          if (name === "pctTheoretical")
+                            return [
+                              v.toFixed(2).replace(".", ",") + " %",
+                              "Prix théorique (% VN)",
+                            ];
+                          if (name === "pctObserved")
+                            return [
+                              v.toFixed(2).replace(".", ",") + " %",
+                              "Prix observé (% VN)",
+                            ];
                           return [v, name];
                         }}
-                        labelFormatter={(d) => formatDate(d as string)}
+                        labelFormatter={(date) =>
+                          new Date(date as string).toLocaleDateString("fr-FR", {
+                            day: "2-digit",
+                            month: "2-digit",
+                            year: "2-digit",
+                          })
+                        }
                       />
                       <ReferenceLine
-                        y={bond.nominalValue}
+                        y={quotationsUnit === "pct" ? 100 : bond.nominalValue}
                         stroke="#94a3b8"
                         strokeDasharray="3 3"
                         label={{
-                          value: "Nominal",
+                          value:
+                            quotationsUnit === "pct" ? "Pair (100 %)" : "Nominal",
                           position: "right",
                           fill: "#64748b",
                           fontSize: 10,
@@ -1479,7 +1865,11 @@ export default function BondDetailView({
                       />
                       {liveCleanPrice !== null && (
                         <ReferenceLine
-                          y={liveCleanPrice}
+                          y={
+                            quotationsUnit === "pct"
+                              ? (liveCleanPrice / bond.nominalValue) * 100
+                              : liveCleanPrice
+                          }
                           stroke="#0f172a"
                           strokeWidth={1.8}
                           ifOverflow="extendDomain"
@@ -1491,25 +1881,120 @@ export default function BondDetailView({
                           }}
                         />
                       )}
-                      <Area
-                        type="monotone"
-                        dataKey="theoretical"
-                        stroke="#9333ea"
-                        strokeWidth={2}
-                        fill="url(#bondPrice)"
-                        connectNulls
-                        isAnimationActive={false}
-                      />
+                      {showTheoretical && (
+                        <Area
+                          type="monotone"
+                          dataKey={
+                            quotationsUnit === "pct"
+                              ? "pctTheoretical"
+                              : "theoretical"
+                          }
+                          stroke="#9333ea"
+                          strokeWidth={2}
+                          fill="url(#bondPrice)"
+                          connectNulls
+                        />
+                      )}
+                      {/* La serie observee figurait dans les donnees et dans
+                          l'infobulle, mais aucune courbe ne la tracait : la
+                          comparaison que cet onglet promet etait invisible. */}
+                      {hasObservedPrices && showObserved && (
+                        <Line
+                          type="monotone"
+                          dataKey={
+                            quotationsUnit === "pct"
+                              ? "pctObserved"
+                              : "observed"
+                          }
+                          stroke="#2563eb"
+                          strokeWidth={1.5}
+                          dot={false}
+                          connectNulls
+                        />
+                      )}
                     </ComposedChart>
                   </ResponsiveContainer>
                 </div>
               ) : (
-                <div className="h-64 flex items-center justify-center text-sm text-slate-500">
+                <div className="h-64 md:h-72 flex items-center justify-center text-sm text-slate-500">
                   Aucun historique de prix disponible.
                 </div>
               )}
-            </section>
-          </>
+            </div>
+
+            {/* Carte donnees cles, a droite comme sur la fiche action. */}
+            <div className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
+              <h3 className="text-base font-medium mb-4">Données clés</h3>
+              <dl className="space-y-3 text-sm">
+                <div className="flex justify-between">
+                  <dt className="text-slate-500">Prix théorique</dt>
+                  <dd className="font-medium">
+                    {latestTheoretical
+                      ? formatFCFA2(latestTheoretical.theoreticalPrice) + " FCFA"
+                      : "—"}
+                  </dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-slate-500">Prix de marché</dt>
+                  <dd className="font-medium">
+                    {formatFCFA2(marketPrice)} FCFA
+                  </dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-slate-500">Écart</dt>
+                  <dd
+                    className={`font-medium ${
+                      !latestTheoretical
+                        ? "text-slate-400"
+                        : marketPrice >= latestTheoretical.theoreticalPrice
+                          ? "text-green-600"
+                          : "text-red-600"
+                    }`}
+                  >
+                    {latestTheoretical &&
+                    latestTheoretical.theoreticalPrice > 0
+                      ? formatPctSigned(
+                          (marketPrice - latestTheoretical.theoreticalPrice) /
+                            latestTheoretical.theoreticalPrice,
+                        )
+                      : "—"}
+                  </dd>
+                </div>
+                <div className="flex justify-between pt-3 border-t border-slate-100">
+                  <dt className="text-slate-500">YTM théorique</dt>
+                  <dd className="font-medium">
+                    {latestTheoretical
+                      ? (latestTheoretical.ytm * 100)
+                          .toFixed(2)
+                          .replace(".", ",") + "%"
+                      : "—"}
+                  </dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-slate-500">Spread de signature</dt>
+                  <dd className="font-medium">
+                    {signatureSpread === null
+                      ? "—"
+                      : formatPctSigned(signatureSpread, 2)}
+                  </dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-slate-500">Dernier point</dt>
+                  <dd className="font-medium">
+                    {latestTheoretical
+                      ? formatDateShort(latestTheoretical.date)
+                      : "—"}
+                  </dd>
+                </div>
+              </dl>
+
+              <p className="text-xs text-slate-500 mt-4 pt-3 border-t border-slate-100">
+                Le prix théorique est calibré sur la courbe des adjudications
+                UMOA-Titres. L&apos;écart au prix de marché mesure la prime ou
+                la décote que la cote accorde à cette signature.
+              </p>
+            </div>
+          </div>
         )}
 
         {/* ============================================================ */}
@@ -1550,7 +2035,7 @@ export default function BondDetailView({
             {cashflows.length > 0 && (
               <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
                 <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
-                  <h3 className="text-base font-medium">📅 Échéancier complet des flux</h3>
+                  <h3 className="text-base font-medium">Échéancier complet des flux</h3>
                   <div className="flex items-center gap-3 flex-wrap">
                     <div className="text-xs text-slate-500 flex gap-3">
                       <span>{pastCashflows.length} versés</span>
@@ -1829,236 +2314,390 @@ export default function BondDetailView({
         {/* ONGLET SIMULATEUR                                              */}
         {/* ============================================================ */}
         {activeTab === "simulator" && (
-          <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
-            <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
-              <h3 className="text-base font-medium">🧮 Simulateur obligataire</h3>
-              <div className="inline-flex rounded-md bg-slate-100 p-0.5 text-xs">
-                <button
-                  onClick={() => switchSimMode("ytm")}
-                  className={`px-3 py-1 rounded transition ${
-                    simMode === "ytm"
-                      ? "bg-white shadow-sm font-medium"
-                      : "text-slate-500 hover:text-slate-700"
-                  }`}
-                >
-                  YTM → Prix
-                </button>
-                <button
-                  onClick={() => switchSimMode("price")}
-                  className={`px-3 py-1 rounded transition ${
-                    simMode === "price"
-                      ? "bg-white shadow-sm font-medium"
-                      : "text-slate-500 hover:text-slate-700"
-                  }`}
-                >
-                  Prix → YTM
-                </button>
-              </div>
-            </div>
-
-            {simWarnings.length > 0 && (
-              <div className="mb-3 space-y-1">
-                {simWarnings.map((w, i) => (
-                  <div
-                    key={i}
-                    className="text-xs px-3 py-2 rounded-md bg-amber-50 border border-amber-200 text-amber-800 flex items-start gap-2"
-                  >
-                    <span className="shrink-0">⚠️</span>
-                    <span>{w}</span>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
+            <div className="lg:col-span-2 space-y-4 md:space-y-6">
+              {/* ---------- PARAMETRES ---------- */}
+              <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
+                <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
+                  <h3 className="text-base font-medium">Paramètres de l&apos;opération</h3>
+                  <div className="inline-flex rounded-md bg-slate-100 p-0.5 text-xs">
+                    <button
+                      onClick={() => setSimSide("achat")}
+                      className={`px-3 py-1 rounded transition ${
+                        simSide === "achat"
+                          ? "bg-white shadow-sm font-medium"
+                          : "text-slate-500 hover:text-slate-700"
+                      }`}
+                    >
+                      Achat
+                    </button>
+                    <button
+                      onClick={() => setSimSide("vente")}
+                      className={`px-3 py-1 rounded transition ${
+                        simSide === "vente"
+                          ? "bg-white shadow-sm font-medium"
+                          : "text-slate-500 hover:text-slate-700"
+                      }`}
+                    >
+                      Vente
+                    </button>
                   </div>
-                ))}
-              </div>
-            )}
+                </div>
 
-            {/* INPUTS */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">
-                  Date de simulation
-                </label>
-                <input
-                  type="date"
-                  value={simDate.toISOString().slice(0, 10)}
-                  onChange={(e) => {
-                    const d = new Date(e.target.value);
-                    if (!isNaN(d.getTime())) setSimDate(d);
-                  }}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:border-blue-500"
-                />
-              </div>
-              <div>
-                {simMode === "ytm" ? (
-                  <>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                  <div>
                     <label className="block text-xs text-slate-500 mb-1">
-                      Yield to maturity
+                      Quantité (titres)
                     </label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        step="0.01"
-                        inputMode="decimal"
-                        value={simYtmInput}
-                        onChange={(e) => {
-                          setSimYtmInput(e.target.value);
-                          const n = Number(e.target.value);
-                          if (Number.isFinite(n)) setSimYtm(n / 100);
-                        }}
-                        onBlur={() => {
-                          // Reformate l'affichage en sortie de saisie ; canonical
-                          // deja a jour via onChange.
-                          if (Number.isFinite(simYtm)) {
-                            setSimYtmInput((simYtm * 100).toFixed(4));
-                          }
-                        }}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:border-blue-500 tabular-nums"
-                      />
-                      <span className="text-sm text-slate-500">%</span>
-                    </div>
-                  </>
-                ) : (
-                  <>
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      inputMode="numeric"
+                      value={simQtyInput}
+                      onChange={(e) => {
+                        setSimQtyInput(e.target.value);
+                        const n = Number(e.target.value);
+                        if (Number.isFinite(n) && n > 0) setSimQty(n);
+                      }}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:border-blue-500 tabular-nums"
+                    />
+                  </div>
+                  <div>
                     <label className="block text-xs text-slate-500 mb-1">
-                      Clean Price
+                      Date de dénouement
                     </label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        step="1"
-                        inputMode="decimal"
-                        value={simPriceInput}
-                        onChange={(e) => {
-                          setSimPriceInput(e.target.value);
-                          const n = Number(e.target.value);
-                          if (Number.isFinite(n)) setSimPrice(n);
-                        }}
-                        onBlur={() => {
-                          if (Number.isFinite(simPrice)) {
-                            setSimPriceInput(simPrice.toFixed(2));
-                          }
-                        }}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:border-blue-500 tabular-nums"
-                      />
-                      <span className="text-sm text-slate-500">FCFA</span>
+                    <input
+                      type="date"
+                      value={simDate.toISOString().slice(0, 10)}
+                      onChange={(e) => {
+                        const d = new Date(e.target.value);
+                        if (!isNaN(d.getTime())) setSimDate(d);
+                      }}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs text-slate-500">
+                        {simMode === "ytm" ? "Rendement visé" : "Cours pied de coupon"}
+                      </label>
+                      <div className="inline-flex rounded bg-slate-100 p-0.5 text-[10px]">
+                        <button
+                          onClick={() => switchSimMode("ytm")}
+                          className={`px-1.5 py-0.5 rounded ${
+                            simMode === "ytm" ? "bg-white shadow-sm font-medium" : "text-slate-500"
+                          }`}
+                        >
+                          YTM
+                        </button>
+                        <button
+                          onClick={() => switchSimMode("price")}
+                          className={`px-1.5 py-0.5 rounded ${
+                            simMode === "price" ? "bg-white shadow-sm font-medium" : "text-slate-500"
+                          }`}
+                        >
+                          Prix
+                        </button>
+                      </div>
                     </div>
-                    <p className="text-[11px] text-slate-400 mt-1">
-                      Nominal courant : {formatFCFA(bond.nominalValue)} FCFA
-                    </p>
-                  </>
+                    {simMode === "ytm" ? (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          step="0.01"
+                          inputMode="decimal"
+                          value={simYtmInput}
+                          onChange={(e) => {
+                            setSimYtmInput(e.target.value);
+                            const n = Number(e.target.value);
+                            if (Number.isFinite(n)) setSimYtm(n / 100);
+                          }}
+                          onBlur={() => {
+                            if (Number.isFinite(simYtm)) {
+                              setSimYtmInput((simYtm * 100).toFixed(4));
+                            }
+                          }}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:border-blue-500 tabular-nums"
+                        />
+                        <span className="text-sm text-slate-500">%</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          step="1"
+                          inputMode="decimal"
+                          value={simPriceInput}
+                          onChange={(e) => {
+                            setSimPriceInput(e.target.value);
+                            const n = Number(e.target.value);
+                            if (Number.isFinite(n)) setSimPrice(n);
+                          }}
+                          onBlur={() => {
+                            if (Number.isFinite(simPrice)) {
+                              setSimPriceInput(simPrice.toFixed(2));
+                            }
+                          }}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:border-blue-500 tabular-nums"
+                        />
+                        <span className="text-sm text-slate-500">FCFA</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {simWarnings.length > 0 && (
+                  <div className="space-y-1">
+                    {simWarnings.map((w, i) => (
+                      <div
+                        key={i}
+                        className="text-xs px-3 py-2 rounded-md bg-amber-50 border border-amber-200 text-amber-800"
+                      >
+                        {w}
+                      </div>
+                    ))}
+                  </div>
                 )}
-              </div>
+              </section>
+
+              {/* ---------- DECOMPTE ---------- */}
+              {dealTicket && (
+                <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
+                  <h3 className="text-base font-medium mb-4">
+                    Décompte de l&apos;opération
+                  </h3>
+                  <div className="border border-slate-200 rounded-md overflow-hidden text-sm">
+                    <table className="w-full">
+                      <tbody className="divide-y divide-slate-100">
+                        <SimRow
+                          label={`Montant brut — ${formatFCFA(simQty)} × ${formatFCFA2(dealTicket.clean)}`}
+                          value={`${formatFCFA(dealTicket.montantBrut)} FCFA`}
+                        />
+                        <SimRow
+                          label={`Coupon couru — ${formatFCFA2(dealTicket.couru)} par titre`}
+                          value={`${formatFCFA(dealTicket.couruTotal)} FCFA`}
+                        />
+                        <SimRow
+                          label="Montant négocié (assiette des commissions)"
+                          value={`${formatFCFA(dealTicket.montantNegocie)} FCFA`}
+                        />
+                      </tbody>
+                    </table>
+
+                    <div className="px-3 py-2 bg-slate-50 border-y border-slate-200 text-[11px] font-semibold text-slate-700 uppercase tracking-wide">
+                      Commissions réglementées
+                    </div>
+                    <table className="w-full">
+                      <tbody className="divide-y divide-slate-100">
+                        <SimRow
+                          label={`BRVM — tranche ≤ 1 Md (${formatFCFA(dealTicket.com.t1)}) à 0,050 %`}
+                          value={`${formatFCFA(dealTicket.com.brvmT1)} FCFA`}
+                        />
+                        {dealTicket.com.t2 > 0 && (
+                          <SimRow
+                            label={`BRVM — tranche > 1 Md (${formatFCFA(dealTicket.com.t2)}) à 0,0375 %`}
+                            value={`${formatFCFA(dealTicket.com.brvmT2)} FCFA`}
+                          />
+                        )}
+                        <SimRow
+                          label={`DC/BR — tranche ≤ 1 Md (${formatFCFA(dealTicket.com.t1)}) à 0,100 %`}
+                          value={`${formatFCFA(dealTicket.com.dcbrT1)} FCFA`}
+                        />
+                        {dealTicket.com.t2 > 0 && (
+                          <SimRow
+                            label={`DC/BR — tranche > 1 Md (${formatFCFA(dealTicket.com.t2)}) à 0,050 %`}
+                            value={`${formatFCFA(dealTicket.com.dcbrT2)} FCFA`}
+                          />
+                        )}
+                      </tbody>
+                    </table>
+
+                    <div className="px-3 py-2 bg-slate-50 border-y border-slate-200 text-[11px] font-semibold text-slate-700 uppercase tracking-wide">
+                      Frais d&apos;intermédiation
+                    </div>
+                    <table className="w-full">
+                      <tbody className="divide-y divide-slate-100">
+                        <FeeRow
+                          label="Courtage SGI"
+                          rate={feeSGI}
+                          onRate={setFeeSGI}
+                          absolute={dealTicket.sgi}
+                        />
+                        <FeeRow
+                          label="TPS"
+                          rate={feeTPS}
+                          onRate={setFeeTPS}
+                          absolute={dealTicket.tps}
+                          note="(% sur courtage SGI)"
+                        />
+                      </tbody>
+                    </table>
+
+                    <div className="px-3 py-2 bg-blue-50 border-t border-slate-200 flex justify-between items-center">
+                      <span className="text-sm font-medium">
+                        {simSide === "achat"
+                          ? "Montant total à régler"
+                          : "Produit net de la vente"}
+                      </span>
+                      <span className="text-base font-semibold text-blue-900 tabular-nums">
+                        {formatFCFA(dealTicket.regle)} FCFA
+                      </span>
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {/* ---------- ANALYTIQUE ---------- */}
+              {simMetrics && (
+                <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
+                  <h3 className="text-base font-medium mb-4">
+                    Analytique de la ligne
+                  </h3>
+                  <div className="border border-slate-200 rounded-md overflow-hidden text-sm">
+                    <table className="w-full">
+                      <tbody className="divide-y divide-slate-100">
+                        <SimRow
+                          label="Cours pied de coupon"
+                          value={`${formatFCFA2(simMetrics.cleanPrice)} FCFA`}
+                        />
+                        <SimRow
+                          label="Prix plein coupon"
+                          value={`${formatFCFA2(simMetrics.dirtyPrice)} FCFA`}
+                        />
+                        <SimRow
+                          label="Duration de Macaulay"
+                          value={`${simMetrics.macaulay.toFixed(3)} ans`}
+                        />
+                        <SimRow
+                          label="Duration modifiée"
+                          value={simMetrics.modified.toFixed(3)}
+                        />
+                        <SimRow
+                          label="Sensibilité (PV01)"
+                          value={`${formatFCFA2(simMetrics.bpv)} FCFA`}
+                        />
+                        <SimRow
+                          label="Convexité"
+                          value={simMetrics.convexity.toFixed(4)}
+                        />
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-3">
+                    Un mouvement de 100 points de base ferait varier la position
+                    d&apos;environ{" "}
+                    <b>
+                      {formatFCFA(
+                        Math.abs(simMetrics.bpv) * 100 * simQty,
+                      )}{" "}
+                      FCFA
+                    </b>{" "}
+                    sur {formatFCFA(simQty)} titres.
+                  </p>
+                </section>
+              )}
             </div>
 
-            {/* OUTPUTS — prix en valeur absolue (FCFA) */}
-            {simMetrics &&
-              (() => {
-                const dirty = simMetrics.dirtyPrice;
-                const dayToMatYears = Math.max(
-                  0,
-                  (new Date(bond.maturityDate).getTime() - simDate.getTime()) /
-                    (365 * 24 * 60 * 60 * 1000)
-                );
-
-                // Frais en absolu (% × dirty price), TPS appliquee sur frais SGI.
-                const brvmAbs = (feeBRVM / 100) * dirty;
-                const dcbrAbs = (feeDCBR / 100) * dirty;
-                const sgiAbs = (feeSGI / 100) * dirty;
-                const tpsAbs = (feeTPS / 100) * sgiAbs;
-                const totalFees = brvmAbs + dcbrAbs + sgiAbs + tpsAbs;
-                const tousFraisCompris = dirty + totalFees;
-
-                return (
-                  <>
-                    <div className="border border-slate-200 rounded-md overflow-hidden mb-4 text-sm">
-                      <table className="w-full">
-                        <tbody className="divide-y divide-slate-100">
-                          <SimRow
-                            label="Yield to maturity"
-                            value={`${(simMetrics.ytm * 100).toFixed(4)} %`}
-                          />
-                          <SimRow
-                            label="Clean Price"
-                            value={`${formatFCFA2(simMetrics.cleanPrice)} FCFA`}
-                          />
-                          <SimRow
-                            label="Dirty Price"
-                            value={`${formatFCFA2(simMetrics.dirtyPrice)} FCFA`}
-                          />
-                          <SimRow
-                            label="Coupon couru"
-                            value={`${formatFCFA2(simMetrics.accruedInterest)} FCFA`}
-                          />
-                          <SimRow
-                            label="Day to maturity"
-                            value={`${dayToMatYears.toFixed(3)} years`}
-                          />
-                          <SimRow
-                            label="Mac Duration"
-                            value={`${simMetrics.macaulay.toFixed(3)} years`}
-                          />
-                          <SimRow
-                            label="Mod Duration"
-                            value={simMetrics.modified.toFixed(3)}
-                          />
-                          <SimRow
-                            label="PV01"
-                            value={`${formatFCFA2(simMetrics.bpv)} FCFA`}
-                          />
-                          <SimRow
-                            label="Convexity"
-                            value={simMetrics.convexity.toFixed(4)}
-                          />
-                        </tbody>
-                      </table>
+            {/* ---------- RECAPITULATIF ---------- */}
+            <div className="space-y-4 md:space-y-6">
+              {dealTicket && (
+                <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
+                  <h3 className="text-base font-medium mb-4">Récapitulatif</h3>
+                  <div className="mb-4">
+                    <div className="text-xs text-slate-500 mb-1">
+                      {simSide === "achat" ? "À régler" : "À recevoir"}
                     </div>
-
-                    {/* FRAIS BRVM / DC-BR / SGI / TPS — montants en FCFA */}
-                    <div className="border border-slate-200 rounded-md overflow-hidden text-sm">
-                      <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 text-[11px] font-semibold text-slate-700 uppercase tracking-wide">
-                        Frais
-                      </div>
-                      <table className="w-full">
-                        <tbody className="divide-y divide-slate-100">
-                          <FeeRow
-                            label="Frais BRVM"
-                            rate={feeBRVM}
-                            onRate={setFeeBRVM}
-                            absolute={brvmAbs}
-                          />
-                          <FeeRow
-                            label="Frais DC/BR"
-                            rate={feeDCBR}
-                            onRate={setFeeDCBR}
-                            absolute={dcbrAbs}
-                          />
-                          <FeeRow
-                            label="Frais SGI"
-                            rate={feeSGI}
-                            onRate={setFeeSGI}
-                            absolute={sgiAbs}
-                          />
-                          <FeeRow
-                            label="TPS"
-                            rate={feeTPS}
-                            onRate={setFeeTPS}
-                            absolute={tpsAbs}
-                            note="(% sur frais SGI)"
-                          />
-                        </tbody>
-                      </table>
-                      <div className="px-3 py-2 bg-blue-50 border-t border-slate-200 flex justify-between items-center">
-                        <span className="text-sm font-medium">
-                          Prix tout compris
-                        </span>
-                        <span className="text-base font-semibold text-blue-900 tabular-nums">
-                          {formatFCFA2(tousFraisCompris)} FCFA
-                        </span>
-                      </div>
+                    <div className="text-2xl md:text-3xl font-semibold text-blue-900 tabular-nums">
+                      {formatFCFA(dealTicket.regle)}
                     </div>
+                    <div className="text-xs text-slate-400 mt-0.5">FCFA</div>
+                  </div>
+                  <dl className="space-y-3 text-sm">
+                    <div className="flex justify-between">
+                      <dt className="text-slate-500">Frais totaux</dt>
+                      <dd className="font-medium tabular-nums">
+                        {formatFCFA(dealTicket.fraisTotal)} FCFA
+                      </dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-slate-500">Poids des frais</dt>
+                      <dd className="font-medium tabular-nums">
+                        {(dealTicket.fraisPct * 100).toFixed(3).replace(".", ",")}%
+                      </dd>
+                    </div>
+                    <div className="flex justify-between pt-3 border-t border-slate-100">
+                      <dt className="text-slate-500">
+                        {simSide === "achat" ? "Prix de revient" : "Prix de cession"}
+                      </dt>
+                      <dd className="font-medium tabular-nums">
+                        {formatFCFA2(dealTicket.dirtyEffectif)} FCFA
+                      </dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-slate-500">Rendement affiché</dt>
+                      <dd className="font-medium tabular-nums">
+                        {(dealTicket.ytmBrut * 100).toFixed(3).replace(".", ",")}%
+                      </dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-slate-500">Rendement net de frais</dt>
+                      <dd className="font-medium tabular-nums">
+                        {dealTicket.ytmNet === null
+                          ? "—"
+                          : (dealTicket.ytmNet * 100).toFixed(3).replace(".", ",") + "%"}
+                      </dd>
+                    </div>
+                    {dealTicket.ytmNet !== null && (
+                      <div className="flex justify-between">
+                        <dt className="text-slate-500">Coût en rendement</dt>
+                        <dd className="font-medium tabular-nums text-rose-600">
+                          {Math.round(
+                            Math.abs(dealTicket.ytmNet - dealTicket.ytmBrut) * 10000,
+                          )}{" "}
+                          pb
+                        </dd>
+                      </div>
+                    )}
+                  </dl>
+                </section>
+              )}
 
-                  </>
-                );
-              })()}
-          </section>
+              <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
+                <h3 className="text-base font-medium mb-3">Barème appliqué</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="text-slate-500">
+                      <tr>
+                        <th className="text-left py-1 font-medium">Tranche</th>
+                        <th className="text-right py-1 font-medium">BRVM</th>
+                        <th className="text-right py-1 font-medium">DC/BR</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 tabular-nums">
+                      <tr>
+                        <td className="py-1.5">≤ 1 Md FCFA</td>
+                        <td className="py-1.5 text-right">0,0500 %</td>
+                        <td className="py-1.5 text-right">0,1000 %</td>
+                      </tr>
+                      <tr>
+                        <td className="py-1.5">&gt; 1 Md FCFA</td>
+                        <td className="py-1.5 text-right">0,0375 %</td>
+                        <td className="py-1.5 text-right">0,0500 %</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <p className="text-xs text-slate-500 mt-3">
+                  Barème marginal : la fraction de l&apos;opération sous le
+                  milliard est commissionnée au premier taux, l&apos;excédent au
+                  second. L&apos;assiette est le montant négocié, coupon couru
+                  inclus. Le courtage SGI et la TPS varient d&apos;un
+                  intermédiaire à l&apos;autre et restent modifiables.
+                </p>
+              </section>
+            </div>
+          </div>
         )}
 
         {/* ============================================================ */}
@@ -2067,7 +2706,7 @@ export default function BondDetailView({
         {activeTab === "characteristics" && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
             <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6 lg:col-span-2">
-              <h3 className="text-base font-medium mb-4">📋 Fiche signalétique</h3>
+              <h3 className="text-base font-medium mb-4">Fiche signalétique</h3>
               <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2.5 text-sm">
                 <Row label="ISIN" value={bond.isin} mono />
                 <Row label="Code BRVM" value={bond.code || "—"} />
@@ -2141,7 +2780,7 @@ export default function BondDetailView({
             <div className="space-y-4 md:space-y-6">
               {similarBonds.length > 0 && (
                 <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
-                  <h3 className="text-base font-medium mb-3">🔀 Obligations similaires</h3>
+                  <h3 className="text-base font-medium mb-3">Obligations similaires</h3>
                   <p className="text-xs text-slate-500 mb-3">
                     Même pays, durée résiduelle proche
                   </p>

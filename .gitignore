@@ -55,3 +55,22 @@ __pycache__/
 
 # Excel autosave next to .xlsb (Microsoft Office)
 *.xlk
+
+# Documents de travail deposes a la racine — jamais versionnes.
+#
+# Ce depot est PUBLIC. Y pousser un inventaire de FCP, un etat de valeur
+# liquidative, une balance generale ou des transactions inter-fonds les rendrait
+# consultables par n'importe qui, et un depot GitHub public est indexe, forke et
+# mis en cache : la suppression ulterieure ne repare rien.
+#
+# La regle est ancree sur la racine (/) pour ne pas toucher les documents
+# legitimement versionnes sous data/ — avis de prix CHPH, notices publiques.
+/*.xlsx
+/*.pptx
+/*.pdf
+/*.docx
+
+# Archives et scripts jetables
+/data/historique_sika/*.rar
+/_tmp_*.mjs
+/_test_*

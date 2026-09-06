@@ -8,15 +8,21 @@ import { bondHref } from "@/lib/listedBondsTypes";
 
 type EnrichedBond = ListedBond & {
   ytm: number;
+  /** Date du cours ayant servi au YTM. null = aucun cours observe. */
+  priceDate: string | null;
 };
 
 type Anomaly = {
   bond: EnrichedBond;
   reason: string;
   severity: "watch_high" | "watch_low";
-  /** Écart absolu en bps par rapport à la moyenne des pairs (positif = décoté). */
+  /** Ecart absolu en bps par rapport a la mediane des pairs (positif = decote). */
   deviationBps: number;
   peersCount: number;
+  zScore: number;
+  /** Dispersion de la cohorte, en bps. Sert a juger si l'ecart est mesurable. */
+  peerSpreadBps: number;
+  priceDate: string;
 };
 
 type Props = {
@@ -26,77 +32,103 @@ type Props = {
   limit?: number | null;
 };
 
+/** Taille minimale de cohorte. A trois pairs, l'ecart type n'a pas de sens :
+ *  un z de 1,6 y est du bruit, pas un signal. */
+const MIN_PAIRS = 5;
+
+/** Plancher de dispersion, en fraction (0,0020 = 20 bps). En deca, la cohorte
+ *  est trop homogene pour qu'un ecart soit mesurable : diviser par un ecart
+ *  type quasi nul produisait des z-scores de 40, mecaniquement absurdes. */
+const SD_PLANCHER = 0.002;
+
+const Z_SEUIL = 1.5;
+
 /**
- * Détection statistique : pour chaque obligation rated, compare son YTM aux
- * pairs (même pays + même rating + durée ±1 an, min 3 pairs). Z-score > 1,5σ
- * = anomalie. Pas un signal d'achat / vente — un point d'analyse à creuser.
+ * Detection statistique : pour chaque obligation notee ET cotee, compare son
+ * YTM a celui de ses pairs (meme pays, meme notation, duree ±1 an).
+ *
+ * Trois garde-fous, appris des faux positifs de la version precedente :
+ *  - on n'evalue que des titres dont le YTM vient d'un COURS OBSERVE. Sans
+ *    cours, getBondYTMFromLatest retourne le taux de coupon : comparer des
+ *    coupons entre eux ne revele aucune anomalie de valorisation, seulement
+ *    des conditions d'emission differentes ;
+ *  - variance d'ECHANTILLON (n−1), et non de population : sur des cohortes de
+ *    5 a 20 lignes, diviser par n sous-estime la dispersion et gonfle le z ;
+ *  - plancher de dispersion : sous 20 bps d'ecart type, on ne signale rien.
+ *
+ * Ce n'est pas un signal d'achat ou de vente — un point d'analyse a creuser.
  */
 function detectAnomalies(
   bonds: ListedBond[],
-  prices: ListedBondPrice[]
+  prices: ListedBondPrice[],
 ): Anomaly[] {
   const latestByIsin = new Map<string, ListedBondPrice>();
   for (const p of prices) {
     const cur = latestByIsin.get(p.isin);
     if (!cur || p.date > cur.date) latestByIsin.set(p.isin, p);
   }
-  const enriched: EnrichedBond[] = bonds.map((b) => ({
-    ...b,
-    ytm: getBondYTMFromLatest(b, latestByIsin.get(b.isin) ?? null),
-  }));
+
+  const enriched: EnrichedBond[] = bonds.map((b) => {
+    const lp = latestByIsin.get(b.isin);
+    const cote = !!lp && lp.cleanPrice > 0;
+    return {
+      ...b,
+      ytm: getBondYTMFromLatest(b, lp ?? null),
+      priceDate: cote ? lp!.date : null,
+    };
+  });
+
+  // Univers evaluable : note ET cote.
+  const univers = enriched.filter(
+    (b) => b.rating && b.rating.trim() !== "" && b.priceDate !== null && b.ytm > 0,
+  );
 
   const anoms: Anomaly[] = [];
 
-  enriched.forEach((b) => {
-    if (!b.rating) return;
-
-    const peers = enriched.filter(
+  univers.forEach((b) => {
+    const peers = univers.filter(
       (p) =>
         p.country === b.country &&
         p.rating === b.rating &&
         Math.abs(p.yearsToMaturity - b.yearsToMaturity) < 1 &&
-        p.isin !== b.isin &&
-        p.ytm > 0
+        p.isin !== b.isin,
     );
 
-    if (peers.length < 3) return;
+    if (peers.length < MIN_PAIRS) return;
 
-    const peerYtms = peers.map((p) => p.ytm);
-    const peerAvg = peerYtms.reduce((s, y) => s + y, 0) / peerYtms.length;
-    const peerVariance =
-      peerYtms.reduce((s, y) => s + Math.pow(y - peerAvg, 2), 0) /
-      peerYtms.length;
-    const peerStdDev = Math.sqrt(peerVariance);
+    const ys = peers.map((p) => p.ytm);
+    const moyenne = ys.reduce((s, y) => s + y, 0) / ys.length;
+    // Variance d'echantillon : n−1 au denominateur.
+    const variance =
+      ys.reduce((s, y) => s + (y - moyenne) ** 2, 0) / (ys.length - 1);
+    const ecartType = Math.sqrt(variance);
 
-    const deviation = b.ytm - peerAvg;
-    const zScore = peerStdDev > 0 ? deviation / peerStdDev : 0;
-    const deviationBps = Math.round(deviation * 10000);
+    if (ecartType < SD_PLANCHER) return;
 
-    if (zScore > 1.5) {
-      anoms.push({
-        bond: b,
-        reason: `YTM ${(b.ytm * 100).toFixed(2)}% vs ${(peerAvg * 100).toFixed(
-          2
-        )}% moyen (${peers.length} pairs ${b.country}/${b.rating}) · +${deviationBps} bps`,
-        severity: "watch_high",
-        deviationBps,
-        peersCount: peers.length,
-      });
-    } else if (zScore < -1.5) {
-      anoms.push({
-        bond: b,
-        reason: `YTM ${(b.ytm * 100).toFixed(2)}% vs ${(peerAvg * 100).toFixed(
-          2
-        )}% moyen (${peers.length} pairs ${b.country}/${b.rating}) · ${deviationBps} bps`,
-        severity: "watch_low",
-        deviationBps,
-        peersCount: peers.length,
-      });
-    }
+    const ecart = b.ytm - moyenne;
+    const z = ecart / ecartType;
+    if (Math.abs(z) <= Z_SEUIL) return;
+
+    const deviationBps = Math.round(ecart * 10000);
+    const peerSpreadBps = Math.round(ecartType * 10000);
+
+    anoms.push({
+      bond: b,
+      reason:
+        `${(b.ytm * 100).toFixed(2)}% contre ${(moyenne * 100).toFixed(2)}% ` +
+        `pour ${peers.length} pairs ${b.country}/${b.rating} ` +
+        `(dispersion ${peerSpreadBps} pb, z = ${z.toFixed(1)})`,
+      severity: z > 0 ? "watch_high" : "watch_low",
+      deviationBps,
+      peersCount: peers.length,
+      zScore: z,
+      peerSpreadBps,
+      priceDate: b.priceDate as string,
+    });
   });
 
   return anoms.sort(
-    (a, b) => Math.abs(b.deviationBps) - Math.abs(a.deviationBps)
+    (a, b) => Math.abs(b.deviationBps) - Math.abs(a.deviationBps),
   );
 }
 
@@ -107,6 +139,15 @@ export default function BondAnomalies({ bonds, prices, limit = null }: Props) {
     () => detectAnomalies(bonds, prices),
     [bonds, prices]
   );
+
+  /** Reference de fraicheur : la date de cours la plus recente du jeu, et non
+   *  la date du jour. Deterministe, donc identique au rendu serveur et client
+   *  — comparer a new Date() ferait diverger l'hydratation a minuit. */
+  const dateReference = useMemo(() => {
+    let max = "";
+    for (const p of prices) if (p.date > max) max = p.date;
+    return max;
+  }, [prices]);
 
   // KPIs calcules sur le set complet — restent stables quand on filtre.
   const kpis = useMemo(() => {
@@ -255,7 +296,7 @@ export default function BondAnomalies({ bonds, prices, limit = null }: Props) {
               <div className="flex justify-between items-start gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="font-medium">
-                    {a.severity === "watch_high" ? "📈" : "📉"} {a.bond.name}
+                    {a.bond.name}
                     {a.bond.code && (
                       <span className="ml-2 text-xs text-slate-500 font-normal">
                         ({a.bond.code})
@@ -263,10 +304,32 @@ export default function BondAnomalies({ bonds, prices, limit = null }: Props) {
                     )}
                   </div>
                   <div className="text-xs text-slate-600 mt-0.5">{a.reason}</div>
+                  <div className="text-[11px] text-slate-400 mt-1">
+                    Cours du {formatDateCourte(a.priceDate)}
+                    {perime(a.priceDate, dateReference) && (
+                      <span className="ml-1.5 text-amber-700">
+                        · plus de 15 jours, écart peut-être obsolète
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <span className="text-xs text-slate-500 whitespace-nowrap font-mono">
-                  {a.bond.isin}
-                </span>
+                <div className="text-right whitespace-nowrap">
+                  {/* L'ecart en points de base est le chiffre qu'on lit ;
+                      le z-score n'est qu'un critere de selection. */}
+                  <div
+                    className={`text-base font-semibold tabular-nums ${
+                      a.severity === "watch_high"
+                        ? "text-blue-800"
+                        : "text-rose-800"
+                    }`}
+                  >
+                    {a.deviationBps > 0 ? "+" : ""}
+                    {a.deviationBps} pb
+                  </div>
+                  <div className="text-[11px] text-slate-500 font-mono mt-0.5">
+                    {a.bond.isin}
+                  </div>
+                </div>
               </div>
             </Link>
           ))}
@@ -304,4 +367,21 @@ function AnomalyKpi({
       )}
     </div>
   );
+}
+
+/** JJ/MM/AA a partir d'une date ISO. */
+function formatDateCourte(iso: string): string {
+  const [y, m, d] = iso.split("-");
+  return y && m && d ? `${d}/${m}/${y.slice(2)}` : iso;
+}
+
+/** Un ecart calcule sur un cours vieux de plus de deux semaines n'est plus
+ *  actionnable : sur ce marche le cours est reporte tant qu'aucun echange
+ *  n'a lieu, donc l'anomalie peut avoir disparu sans que rien ne le montre. */
+function perime(iso: string, reference: string): boolean {
+  if (!reference) return false;
+  const a = new Date(iso + "T00:00:00Z").getTime();
+  const b = new Date(reference + "T00:00:00Z").getTime();
+  if (isNaN(a) || isNaN(b)) return false;
+  return (b - a) / 86400000 > 15;
 }

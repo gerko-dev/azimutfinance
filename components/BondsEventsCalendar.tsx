@@ -2,17 +2,40 @@
 
 import { useState, useMemo, useCallback, useEffect } from "react";
 import Link from "next/link";
-import type { ListedBond, ListedBondEvent } from "@/lib/listedBondsTypes";
+import type { ListedBondEvent } from "@/lib/listedBondsTypes";
 import CountryFlag from "./CountryFlag";
-import { bondHref } from "@/lib/listedBondsTypes";
+
+/** Le calendrier ne lit que ces quatre champs d'un titre. ListedBond comme
+ *  SovereignCalendarBond les portent, ce qui permet de servir le gisement cote
+ *  et le gisement souverain avec le meme composant. */
+type CalendarBond = {
+  code: string;
+  isin: string;
+  name: string;
+  country: string;
+  /** Seulement pour la recherche plein texte. Un titre souverain n'a pas
+   *  d'emetteur distinct de son pays, le champ reste vide. */
+  issuer?: string;
+};
 
 type Props = {
-  bonds: ListedBond[];
+  bonds: CalendarBond[];
   events: ListedBondEvent[];
   /** ISO YYYY-MM-DD — debut de la fenetre glissante (aujourd'hui). */
+  /** Borne basse des evenements transmis (90 jours avant aujourd'hui). */
   startDate: string;
   /** ISO — fin de la fenetre (aujourd'hui + 12 mois). */
   endDate: string;
+  /** Jour courant. Distinct de startDate : la fenetre transmise remonte
+   *  dans le passe, mais l'affichage demarre ici. */
+  todayISO: string;
+  /** Racine des liens vers la fiche d'un titre. « /obligation » par defaut ;
+   *  le gisement souverain passe « /souverain ».
+   *
+   *  Une chaine et non une fonction : ce composant est client, et une fonction
+   *  ne franchit pas la frontiere serveur/client — React refuse de la
+   *  serialiser. */
+  hrefBase?: string;
 };
 
 type EventType = ListedBondEvent["eventType"];
@@ -121,11 +144,25 @@ export default function BondsEventsCalendar({
   events,
   startDate,
   endDate,
+  todayISO,
+  hrefBase = "/obligation",
 }: Props) {
+  const lienFiche = useCallback(
+    (b: { code?: string | null; isin?: string | null }) => {
+      const cle = (b.code || "").trim() || (b.isin || "").trim();
+      return `${hrefBase}/${encodeURIComponent(cle)}`;
+    },
+    [hrefBase],
+  );
+
   // === INDEX OBLIGATIONS ===
-  const bondByIsin = useMemo(() => {
-    const m = new Map<string, ListedBond>();
-    for (const b of bonds) m.set(b.isin, b);
+  /** Index par MNEMONIQUE et non par ISIN : quatre lignes du referentiel
+   *  partagent l'ISIN "NC" (FDFINBF.O3, FEPTC.O4, O5, O6). Une carte par ISIN
+   *  n'en retenait qu'une, et 12 evenements de la fenetre s'affichaient sous
+   *  le nom, le pays et le lien d'un autre titre. */
+  const bondByCode = useMemo(() => {
+    const m = new Map<string, CalendarBond>();
+    for (const b of bonds) if (b.code) m.set(b.code, b);
     return m;
   }, [bonds]);
 
@@ -136,14 +173,20 @@ export default function BondsEventsCalendar({
   const [selectedTypes, setSelectedTypes] = useState<Set<EventType>>(new Set());
   const [search, setSearch] = useState("");
 
+  // === PASSE RECENT ===
+  // Les evenements anterieurs a aujourd'hui sont deja charges ; le bouton ne
+  // fait qu'ouvrir la borne basse. Le curseur, lui, reste sur le mois courant
+  // pour ne pas ouvrir le calendrier trois mois en arriere.
+  const [inclurePasse, setInclurePasse] = useState(false);
+
   const availableCountries = useMemo(() => {
     const set = new Set<string>();
     for (const e of events) {
-      const b = bondByIsin.get(e.isin);
+      const b = bondByCode.get(e.code);
       if (b?.country) set.add(b.country);
     }
     return Array.from(set).sort();
-  }, [events, bondByIsin]);
+  }, [events, bondByCode]);
 
   const availableTypes = useMemo(() => {
     const set = new Set<EventType>();
@@ -154,7 +197,8 @@ export default function BondsEventsCalendar({
   const filteredEvents = useMemo(() => {
     const q = search.trim().toLowerCase();
     return events.filter((e) => {
-      const b = bondByIsin.get(e.isin);
+      if (!inclurePasse && e.date < todayISO) return false;
+      const b = bondByCode.get(e.code);
       if (
         selectedCountries.size > 0 &&
         (!b?.country || !selectedCountries.has(b.country))
@@ -178,7 +222,15 @@ export default function BondsEventsCalendar({
       }
       return true;
     });
-  }, [events, bondByIsin, selectedCountries, selectedTypes, search]);
+  }, [
+    events,
+    bondByCode,
+    selectedCountries,
+    selectedTypes,
+    search,
+    inclurePasse,
+    todayISO,
+  ]);
 
   // === GROUPAGE PAR DATE ===
   const eventsByDate = useMemo(() => {
@@ -191,12 +243,16 @@ export default function BondsEventsCalendar({
   }, [filteredEvents]);
 
   // === MOIS COURANT ===
-  const startParts = startDate.split("-").map(Number);
+  const todayParts = todayISO.split("-").map(Number);
+  const todayYear = todayParts[0];
+  const todayMonth = todayParts[1] - 1;
+
+  const borneBasse = inclurePasse ? startDate : todayISO;
+  const startParts = borneBasse.split("-").map(Number);
   const startYear = startParts[0];
   const startMonth = startParts[1] - 1;
-  const todayISO = startDate;
 
-  const [cursor, setCursor] = useState({ year: startYear, month: startMonth });
+  const [cursor, setCursor] = useState({ year: todayYear, month: todayMonth });
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
   // === BORNES NAVIGATION ===
@@ -225,9 +281,20 @@ export default function BondsEventsCalendar({
     });
   }, []);
   const goToday = useCallback(() => {
-    setCursor({ year: startYear, month: startMonth });
+    setCursor({ year: todayYear, month: todayMonth });
     setSelectedDay(todayISO);
-  }, [startYear, startMonth, todayISO]);
+  }, [todayYear, todayMonth, todayISO]);
+
+  // Refermer le passe alors qu'on le consulte laisserait le curseur hors
+  // bornes, sur un mois vide et inatteignable : on le ramene au mois courant
+  // dans le meme geste.
+  const basculePasse = useCallback(() => {
+    const suivant = !inclurePasse;
+    if (!suivant && cursorIndex < todayYear * 12 + todayMonth) {
+      setCursor({ year: todayYear, month: todayMonth });
+    }
+    setInclurePasse(suivant);
+  }, [inclurePasse, cursorIndex, todayYear, todayMonth]);
 
   // Navigation clavier ←/→
   useEffect(() => {
@@ -308,7 +375,7 @@ export default function BondsEventsCalendar({
       `X-WR-CALNAME:Calendrier obligations cotées BRVM`,
     ];
     filteredEvents.forEach((e, i) => {
-      const b = bondByIsin.get(e.isin);
+      const b = bondByCode.get(e.code);
       const dt = e.date.replace(/-/g, "");
       const next = new Date(e.date);
       next.setDate(next.getDate() + 1);
@@ -336,7 +403,7 @@ export default function BondsEventsCalendar({
     a.download = `obligations-evenements-${todayISO}.ics`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [filteredEvents, bondByIsin, todayISO]);
+  }, [filteredEvents, bondByCode, todayISO]);
 
   const exportCSV = useCallback(() => {
     const headers = [
@@ -351,7 +418,7 @@ export default function BondsEventsCalendar({
       "description",
     ];
     const rows = filteredEvents.map((e) => {
-      const b = bondByIsin.get(e.isin);
+      const b = bondByCode.get(e.code);
       return [
         e.date,
         e.isin,
@@ -376,7 +443,7 @@ export default function BondsEventsCalendar({
     a.download = `obligations-evenements-${todayISO}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [filteredEvents, bondByIsin, todayISO]);
+  }, [filteredEvents, bondByCode, todayISO]);
 
   // === HANDLERS DE FILTRE ===
   function toggleCountry(c: string) {
@@ -406,52 +473,37 @@ export default function BondsEventsCalendar({
   // === RENDU ===
   return (
     <>
-      {/* HERO */}
-      <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-b border-slate-800">
-        <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8">
-          <div className="text-xs md:text-sm text-slate-400 mb-2">
-            <Link href="/marches/obligations" className="hover:text-white transition">
-              Obligations cotées
-            </Link>
-            <span className="mx-2 text-slate-500">›</span>
-            <span className="text-slate-200">Calendrier</span>
-          </div>
-          <div className="flex items-end justify-between flex-wrap gap-3">
-            <div>
-              <h1 className="text-2xl md:text-3xl font-semibold mb-1 text-white">
-                📅 Calendrier des événements
-              </h1>
-              <p className="text-sm md:text-base text-slate-300">
-                {filteredEvents.length} événement
-                {filteredEvents.length > 1 ? "s" : ""} sur les 12 prochains mois
-                {hasActiveFilters
-                  ? " (filtré)"
-                  : ` · ${events.length} au total`}
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={exportICal}
-                className="text-xs md:text-sm px-3 py-2 rounded-md bg-white border border-slate-200 hover:border-slate-300 transition inline-flex items-center gap-1.5"
-                title="Exporter le calendrier filtré au format iCal (.ics) — compatible Google/Outlook/Apple Calendar"
-              >
-                <span aria-hidden>📤</span> iCal
-              </button>
-              <button
-                type="button"
-                onClick={exportCSV}
-                className="text-xs md:text-sm px-3 py-2 rounded-md bg-white border border-slate-200 hover:border-slate-300 transition inline-flex items-center gap-1.5"
-                title="Exporter au format CSV (séparateur ;)"
-              >
-                <span aria-hidden>📊</span> CSV
-              </button>
-            </div>
+      <main className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8 space-y-6">
+        {/* EXPORTS — le titre et le fil d'Ariane appartiennent a la page, pas
+            au composant : celui-ci sert aussi bien le gisement cote que le
+            gisement souverain. */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs md:text-sm text-slate-500">
+            {filteredEvents.length} événement
+            {filteredEvents.length > 1 ? "s" : ""} affiché
+            {filteredEvents.length > 1 ? "s" : ""}
+            {hasActiveFilters ? " (filtré)" : ""}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={exportICal}
+              className="text-xs md:text-sm px-3 py-2 rounded-md bg-white border border-slate-200 hover:border-slate-300 transition inline-flex items-center gap-1.5"
+              title="Exporter le calendrier filtré au format iCal (.ics) — compatible Google/Outlook/Apple Calendar"
+            >
+              <span aria-hidden>📤</span> iCal
+            </button>
+            <button
+              type="button"
+              onClick={exportCSV}
+              className="text-xs md:text-sm px-3 py-2 rounded-md bg-white border border-slate-200 hover:border-slate-300 transition inline-flex items-center gap-1.5"
+              title="Exporter au format CSV (séparateur ;)"
+            >
+              <span aria-hidden>📊</span> CSV
+            </button>
           </div>
         </div>
-      </div>
 
-      <main className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8 space-y-6">
         {/* FILTRES */}
         <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-5">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 lg:gap-4 items-start">
@@ -502,12 +554,16 @@ export default function BondsEventsCalendar({
               <div className="flex flex-wrap gap-1.5">
                 {availableCountries.map((c) => {
                   const active = selectedCountries.has(c);
+                  // Largeur fixe et contenu centre : la liste melange des
+                  // codes a deux lettres (CI, SN) et des libelles regionaux
+                  // (UEMOA, CEDEAO). Sans min-w, les puces s'alignaient en
+                  // escalier.
                   return (
                     <button
                       key={c}
                       type="button"
                       onClick={() => toggleCountry(c)}
-                      className={`text-xs px-2 py-1 rounded-md ring-1 transition inline-flex items-center gap-1 ${
+                      className={`text-xs px-2 py-1 rounded-md ring-1 transition inline-flex items-center justify-center gap-1 min-w-[84px] ${
                         active
                           ? "bg-blue-50 text-blue-700 ring-blue-200"
                           : "bg-white text-slate-600 ring-slate-200 hover:ring-slate-300"
@@ -564,14 +620,29 @@ export default function BondsEventsCalendar({
               <h2 className="text-base md:text-lg font-semibold text-center">
                 {MONTHS_FR[cursor.month]} {cursor.year}
               </h2>
-              <button
-                type="button"
-                onClick={goToday}
-                className="text-xs px-2.5 py-1 rounded-md border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition"
-                title="Aller à aujourd'hui (T)"
-              >
-                Aujourd&apos;hui
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={basculePasse}
+                  aria-pressed={inclurePasse}
+                  className={`text-xs px-2.5 py-1 rounded-md border transition ${
+                    inclurePasse
+                      ? "border-blue-300 bg-blue-50 text-blue-800"
+                      : "border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+                  }`}
+                  title="Afficher aussi les 90 derniers jours"
+                >
+                  Passé récent
+                </button>
+                <button
+                  type="button"
+                  onClick={goToday}
+                  className="text-xs px-2.5 py-1 rounded-md border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition"
+                  title="Aller à aujourd'hui (T)"
+                >
+                  Aujourd&apos;hui
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50 text-[11px] font-medium text-slate-500 uppercase">
@@ -725,11 +796,11 @@ export default function BondsEventsCalendar({
               )}
               <ul className="divide-y divide-slate-100">
                 {dayEvents.map((e, i) => {
-                  const b = bondByIsin.get(e.isin);
+                  const b = bondByCode.get(e.code);
                   return (
                     <li key={i}>
                       <Link
-                        href={bondHref(b ?? { isin: e.isin })}
+                        href={lienFiche(b ?? { isin: e.isin })}
                         className="block px-4 md:px-5 py-3 hover:bg-blue-50/40 transition"
                       >
                         <div className="flex items-start gap-2.5">

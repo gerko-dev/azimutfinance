@@ -342,6 +342,99 @@ export default async function SourcesPage() {
             </p>
           </Method>
 
+          <Method title="Courbe des taux souverains — méthode standard (UMOA-Titres)">
+            <p>
+              Reproduit la note de l&apos;Agence UMOA-Titres «&nbsp;Courbes de taux
+              des émetteurs du MTP&nbsp;». Chaîne&nbsp;: chaque titre est positionné
+              à sa <strong>durée de vie moyenne</strong> à l&apos;émission (et non
+              à son échéance), arrondie au pilier standard le plus proche&nbsp;;
+              les BAT, à intérêts précomptés, sont convertis en post-comptés par{" "}
+              <code>T_post = T_pre / (1 − n·T_pre)</code> et fournissent
+              directement un taux zéro-coupon&nbsp;; les OAT sont démembrées par
+              bisection sur leur prix moyen pondéré, en actualisant les flux
+              antérieurs aux taux déjà établis&nbsp;; les piliers non émis sont
+              interpolés linéairement entre les bornes observées, jamais
+              extrapolés. Lissage final par Nelson-Siegel-Svensson.
+            </p>
+            <p>
+              <strong>Deux calages que la note ne fixe pas.</strong> Elle présente
+              τ₁ et τ₂ comme des paramètres à estimer, mais en réajustant une NSS
+              libre sur la colonne «&nbsp;après lissage&nbsp;» des fichiers publiés
+              (14, 21 et 28/08/2026), τ₂ ressort à <strong>3,00 pour sept pays sur
+              huit</strong> avec un résidu de 0,02 à 0,3&nbsp;pb — la colonne
+              officielle <em>est</em> une NSS de τ₂&nbsp;=&nbsp;3. τ₁ se tient
+              entre 0,20 et 1,05&nbsp;; laissé libre, le critère des moindres
+              carrés l&apos;envoie vers 0,05, où les deux premiers facteurs
+              s&apos;éteignent avant le premier pilier et ne servent plus qu&apos;à
+              passer par le point le plus bruité. Il est donc borné à
+              [0,20&nbsp;; 1,50], ce qui ramène l&apos;écart médian au lissage
+              officiel de 9,7 à 2,2&nbsp;pb.
+            </p>
+            <p>
+              <strong>Péremption des piliers.</strong> La note dit «&nbsp;la
+              dernière émission&nbsp;» sans horizon, mais l&apos;erreur suit
+              l&apos;ancienneté de l&apos;adjudication retenue&nbsp;: mesurée sur
+              les 351 piliers des trois courbes publiées, 6&nbsp;pb à moins de
+              trois mois, 26&nbsp;pb entre un et trois ans, 70&nbsp;pb au-delà. Un
+              seuil de <strong>5 ans</strong> conserve 98&nbsp;% des piliers et
+              fait tomber le troisième quartile de 42 à 24&nbsp;pb. Plus court, on
+              paie cher en couverture&nbsp;: à 6 mois il ne reste que 43&nbsp;% des
+              piliers et plus de courbe béninoise. Les échanges et rachats sont
+              écartés (taux de sortie, pas d&apos;émission).
+            </p>
+            <p>
+              <strong>Écart aux courbes publiées</strong>, sur les trois fichiers
+              de référence&nbsp;: zéro-coupon médian 12&nbsp;pb (p75 24&nbsp;pb).
+              Sur la courbe lissée, Mali 7, Côte d&apos;Ivoire 8, Bénin 11, Sénégal
+              15, Togo 17&nbsp;pb&nbsp;; Burkina 57, Guinée Bissau 83, Niger
+              99&nbsp;pb. Ces trois derniers relèvent d&apos;un défaut de collecte
+              — le Niger n&apos;a plus d&apos;adjudication en base depuis avril
+              2026 — et non d&apos;une erreur de méthode.
+            </p>
+            <p className="text-xs text-slate-500">
+              Calcul hors ligne&nbsp;:{" "}
+              <code>scripts/build_umoa_yield_curves.py</code>, relancé après chaque
+              scraping des adjudications (workflow{" "}
+              <code>scrape-umoa-emissions</code>, 08h et 19h UTC). Sortie{" "}
+              <code>data/umoa-courbes-taux.csv</code> (piliers + β et τ de la
+              fonctionnelle). Lecture&nbsp;:{" "}
+              <code>lib/dataLoader.ts::loadUmoaCourbesTaux</code>. La page ne
+              recalcule rien.
+            </p>
+          </Method>
+
+          <Method title="Courbe des taux souverains — méthode Azimut">
+            <p>
+              Lecture sans modèle du même gisement&nbsp;: <strong>médiane</strong>{" "}
+              des taux d&apos;adjudication constatés à chaque pilier de maturité,
+              les titres étant rattachés au pilier le plus proche de leur durée de
+              vie moyenne. Médiane et non moyenne&nbsp;: une adjudication faite
+              dans un moment de tension déplacerait une moyenne calculée sur cinq
+              observations. Un pilier portant moins de deux lignes ne donne pas de
+              point — la médiane d&apos;une seule ligne n&apos;est pas une
+              observation de marché, c&apos;est cette ligne.
+            </p>
+            <p>
+              Aucune extrapolation, aucun lissage&nbsp;: la courbe ne dit rien
+              entre deux piliers, mais n&apos;invente rien non plus. Contrepartie
+              de la méthode standard, qui est continue partout au prix d&apos;une
+              hypothèse de forme.
+            </p>
+            <p>
+              <strong>Limite connue.</strong> La grille Azimut commence à 3 mois et
+              n&apos;a pas de pilier «&nbsp;1 mois&nbsp;», que la grille officielle
+              possède. Les BAT à un mois sont donc rabattus sur le pilier 3 mois et
+              tirent sa médiane vers le bas — 193 lignes concernées pour la seule
+              Côte d&apos;Ivoire. Les deux méthodes ne sont pas comparables sur le
+              très court terme.
+            </p>
+            <p className="text-xs text-slate-500">
+              Code&nbsp;: <code>components/SovereignYieldCurve.tsx</code>{" "}
+              (<code>PILIERS_AZIMUT</code>, <code>pilierProche</code>,{" "}
+              <code>MIN_PAR_TRANCHE</code>).
+            </p>
+          </Method>
+
           <Method title="Rendement brut immobilier">
             <p>
               Loyer annuel médian ÷ prix d&apos;achat médian, par localité. Calculé uniquement

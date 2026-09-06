@@ -358,7 +358,7 @@ export default function SouverainsProView({ data }: { data: SouverainsProData })
 
       {/* ====== COURBE DES TAUX SOUVERAINE ====== */}
       <Card
-        title="Courbe des taux souveraine"
+        title="Courbe des taux souverains"
         subtitle="rendement d'adjudication × maturité"
         right={
           <div className="flex items-center gap-1.5 text-[11px]">

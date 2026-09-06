@@ -7,10 +7,9 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Cell,
   Legend,
   Line,
-  ScatterChart,
+  ComposedChart,
 } from "recharts";
 import { ResponsiveContainer } from "@/components/ui/ChartContainer";
 import type { ListedBond, ListedBondPrice } from "@/lib/listedBondsTypes";
@@ -21,13 +20,38 @@ import { getBondYTMFromLatest } from "@/lib/listedBondsTypes";
 // largement les signatures les plus risquées de la zone UEMOA.
 const YTM_MAX = 0.15;
 
-const TYPE_COLORS: Record<string, string> = {
-  "Obligation d'Etat": "#2563eb",
-  "Obligation privée": "#16a34a",
-  "Obligation régionale": "#9333ea",
-  "Sukuk Etat": "#ea580c",
-  Autre: "#64748b",
-};
+/** Tranches de maturité servant à construire une courbe observée.
+ *  Bornes resserrées sur le court terme, où la structure se joue, et
+ *  élargies au-delà de 7 ans où les lignes se raréfient. */
+const TRANCHES: { min: number; max: number; label: string }[] = [
+  { min: 0, max: 1, label: "< 1 an" },
+  { min: 1, max: 2, label: "1–2 ans" },
+  { min: 2, max: 3, label: "2–3 ans" },
+  { min: 3, max: 5, label: "3–5 ans" },
+  { min: 5, max: 7, label: "5–7 ans" },
+  { min: 7, max: 10, label: "7–10 ans" },
+  { min: 10, max: Infinity, label: "> 10 ans" },
+];
+
+/** En dessous, une tranche ne porte pas de point de courbe : la médiane
+ *  d'une seule obligation n'est pas une observation de marché, c'est cette
+ *  obligation. On l'affiche quand même en nuage, jamais en courbe. */
+const MIN_PAR_TRANCHE = 2;
+
+/** Palette des séries comparées. Ordonnée pour rester lisible en superposition
+ *  et distinguable en cas d'impression noir et blanc (luminances écartées). */
+const PALETTE = [
+  "#2563eb",
+  "#16a34a",
+  "#ea580c",
+  "#9333ea",
+  "#0891b2",
+  "#dc2626",
+  "#ca8a04",
+  "#4f46e5",
+  "#059669",
+  "#db2777",
+];
 
 type EnrichedForCurve = {
   ytm: number;
@@ -41,7 +65,7 @@ type EnrichedForCurve = {
 
 function enrichForCurve(
   bonds: ListedBond[],
-  prices: ListedBondPrice[]
+  prices: ListedBondPrice[],
 ): EnrichedForCurve[] {
   const latestByIsin = new Map<string, ListedBondPrice>();
   for (const p of prices) {
@@ -59,6 +83,13 @@ function enrichForCurve(
   }));
 }
 
+function mediane(xs: number[]): number {
+  if (xs.length === 0) return 0;
+  const s = [...xs].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 === 1 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+
 type Props = {
   bonds: ListedBond[];
   prices: ListedBondPrice[];
@@ -71,141 +102,122 @@ export default memo(function BondYieldCurve({
   prices,
   showBadge = true,
 }: Props) {
-  const enrichedBonds = useMemo(() => enrichForCurve(bonds, prices), [bonds, prices]);
+  const enriched = useMemo(() => enrichForCurve(bonds, prices), [bonds, prices]);
 
-  const availableTypes = useMemo(() => {
-    return Array.from(new Set(bonds.map((b) => b.issuerType))).sort();
-  }, [bonds]);
+  /** Points exploitables : maturité et rendement plausibles. */
+  const points = useMemo(
+    () =>
+      enriched.filter(
+        (b) => b.yearsToMaturity > 0 && b.ytm > 0 && b.ytm <= YTM_MAX,
+      ),
+    [enriched],
+  );
 
-  const availableCountriesForCurve = useMemo(() => {
-    const countries = new Set(enrichedBonds.map((b) => b.country));
-    return Array.from(countries).sort();
-  }, [enrichedBonds]);
+  const [dimension, setDimension] = useState<"country" | "issuerType">(
+    "country",
+  );
+  const [affichage, setAffichage] = useState<"points" | "courbe" | "les-deux">(
+    "les-deux",
+  );
 
-  const [curveFilterCountry, setCurveFilterCountry] = useState<string>("all");
-  const [curveFilterType, setCurveFilterType] = useState<string>("all");
-  const [curveAverageBasis, setCurveAverageBasis] = useState<string>("all-etat");
-
-  const yieldCurveData = useMemo(() => {
-    return enrichedBonds
-      .filter((b) => b.yearsToMaturity > 0 && b.ytm > 0 && b.ytm <= YTM_MAX)
-      .filter((b) => curveFilterCountry === "all" || b.country === curveFilterCountry)
-      .filter((b) => curveFilterType === "all" || b.issuerType === curveFilterType)
-      .map((b) => ({
-        x: b.yearsToMaturity,
-        y: b.ytm * 100,
-        name: b.name,
-        isin: b.isin,
-        code: b.code,
-        type: b.issuerType,
-        country: b.country,
-      }));
-  }, [enrichedBonds, curveFilterCountry, curveFilterType]);
-
-  const averageCurveInfo = useMemo(() => {
-    let basis = enrichedBonds.filter(
-      (b) => b.yearsToMaturity > 0 && b.ytm > 0 && b.ytm <= YTM_MAX
-    );
-    let label = "";
-
-    switch (curveAverageBasis) {
-      case "all":
-        label = `Marché global (${basis.length} oblig.)`;
-        break;
-      case "all-etat":
-        basis = basis.filter((b) => b.issuerType === "Obligation d'Etat");
-        label = `États UEMOA (${basis.length} oblig.)`;
-        break;
-      case "view":
-        basis = basis.filter(
-          (b) =>
-            (curveFilterCountry === "all" || b.country === curveFilterCountry) &&
-            (curveFilterType === "all" || b.issuerType === curveFilterType)
-        );
-        label = `Sélection en cours (${basis.length} oblig.)`;
-        break;
-      default:
-        if (curveAverageBasis.startsWith("country:")) {
-          const c = curveAverageBasis.substring(8);
-          basis = basis.filter((b) => b.country === c);
-          label = `Pays ${c} (${basis.length} oblig.)`;
-        } else if (curveAverageBasis.startsWith("type:")) {
-          const t = curveAverageBasis.substring(5);
-          basis = basis.filter((b) => b.issuerType === t);
-          label = `Type "${t}" (${basis.length} oblig.)`;
-        }
+  /** Groupes disponibles dans la dimension choisie, du plus fourni au moins
+   *  fourni : l'ordre de la palette suit ainsi l'importance des séries. */
+  const groupes = useMemo(() => {
+    const compte = new Map<string, number>();
+    for (const p of points) {
+      const k = p[dimension];
+      compte.set(k, (compte.get(k) ?? 0) + 1);
     }
+    return Array.from(compte.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([nom, n], i) => ({ nom, n, couleur: PALETTE[i % PALETTE.length] }));
+  }, [points, dimension]);
 
-    if (basis.length < 3) {
-      return {
-        points: [] as { x: number; y: number }[],
-        label: `${label} · trop peu de données`,
-      };
-    }
+  /** Sélection courante. Vide = tout afficher : on évite un écran blanc au
+   *  changement de dimension, et l'utilisateur retire ce qui l'encombre. */
+  const [selection, setSelection] = useState<Record<string, string[]>>({});
+  const cle = dimension;
+  const actifs = useMemo(() => {
+    const s = selection[cle];
+    if (s === undefined) return groupes.slice(0, 4).map((g) => g.nom);
+    return s;
+  }, [selection, cle, groupes]);
 
-    const n = basis.length;
-    const sumX = basis.reduce((s, b) => s + b.yearsToMaturity, 0);
-    const sumY = basis.reduce((s, b) => s + b.ytm * 100, 0);
-    const sumXY = basis.reduce(
-      (s, b) => s + b.yearsToMaturity * b.ytm * 100,
-      0
-    );
-    const sumXX = basis.reduce(
-      (s, b) => s + b.yearsToMaturity * b.yearsToMaturity,
-      0
-    );
+  function bascule(nom: string) {
+    const courant = actifs;
+    const suivant = courant.includes(nom)
+      ? courant.filter((x) => x !== nom)
+      : [...courant, nom];
+    setSelection({ ...selection, [cle]: suivant });
+  }
 
-    const denom = n * sumXX - sumX * sumX;
-    if (denom === 0) {
-      return {
-        points: [] as { x: number; y: number }[],
-        label: `${label} · calcul impossible`,
-      };
-    }
+  /** Une série par groupe retenu : le nuage brut et la courbe observée.
+   *
+   *  La courbe n'est pas un ajustement : c'est la MÉDIANE des rendements
+   *  constatés dans chaque tranche de maturité, posée à la maturité médiane
+   *  de la tranche. Rien n'est extrapolé, rien n'est lissé — une tranche sans
+   *  obligation reste un trou. C'est le seul tracé qu'un marché aussi peu
+   *  liquide autorise sans inventer de structure.
+   *
+   *  La médiane plutôt que la moyenne : deux ou trois lignes décotées
+   *  suffiraient à déplacer une moyenne calculée sur cinq observations.
+   */
+  const series = useMemo(() => {
+    return groupes
+      .filter((g) => actifs.includes(g.nom))
+      .map((g) => {
+        const sousEnsemble = points.filter((p) => p[dimension] === g.nom);
 
-    const slope = (n * sumXY - sumX * sumY) / denom;
-    const intercept = (sumY - slope * sumX) / n;
+        const courbe = TRANCHES.map((t) => {
+          const dedans = sousEnsemble.filter(
+            (p) => p.yearsToMaturity >= t.min && p.yearsToMaturity < t.max,
+          );
+          if (dedans.length < MIN_PAR_TRANCHE) return null;
+          return {
+            x: mediane(dedans.map((p) => p.yearsToMaturity)),
+            y: mediane(dedans.map((p) => p.ytm * 100)),
+            tranche: t.label,
+            effectif: dedans.length,
+            groupe: g.nom,
+          };
+        }).filter((v): v is NonNullable<typeof v> => v !== null);
 
-    const minX = Math.min(...basis.map((b) => b.yearsToMaturity));
-    const maxX = Math.max(...basis.map((b) => b.yearsToMaturity));
+        const ys = sousEnsemble.map((p) => p.ytm * 100);
+        const court = courbe.find((c) => c.x < 3);
+        const long = [...courbe].reverse().find((c) => c.x >= 7);
 
-    return {
-      points: [
-        { x: minX, y: slope * minX + intercept },
-        { x: maxX, y: slope * maxX + intercept },
-      ],
-      label,
-    };
-  }, [enrichedBonds, curveAverageBasis, curveFilterCountry, curveFilterType]);
-
-  const averageCurve = averageCurveInfo.points;
-
-  // KPIs derives de la selection courante (yieldCurveData), pas du dataset
-  // brut : ils suivent les filtres pays/type comme le chart.
-  const kpis = useMemo(() => {
-    const ys = yieldCurveData
-      .map((d) => d.y)
-      .slice()
-      .sort((a, b) => a - b);
-    const median =
-      ys.length === 0
-        ? 0
-        : ys.length % 2 === 1
-        ? ys[(ys.length - 1) / 2]
-        : (ys[ys.length / 2 - 1] + ys[ys.length / 2]) / 2;
-    const min = ys.length ? ys[0] : 0;
-    const max = ys.length ? ys[ys.length - 1] : 0;
-    return { count: yieldCurveData.length, median, min, max };
-  }, [yieldCurveData]);
+        return {
+          ...g,
+          nuage: sousEnsemble.map((p) => ({
+            x: p.yearsToMaturity,
+            y: p.ytm * 100,
+            name: p.name,
+            code: p.code,
+            isin: p.isin,
+            type: p.issuerType,
+            country: p.country,
+            groupe: g.nom,
+          })),
+          courbe,
+          medianeGlobale: mediane(ys),
+          min: ys.length ? Math.min(...ys) : 0,
+          max: ys.length ? Math.max(...ys) : 0,
+          // Pente OBSERVÉE entre le court et le long terme, en points de base.
+          // Lue sur deux médianes de tranche, pas ajustée.
+          pente: court && long ? (long.y - court.y) * 100 : null,
+        };
+      });
+  }, [groupes, actifs, points, dimension]);
 
   return (
     <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
       <div className="flex justify-between items-start flex-wrap gap-2 mb-3">
         <div>
-          <h2 className="text-lg md:text-xl font-semibold">📊 Courbe des taux BRVM</h2>
+          <h2 className="text-lg md:text-xl font-semibold">Courbe des taux BRVM</h2>
           <p className="text-xs md:text-sm text-slate-600 mt-1">
-            YTM actuariel par maturité résiduelle. La ligne pointillée est la droite de
-            régression calculée sur la base sélectionnée.
+            YTM actuariel par maturité résiduelle. Les courbes relient la
+            médiane des rendements constatés dans chaque tranche de maturité :
+            aucune extrapolation, aucun lissage.
           </p>
         </div>
         {showBadge && (
@@ -215,106 +227,89 @@ export default memo(function BondYieldCurve({
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-2 md:gap-3 mb-4 p-3 bg-slate-50 rounded-md">
-        <div>
-          <label className="block text-[10px] uppercase tracking-wide text-slate-500 mb-1 font-medium">
-            Afficher les points · Pays
-          </label>
-          <select
-            value={curveFilterCountry}
-            onChange={(e) => setCurveFilterCountry(e.target.value)}
-            className="w-full px-2.5 py-1.5 text-sm border border-slate-300 rounded-md bg-white focus:outline-none focus:border-blue-500"
-          >
-            <option value="all">Tous pays</option>
-            {availableCountriesForCurve.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
+      {/* ---------- CONTROLES ---------- */}
+      <div className="flex flex-wrap items-center gap-4 mb-3">
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] uppercase tracking-wide text-slate-500 font-medium">
+            Comparer par
+          </span>
+          <div className="inline-flex rounded-md bg-slate-100 p-0.5 text-xs">
+            {[
+              { l: "Pays", v: "country" as const },
+              { l: "Type d'émetteur", v: "issuerType" as const },
+            ].map((d) => (
+              <button
+                key={d.v}
+                onClick={() => setDimension(d.v)}
+                className={`px-3 py-1 rounded transition ${
+                  dimension === d.v
+                    ? "bg-white shadow-sm font-medium"
+                    : "text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                {d.l}
+              </button>
             ))}
-          </select>
+          </div>
         </div>
 
-        <div>
-          <label className="block text-[10px] uppercase tracking-wide text-slate-500 mb-1 font-medium">
-            Afficher les points · Type
-          </label>
-          <select
-            value={curveFilterType}
-            onChange={(e) => setCurveFilterType(e.target.value)}
-            className="w-full px-2.5 py-1.5 text-sm border border-slate-300 rounded-md bg-white focus:outline-none focus:border-blue-500"
-          >
-            <option value="all">Tous types</option>
-            {availableTypes.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] uppercase tracking-wide text-slate-500 font-medium">
+            Affichage
+          </span>
+          <div className="inline-flex rounded-md bg-slate-100 p-0.5 text-xs">
+            {[
+              { l: "Points", v: "points" as const },
+              { l: "Courbe", v: "courbe" as const },
+              { l: "Les deux", v: "les-deux" as const },
+            ].map((a) => (
+              <button
+                key={a.v}
+                onClick={() => setAffichage(a.v)}
+                className={`px-3 py-1 rounded transition ${
+                  affichage === a.v
+                    ? "bg-white shadow-sm font-medium"
+                    : "text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                {a.l}
+              </button>
             ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-[10px] uppercase tracking-wide text-slate-500 mb-1 font-medium">
-            Calibrer la moyenne sur
-          </label>
-          <select
-            value={curveAverageBasis}
-            onChange={(e) => setCurveAverageBasis(e.target.value)}
-            className="w-full px-2.5 py-1.5 text-sm border border-slate-300 rounded-md bg-white focus:outline-none focus:border-blue-500"
-          >
-            <option value="all-etat">États UEMOA (défaut)</option>
-            <option value="all">Marché global</option>
-            <option value="view">Sélection affichée</option>
-            <optgroup label="Par pays">
-              {availableCountriesForCurve.map((c) => {
-                // CEDEAO et UEMOA sont des emetteurs regionaux (BIDC, BOAD,
-                // CRRH-UEMOA…), pas des pays — on retire le prefixe "Pays".
-                const isRegional = c === "CEDEAO" || c === "UEMOA";
-                return (
-                  <option key={`country:${c}`} value={`country:${c}`}>
-                    {isRegional ? c : `Pays ${c}`}
-                  </option>
-                );
-              })}
-            </optgroup>
-            <optgroup label="Par type">
-              {availableTypes.map((t) => (
-                <option key={`type:${t}`} value={`type:${t}`}>
-                  Type {t}
-                </option>
-              ))}
-            </optgroup>
-          </select>
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-2 md:gap-3 mb-4">
-        <CurveKpi
-          label="Obligations affichées"
-          value={kpis.count.toString()}
-          accent="bg-violet-500"
-        />
-        <CurveKpi
-          label="YTM médian"
-          value={kpis.count ? `${kpis.median.toFixed(2)}%` : "—"}
-          accent="bg-blue-500"
-        />
-        <CurveKpi
-          label="YTM min – max"
-          value={
-            kpis.count
-              ? `${kpis.min.toFixed(2)}% – ${kpis.max.toFixed(2)}%`
-              : "—"
-          }
-          accent="bg-emerald-500"
-        />
-      </div>
-      <div className="text-xs text-slate-500 mb-3">
-        Moyenne : <b className="text-slate-900">{averageCurveInfo.label}</b>
+      {/* ---------- SERIES COMPAREES ---------- */}
+      <div className="flex flex-wrap gap-2 mb-4">
+        {groupes.map((g) => {
+          const on = actifs.includes(g.nom);
+          return (
+            <button
+              key={g.nom}
+              type="button"
+              onClick={() => bascule(g.nom)}
+              aria-pressed={on}
+              className={`text-xs px-2.5 py-1 rounded-md border transition ${
+                on
+                  ? "border-slate-300 bg-white text-slate-800"
+                  : "border-slate-200 text-slate-400 bg-slate-50 hover:bg-white"
+              }`}
+            >
+              <span
+                className="inline-block w-2 h-2 rounded-full mr-1.5 align-middle"
+                style={{ backgroundColor: on ? g.couleur : "#cbd5e1" }}
+              />
+              {g.nom}
+              <span className="text-slate-400 ml-1">({g.n})</span>
+            </button>
+          );
+        })}
       </div>
 
+      {/* ---------- GRAPHIQUE ---------- */}
       <div className="h-72 md:h-80">
         <ResponsiveContainer width="100%" height="100%">
-          <ScatterChart margin={{ top: 10, right: 20, bottom: 30, left: 10 }}>
+          <ComposedChart margin={{ top: 10, right: 20, bottom: 30, left: 10 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
             <XAxis
               type="number"
@@ -352,13 +347,25 @@ export default memo(function BondYieldCurve({
               trigger="hover"
               content={({ active, payload }) => {
                 if (!active || !payload || !payload.length) return null;
-                // Recharts inclut parfois la Line de régression dans le payload
-                // (sans `name`/`isin`) — on cible explicitement le point Scatter.
-                const scatterEntry = payload.find(
-                  (p) => p.payload && p.payload.isin
-                );
-                if (!scatterEntry) return null;
-                const d = scatterEntry.payload;
+                // Un point de courbe porte `tranche`, un point de nuage `isin`.
+                const pt = payload.find((p) => p.payload?.tranche)?.payload;
+                if (pt) {
+                  return (
+                    <div className="bg-white border border-slate-200 rounded-md shadow-md p-3 text-xs">
+                      <div className="font-medium mb-1">{pt.groupe}</div>
+                      <div className="text-slate-500">{pt.tranche}</div>
+                      <div className="mt-1">
+                        YTM médian : <b>{Number(pt.y).toFixed(2)}%</b>
+                      </div>
+                      <div className="text-slate-400 mt-1">
+                        {pt.effectif} obligation{pt.effectif > 1 ? "s" : ""} dans
+                        la tranche
+                      </div>
+                    </div>
+                  );
+                }
+                const d = payload.find((p) => p.payload?.isin)?.payload;
+                if (!d) return null;
                 return (
                   <div className="bg-white border border-slate-200 rounded-md shadow-md p-3 text-xs">
                     <div className="font-medium mb-1">{d.name || d.code}</div>
@@ -378,64 +385,100 @@ export default memo(function BondYieldCurve({
                 );
               }}
             />
-            <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: "11px" }} />
+            <Legend
+              verticalAlign="top"
+              height={36}
+              wrapperStyle={{ fontSize: "11px" }}
+            />
 
-            {averageCurve.length >= 2 && (
-              <Line
-                type="linear"
-                dataKey="y"
-                data={averageCurve}
-                stroke="#64748b"
-                strokeWidth={2}
-                strokeDasharray="5 5"
-                dot={false}
-                legendType="plainline"
-                name={`Moyenne · ${averageCurveInfo.label}`}
-                isAnimationActive={false}
-              />
-            )}
+            {affichage !== "courbe" &&
+              series.map((g) => (
+                <Scatter
+                  key={`n-${g.nom}`}
+                  name={g.nom}
+                  data={g.nuage}
+                  fill={g.couleur}
+                  fillOpacity={affichage === "les-deux" ? 0.45 : 0.85}
+                  legendType={affichage === "les-deux" ? "none" : "circle"}
+                  isAnimationActive={false}
+                />
+              ))}
 
-            {Object.keys(TYPE_COLORS).map((type) => {
-              const data = yieldCurveData.filter((d) => d.type === type);
-              if (data.length === 0) return null;
-              return (
-                <Scatter key={type} name={type} data={data} fill={TYPE_COLORS[type]}>
-                  {data.map((_, i) => (
-                    <Cell key={i} fill={TYPE_COLORS[type]} />
-                  ))}
-                </Scatter>
-              );
-            })}
-          </ScatterChart>
+            {affichage !== "points" &&
+              series.map((g) => (
+                <Line
+                  key={`c-${g.nom}`}
+                  type="monotone"
+                  dataKey="y"
+                  data={g.courbe}
+                  name={g.nom}
+                  stroke={g.couleur}
+                  strokeWidth={2}
+                  dot={{ r: 3.5, fill: g.couleur, strokeWidth: 0 }}
+                  activeDot={{ r: 5 }}
+                  legendType="plainline"
+                  connectNulls
+                  isAnimationActive={false}
+                />
+              ))}
+          </ComposedChart>
         </ResponsiveContainer>
       </div>
+
+      {/* ---------- TABLEAU DE COMPARAISON ---------- */}
+      {series.length > 0 && (
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-slate-500 text-xs">
+              <tr className="border-b border-slate-200">
+                <th className="text-left py-2 font-medium">Série</th>
+                <th className="text-right py-2 font-medium">Lignes</th>
+                <th className="text-right py-2 font-medium">YTM médian</th>
+                <th className="text-right py-2 font-medium">Min – max</th>
+                <th className="text-right py-2 font-medium">Points de courbe</th>
+                <th className="text-right py-2 font-medium">Pente observée</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 tabular-nums">
+              {series.map((g) => (
+                <tr key={g.nom}>
+                  <td className="py-2">
+                    <span
+                      className="inline-block w-2 h-2 rounded-full mr-2 align-middle"
+                      style={{ backgroundColor: g.couleur }}
+                    />
+                    {g.nom}
+                  </td>
+                  <td className="py-2 text-right">{g.nuage.length}</td>
+                  <td className="py-2 text-right">
+                    {g.medianeGlobale.toFixed(2).replace(".", ",")}%
+                  </td>
+                  <td className="py-2 text-right text-slate-500">
+                    {g.min.toFixed(2).replace(".", ",")} –{" "}
+                    {g.max.toFixed(2).replace(".", ",")}%
+                  </td>
+                  <td className="py-2 text-right text-slate-500">
+                    {g.courbe.length} / {TRANCHES.length}
+                  </td>
+                  <td
+                    className={`py-2 text-right ${
+                      g.pente === null
+                        ? "text-slate-400"
+                        : g.pente > 0
+                          ? "text-emerald-600"
+                          : "text-rose-600"
+                    }`}
+                  >
+                    {g.pente === null
+                      ? "—"
+                      : `${g.pente > 0 ? "+" : ""}${Math.round(g.pente)} pb`}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </section>
   );
 });
-
-// Mini-carte KPI pour la bande de stats au-dessus du chart. Barre latérale
-// colorée + valeur tabular-nums pour rester aligné avec le style du hero.
-function CurveKpi({
-  label,
-  value,
-  accent,
-}: {
-  label: string;
-  value: string;
-  accent: string;
-}) {
-  return (
-    <div className="relative bg-white rounded-md border border-slate-200 p-3 overflow-hidden">
-      <span
-        className={`absolute left-0 top-0 bottom-0 w-1 ${accent}`}
-        aria-hidden
-      />
-      <div className="text-[10px] uppercase tracking-wide text-slate-500 mb-0.5 ml-1">
-        {label}
-      </div>
-      <div className="text-base md:text-lg font-semibold text-slate-900 tabular-nums ml-1">
-        {value}
-      </div>
-    </div>
-  );
-}
