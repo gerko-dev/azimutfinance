@@ -27,7 +27,7 @@ const menuSections: MenuSection[] = [
   {
     label: "Marchés",
     items: [
-      { label: "Actions BRVM", href: "/marches/actions" },
+      { label: "Actions cotées", href: "/marches/actions" },
       { label: "Obligations cotées", href: "/marches/obligations" },
       { label: "Souverains non cotés", href: "/marches/souverains-non-cotes" },
       {

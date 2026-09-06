@@ -63,7 +63,7 @@ export default function Footer() {
 
           {/* Marchés */}
           <Column title="Marchés">
-            <Item href="/marches/actions">Actions BRVM</Item>
+            <Item href="/marches/actions">Actions cotées</Item>
             <Item href="/marches/obligations">Obligations cotées</Item>
             <Item href="/marches/souverains-non-cotes">Souverains non cotés</Item>
             <Item href="/marches/fcp">FCP / OPCVM</Item>
