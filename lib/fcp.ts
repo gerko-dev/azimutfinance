@@ -43,6 +43,9 @@ const BOC_FILE = "fcp.csv";
 // gestionnaire + nomAumfcp + opcvm + date + vl + frequenceCalcul + source).
 // Produit hors ligne par scripts/backfill_fcp_vl.py.
 const VL_HISTORY_FILE = "fcp/vl-historique.csv";
+// Fractionnements de parts (utf-8 / ; / gestionnaire + nomAumfcp + dateEffet
+// + facteur + source). Tenu a la main, cf. loadSplits().
+const SPLITS_FILE = "fcp/fractionnements.csv";
 
 // ==========================================
 // TYPES
@@ -340,12 +343,78 @@ function loadVLHistory(): Map<string, Array<{ date: string; vl: number }>> {
   return out;
 }
 
+/**
+ * Fractionnements de parts (data/fcp/fractionnements.csv).
+ *
+ * Un fonds qui divise sa part par dix voit sa VL chuter d'autant sans qu'il ne
+ * se passe rien d'économique. La SICAV ABDOU DIOUF est passée de 17 600 727 le
+ * 1er juillet 2026 à 1 763 598 le lendemain. Laissée brute, la série affiche
+ * une perte de 90 % qui n'a pas eu lieu, et toute performance calculée à
+ * travers la date est fausse.
+ *
+ * Le fichier est tenu à la main, chaque ligne portant sa justification : une
+ * détection automatique confondrait un fractionnement avec un décrochage réel,
+ * et l'erreur serait invisible.
+ */
+function loadSplits(): Map<string, Array<{ date: string; facteur: number }>> {
+  const out = new Map<string, Array<{ date: string; facteur: number }>>();
+  type Row = {
+    gestionnaire: string;
+    nomAumfcp: string;
+    dateEffet: string;
+    facteur: string;
+  };
+  let rows: Row[];
+  try {
+    rows = parseCSV<Row>(SPLITS_FILE, ";", "utf-8");
+  } catch {
+    return out;
+  }
+  for (const r of rows) {
+    const gest = (r.gestionnaire || "").trim();
+    const nom = (r.nomAumfcp || "").trim();
+    const date = (r.dateEffet || "").trim();
+    const facteur = parseNumOrNull(r.facteur);
+    if (!gest || !nom || date.length !== 10 || facteur === null || facteur <= 0) {
+      continue;
+    }
+    const key = `${gest}__${fundNameKey(nom)}`;
+    const liste = out.get(key);
+    if (liste) liste.push({ date, facteur });
+    else out.set(key, [{ date, facteur }]);
+  }
+  return out;
+}
+
+/**
+ * Ramène toutes les VL antérieures à un fractionnement à l'échelle actuelle,
+ * pour que la série soit continue et les performances justes.
+ *
+ * Convention retenue : on divise le PASSÉ, pas on multiplie le présent. La
+ * dernière VL affichée reste donc celle que publie le BOC, ce qui évite de
+ * montrer à l'utilisateur un chiffre qu'il ne retrouverait nulle part.
+ *
+ * L'actif net n'est PAS touché : un fractionnement multiplie le nombre de
+ * parts et divise leur valeur, l'encours du fonds ne bouge pas.
+ */
+function ajusterFractionnements(
+  obs: FundObservation[],
+  splits: Array<{ date: string; facteur: number }>,
+): void {
+  for (const { date, facteur } of splits) {
+    for (const o of obs) {
+      if (o.date < date && o.vl !== null) o.vl = o.vl / facteur;
+    }
+  }
+}
+
 export function loadFunds(): Fund[] {
   if (_fundsCache !== null) return _fundsCache;
 
   const rows = parseCSV<AumfcpRow>(AUMFCP_FILE, ";", "latin1");
   const bocSnapshots = loadBocSnapshots();
   const vlHistory = loadVLHistory();
+  const splits = loadSplits();
 
   // Groupage par (gestionnaire, clé canonique du nom). La clé canonique fusionne
   // les variantes du même fonds (ex: « AURORE OPPORTUNITES » et
@@ -438,6 +507,12 @@ export function loadFunds(): Fund[] {
     }
 
     obs.sort((a, b) => a.date.localeCompare(b.date));
+
+    // Fractionnements : appliqué ICI, une fois toutes les observations réunies
+    // — trimestrielles, historique BOC et VL du jour — et avant que latestVL,
+    // latestQuarter et la catégorie courante n'en soient déduits.
+    const splitsFonds = splits.get(groupKey);
+    if (splitsFonds) ajusterFractionnements(obs, splitsFonds);
 
     // Catégorie "courante" du fonds = celle de l'observation la plus récente.
     const latestObs = obs[obs.length - 1];

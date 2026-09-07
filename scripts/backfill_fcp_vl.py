@@ -48,6 +48,7 @@ from datetime import date, datetime, timedelta
 RACINE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SORTIE = os.path.join(RACINE, "data", "fcp", "vl-historique.csv")
 JOURNAL = os.path.join(RACINE, "data", "fcp", ".vl-historique-bulletins.txt")
+FRACTIONNEMENTS = os.path.join(RACINE, "data", "fcp", "fractionnements.csv")
 
 # Le gestionnaire fait partie de l'identite du fonds, pas de sa description :
 # le site joint les series sur le couple (gestionnaire, nom), et deux maisons
@@ -142,6 +143,57 @@ def noter_bulletins(jours: list[str]) -> None:
             f.write(j + "\n")
 
 
+def lire_fractionnements() -> dict[str, list[tuple[str, float]]]:
+    """Fractionnements connus, indexes par nom canonique de fonds.
+
+    Un fonds qui divise sa part par dix voit sa VL chuter d'autant sans que
+    rien d'economique ne se passe. Le controle d'echelle ci-dessous compare
+    chaque VL a celle du referentiel trimestriel : sans cette table, il aurait
+    rejete — et il a rejete — toutes les valeurs posterieures au
+    fractionnement de la SICAV ABDOU DIOUF, amputant sa serie de deux mois.
+    """
+    out: dict[str, list[tuple[str, float]]] = {}
+    if not os.path.exists(FRACTIONNEMENTS):
+        return out
+    with open(FRACTIONNEMENTS, encoding="utf-8", newline="") as f:
+        for r in csv.DictReader(f, delimiter=";"):
+            nom = (r.get("nomAumfcp") or "").strip()
+            date_effet = (r.get("dateEffet") or "").strip()
+            try:
+                facteur = float((r.get("facteur") or "").replace(",", "."))
+            except ValueError:
+                continue
+            if nom and RE_ISO.match(date_effet) and facteur > 0:
+                out.setdefault(nom.upper(), []).append((date_effet, facteur))
+    return out
+
+
+def reference_ajustee(
+    reference: float | None,
+    nom: str,
+    date_vl: str,
+    date_ref: str,
+    fractionnements: dict[str, list[tuple[str, float]]],
+) -> float | None:
+    """Ramene la VL de reference a l'echelle qui avait cours a `date_vl`.
+
+    La reference vient du referentiel trimestriel, arretee a `date_ref`. Si un
+    fractionnement s'est produit entre les deux dates, les deux valeurs ne sont
+    pas sur la meme echelle et les comparer directement n'a pas de sens.
+    """
+    if reference is None:
+        return None
+    for date_effet, facteur in fractionnements.get(nom.upper(), []):
+        # Fractionnement posterieur a la VL mais anterieur ou egal a la
+        # reference : la reference est deja divisee, la VL non.
+        if date_vl < date_effet <= date_ref:
+            reference *= facteur
+        # Cas inverse : la VL est deja divisee, la reference non.
+        elif date_ref < date_effet <= date_vl:
+            reference /= facteur
+    return reference
+
+
 def lire_sortie() -> dict[tuple[str, str], list[str]]:
     if not os.path.exists(SORTIE):
         return {}
@@ -172,6 +224,93 @@ def nombre(v: str) -> float | None:
     except ValueError:
         return None
     return x if VL_MIN <= x <= VL_MAX else None
+
+
+# En dessous, une chute d'un jour au suivant n'est plus un mouvement de marche
+# credible pour un OPCVM de la zone : c'est un fractionnement de parts.
+SEUIL_FRACTIONNEMENT = 0.35
+
+# Un point qui s'ecarte de ses DEUX voisins d'au moins la moitie, alors que ces
+# voisins s'accordent entre eux, n'est pas un mouvement de marche : c'est une
+# colonne mal decoupee dans le PDF.
+SEUIL_ABERRATION = 1.5
+TOLERANCE_VOISINS = 0.15
+
+
+def indexer_series(
+    obs: dict[tuple[str, str, str], list[str]],
+) -> dict[tuple[str, str], list[tuple[str, float]]]:
+    series: dict[tuple[str, str], list[tuple[str, float]]] = {}
+    for (gest, nom, d), ligne in obs.items():
+        try:
+            series.setdefault((gest, nom), []).append((d, float(ligne[4])))
+        except (ValueError, IndexError):
+            continue
+    for points in series.values():
+        points.sort()
+    return series
+
+
+def retirer_aberrations(obs: dict[tuple[str, str, str], list[str]]) -> int:
+    """Retire les pics isoles laisses par le decoupage du PDF.
+
+    BOA ACTIONS passait de 16 826 a 37 465 puis retombait a 16 829 la semaine
+    suivante ; SOAGA EPARGNE QUIETUDE de 6 259 a 14 400 puis 6 261. Un seul
+    point faux, encadre de deux voisins qui s'accordent — donc identifiable
+    sans reference exterieure, et sans risque de confondre avec un vrai
+    decrochage, qui lui ne revient pas.
+    """
+    retires = 0
+    for (gest, nom), points in indexer_series(obs).items():
+        for i in range(1, len(points) - 1):
+            (_, avant), (d, val), (_, apres) = points[i - 1], points[i], points[i + 1]
+            if avant <= 0 or apres <= 0 or val <= 0:
+                continue
+            ecart_avant = max(val / avant, avant / val)
+            ecart_apres = max(val / apres, apres / val)
+            voisins_daccord = abs(apres / avant - 1) <= TOLERANCE_VOISINS
+            if (
+                ecart_avant >= SEUIL_ABERRATION
+                and ecart_apres >= SEUIL_ABERRATION
+                and voisins_daccord
+            ):
+                obs.pop((gest, nom, d), None)
+                retires += 1
+    return retires
+
+
+def signaler_fractionnements(
+    obs: dict[tuple[str, str, str], list[str]],
+    connus: dict[str, list[tuple[str, float]]],
+) -> None:
+    """Signale les ruptures de serie qui ressemblent a un fractionnement.
+
+    Ne corrige rien : il faut verifier au bulletin avant d'inscrire une ligne
+    dans data/fcp/fractionnements.csv. Mais un fractionnement non declare rend
+    fausse toute performance calculee a travers sa date, sans que rien ne le
+    signale — la SICAV ABDOU DIOUF a divise sa part par dix le 2 juillet 2026,
+    et seule une question posee a temps l'a fait remarquer.
+    """
+    suspects: list[tuple[str, str, str, float]] = []
+    for (gest, nom), points in indexer_series(obs).items():
+        declares = {dt for dt, _ in connus.get(nom.upper(), [])}
+        for i in range(1, len(points)):
+            (d0, v0), (d1, v1) = points[i - 1], points[i]
+            if v0 <= 0 or d1 in declares:
+                continue
+            if v1 / v0 <= 1 - SEUIL_FRACTIONNEMENT:
+                suspects.append((nom, d0, d1, v0 / v1))
+
+    if not suspects:
+        return
+    print()
+    print(
+        f"⚠ {len(suspects)} rupture(s) de série évoquant un fractionnement non "
+        "déclaré — à vérifier au bulletin, puis à inscrire dans "
+        "data/fcp/fractionnements.csv :"
+    )
+    for nom, d0, d1, facteur in sorted(suspects, key=lambda x: x[2]):
+        print(f"   {nom[:34]:36} {d0} → {d1}   facteur ≈ {facteur:.2f}")
 
 
 def main() -> int:
@@ -209,6 +348,13 @@ def main() -> int:
     # une semaine, « AFRICABOURSE ASSET MANAGEMENT » la suivante, parce que son
     # nom court sur deux lignes du tableau — et un meme fonds se dedoublerait.
     index_aum = boc.load_aumfcp_index()
+    fractionnements = lire_fractionnements()
+    if fractionnements:
+        print(
+            f"Fractionnements connus : "
+            f"{sum(len(v) for v in fractionnements.values())} "
+            f"sur {len(fractionnements)} fonds"
+        )
 
     obs = lire_sortie()
     deja = lire_journal()
@@ -321,7 +467,11 @@ def main() -> int:
                 freq = (r.get("frequenceCalcul") or "").strip()
                 # VL du referentiel trimestriel, quand l'enrichissement l'a
                 # trouvee : sert d'ordre de grandeur de controle.
-                reference = nombre(r.get("vlAumfcp", ""))
+                # VL du referentiel trimestriel et sa date : servent d'ordre
+                # de grandeur de controle, une fois ramenees a l'echelle de
+                # l'observation (cf. reference_ajustee).
+                reference_brute = nombre(r.get("vlAumfcp", ""))
+                date_reference = (r.get("dateAumfcp") or "").strip()
                 # Deux observations datees par fonds et par bulletin.
                 # Noms d'apres enrichissement : enrich_fcp_rows renomme
                 # valeurPrecedente/valeurJour en vlPrecedente/vlActuelle, comme
@@ -371,9 +521,10 @@ def main() -> int:
                     # de 6 799, un facteur 4 600, et 194 observations fausses qui
                     # auraient ecrase toute echelle de graphique. Une VL peut
                     # doubler en quatre ans, pas quintupler.
-                    if reference is not None and not (
-                        0.2 <= vl / reference <= 5
-                    ):
+                    ref = reference_ajustee(
+                        reference_brute, nom, d, date_reference, fractionnements
+                    )
+                    if ref is not None and not (0.2 <= vl / ref <= 5):
                         echelles += 1
                         continue
                     cle = (gest, nom, d)
@@ -402,6 +553,10 @@ def main() -> int:
                 ecrire_sortie(obs)
                 noter_bulletins(en_attente)
                 en_attente = []
+
+    aberrations = retirer_aberrations(obs)
+    if aberrations:
+        print(f"Pics isolés retirés : {aberrations} (colonne mal découpée)")
 
     ecrire_sortie(obs)
     noter_bulletins(en_attente)
@@ -433,6 +588,8 @@ def main() -> int:
     if dates:
         print(f"Période couverte : {dates[0]} → {dates[-1]}")
     print(f"Écrit dans data/fcp/vl-historique.csv")
+
+    signaler_fractionnements(obs, fractionnements)
     return 0
 
 
