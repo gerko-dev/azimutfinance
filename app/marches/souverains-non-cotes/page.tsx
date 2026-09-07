@@ -33,6 +33,7 @@ export default async function Page() {
   const stats = getSovereignMarketStats(bonds);
   const upcoming = loadUmoaEmissionsAVenir();
   const planned = loadUmoaEmissionsPlanifiees();
+
   const userRole = await fetchUserRole();
 
   return (

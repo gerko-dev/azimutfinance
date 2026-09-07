@@ -357,12 +357,12 @@ export default function SouverainsNonCotesView({
               Outils sur le gisement souverain
             </h2>
             <span className="text-xs text-slate-500">
-              3 outils Premium · courbe, écarts de taux, calendrier
+              4 outils Premium · courbe, écarts de taux, calendrier, soumission
             </span>
           </div>
           {/* Meme ordre que la section des obligations cotees : courbe,
-              surveillance, calendrier. */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
+              surveillance, calendrier — puis le repere de soumission. */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
             <SovereignToolCard
               href="/marches/souverains-non-cotes/courbe-taux"
               accent="violet"
@@ -383,8 +383,16 @@ export default function SouverainsNonCotesView({
               href="/marches/souverains-non-cotes/calendrier"
               accent="emerald"
               title="Calendrier obligataire"
-              description="Adjudications à venir et calendrier annuel publié par les agences."
+              description="Adjudications à venir et calendrier annuel."
               stat={`${upcoming.length} opérations annoncées`}
+              unlocked={isPremium}
+            />
+            <SovereignToolCard
+              href="/marches/souverains-non-cotes/simulateur"
+              accent="amber"
+              title="Repère de soumission"
+              description="À quel prix soumissionner pour être retenu."
+              stat="Marginal et moyen pondéré"
               unlocked={isPremium}
             />
           </div>
@@ -814,6 +822,7 @@ const TOOL_ACCENT: Record<string, string> = {
   violet: "bg-violet-500",
   emerald: "bg-emerald-500",
   indigo: "bg-indigo-500",
+  amber: "bg-amber-500",
 };
 
 function SovereignToolCard({
