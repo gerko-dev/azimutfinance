@@ -86,6 +86,13 @@ const ALLOWED_BOT_PATTERNS = [
   "telegrambot",
   "discordbot",
   "applebot",     // distinct de Applebot-Extended (entrainement)
+  // Robots publicitaires Google, distincts de Google-Extended qui reste
+  // bloque : celui-la sert a l'entrainement des modeles, ceux-ci a analyser
+  // les pages pour la regie. Ils passaient deja, mais par accident — aucun
+  // motif ne les attrapait. Les declarer evite qu'un ajout futur a
+  // BLOCKED_UA_PATTERNS ne les bloque sans que personne ne fasse le lien.
+  "mediapartners-google",
+  "adsbot-google",
   "vercel-screenshot", // preview deployment screenshots
 ];
 

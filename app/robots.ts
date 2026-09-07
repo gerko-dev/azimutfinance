@@ -82,6 +82,17 @@ export default function robots(): MetadataRoute.Robots {
         allow: "/",
         disallow: standardDisallow,
       },
+      // Robots publicitaires Google : acces complet aux pages publiques.
+      // Mediapartners-Google analyse le contenu, AdsBot-Google verifie la
+      // qualite des pages de destination. Tous deux distincts de
+      // Google-Extended, bloque plus haut, qui sert a l'entrainement des
+      // modeles. La politique generale les autorise deja ; la regle
+      // explicite les protege d'un futur Disallow trop large.
+      {
+        userAgent: ["Mediapartners-Google", "AdsBot-Google"],
+        allow: "/",
+        disallow: standardDisallow,
+      },
       // Politique stricte pour bots IA et scrapers connus
       ...BLOCKED_AI_BOTS.map((ua) => ({
         userAgent: ua,
