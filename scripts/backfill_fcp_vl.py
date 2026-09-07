@@ -215,8 +215,16 @@ def lire_sortie() -> dict[tuple[str, str], list[str]]:
 def ecrire_sortie(obs: dict[tuple[str, str], list[str]]) -> None:
     os.makedirs(os.path.dirname(SORTIE), exist_ok=True)
     lignes = sorted(obs.values(), key=lambda r: (r[0], r[1], r[3]))
+    # Fin de ligne LF explicite, et non le CRLF par defaut de csv.writer.
+    #
+    # Sans cela, le fichier prend un jeu de fins de ligne different selon la
+    # machine qui l'ecrit, et git voit un fichier entierement modifie a chaque
+    # passage : la premiere execution du cron a produit un diff de 3,4 Mo pour
+    # zero ligne reellement changee. Au rythme de trois passages par jour, le
+    # depot aurait grossi de plusieurs mega-octets quotidiens sans qu'aucune
+    # donnee ne bouge. Cf. .gitattributes, qui fige la meme convention.
     with open(SORTIE, "w", encoding="utf-8", newline="") as f:
-        w = csv.writer(f, delimiter=";")
+        w = csv.writer(f, delimiter=";", lineterminator="\n")
         w.writerow(ENTETES)
         w.writerows(lignes)
 

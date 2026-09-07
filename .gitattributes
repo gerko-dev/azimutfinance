@@ -1,0 +1,15 @@
+# Fins de ligne des donnees ecrites par les scripts d'automatisation.
+#
+# Ces fichiers sont produits tantot sur un poste Windows, tantot sur un runner
+# Linux de GitHub Actions. Sans convention figee, git les voit entierement
+# modifies a chaque changement de machine : la premiere execution du cron a
+# produit un diff de 3,4 Mo sur vl-historique.csv pour zero ligne reellement
+# changee.
+#
+# On ne touche PAS aux autres CSV du depot, dont plusieurs sont en CRLF de
+# longue date (aumfcp.csv notamment) : les convertir produirait exactement le
+# diff massif qu'on cherche a eviter.
+data/fcp/vl-historique.csv text eol=lf
+data/fcp/risque.csv text eol=lf
+data/fcp/fractionnements.csv text eol=lf
+data/umoa-courbes-taux.csv text eol=lf
