@@ -20,6 +20,7 @@
 #     volume echange, valeur transigee de la page 1 du BOC)
 #   - data/fcp.csv (tableau FCP / SICAV extrait de la derniere page du BOC)
 #   - data/obligations-cotees.csv (injection des VN dans nominalValue, --merge)
+#   - data/fcp/vl-historique.csv (historique des VL, cf. etape d'archivage)
 
 name: Scrape BOC BRVM
 
@@ -72,26 +73,38 @@ jobs:
             python scripts/scrape_brvm_boc.py --merge
           fi
 
+      # data/fcp.csv est un INSTANTANE ecrase chaque jour : sans cette etape,
+      # la VL du jour serait perdue des demain. Le backfill l'archive dans
+      # data/fcp/vl-historique.csv.
+      #
+      # Lance sans borne de dates : le journal des bulletins deja depouilles
+      # fait sauter tout ce qui est fait, donc seuls les jours nouveaux sont
+      # telecharges. Le workflow rattrape ainsi de lui-meme les jours manques
+      # — panne du runner, BOC indisponible, coupure reseau — puisqu'un echec
+      # reseau n'est justement pas journalise.
+      - name: Archiver la VL du jour dans l'historique
+        run: python scripts/backfill_fcp_vl.py
+
       - name: Show diff stats
         run: |
           echo "=== Files modified ==="
-          git status --short data/obligations-cotees.csv data/obligations-cotees-vn-boc.csv data/obligations-cotees-boc-synthese.json data/fcp.csv data/obligations-cotees-prix.csv data/obligations-cotees-boc-statut.csv || true
+          git status --short data/obligations-cotees.csv data/obligations-cotees-vn-boc.csv data/obligations-cotees-boc-synthese.json data/fcp.csv data/fcp/vl-historique.csv data/fcp/.vl-historique-bulletins.txt data/obligations-cotees-prix.csv data/obligations-cotees-boc-statut.csv || true
           echo ""
           echo "=== Diff summary ==="
-          git diff --stat data/obligations-cotees.csv data/obligations-cotees-vn-boc.csv data/obligations-cotees-boc-synthese.json data/fcp.csv data/obligations-cotees-prix.csv data/obligations-cotees-boc-statut.csv || true
+          git diff --stat data/obligations-cotees.csv data/obligations-cotees-vn-boc.csv data/obligations-cotees-boc-synthese.json data/fcp.csv data/fcp/vl-historique.csv data/fcp/.vl-historique-bulletins.txt data/obligations-cotees-prix.csv data/obligations-cotees-boc-statut.csv || true
 
       - name: Commit & push if changed
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/obligations-cotees.csv data/obligations-cotees-vn-boc.csv data/obligations-cotees-boc-synthese.json data/fcp.csv data/obligations-cotees-prix.csv data/obligations-cotees-boc-statut.csv
+          git add data/obligations-cotees.csv data/obligations-cotees-vn-boc.csv data/obligations-cotees-boc-synthese.json data/fcp.csv data/fcp/vl-historique.csv data/fcp/.vl-historique-bulletins.txt data/obligations-cotees-prix.csv data/obligations-cotees-boc-statut.csv
           if git diff --staged --quiet; then
             echo "Aucun changement a commiter."
             exit 0
           fi
           DATE_TAG=$(date -u +%Y-%m-%d)
           git commit \
-            -m "chore(data): refresh VN + volumes obligations cotees BRVM ${DATE_TAG}" \
+            -m "chore(data): refresh VN + volumes obligations + VL FCP ${DATE_TAG}" \
             -m "Mise a jour automatique via GitHub Actions (workflow scrape-boc)." \
             -m "Source : Bulletin Officiel de la Cote BRVM (bfin.brvm.org)."
           # Retry pour gerer les pushs concurrents (eviter conflits avec

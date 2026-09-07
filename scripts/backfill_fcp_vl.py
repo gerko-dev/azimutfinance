@@ -82,6 +82,12 @@ VL_MAX = 50_000_000.0
 # meme un fonds a VL mensuelle publie une « valeur precedente » d'un mois.
 PEREMPTION_JOURS = 400
 
+# Un bulletin « absent » n'est definitif que passe ce delai. Avant, il peut
+# simplement ne pas etre encore publie : la BRVM met le BOC en ligne en fin de
+# journee, et le workflow passe des 8h UTC. Journaliser l'absence a ce
+# moment-la interdirait la relecture du soir, et la VL du jour serait perdue.
+JOURS_AVANT_ABSENCE_DEFINITIVE = 7
+
 # Seules des dates ISO entrent dans la serie.
 RE_ISO = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
@@ -391,6 +397,7 @@ def main() -> int:
     en_attente: list[str] = []
     perimees = 0
     invalides = 0
+    recentes = 0
     futures = 0
     echelles = 0
 
@@ -436,11 +443,17 @@ def main() -> int:
                 echecs += 1
                 continue
 
-            en_attente.append(cible.isoformat())
-
             if statut != "ok" or not contenu:
                 absents += 1
+                # Absence recente : on ne la grave pas dans le journal, le
+                # bulletin est peut-etre simplement en attente de publication.
+                if (fin - cible).days >= JOURS_AVANT_ABSENCE_DEFINITIVE:
+                    en_attente.append(cible.isoformat())
+                else:
+                    recentes += 1
                 continue
+
+            en_attente.append(cible.isoformat())
 
             try:
                 # DERNIERE page, en mode layout : le tableau FCP aligne
@@ -579,6 +592,12 @@ def main() -> int:
         f"Bulletins dépouillés : {traites}   déjà faits : {ignores}   "
         f"fériés : {absents}   échecs réseau : {echecs}"
     )
+    if recentes:
+        print(
+            f"Absences récentes non journalisées : {recentes} "
+            f"(moins de {JOURS_AVANT_ABSENCE_DEFINITIVE} jours — bulletin "
+            "peut-être pas encore publié, sera relu)"
+        )
     if echecs:
         print(
             f"Les {echecs} jours en échec réseau ne sont PAS journalisés : "
