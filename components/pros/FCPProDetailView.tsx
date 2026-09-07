@@ -42,7 +42,12 @@ export type FCPProDetailData = {
     bocDayChange: number | null;
   };
   refQuarter: string;
-  latestVL: { date: string; vl: number; kind: "quarter" | "latest" } | null;
+  latestVL: {
+    date: string;
+    vl: number;
+    /** Trimestre publié, VL relevée dans un BOC archivé, ou dernier bulletin. */
+    kind: "quarter" | "boc" | "latest";
+  } | null;
   stalenessCutoff: string;
   aumRef: number | null;
   aumDelta1Y: number | null;

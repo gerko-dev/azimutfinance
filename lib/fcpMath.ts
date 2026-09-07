@@ -6,6 +6,38 @@
 // entre fonds (cf. lib/fcp.ts).
 
 import type { Fund, FundObservation } from "./fcp";
+import { obsAt } from "./fcp";
+
+/** Observation d'un fonds a une date, seulement si elle porte une VL.
+ *
+ *  Passe par l'index de `obsAt` au lieu de balayer `observations` : depuis que
+ *  l'historique BOC porte les series a neuf cents points, un `.find()` par
+ *  date et par fonds de cohorte demandait des dizaines de millions de
+ *  comparaisons par fiche. */
+function obsVLAt(fund: Fund, dateISO: string): FundObservation | undefined {
+  const o = obsAt(fund, dateISO);
+  return o && o.vl !== null ? o : undefined;
+}
+
+/** Point trimestriel complet : actif net ET valeur liquidative. */
+function obsQuarterCompletAt(
+  fund: Fund,
+  dateISO: string,
+): FundObservation | undefined {
+  const o = obsAt(fund, dateISO);
+  return o && o.kind === "quarter" && o.aum !== null && o.vl !== null
+    ? o
+    : undefined;
+}
+
+/** Idem, restreint aux points trimestriels porteurs d'un actif net. */
+function obsQuarterAumAt(
+  fund: Fund,
+  dateISO: string,
+): FundObservation | undefined {
+  const o = obsAt(fund, dateISO);
+  return o && o.kind === "quarter" && o.aum !== null ? o : undefined;
+}
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -251,8 +283,8 @@ export function quartileHistory(
     const qCur = quarterEnds[i];
 
     const perfFor = (f: Fund): number | null => {
-      const prev = f.observations.find((o) => o.date === qPrev && o.vl !== null);
-      const cur = f.observations.find((o) => o.date === qCur && o.vl !== null);
+      const prev = obsVLAt(f, qPrev);
+      const cur = obsVLAt(f, qCur);
       if (!prev || !cur || prev.vl === null || cur.vl === null) return null;
       return twr(prev.vl, cur.vl);
     };
@@ -458,7 +490,7 @@ export function aumTimelineByCategory(
     const row: Record<string, number | string> = { date: q };
     const totals = new Map<string, number>();
     for (const f of funds) {
-      const obs = f.observations.find((o) => o.date === q && o.kind === "quarter" && o.aum !== null);
+      const obs = obsQuarterAumAt(f, q);
       if (!obs || obs.aum === null) continue;
       totals.set(f.categorie, (totals.get(f.categorie) || 0) + obs.aum);
     }
@@ -485,8 +517,8 @@ export function quarterlyPerfHeatmap(
       const perfs: number[] = [];
       for (const f of funds) {
         if (f.categorie !== cat) continue;
-        const prev = f.observations.find((o) => o.date === qPrev && o.vl !== null);
-        const cur = f.observations.find((o) => o.date === qCur && o.vl !== null);
+        const prev = obsVLAt(f, qPrev);
+        const cur = obsVLAt(f, qCur);
         if (!prev || !cur || prev.vl === null || cur.vl === null) continue;
         perfs.push(twr(prev.vl, cur.vl));
       }
@@ -554,13 +586,31 @@ export function cohortMedianRebasedSeries(
   baseDate: string,
   dates: string[]
 ): Array<{ date: string; value: number | null }> {
+  // Chaque fonds est indexé UNE fois par date, au lieu d'être rebalayé à
+  // chaque point de la courbe.
+  //
+  // La version précédente appelait deux `.find()` linéaires par date et par
+  // fonds de cohorte. Cela passait tant qu'un fonds n'avait que ses quatorze
+  // points trimestriels — 14 × 40 × 14, soit huit mille opérations. Depuis que
+  // l'historique BOC porte les séries à neuf cents points, le même calcul en
+  // demande 900 × 40 × 900, soixante-cinq millions par fiche : le worker Next
+  // mourait avant de rendre la page.
+  const index = cohort.map((f) => {
+    const parDate = new Map<string, number>();
+    for (const o of f.observations) {
+      if (o.vl !== null) parDate.set(o.date, o.vl);
+    }
+    return parDate;
+  });
+  const bases = index.map((m) => m.get(baseDate));
+
   return dates.map((d) => {
     const values: number[] = [];
-    for (const f of cohort) {
-      const baseObs = f.observations.find((o) => o.date === baseDate && o.vl !== null);
-      const curObs = f.observations.find((o) => o.date === d && o.vl !== null);
-      if (!baseObs || baseObs.vl === null || !curObs || curObs.vl === null) continue;
-      values.push((curObs.vl / baseObs.vl) * 100);
+    for (let i = 0; i < index.length; i++) {
+      const base = bases[i];
+      const cur = index[i].get(d);
+      if (base === undefined || cur === undefined || base === 0) continue;
+      values.push((cur / base) * 100);
     }
     return { date: d, value: percentile(values, 0.5) };
   });
@@ -586,19 +636,31 @@ export function excessVsCategory(
   const out: ExcessFrame[] = [];
   let cumFund = 1;
   let cumMedian = 1;
+
+  // Même indexation que cohortMedianRebasedSeries, pour la même raison : les
+  // séries font desormais des centaines de points, un balayage linéaire par
+  // trimestre et par fonds n'est plus tenable.
+  const vlDu = (f: Fund) => {
+    const m = new Map<string, number>();
+    for (const o of f.observations) if (o.vl !== null) m.set(o.date, o.vl);
+    return m;
+  };
+  const indexFonds = vlDu(fund);
+  const indexCohorte = cohort.map(vlDu);
+
   for (let i = 1; i < quarterEnds.length; i++) {
     const qPrev = quarterEnds[i - 1];
     const qCur = quarterEnds[i];
-    const prev = fund.observations.find((o) => o.date === qPrev && o.vl !== null);
-    const cur = fund.observations.find((o) => o.date === qCur && o.vl !== null);
+    const prev = indexFonds.get(qPrev);
+    const cur = indexFonds.get(qCur);
     const fundPerf =
-      prev && cur && prev.vl !== null && cur.vl !== null ? twr(prev.vl, cur.vl) : null;
+      prev !== undefined && cur !== undefined ? twr(prev, cur) : null;
 
     const cohortPerfs: number[] = [];
-    for (const f of cohort) {
-      const p = f.observations.find((o) => o.date === qPrev && o.vl !== null);
-      const c = f.observations.find((o) => o.date === qCur && o.vl !== null);
-      if (p && c && p.vl !== null && c.vl !== null) cohortPerfs.push(twr(p.vl, c.vl));
+    for (const m of indexCohorte) {
+      const p = m.get(qPrev);
+      const c = m.get(qCur);
+      if (p !== undefined && c !== undefined) cohortPerfs.push(twr(p, c));
     }
     const cohortMedianPerf = percentile(cohortPerfs, 0.5);
 
@@ -638,12 +700,8 @@ export function aumGrowthDecomposition(
   fromDate: string,
   toDate: string
 ): AumGrowth {
-  const startObs = fund.observations.find(
-    (o) => o.date === fromDate && o.kind === "quarter" && o.aum !== null && o.vl !== null
-  );
-  const endObs = fund.observations.find(
-    (o) => o.date === toDate && o.kind === "quarter" && o.aum !== null && o.vl !== null
-  );
+  const startObs = obsQuarterCompletAt(fund, fromDate);
+  const endObs = obsQuarterCompletAt(fund, toDate);
   if (
     !startObs ||
     !endObs ||
@@ -781,7 +839,7 @@ export function rolling1YStats(
     const targetMs = toMs(q) - 365.25 * MS_PER_DAY;
     const targetISO = new Date(targetMs).toISOString().slice(0, 10);
     const fromObs = findObsOnOrBefore(fund.observations, targetISO);
-    const toObs = fund.observations.find((o) => o.date === q && o.vl !== null);
+    const toObs = obsVLAt(fund, q);
     let perf1Y: number | null = null;
     if (fromObs && toObs && fromObs.vl !== null && toObs.vl !== null) {
       perf1Y = twr(fromObs.vl, toObs.vl);
@@ -821,9 +879,7 @@ export function marketShareHistory(
     let fundAUM: number | null = null;
     let totalCat = 0;
     for (const f of cohort) {
-      const o = f.observations.find(
-        (o) => o.date === q && o.kind === "quarter" && o.aum !== null
-      );
+      const o = obsQuarterAumAt(f, q);
       if (!o || o.aum === null) continue;
       totalCat += o.aum;
       aumsInCat.push(o.aum);
@@ -885,9 +941,7 @@ export function categoryBreakdownForManager(
 ): CategoryBreakdown[] {
   const map = new Map<string, { aum: number; nb: number }>();
   for (const f of managerFunds) {
-    const obs = f.observations.find(
-      (o) => o.date === refDate && o.kind === "quarter" && o.aum !== null
-    );
+    const obs = obsQuarterAumAt(f, refDate);
     if (!obs || obs.aum === null) continue;
     const cat = obs.categorie;
     const e = map.get(cat) || { aum: 0, nb: 0 };
@@ -1001,12 +1055,8 @@ export function managerAumGrowthDecomposition(
   let closedFundsCount = 0;
   let closedFundsAUM = 0;
   for (const f of managerFunds) {
-    const start = f.observations.find(
-      (o) => o.date === fromDate && o.kind === "quarter" && o.aum !== null && o.vl !== null
-    );
-    const end = f.observations.find(
-      (o) => o.date === toDate && o.kind === "quarter" && o.aum !== null && o.vl !== null
-    );
+    const start = obsQuarterCompletAt(f, fromDate);
+    const end = obsQuarterCompletAt(f, toDate);
     const hasStart = !!start && start.aum !== null && start.vl !== null;
     const hasEnd = !!end && end.aum !== null && end.vl !== null;
     if (hasStart && hasEnd) {
@@ -1096,8 +1146,8 @@ export function managerPerfHeatmap(
       const perfs: number[] = [];
       for (const f of managerFunds) {
         if (f.categorie !== cat) continue;
-        const prev = f.observations.find((o) => o.date === qPrev && o.vl !== null);
-        const cur = f.observations.find((o) => o.date === qCur && o.vl !== null);
+        const prev = obsVLAt(f, qPrev);
+        const cur = obsVLAt(f, qCur);
         if (!prev || !cur || prev.vl === null || cur.vl === null) continue;
         perfs.push(twr(prev.vl, cur.vl));
       }
@@ -1117,8 +1167,8 @@ export function quarterlyCalendar(fund: Fund, quarterEnds: string[]): CalendarCe
   for (let i = 1; i < quarterEnds.length; i++) {
     const qPrev = quarterEnds[i - 1];
     const qCur = quarterEnds[i];
-    const prev = fund.observations.find((o) => o.date === qPrev && o.vl !== null);
-    const cur = fund.observations.find((o) => o.date === qCur && o.vl !== null);
+    const prev = obsVLAt(fund, qPrev);
+    const cur = obsVLAt(fund, qCur);
     const perf =
       prev && cur && prev.vl !== null && cur.vl !== null ? twr(prev.vl, cur.vl) : null;
     const year = parseInt(qCur.slice(0, 4), 10);

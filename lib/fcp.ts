@@ -1,19 +1,27 @@
 // === LOADER FCP / OPCVM ===
 //
-// Deux sources :
+// Trois sources :
 //   1. data/fcp/aumfcp.csv (latin-1, ";") — historique trimestriel publié
 //      par l'AGP UEMOA. 4 dates par an (mar/juin/sept/déc 31). Donne VL +
 //      Actif net pour chaque fonds. Sert de grille de référence pour les
-//      perfs et les agrégats d'encours.
-//   2. data/fcp.csv (utf-8, ";") — scrap quotidien du Bulletin Officiel de
-//      la Cote (BOC) BRVM, dernière page. Apporte la VL la plus récente
-//      par fonds (intra-trimestre), le dépositaire, la fréquence de calcul.
+//      perfs et les agrégats d'encours — c'est la SEULE source d'AUM.
+//   2. data/fcp/vl-historique.csv (utf-8, ";") — historique des VL
+//      reconstitué depuis les BOC archivés par scripts/backfill_fcp_vl.py.
+//      35 000 observations sur 133 fonds depuis 2022, médiane de 170 points
+//      par fonds. C'est ce qui rend les courbes lisibles : sans lui, un fonds
+//      n'a que ses 14 points trimestriels.
+//   3. data/fcp.csv (utf-8, ";") — scrap quotidien du BOC, dernière page.
+//      Apporte la VL du jour, le dépositaire, la fréquence de calcul.
 //      Le scraper résout déjà gestionnaire + nomAumfcp côté Python pour
 //      117/120 fonds, donc le matching côté TS est direct.
 //
-// On distingue deux types d'observations :
+// On distingue trois types d'observations :
 //   - "quarter" : point aumfcp (fin de trimestre, AUM publié).
-//   - "latest"  : VL BOC du jour scrapée (sans AUM).
+//   - "boc"     : VL datée relevée dans un BOC archivé (sans AUM).
+//   - "latest"  : VL du dernier BOC scrapé (sans AUM).
+//
+// Recoupement des deux premières sources sur leurs 260 dates communes :
+// écart médian de 0,003 %, p90 à 0,28 %.
 //
 // On ne calcule PAS de volatilité, Sharpe, drawdown, capture ratio : la
 // fréquence hétérogène et la rareté des points trimestriels rendraient ces
@@ -31,6 +39,10 @@ const AUMFCP_FILE = "fcp/aumfcp.csv";
 // Snapshot BOC du jour (utf-8 / ; / colonnes typeOpc + actifNet + vlActuelle
 // + dateActuelle + depositaire + frequenceCalcul + nomAumfcp...).
 const BOC_FILE = "fcp.csv";
+// Historique des VL reconstitue depuis les BOC archives (utf-8 / ; / colonnes
+// gestionnaire + nomAumfcp + opcvm + date + vl + frequenceCalcul + source).
+// Produit hors ligne par scripts/backfill_fcp_vl.py.
+const VL_HISTORY_FILE = "fcp/vl-historique.csv";
 
 // ==========================================
 // TYPES
@@ -49,7 +61,10 @@ export type FundObservation = {
   date: string;                 // ISO YYYY-MM-DD
   vl: number | null;
   aum: number | null;
-  kind: "quarter" | "latest";
+  /** "quarter" : point trimestriel aumfcp, seul à porter un AUM.
+   *  "boc"     : VL datée relevée dans un Bulletin Officiel de la Cote archivé.
+   *  "latest"  : VL du dernier BOC scrapé, hors historique. */
+  kind: "quarter" | "boc" | "latest";
   categorie: FundCategory;      // catégorie déclarée pour CETTE ligne (peut varier dans le temps)
   categorieRaw: string;
 };
@@ -78,7 +93,7 @@ export type Fund = {
   categorieRaw: string;         // libellé original avec sous-classe : "Obligataire (OLMT)" etc.
   observations: FundObservation[]; // triées par date asc
   // Raccourcis utiles aux composants
-  latestVL: { date: string; vl: number; kind: "quarter" | "latest" } | null;
+  latestVL: { date: string; vl: number; kind: FundObservation["kind"] } | null;
   latestQuarter: { date: string; vl: number; aum: number } | null;
   firstObsDate: string | null;
   // Snapshot BOC (rempli si le fond a matché côté Python via nomAumfcp).
@@ -290,11 +305,47 @@ function loadBocSnapshots(): Map<string, BocSnapshot> {
   return out;
 }
 
+/**
+ * Historique des VL reconstitué depuis les BOC archivés
+ * (data/fcp/vl-historique.csv, produit par scripts/backfill_fcp_vl.py).
+ *
+ * Le fichier porte déjà le gestionnaire et le nom canoniques, résolus contre
+ * aumfcp.csv par le même enrichissement que le scraper quotidien : la clef se
+ * construit donc exactement comme celle des groupes de loadFunds().
+ *
+ * Le fichier est facultatif — le site fonctionne sans, avec les seuls points
+ * trimestriels.
+ */
+function loadVLHistory(): Map<string, Array<{ date: string; vl: number }>> {
+  const out = new Map<string, Array<{ date: string; vl: number }>>();
+  type Row = { gestionnaire: string; nomAumfcp: string; date: string; vl: string };
+  let rows: Row[];
+  try {
+    rows = parseCSV<Row>(VL_HISTORY_FILE, ";", "utf-8");
+  } catch {
+    return out;
+  }
+  for (const r of rows) {
+    const gest = (r.gestionnaire || "").trim();
+    const nom = (r.nomAumfcp || "").trim();
+    const date = (r.date || "").trim();
+    const vl = parseNumOrNull(r.vl);
+    if (!gest || !nom || date.length !== 10 || vl === null || vl <= 0) continue;
+    const key = `${gest}__${fundNameKey(nom)}`;
+    const liste = out.get(key);
+    if (liste) liste.push({ date, vl });
+    else out.set(key, [{ date, vl }]);
+  }
+  for (const liste of out.values()) liste.sort((a, b) => a.date.localeCompare(b.date));
+  return out;
+}
+
 export function loadFunds(): Fund[] {
   if (_fundsCache !== null) return _fundsCache;
 
   const rows = parseCSV<AumfcpRow>(AUMFCP_FILE, ";", "latin1");
   const bocSnapshots = loadBocSnapshots();
+  const vlHistory = loadVLHistory();
 
   // Groupage par (gestionnaire, clé canonique du nom). La clé canonique fusionne
   // les variantes du même fonds (ex: « AURORE OPPORTUNITES » et
@@ -335,6 +386,31 @@ export function loadFunds(): Fund[] {
     // === Injection BOC : on cherche une VL fraîche pour ce fonds. Le key BOC
     //     utilise gestionnaire + fundNameKey(nomAumfcp), donc identique à
     //     groupKey si le scraper a bien résolu le matching.
+    // === Historique BOC : les VL datées relevées dans les bulletins archivés.
+    //     Elles densifient la série entre deux points trimestriels — d'un point
+    //     par trimestre à un point par semaine sur la plupart des fonds.
+    //
+    //     Un point trimestriel l'emporte toujours sur une VL BOC de la même
+    //     date : lui seul porte l'actif net, et l'écraser viderait les
+    //     agrégats d'encours.
+    const datesDejaVues = new Set(obs.map((o) => o.date));
+    const dernierObs = obs.length > 0 ? obs[obs.length - 1] : null;
+    for (const h of vlHistory.get(groupKey) ?? []) {
+      if (datesDejaVues.has(h.date)) continue;
+      datesDejaVues.add(h.date);
+      obs.push({
+        date: h.date,
+        vl: h.vl,
+        aum: null,
+        kind: "boc",
+        // La catégorie n'est pas publiée avec la VL du bulletin : on reprend
+        // celle du fonds telle que déclarée au dernier trimestre connu.
+        categorie: dernierObs?.categorie ?? "Diversifié",
+        categorieRaw: dernierObs?.categorieRaw ?? "",
+      });
+    }
+    obs.sort((a, b) => a.date.localeCompare(b.date));
+
     const bocSnap = bocSnapshots.get(groupKey) ?? null;
     if (bocSnap) {
       // VL quotidienne BOC : on prend `vlActuelle` si elle est publiée, sinon on
@@ -624,4 +700,33 @@ export function categorySlug(cat: FundCategory): string {
 
 export function categoryFromSlug(slug: string): FundCategory | null {
   return CATEGORY_FROM_SLUG[slug] ?? null;
+}
+
+// ==========================================
+// INDEX DES OBSERVATIONS PAR DATE
+// ==========================================
+
+/**
+ * Observation d'un fonds à une date, en temps constant.
+ *
+ * Tout `lib/fcpMath.ts` a été écrit quand un fonds n'avait que ses quatorze
+ * points trimestriels : un `.find()` linéaire par date et par fonds y passait
+ * inaperçu. L'historique BOC porte les séries à neuf cents points, et les
+ * mêmes boucles — quarts × cohorte × observations — demandaient des dizaines
+ * de millions de comparaisons par fiche. Le worker Next mourait avant de
+ * rendre la page.
+ *
+ * L'index est construit une fois par fonds, à la première demande, et retenu
+ * dans une WeakMap : il disparaît avec le fonds, sans fuite.
+ */
+const _obsIndex = new WeakMap<Fund, Map<string, FundObservation>>();
+
+export function obsAt(fund: Fund, dateISO: string): FundObservation | undefined {
+  let idx = _obsIndex.get(fund);
+  if (idx === undefined) {
+    idx = new Map();
+    for (const o of fund.observations) idx.set(o.date, o);
+    _obsIndex.set(fund, idx);
+  }
+  return idx.get(dateISO);
 }

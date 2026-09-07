@@ -21,7 +21,10 @@ import { ResponsiveContainer } from "@/components/ui/ChartContainer";
 // ==========================================
 // TYPES PROPS (alignés sur app/fcp/[slug]/page.tsx)
 // ==========================================
-type LatestVL = { date: string; vl: number; kind: "quarter" | "latest" } | null;
+/** Origine du point : trimestre publié, VL relevée dans un BOC archivé, ou
+ *  VL du dernier bulletin scrapé. */
+type ObsKind = "quarter" | "boc" | "latest";
+type LatestVL = { date: string; vl: number; kind: ObsKind } | null;
 
 type PerfRow = {
   label: string;
@@ -32,7 +35,7 @@ type PerfRow = {
   excess: number | null;
 };
 
-type RebasedPoint = { date: string; rebased: number; kind: "quarter" | "latest" };
+type RebasedPoint = { date: string; rebased: number; kind: ObsKind };
 type CohortRebasedPoint = { date: string; value: number | null };
 
 type QuartileFrame = { date: string; quartile: 1 | 2 | 3 | 4 | null; perf: number | null };

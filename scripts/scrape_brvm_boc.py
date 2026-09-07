@@ -777,13 +777,19 @@ def parse_pct(s: str) -> float | None:
 
 
 def normalize_iso_date(s: str) -> str:
-    """DD/MM/YYYY -> YYYY-MM-DD. DD/MM/YY -> 20YY-MM-DD. Texte / ND -> "" ."""
+    """DD/MM/YYYY -> YYYY-MM-DD. DD/MM/YY -> 20YY-MM-DD. Texte / ND -> "" .
+
+    Le separateur peut etre / . ou - : les bulletins d'avant 2024 datent en
+    JJ.MM.AAAA. N'accepter que le slash rendait la chaine brute, et un
+    « 14.04.2023 » fait dix caracteres comme une date ISO — de quoi passer tous
+    les controles de longueur en aval sans jamais etre une date valide.
+    """
     if not s:
         return ""
     t = s.strip()
     if t in {"ND", "-", ""}:
         return ""
-    m = re.match(r"^(\d{1,2})/(\d{1,2})/(\d{2,4})$", t)
+    m = re.match(r"^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{2,4})$", t)
     if not m:
         # Format texte "Mois Annee" — non normalisable. On garde brut.
         return t
