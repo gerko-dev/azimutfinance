@@ -10,7 +10,12 @@
 //      35 000 observations sur 133 fonds depuis 2022, médiane de 170 points
 //      par fonds. C'est ce qui rend les courbes lisibles : sans lui, un fonds
 //      n'a que ses 14 points trimestriels.
-//   3. data/fcp.csv (utf-8, ";") — scrap quotidien du BOC, dernière page.
+//   3. data/fcp/risque.csv (utf-8, ";") — niveaux de risque publiés par les
+//      sociétés de gestion, relevés à la main (DICI, sites SGO, classement
+//      interne). Couverture partielle et assumée : 63 fonds sur 146, soit
+//      40 % de l'encours. Un fonds absent n'a PAS de niveau — on ne le déduit
+//      jamais de la catégorie.
+//   4. data/fcp.csv (utf-8, ";") — scrap quotidien du BOC, dernière page.
 //      Apporte la VL du jour, le dépositaire, la fréquence de calcul.
 //      Le scraper résout déjà gestionnaire + nomAumfcp côté Python pour
 //      117/120 fonds, donc le matching côté TS est direct.
@@ -46,6 +51,10 @@ const VL_HISTORY_FILE = "fcp/vl-historique.csv";
 // Fractionnements de parts (utf-8 / ; / gestionnaire + nomAumfcp + dateEffet
 // + facteur + source). Tenu a la main, cf. loadSplits().
 const SPLITS_FILE = "fcp/fractionnements.csv";
+// Niveaux de risque publies par les societes de gestion (utf-8 / ; /
+// gestionnaire + nomAumfcp + niveauRisque + echelleMax + horizonAnnees +
+// source + dateReleve). Cf. scripts/import_fcp_risque.py.
+const RISQUE_FILE = "fcp/risque.csv";
 
 // ==========================================
 // TYPES
@@ -101,6 +110,23 @@ export type Fund = {
   firstObsDate: string | null;
   // Snapshot BOC (rempli si le fond a matché côté Python via nomAumfcp).
   bocSnapshot: BocSnapshot | null;
+  /** Niveau de risque PUBLIÉ par la société de gestion. Null quand elle ne le
+   *  publie pas — jamais déduit de la catégorie, ce qui donnerait un chiffre
+   *  d'apparence officielle sans l'être. */
+  risque: NiveauRisque | null;
+};
+
+export type NiveauRisque = {
+  /** Niveau sur l'échelle, tel que publié. */
+  niveau: number;
+  /** Borne haute de l'échelle. 7 pour les DICI, mais certaines sources
+   *  publient sur 10 : les mélanger rendrait la comparaison fausse. */
+  echelleMax: number;
+  /** Horizon de placement recommandé, en années. Null si non publié. */
+  horizonAnnees: number | null;
+  /** D'où vient le chiffre — URL ou document. */
+  source: string;
+  dateReleve: string;
 };
 
 // ==========================================
@@ -408,6 +434,51 @@ function ajusterFractionnements(
   }
 }
 
+/**
+ * Niveaux de risque publiés (data/fcp/risque.csv).
+ *
+ * Le fichier ne contient que des valeurs RELEVÉES : DICI, site de la société
+ * de gestion, ou classement interne. Un fonds absent du fichier n'a pas de
+ * niveau, et le site doit le dire plutôt que d'en inventer un depuis la
+ * catégorie — un fonds « Actions » n'est pas mécaniquement plus risqué qu'un
+ * « Diversifié », et le classement le montre : BAM WURUS, un fonds actions,
+ * est publié au niveau 3, quand des diversifiés sont au niveau 6.
+ */
+function loadRisques(): Map<string, NiveauRisque> {
+  const out = new Map<string, NiveauRisque>();
+  type Row = {
+    gestionnaire: string;
+    nomAumfcp: string;
+    niveauRisque: string;
+    echelleMax: string;
+    horizonAnnees: string;
+    source: string;
+    dateReleve: string;
+  };
+  let rows: Row[];
+  try {
+    rows = parseCSV<Row>(RISQUE_FILE, ";", "utf-8");
+  } catch {
+    return out;
+  }
+  for (const r of rows) {
+    const gest = (r.gestionnaire || "").trim();
+    const nom = (r.nomAumfcp || "").trim();
+    const niveau = parseNumOrNull(r.niveauRisque);
+    const echelleMax = parseNumOrNull(r.echelleMax);
+    if (!gest || !nom || niveau === null || echelleMax === null) continue;
+    if (niveau < 1 || niveau > echelleMax) continue;
+    out.set(`${gest}__${fundNameKey(nom)}`, {
+      niveau,
+      echelleMax,
+      horizonAnnees: parseNumOrNull(r.horizonAnnees),
+      source: (r.source || "").trim(),
+      dateReleve: (r.dateReleve || "").trim(),
+    });
+  }
+  return out;
+}
+
 export function loadFunds(): Fund[] {
   if (_fundsCache !== null) return _fundsCache;
 
@@ -415,6 +486,7 @@ export function loadFunds(): Fund[] {
   const bocSnapshots = loadBocSnapshots();
   const vlHistory = loadVLHistory();
   const splits = loadSplits();
+  const risques = loadRisques();
 
   // Groupage par (gestionnaire, clé canonique du nom). La clé canonique fusionne
   // les variantes du même fonds (ex: « AURORE OPPORTUNITES » et
@@ -547,6 +619,7 @@ export function loadFunds(): Fund[] {
         : null,
       firstObsDate: obs.length > 0 ? obs[0].date : null,
       bocSnapshot: bocSnap,
+      risque: risques.get(groupKey) ?? null,
     });
   }
 
