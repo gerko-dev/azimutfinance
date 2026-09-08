@@ -213,6 +213,12 @@ type Props = {
     bocDate: string;
     bocVL: number | null;
     bocDayChange: number | null;
+    /** VL et date de creation publiees par le BOC. Notre archive de bulletins
+     *  commence en novembre 2022 ; un fonds cree en 2012 y arrive avec dix ans
+     *  de vie derriere lui, et son premier releve chez nous n'est pas son
+     *  origine. */
+    vlOrigine: number | null;
+    dateOrigine: string;
   };
   refQuarter: string;
   latestVLGlobal: string;
@@ -558,6 +564,31 @@ export default function FCPDetailView(props: Props) {
   }, [vlChartRaw]);
 
   const vlColor = (vlWindowChange ?? 0) >= 0 ? "#16a34a" : "#dc2626";
+  /** Origine du fonds : ce que le BOC publie, sinon le premier releve que nous
+   *  detenons. La distinction compte — notre archive commence en novembre 2022
+   *  et beaucoup de fonds sont bien plus anciens : EPARGNE CROISSANCE est ne le
+   *  19 novembre 2012 a 5 000, dix ans avant notre premier bulletin. Quand le
+   *  BOC ne le dit pas, le repli est signale sous la date. */
+  const origine = useMemo(() => {
+    if (fund.vlOrigine !== null && fund.dateOrigine) {
+      return {
+        vl: fund.vlOrigine,
+        date: fund.dateOrigine,
+        repli: false,
+        note: "Valeur et date de création du fonds, publiées par le BOC",
+      };
+    }
+    if (vlSeries.length > 0) {
+      return {
+        vl: vlSeries[0].vl,
+        date: vlSeries[0].date,
+        repli: true,
+        note: "Le BOC ne publie pas l'origine de ce fonds : premier relevé de nos sources, pas nécessairement sa création",
+      };
+    }
+    return { vl: null, date: "", repli: false, note: "" };
+  }, [fund.vlOrigine, fund.dateOrigine, vlSeries]);
+
   /** Reference stable pour « Donnees cles » : celle du graphe suit la fenetre
    *  choisie et changerait sous le curseur. */
   const volatilite1An =
@@ -1120,19 +1151,24 @@ export default function FCPDetailView(props: Props) {
                         : fmtPct(stats.perteMax.amplitude, 2)}
                     </dd>
                   </div>
-                  <div className="flex justify-between gap-3 pt-2 border-t border-slate-100">
+                  <div
+                    className="flex justify-between gap-3 pt-2 border-t border-slate-100"
+                    title={origine.note}
+                  >
                     <dt className="text-slate-500">VL d&apos;origine</dt>
                     <dd className="font-medium text-right tabular-nums">
-                      {vlSeries.length > 0 ? fmtVL(vlSeries[0].vl) : "NC"}
+                      {origine.vl === null ? "NC" : fmtVL(origine.vl)}
                     </dd>
                   </div>
-                  <div
-                    className="flex justify-between gap-3"
-                    title="Premier relevé connu de nos sources, pas nécessairement la création du fonds"
-                  >
+                  <div className="flex justify-between gap-3" title={origine.note}>
                     <dt className="text-slate-500">Première VL</dt>
                     <dd className="font-medium text-right">
-                      {vlSeries.length > 0 ? fmtDateFR(vlSeries[0].date) : "NC"}
+                      {origine.date ? fmtDateFR(origine.date) : "NC"}
+                      {origine.repli && (
+                        <span className="block text-[10px] font-normal text-slate-400">
+                          premier relevé connu
+                        </span>
+                      )}
                     </dd>
                   </div>
                 </dl>

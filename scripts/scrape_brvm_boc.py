@@ -925,7 +925,9 @@ def extract_fcp(text: str) -> list[dict[str, str]]:
                 "opcvm": opcvm_raw,
                 "categorieCode": cat_code,
                 "frequenceCalcul": current_freq,
-                "vlOrigine": str(int(parse_fr_number(vl_orig) or 0)) if parse_fr_number(vl_orig) else "",
+                # Meme formatage que les autres VL : passer par int() tronquait les
+                # decimales, et toutes les VL d'origine ne sont pas rondes.
+                "vlOrigine": _fmt_num(parse_fr_number(vl_orig)),
                 "valeurPrecedente": _fmt_num(parse_fr_number(val_prec)),
                 "datePrecedente": normalize_iso_date(date_prec),
                 "valeurJour": _fmt_num(parse_fr_number(val_day)),

@@ -272,6 +272,10 @@ export default async function FCPDetailPage({
           bocDate: fund.bocSnapshot?.bocDate ?? "",
           bocVL: fund.bocSnapshot?.vlActuelle ?? null,
           bocDayChange: fund.bocSnapshot?.dayChange ?? null,
+          // Valeur et date de creation du fonds, telles que le BOC les
+          // publie — et non le premier releve de notre archive.
+          vlOrigine: fund.bocSnapshot?.vlOrigine ?? null,
+          dateOrigine: fund.bocSnapshot?.dateOrigine ?? "",
         }}
         refQuarter={refQuarter}
         latestVLGlobal={latestVLGlobal}
