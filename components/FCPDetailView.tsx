@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
-  LineChart,
   Line,
   BarChart,
   Bar,
@@ -37,7 +36,6 @@ type PerfRow = {
   excess: number | null;
 };
 
-type RebasedPoint = { date: string; rebased: number; kind: ObsKind };
 /** VL telle que publiee, en FCFA. Le graphe rebase de l'onglet Performance
  *  repond a « ce fonds fait-il mieux que sa categorie » ; celui-ci repond a
  *  « combien vaut une part, et depuis quand » — une base 100 efface
@@ -100,8 +98,6 @@ type MarketShareFrame = {
   fundAUM: number | null;
   totalCatAUM: number;
 };
-
-type CalendarCell = { year: number; quarter: 1 | 2 | 3 | 4; perf: number | null };
 
 type AumGrowth = {
   fromDate: string;
@@ -169,6 +165,32 @@ type StatsRisque = {
   nbPointsTotal: number;
 };
 
+type LigneComparatif = {
+  cle: string;
+  label: string;
+  fromDate: string;
+  toDate: string;
+  fonds: number | null;
+  mediane: number | null;
+  reference: number | null;
+};
+
+type AnneeComparatif = {
+  annee: number;
+  fonds: number | null;
+  mediane: number | null;
+  reference: number | null;
+  partielle: boolean;
+};
+
+type Comparatif = {
+  fenetres: LigneComparatif[];
+  annees: AnneeComparatif[];
+  mois: Array<{ annee: number; mois: number; perf: number | null }>;
+  totauxAnnuels: Array<{ annee: number; perf: number | null }>;
+  aReference: boolean;
+};
+
 type Rolling = {
   points: Array<{ asOf: string; perf1Y: number | null }>;
   min: number | null;
@@ -206,7 +228,6 @@ type Props = {
   ytdRankBase: number;
   cohortSize: number;
   perfTable: PerfRow[];
-  rebasedFundSeries: RebasedPoint[];
   cohortRebased: CohortRebasedPoint[];
   /** Historique de VL brut, du premier releve au dernier bulletin. */
   vlSeries: VLPoint[];
@@ -219,12 +240,12 @@ type Props = {
   peerEntries: PeerEntry[];
   managerEntries: ManagerEntry[];
   marketShare: MarketShareFrame[];
-  calendar: CalendarCell[];
   growth1Y: AumGrowth | null;
   growth3Y: AumGrowth | null;
   cadence: Cadence;
   rolling: Rolling;
   stats: StatsRisque;
+  comparatif: Comparatif;
 };
 
 // ==========================================
@@ -277,6 +298,41 @@ function fmtDateFR(iso: string): string {
     timeZone: "UTC",
   });
 }
+/** Cellule chiffree du comparatif.
+ *
+ *  `null` s'affiche « — » et non « 0,00 % » : sur un ecart de performance, un
+ *  zero se lit « a egalite » alors qu'il veut dire « pas de donnee ». Les
+ *  colonnes de reference sont en gris : ce sont des reperes, pas le sujet. */
+function Cellule({
+  v,
+  gras = false,
+  neutre = false,
+  dernier = false,
+}: {
+  v: number | null;
+  gras?: boolean;
+  neutre?: boolean;
+  dernier?: boolean;
+}) {
+  const couleur =
+    v === null
+      ? "text-slate-300"
+      : neutre
+        ? "text-slate-600"
+        : v >= 0
+          ? "text-green-700"
+          : "text-red-700";
+  return (
+    <td
+      className={`${dernier ? "px-4" : "px-3"} py-2.5 text-right tabular-nums ${
+        gras ? "font-semibold" : "font-medium"
+      } ${couleur}`}
+    >
+      {v === null ? "—" : fmtPct(v, 2)}
+    </td>
+  );
+}
+
 /** Ordinal francais : 1er, puis 2e, 3e... */
 function rangFR(n: number): string {
   return `${n}${n === 1 ? "er" : "e"}`;
@@ -298,6 +354,10 @@ const ORIGINE: Record<ObsKind, string> = {
   boc: "BOC",
   latest: "dernier bulletin",
 };
+
+const MOIS_COURTS = [
+  "J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D",
+];
 
 const QUARTILE_COLORS: Record<number, string> = {
   1: "#15803d",
@@ -346,9 +406,6 @@ function interpolate(a: string, b: string, t: number): string {
 // ==========================================
 // COMPONENT
 // ==========================================
-type ChartPeriod = "1A" | "3A" | "5A" | "MAX";
-const CHART_PERIODS: ChartPeriod[] = ["1A", "3A", "5A", "MAX"];
-
 /** Fenetres du graphe de VL. Sept crans comme sur la fiche action : sous un an
  *  les mouvements d'un fonds obligataire sont si petits qu'une echelle 3A les
  *  aplatit completement. */
@@ -368,14 +425,6 @@ const VL_MOIS: Record<VLPeriod, number | null> = {
 function cutoffMois(lastDate: string, mois: number | null): string {
   if (mois === null) return "";
   const ms = new Date(lastDate + "T00:00:00Z").getTime() - mois * 30.4375 * 86400000;
-  return new Date(ms).toISOString().slice(0, 10);
-}
-
-/** Borne inferieure d'une fenetre de graphe ; "" pour MAX. */
-function cutoffFor(lastDate: string, p: ChartPeriod): string {
-  if (p === "MAX") return "";
-  const years = p === "1A" ? 1 : p === "3A" ? 3 : 5;
-  const ms = new Date(lastDate + "T00:00:00Z").getTime() - years * 365.25 * 86400000;
   return new Date(ms).toISOString().slice(0, 10);
 }
 
@@ -418,7 +467,6 @@ export default function FCPDetailView(props: Props) {
     ytdRankBase,
     cohortSize,
     perfTable,
-    rebasedFundSeries,
     cohortRebased,
     vlSeries,
     benchmark,
@@ -429,16 +477,15 @@ export default function FCPDetailView(props: Props) {
     peerEntries,
     managerEntries,
     marketShare,
-    calendar,
     growth1Y,
     growth3Y,
     cadence,
     rolling,
     stats,
+    comparatif,
   } = props;
 
   const [activeTab, setActiveTab] = useState<Tab>("overview");
-  const [chartPeriod, setChartPeriod] = useState<ChartPeriod>("3A");
   const [vlPeriod, setVlPeriod] = useState<VLPeriod>("1A");
   // Comparateurs du graphe de VL. Les activer bascule l'echelle en base 100 :
   // un indice boursier et une VL en FCFA n'ont pas d'axe commun.
@@ -550,24 +597,6 @@ export default function FCPDetailView(props: Props) {
     return Math.sqrt(variance) * Math.sqrt(365.25 / pas);
   }, [vlChartRaw]);
 
-  // === Filtrage du graphe VL selon la période ===
-  const vlChartData = useMemo(() => {
-    if (rebasedFundSeries.length === 0) return [];
-    const cutoff = cutoffFor(
-      rebasedFundSeries[rebasedFundSeries.length - 1].date,
-      chartPeriod
-    );
-    const cohortMap = new Map(cohortRebased.map((c) => [c.date, c.value]));
-    return rebasedFundSeries
-      .filter((p) => !cutoff || p.date >= cutoff)
-      .map((p) => ({
-        date: p.date,
-        fund: p.rebased,
-        cohort: cohortMap.get(p.date) ?? null,
-        kind: p.kind,
-      }));
-  }, [rebasedFundSeries, cohortRebased, chartPeriod]);
-
   // === AUM decomp : visible quarters & data ===
   const aumDecompData = useMemo(
     () =>
@@ -602,19 +631,34 @@ export default function FCPDetailView(props: Props) {
     [marketShare]
   );
 
-  // === Calendrier : matrix année × Q1..Q4 ===
-  const calendarMatrix = useMemo(() => {
-    const years = Array.from(new Set(calendar.map((c) => c.year))).sort();
-    const lastYears = years.slice(-5);
-    return lastYears.map((y) => {
-      const cells: Array<{ q: 1 | 2 | 3 | 4; perf: number | null }> = [];
-      for (const q of [1, 2, 3, 4] as const) {
-        const cell = calendar.find((c) => c.year === y && c.quarter === q);
-        cells.push({ q, perf: cell?.perf ?? null });
-      }
-      return { year: y, cells };
-    });
-  }, [calendar]);
+  // === Calendrier mensuel : une ligne par annee, douze mois + le total ===
+  const calendrierMensuel = useMemo(() => {
+    const parAnnee = new Map<number, Array<number | null>>();
+    for (const c of comparatif.mois) {
+      if (!parAnnee.has(c.annee)) parAnnee.set(c.annee, Array(12).fill(null));
+      parAnnee.get(c.annee)![c.mois - 1] = c.perf;
+    }
+    const totaux = new Map(comparatif.totauxAnnuels.map((t) => [t.annee, t.perf]));
+    return [...parAnnee.entries()]
+      .sort((a, b) => b[0] - a[0])
+      .map(([annee, cellules]) => ({
+        annee,
+        cellules,
+        total: totaux.get(annee) ?? null,
+      }));
+  }, [comparatif]);
+
+  // === Performances calendaires, pour le graphe en barres ===
+  const barresAnnuelles = useMemo(
+    () =>
+      comparatif.annees.map((a) => ({
+        annee: a.partielle ? `${a.annee} *` : String(a.annee),
+        fonds: a.fonds !== null ? a.fonds * 100 : null,
+        mediane: a.mediane !== null ? a.mediane * 100 : null,
+        reference: a.reference !== null ? a.reference * 100 : null,
+      })),
+    [comparatif]
+  );
 
   return (
     <>
@@ -1155,85 +1199,211 @@ export default function FCPDetailView(props: Props) {
         {activeTab === "performance" && (
           <>
             {/* ============================================ */}
-            {/* BLOCK 3 : GRAPHE VL REBASE */}
+            {/* COMPARATIF PAR FENETRE */}
             {/* ============================================ */}
-            <section className="bg-white border border-slate-200 rounded-lg p-5">
-              <div className="flex items-baseline justify-between flex-wrap gap-3 mb-3">
-                <div>
-                  <h2 className="text-lg font-semibold text-slate-900">VL rebasée à 100</h2>
-                  <p className="text-xs text-slate-500">
-                    Fonds vs médiane catégorie · base = {fmtDateFR(rebasedFundSeries[0]?.date || "")}
-                  </p>
-                </div>
-                <div className="inline-flex rounded-md border border-slate-200 overflow-hidden">
-                  {CHART_PERIODS.map((p) => (
-                    <button
-                      key={p}
-                      onClick={() => setChartPeriod(p)}
-                      className={`px-3 py-1.5 text-xs font-medium transition ${
-                        chartPeriod === p
-                          ? "bg-slate-900 text-white"
-                          : "bg-white text-slate-600 hover:bg-slate-50"
-                      }`}
-                    >
-                      {p}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div style={{ width: "100%", height: 360 }}>
-                <ResponsiveContainer>
-                  <LineChart data={vlChartData}>
-                    <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
-                    <XAxis
-                      dataKey="date"
-                      tick={{ fontSize: 11 }}
-                      tickFormatter={(d) => String(d).slice(0, 7)}
-                    />
-                    <YAxis tick={{ fontSize: 11 }} domain={["auto", "auto"]} />
-                    <Tooltip
-                      formatter={(v, name) => [
-                        Number(v).toFixed(2),
-                        name === "fund" ? fund.nom : "Médiane catégorie",
-                      ]}
-                      labelFormatter={(d) => fmtDateFR(String(d))}
-                    />
-                    <Legend
-                      wrapperStyle={{ fontSize: 12 }}
-                      formatter={(value) => (value === "fund" ? fund.nom : "Médiane catégorie")}
-                    />
-                    <ReferenceLine y={100} stroke="#cbd5e1" strokeDasharray="3 3" />
-                    <Line
-                      type="monotone"
-                      dataKey="fund"
-                      stroke="#185FA5"
-                      strokeWidth={2.5}
-                      dot={false}
-                      connectNulls
-                      isAnimationActive={false}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="cohort"
-                      stroke="#94a3b8"
-                      strokeWidth={1.5}
-                      strokeDasharray="4 4"
-                      dot={false}
-                      connectNulls
-                      isAnimationActive={false}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-              {latestVL && latestVL.kind === "latest" && (
-                <p className="text-[11px] text-slate-400 mt-1">
-                  ● Dernier point ({fmtDateFR(latestVL.date)}) = VL intra-trim publiée par la SGO
+            <section className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+              <div className="px-6 pt-5 pb-3">
+                <h2 className="text-lg font-semibold text-slate-900">
+                  Le fonds, sa catégorie, son marché
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Trois réponses par fenêtre : ce que le fonds a fait, ce qu&apos;ont
+                  fait ses concurrents, et ce qu&apos;aurait rapporté le marché
+                  {comparatif.aReference && benchmark ? ` (${benchmark.label})` : ""}
                 </p>
-              )}
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 border-y border-slate-200">
+                    <tr>
+                      <th className="text-left px-6 py-2 text-xs font-semibold text-slate-600">
+                        Fenêtre
+                      </th>
+                      <th className="text-right px-3 py-2 text-xs font-semibold text-slate-600">
+                        Fonds
+                      </th>
+                      <th className="text-right px-3 py-2 text-xs font-semibold text-slate-600">
+                        Médiane catégorie
+                      </th>
+                      {comparatif.aReference && (
+                        <th className="text-right px-3 py-2 text-xs font-semibold text-slate-600">
+                          Marché
+                        </th>
+                      )}
+                      <th className="text-right px-3 py-2 text-xs font-semibold text-slate-600">
+                        vs catégorie
+                      </th>
+                      {comparatif.aReference && (
+                        <th className="text-right px-4 py-2 text-xs font-semibold text-slate-600">
+                          vs marché
+                        </th>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {comparatif.fenetres.map((f) => (
+                      <tr key={f.cle} className="hover:bg-slate-50">
+                        <td className="px-6 py-2.5">
+                          <span className="text-slate-800">{f.label}</span>
+                          <span className="block text-[11px] text-slate-400">
+                            {fmtDateFR(f.fromDate)} → {fmtDateFR(f.toDate)}
+                          </span>
+                        </td>
+                        <Cellule v={f.fonds} gras />
+                        <Cellule v={f.mediane} neutre />
+                        {comparatif.aReference && <Cellule v={f.reference} neutre />}
+                        <Cellule
+                          v={f.fonds !== null && f.mediane !== null ? f.fonds - f.mediane : null}
+                        />
+                        {comparatif.aReference && (
+                          <Cellule
+                            v={
+                              f.fonds !== null && f.reference !== null
+                                ? f.fonds - f.reference
+                                : null
+                            }
+                            dernier
+                          />
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </section>
 
-            <section className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-              <div className="lg:col-span-2 bg-white border border-slate-200 rounded-lg p-5">
+            {/* ============================================ */}
+            {/* PERFORMANCES CALENDAIRES */}
+            {/* ============================================ */}
+            {barresAnnuelles.length > 0 && (
+              <section className="bg-white border border-slate-200 rounded-lg p-5">
+                <div className="mb-3">
+                  <h2 className="text-lg font-semibold text-slate-900">
+                    Performances année par année
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Une bonne année ne fait pas un bon fonds — c&apos;est la
+                    répétition qui compte. Un astérisque marque un exercice
+                    incomplet.
+                  </p>
+                </div>
+                <div style={{ width: "100%", height: 280 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={barresAnnuelles}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                      <XAxis dataKey="annee" tick={{ fontSize: 11, fill: "#64748b" }} />
+                      <YAxis
+                        tick={{ fontSize: 10, fill: "#94a3b8" }}
+                        tickFormatter={(v) => `${v}%`}
+                        width={44}
+                      />
+                      <Tooltip
+                        formatter={(v, n) => [
+                          Number(v).toFixed(2).replace(".", ",") + " %",
+                          n === "fonds"
+                            ? fund.nom
+                            : n === "mediane"
+                              ? "Médiane catégorie"
+                              : benchmark?.label ?? "Marché",
+                        ]}
+                        contentStyle={{ fontSize: 12 }}
+                      />
+                      <Legend
+                        wrapperStyle={{ fontSize: 11 }}
+                        formatter={(v) =>
+                          v === "fonds"
+                            ? fund.nom
+                            : v === "mediane"
+                              ? "Médiane catégorie"
+                              : benchmark?.label ?? "Marché"
+                        }
+                      />
+                      <ReferenceLine y={0} stroke="#94a3b8" />
+                      <Bar dataKey="fonds" fill="#185FA5" radius={[3, 3, 0, 0]} />
+                      <Bar dataKey="mediane" fill="#a78bfa" radius={[3, 3, 0, 0]} />
+                      {comparatif.aReference && (
+                        <Bar dataKey="reference" fill="#94a3b8" radius={[3, 3, 0, 0]} />
+                      )}
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </section>
+            )}
+
+            {/* ============================================ */}
+            {/* CALENDRIER MENSUEL */}
+            {/* ============================================ */}
+            {calendrierMensuel.length > 0 && (
+              <section className="bg-white border border-slate-200 rounded-lg p-5">
+                <div className="mb-3">
+                  <h2 className="text-lg font-semibold text-slate-900">
+                    Calendrier mensuel
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Performance de chaque mois. Une case grise signale un mois sans
+                    relevé exploitable, pas un mois à zéro.
+                  </p>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr>
+                        <th className="text-left font-semibold text-slate-600 px-2 py-1.5"></th>
+                        {MOIS_COURTS.map((m, i) => (
+                          <th
+                            key={i}
+                            className="text-center font-semibold text-slate-500 px-1 py-1.5 w-[7%]"
+                          >
+                            {m}
+                          </th>
+                        ))}
+                        <th className="text-right font-semibold text-slate-600 px-2 py-1.5">
+                          Année
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {calendrierMensuel.map((ligne) => (
+                        <tr key={ligne.annee}>
+                          <td className="font-bold text-slate-700 px-2 py-1.5">
+                            {ligne.annee}
+                          </td>
+                          {ligne.cellules.map((c, i) => (
+                            <td
+                              key={i}
+                              className="px-0.5 py-1.5 text-center tabular-nums"
+                              style={{
+                                background: c === null ? "#f8fafc" : perfHeatColor(c),
+                                color: c === null ? "#cbd5e1" : "#0f172a",
+                              }}
+                              title={c === null ? "Pas de relevé exploitable" : undefined}
+                            >
+                              {c === null ? "·" : (c * 100).toFixed(1).replace(".", ",")}
+                            </td>
+                          ))}
+                          <td
+                            className={`px-2 py-1.5 text-right font-semibold tabular-nums ${
+                              ligne.total === null
+                                ? "text-slate-300"
+                                : ligne.total >= 0
+                                  ? "text-green-700"
+                                  : "text-red-700"
+                            }`}
+                          >
+                            {ligne.total === null ? "—" : fmtPct(ligne.total, 1)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
+
+            {/* ============================================ */}
+            {/* EXCES TRIMESTRIEL VS MEDIANE */}
+            {/* ============================================ */}
+            <section className="bg-white border border-slate-200 rounded-lg p-5">
             <div className="mb-3">
               <h2 className="text-lg font-semibold text-slate-900">
                 Excès trimestriel vs médiane catégorie
@@ -1280,54 +1450,10 @@ export default function FCPDetailView(props: Props) {
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
-              </div>
-
-                {/* Calendrier */}
-                <div className="bg-white border border-slate-200 rounded-lg p-5">
-                  <div className="mb-3">
-                    <h2 className="text-lg font-semibold text-slate-900">Calendrier des trimestres</h2>
-                    <p className="text-xs text-slate-500">Performance trimestrielle du fonds</p>
-                  </div>
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr>
-                        <th className="text-left text-xs font-semibold text-slate-600 px-2 py-1.5"></th>
-                        {[1, 2, 3, 4].map((q) => (
-                          <th
-                            key={q}
-                            className="text-center text-xs font-semibold text-slate-600 px-2 py-1.5"
-                          >
-                            Q{q}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {calendarMatrix.map((row) => (
-                        <tr key={row.year}>
-                          <td className="text-xs font-bold text-slate-700 px-2 py-1.5">{row.year}</td>
-                          {row.cells.map((c, idx) => (
-                            <td
-                              key={idx}
-                              className="px-1.5 py-2 text-center text-xs font-medium"
-                              style={{
-                                background: perfHeatColor(c.perf),
-                                color: "#0f172a",
-                              }}
-                            >
-                              {fmtPct(c.perf, 1)}
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
             </section>
 
           </>
         )}
-
         {activeTab === "statistiques" && (
           <>
             {stats.fenetres.length === 0 ? (

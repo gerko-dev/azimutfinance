@@ -16,8 +16,6 @@ import {
 import {
   perfWindow,
   perfYTD,
-  cohortMedianPerf,
-  cohortMedianYTD,
   cohortMedianRebasedSeries,
   excessVsCategory,
   aumGrowthDecomposition,
@@ -26,9 +24,9 @@ import {
   marketShareHistory,
   quartileHistory,
   quartileInCohort,
-  quarterlyCalendar,
   aumDecomposition,
   statsRisque,
+  comparatifPerformances,
 } from "@/lib/fcpMath";
 import { benchmarkPourCategorie } from "@/lib/fcpBenchmarks";
 import { pageMetadata } from "@/lib/seo";
@@ -138,47 +136,13 @@ export default async function FCPDetailPage({
       ? aumRef / aumYearAgo - 1
       : null;
 
-  // === BLOCK 2 - TABLEAU DE PERFORMANCE ===
-  // « Dernière » n'y figure pas : sa fenêtre va du dernier trimestre publié à
-  // la VL la plus récente du fonds, donc sa durée varie d'un fonds à l'autre.
-  // Comparer le fonds à la médiane de sa catégorie sur une fenêtre dont la
-  // durée n'est pas la même pour tout le monde ne dit rien d'exploitable.
-  const perfTable = [
-    { key: "ytd", label: "YTD", win: ytd, median: cohortMedianYTD(cohort) },
-    { key: "m3", label: "3 mois", win: perfWindow(fund, 0.25, "3M"), median: cohortMedianPerf(cohort, 0.25).totalReturn },
-    { key: "m6", label: "6 mois", win: perfWindow(fund, 0.5, "6M"), median: cohortMedianPerf(cohort, 0.5).totalReturn },
-    { key: "y1", label: "1 an", win: perfWindow(fund, 1, "1Y"), median: cohortMedianPerf(cohort, 1).totalReturn },
-    // Trois ans en cumulé, comme les autres lignes. Annualiser cette seule
-    // ligne mettait deux unités différentes dans la même colonne : +18 % sur
-    // trois ans se lisait à côté de +6 % par an sans que rien ne le signale
-    // hors du titre. La version annualisée reste dans l'onglet Statistiques,
-    // où elle est étiquetée comme telle et entourée de mesures de même nature.
-    { key: "y3", label: "3 ans", win: perfWindow(fund, 3, "3Y"), median: cohortMedianPerf(cohort, 3).totalReturn },
-  ].map((row) => ({
-    label: row.label,
-    fromDate: row.win.fromDate,
-    toDate: row.win.toDate,
-    fundValue: row.win.available ? row.win.totalReturn : null,
-    cohortValue: row.median ?? null,
-    excess:
-      row.win.available && row.median !== null
-        ? row.win.totalReturn - row.median
-        : null,
-  }));
-
-  // === BLOCK 3 - GRAPHE VL REBASE ===
-  // Toutes les obs avec VL non null, du firstObsDate au latestVL
+  // === BLOCK 3 - SERIE DE VL ===
+  // Toutes les obs avec VL non null, du firstObsDate au latestVL. Sert au
+  // graphe de la vue d'ensemble, a la reference de marche et au comparatif.
   const vlSeries = fund.observations
     .filter((o) => o.vl !== null)
     .map((o) => ({ date: o.date, vl: o.vl as number, kind: o.kind }));
   const baseObs = vlSeries[0];
-  const rebasedFundSeries = baseObs
-    ? vlSeries.map((p) => ({
-        date: p.date,
-        rebased: (p.vl / baseObs.vl) * 100,
-        kind: p.kind,
-      }))
-    : [];
   // Médiane catégorie rebasée aux mêmes dates
   const cohortRebased = baseObs
     ? cohortMedianRebasedSeries(
@@ -195,6 +159,28 @@ export default async function FCPDetailPage({
     fund.categorie,
     vlSeries.map((p) => p.date)
   );
+
+  // === BLOCK 3 ter - COMPARATIF FONDS / CATEGORIE / MARCHE ===
+  const comparatif = comparatifPerformances(
+    vlSeries,
+    cohortRebased,
+    benchmark ? benchmark.serie : null
+  );
+
+  // === BLOCK 2 - TABLEAU DE PERFORMANCE ===
+  // Derive du comparatif, et non recalcule : les deux tableaux de la fiche
+  // affichaient sinon deux « medianes categorie » differentes pour la meme
+  // fenetre — l'un mesurant chaque fonds sur SA propre derniere VL, l'autre
+  // tout le monde aux memes bornes. C'est la seconde definition qui vaut pour
+  // une comparaison, et elle vaut maintenant partout.
+  const perfTable = comparatif.fenetres.map((f) => ({
+    label: f.cle === "ytd" ? "YTD" : f.label,
+    fromDate: f.fromDate,
+    toDate: f.toDate,
+    fundValue: f.fonds,
+    cohortValue: f.mediane,
+    excess: f.fonds !== null && f.mediane !== null ? f.fonds - f.mediane : null,
+  }));
 
   // === BLOCK 4 - FRISE QUARTILES ===
   const quartileFrame = quartileHistory(fund, cohort, quarterEnds.slice(-16));
@@ -247,9 +233,6 @@ export default async function FCPDetailPage({
   // === BLOCK 9 - PART DE MARCHE DANS LA CATEGORIE ===
   const marketShare = marketShareHistory(fund, cohort, quarterEnds);
 
-  // === BLOCK 10 - HEATMAP CALENDRIER ===
-  const calendar = quarterlyCalendar(fund, quarterEnds);
-
   // === BLOCK 11 - CROISSANCE 1A & 3A DECOMPOSEE ===
   const refQ3YBefore = refIdx >= 12 ? quarterEnds[refIdx - 12] : null;
   const growth1Y = refYearAgo
@@ -301,12 +284,12 @@ export default async function FCPDetailPage({
         // perf table
         perfTable={perfTable}
         // VL chart
-        rebasedFundSeries={rebasedFundSeries}
         cohortRebased={cohortRebased}
         vlSeries={vlSeries}
         benchmark={benchmark}
         ytdRank={ytdRank}
         ytdRankBase={ytdRankBase}
+        comparatif={comparatif}
         // quartile frieze
         quartileFrame={quartileFrame}
         top2Pct={top2Pct}
@@ -319,8 +302,6 @@ export default async function FCPDetailPage({
         managerEntries={managerEntries}
         // market share
         marketShare={marketShare}
-        // calendar
-        calendar={calendar}
         // growth
         growth1Y={growth1Y}
         growth3Y={growth3Y}

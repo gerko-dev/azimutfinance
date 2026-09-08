@@ -603,21 +603,61 @@ export function cohortMedianRebasedSeries(
   // l'historique BOC porte les séries à neuf cents points, le même calcul en
   // demande 900 × 40 × 900, soixante-cinq millions par fiche : le worker Next
   // mourait avant de rendre la page.
-  const index = cohort.map((f) => {
-    const parDate = new Map<string, number>();
+  //
+  // La correspondance se fait au DERNIER RELEVE CONNU a la date, jamais sur une
+  // egalite de dates. Une egalite vidait la cohorte : les dates demandees sont
+  // celles du fonds courant, et deux SGO ne publient pas le meme jour. Sur la
+  // premiere date de SECURITAS, trois fonds sur cent trente-quatre avaient un
+  // releve — la « mediane de la categorie » se reduisait au fonds lui-meme et
+  // affichait un ecart de 0,00 % sur toutes les fenetres.
+  const series = cohort.map((f) => {
+    const pts: Array<{ date: string; vl: number }> = [];
     for (const o of f.observations) {
-      if (o.vl !== null) parDate.set(o.date, o.vl);
+      if (o.vl !== null && o.vl > 0) pts.push({ date: o.date, vl: o.vl });
     }
-    return parDate;
+    pts.sort((a, b) => a.date.localeCompare(b.date));
+    return pts;
   });
-  const bases = index.map((m) => m.get(baseDate));
+
+  /** Dernier releve du fonds `i` a la date, ou avant. */
+  const auPlusTard = (pts: Array<{ date: string; vl: number }>, d: string) => {
+    let lo = 0;
+    let hi = pts.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (pts[mid].date <= d) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo > 0 ? pts[lo - 1].vl : null;
+  };
+
+  const bases = series.map((pts) => auPlusTard(pts, baseDate));
+
+  // Balayage a deux pointeurs : les dates demandees sont triees, chaque serie
+  // aussi. On avance sans jamais revenir en arriere.
+  const curseurs = new Array(series.length).fill(0);
+  const courants: Array<number | null> = series.map(() => null);
+  for (let i = 0; i < series.length; i++) {
+    courants[i] = bases[i];
+    while (
+      curseurs[i] < series[i].length &&
+      series[i][curseurs[i]].date <= baseDate
+    ) {
+      curseurs[i]++;
+    }
+  }
 
   return dates.map((d) => {
     const values: number[] = [];
-    for (let i = 0; i < index.length; i++) {
+    for (let i = 0; i < series.length; i++) {
       const base = bases[i];
-      const cur = index[i].get(d);
-      if (base === undefined || cur === undefined || base === 0) continue;
+      const pts = series[i];
+      while (curseurs[i] < pts.length && pts[curseurs[i]].date <= d) {
+        courants[i] = pts[curseurs[i]].vl;
+        curseurs[i]++;
+      }
+      const cur = courants[i];
+      if (base === null || base === 0 || cur === null) continue;
       values.push((cur / base) * 100);
     }
     return { date: d, value: percentile(values, 0.5) };
@@ -1521,4 +1561,194 @@ export function statsRisque(fund: Fund, cohort: Fund[]): StatsRisque {
     pasMedianJours: pasMedian,
     nbPointsTotal: pts.length,
   };
+}
+
+// ==========================================
+// COMPARATIF FONDS / CATEGORIE / MARCHE
+// ==========================================
+//
+// Les trois series arrivent alignees sur les MEMES dates — celles des releves
+// de VL du fonds — parce que c'est le fonds qui commande : lui seul dit quand
+// une observation existe. La mediane et la reference sont des indices base 100,
+// la VL est en FCFA ; toutes trois se comparent en RAPPORT de deux valeurs, ce
+// qui rend l'unite indifferente.
+
+/** Valeur d'une serie a une date, ou a la date connue la plus proche avant.
+ *  Rend aussi la date effectivement retenue : sur un fonds trimestriel, une
+ *  borne demandee au 1er juin est servie par le releve du 31 mars, et afficher
+ *  « 1er juin » ferait passer trois mois de performance pour un trimestre. */
+function valeurAuPlusTard(
+  serie: Array<{ date: string; valeur: number | null }>,
+  dateISO: string,
+): { valeur: number; date: string } | null {
+  let trouve: { valeur: number; date: string } | null = null;
+  for (const p of serie) {
+    if (p.date > dateISO) break;
+    if (p.valeur !== null) trouve = { valeur: p.valeur, date: p.date };
+  }
+  return trouve;
+}
+
+/** Performance d'une serie entre deux dates, null si l'une des bornes manque. */
+function perfEntre(
+  serie: Array<{ date: string; valeur: number | null }>,
+  debut: string,
+  fin: string,
+): number | null {
+  const a = valeurAuPlusTard(serie, debut);
+  const b = valeurAuPlusTard(serie, fin);
+  return a !== null && b !== null && a.valeur > 0 ? b.valeur / a.valeur - 1 : null;
+}
+
+/** Bornes reellement servies par la serie du fonds, pour l'affichage. */
+function bornesEffectives(
+  serie: Array<{ date: string; valeur: number | null }>,
+  debut: string,
+  fin: string,
+): { de: string; a: string } {
+  return {
+    de: valeurAuPlusTard(serie, debut)?.date ?? debut,
+    a: valeurAuPlusTard(serie, fin)?.date ?? fin,
+  };
+}
+
+export type LigneComparatif = {
+  cle: string;
+  label: string;
+  fromDate: string;
+  toDate: string;
+  fonds: number | null;
+  mediane: number | null;
+  reference: number | null;
+};
+
+export type AnneeComparatif = {
+  annee: number;
+  fonds: number | null;
+  mediane: number | null;
+  reference: number | null;
+  /** L'exercice n'est pas complet : premiere annee d'historique, ou annee en
+   *  cours. Le lecteur doit le savoir avant de comparer la barre aux autres. */
+  partielle: boolean;
+};
+
+export type Comparatif = {
+  fenetres: LigneComparatif[];
+  annees: AnneeComparatif[];
+  /** Perf mensuelle du fonds, pour le calendrier. */
+  mois: Array<{ annee: number; mois: number; perf: number | null }>;
+  totauxAnnuels: Array<{ annee: number; perf: number | null }>;
+  aReference: boolean;
+};
+
+/**
+ * Comparatif de performance du fonds contre la mediane de sa categorie et
+ * contre la reference de marche de sa categorie.
+ */
+export function comparatifPerformances(
+  vl: Array<{ date: string; vl: number }>,
+  medianeSerie: Array<{ date: string; value: number | null }>,
+  referenceSerie: Array<{ date: string; value: number | null }> | null,
+): Comparatif {
+  const vide: Comparatif = {
+    fenetres: [],
+    annees: [],
+    mois: [],
+    totauxAnnuels: [],
+    aReference: false,
+  };
+  if (vl.length < 2) return vide;
+
+  const fonds = vl.map((p) => ({ date: p.date, valeur: p.vl as number | null }));
+  const mediane = medianeSerie.map((p) => ({ date: p.date, valeur: p.value }));
+  const reference = (referenceSerie ?? []).map((p) => ({
+    date: p.date,
+    valeur: p.value,
+  }));
+
+  const debutHisto = vl[0].date;
+  const fin = vl[vl.length - 1].date;
+  const finMs = toMs(fin);
+  const anneeFin = parseInt(fin.slice(0, 4), 10);
+
+  const recule = (mois: number): string =>
+    new Date(finMs - mois * 30.4375 * MS_PER_DAY).toISOString().slice(0, 10);
+
+  const bornes: Array<{ cle: string; label: string; debut: string }> = [
+    { cle: "ytd", label: "Depuis le 1er janvier", debut: `${anneeFin - 1}-12-31` },
+    { cle: "m3", label: "3 mois", debut: recule(3) },
+    { cle: "m6", label: "6 mois", debut: recule(6) },
+    { cle: "y1", label: "1 an", debut: recule(12) },
+    { cle: "y3", label: "3 ans", debut: recule(36) },
+    { cle: "origine", label: "Depuis l'origine", debut: debutHisto },
+  ];
+
+  const fenetres: LigneComparatif[] = bornes
+    .filter((b) => b.debut >= debutHisto || b.cle === "origine")
+    .map((b) => ({
+      cle: b.cle,
+      label: b.label,
+      // Bornes effectives et non demandees : voir `valeurAuPlusTard`.
+      fromDate: bornesEffectives(fonds, b.debut, fin).de,
+      toDate: bornesEffectives(fonds, b.debut, fin).a,
+      fonds: perfEntre(fonds, b.debut, fin),
+      mediane: perfEntre(mediane, b.debut, fin),
+      reference: reference.length > 0 ? perfEntre(reference, b.debut, fin) : null,
+    }));
+
+  // --- Annees calendaires ---
+  const anneeDebut = parseInt(debutHisto.slice(0, 4), 10);
+  const annees: AnneeComparatif[] = [];
+  for (let a = anneeDebut; a <= anneeFin; a++) {
+    const ouverture = `${a - 1}-12-31`;
+    const cloture = a === anneeFin ? fin : `${a}-12-31`;
+    // La premiere annee ne compte que si le fonds etait deja observe au
+    // 31 decembre precedent ; sinon la « performance annuelle » ne couvrirait
+    // qu'un bout d'annee sans le dire.
+    const partielle = ouverture < debutHisto || a === anneeFin;
+    if (ouverture < debutHisto && a !== anneeFin) {
+      // Exercice tronque a l'ouverture : on part du premier releve connu.
+      annees.push({
+        annee: a,
+        fonds: perfEntre(fonds, debutHisto, cloture),
+        mediane: perfEntre(mediane, debutHisto, cloture),
+        reference: reference.length > 0 ? perfEntre(reference, debutHisto, cloture) : null,
+        partielle: true,
+      });
+      continue;
+    }
+    if (ouverture < debutHisto) continue;
+    annees.push({
+      annee: a,
+      fonds: perfEntre(fonds, ouverture, cloture),
+      mediane: perfEntre(mediane, ouverture, cloture),
+      reference: reference.length > 0 ? perfEntre(reference, ouverture, cloture) : null,
+      partielle,
+    });
+  }
+
+  // --- Calendrier mensuel du fonds ---
+  // Dernier releve de chaque mois ; la performance d'un mois se mesure contre
+  // le dernier releve du mois PRECEDENT, pas contre son premier releve a lui.
+  const parMois = new Map<string, { date: string; vl: number }>();
+  for (const p of vl) parMois.set(p.date.slice(0, 7), p); // la serie est triee
+  const clesMois = [...parMois.keys()].sort();
+  const mois: Array<{ annee: number; mois: number; perf: number | null }> = [];
+  for (let i = 1; i < clesMois.length; i++) {
+    const prec = parMois.get(clesMois[i - 1])!;
+    const cur = parMois.get(clesMois[i])!;
+    // Un trou de plus d'un mois ne donne pas une performance mensuelle.
+    const ecartMois =
+      (parseInt(clesMois[i].slice(0, 4), 10) - parseInt(clesMois[i - 1].slice(0, 4), 10)) * 12 +
+      (parseInt(clesMois[i].slice(5, 7), 10) - parseInt(clesMois[i - 1].slice(5, 7), 10));
+    mois.push({
+      annee: parseInt(clesMois[i].slice(0, 4), 10),
+      mois: parseInt(clesMois[i].slice(5, 7), 10),
+      perf: ecartMois === 1 && prec.vl > 0 ? cur.vl / prec.vl - 1 : null,
+    });
+  }
+
+  const totauxAnnuels = annees.map((a) => ({ annee: a.annee, perf: a.fonds }));
+
+  return { fenetres, annees, mois, totauxAnnuels, aReference: reference.length > 0 };
 }
