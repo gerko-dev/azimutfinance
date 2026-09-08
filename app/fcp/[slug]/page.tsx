@@ -139,26 +139,21 @@ export default async function FCPDetailPage({
     { key: "m3", label: "3 mois", win: perfWindow(fund, 0.25, "3M"), median: cohortMedianPerf(cohort, 0.25).totalReturn },
     { key: "m6", label: "6 mois", win: perfWindow(fund, 0.5, "6M"), median: cohortMedianPerf(cohort, 0.5).totalReturn },
     { key: "y1", label: "1 an", win: perfWindow(fund, 1, "1Y"), median: cohortMedianPerf(cohort, 1).totalReturn },
-    {
-      key: "y3",
-      label: "3 ans (annualisé)",
-      win: perfWindow(fund, 3, "3Y"),
-      median: cohortMedianPerf(cohort, 3).annualized,
-      useAnnualized: true,
-    },
+    // Trois ans en cumulé, comme les autres lignes. Annualiser cette seule
+    // ligne mettait deux unités différentes dans la même colonne : +18 % sur
+    // trois ans se lisait à côté de +6 % par an sans que rien ne le signale
+    // hors du titre. La version annualisée reste dans l'onglet Statistiques,
+    // où elle est étiquetée comme telle et entourée de mesures de même nature.
+    { key: "y3", label: "3 ans", win: perfWindow(fund, 3, "3Y"), median: cohortMedianPerf(cohort, 3).totalReturn },
   ].map((row) => ({
     label: row.label,
     fromDate: row.win.fromDate,
     toDate: row.win.toDate,
-    fundValue: row.win.available
-      ? row.useAnnualized
-        ? row.win.annualized
-        : row.win.totalReturn
-      : null,
+    fundValue: row.win.available ? row.win.totalReturn : null,
     cohortValue: row.median ?? null,
     excess:
       row.win.available && row.median !== null
-        ? (row.useAnnualized ? row.win.annualized : row.win.totalReturn) - row.median
+        ? row.win.totalReturn - row.median
         : null,
   }));
 
