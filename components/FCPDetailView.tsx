@@ -22,6 +22,7 @@ import {
   ZAxis,
 } from "recharts";
 import { ResponsiveContainer } from "@/components/ui/ChartContainer";
+import FCPHistoryView from "./FCPHistoryView";
 
 // ==========================================
 // TYPES PROPS (alignés sur app/fcp/[slug]/page.tsx)
@@ -550,7 +551,8 @@ type Tab =
   | "regularite"
   | "encours"
   | "comparatif"
-  | "publication";
+  | "publication"
+  | "historique";
 
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: "overview", label: "Vue d'ensemble" },
@@ -560,6 +562,7 @@ const TABS: Array<{ id: Tab; label: string }> = [
   { id: "encours", label: "Encours" },
   { id: "comparatif", label: "Comparatif" },
   { id: "publication", label: "Publication" },
+  { id: "historique", label: "Historique" },
 ];
 
 export default function FCPDetailView(props: Props) {
@@ -2742,6 +2745,10 @@ export default function FCPDetailView(props: Props) {
             </section>
 
           </>
+        )}
+
+        {activeTab === "historique" && (
+          <FCPHistoryView nom={fund.nom} slug={fund.id} vlSeries={vlSeries} />
         )}
 
         <p className="text-xs text-slate-400">
