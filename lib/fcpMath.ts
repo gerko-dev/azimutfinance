@@ -1649,6 +1649,7 @@ export function comparatifPerformances(
   vl: Array<{ date: string; vl: number }>,
   medianeSerie: Array<{ date: string; value: number | null }>,
   referenceSerie: Array<{ date: string; value: number | null }> | null,
+  origine?: { date: string; vl: number } | null,
 ): Comparatif {
   const vide: Comparatif = {
     fenetres: [],
@@ -1680,21 +1681,48 @@ export function comparatifPerformances(
     { cle: "m6", label: "6 mois", debut: recule(6) },
     { cle: "y1", label: "1 an", debut: recule(12) },
     { cle: "y3", label: "3 ans", debut: recule(36) },
-    { cle: "origine", label: "Depuis le 1er relevé", debut: debutHisto },
+    { cle: "origine", label: "Depuis l'origine", debut: debutHisto },
   ];
+
+  // Depuis l'origine part de la CREATION du fonds quand le BOC la publie, et
+  // non de notre premier bulletin : SECURITAS est ne en 2013 a 5 000, notre
+  // archive commence en novembre 2022.
+  //
+  // Les cellules de comparaison de cette ligne restent vides, et c'est
+  // deliberе : la mediane de categorie et la reference de marche ne remontent
+  // pas avant novembre 2022. Afficher +79 % pour le fonds en face d'un +12 % de
+  // categorie ferait passer dix ans d'anteriorite pour de la surperformance.
+  // Les cinq autres fenetres portent la comparaison ; celle-ci porte le chemin
+  // parcouru.
+  const origineHorsArchive =
+    origine != null && origine.vl > 0 && origine.date !== "" && origine.date < debutHisto;
+  const dernierVL = vl[vl.length - 1].vl;
 
   const fenetres: LigneComparatif[] = bornes
     .filter((b) => b.debut >= debutHisto || b.cle === "origine")
-    .map((b) => ({
-      cle: b.cle,
-      label: b.label,
-      // Bornes effectives et non demandees : voir `valeurAuPlusTard`.
-      fromDate: bornesEffectives(fonds, b.debut, fin).de,
-      toDate: bornesEffectives(fonds, b.debut, fin).a,
-      fonds: perfEntre(fonds, b.debut, fin),
-      mediane: perfEntre(mediane, b.debut, fin),
-      reference: reference.length > 0 ? perfEntre(reference, b.debut, fin) : null,
-    }));
+    .map((b) => {
+      if (b.cle === "origine" && origineHorsArchive && origine) {
+        return {
+          cle: b.cle,
+          label: b.label,
+          fromDate: origine.date,
+          toDate: fin,
+          fonds: dernierVL / origine.vl - 1,
+          mediane: null,
+          reference: null,
+        };
+      }
+      return {
+        cle: b.cle,
+        label: b.label,
+        // Bornes effectives et non demandees : voir `valeurAuPlusTard`.
+        fromDate: bornesEffectives(fonds, b.debut, fin).de,
+        toDate: bornesEffectives(fonds, b.debut, fin).a,
+        fonds: perfEntre(fonds, b.debut, fin),
+        mediane: perfEntre(mediane, b.debut, fin),
+        reference: reference.length > 0 ? perfEntre(reference, b.debut, fin) : null,
+      };
+    });
 
   // --- Annees calendaires ---
   const anneeDebut = parseInt(debutHisto.slice(0, 4), 10);

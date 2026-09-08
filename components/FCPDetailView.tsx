@@ -1215,7 +1215,7 @@ export default function FCPDetailView(props: Props) {
                           perfOrigine.cumulee >= 0 ? "text-green-700" : "text-red-700"
                         }`}
                       >
-                        {fmtPct(perfOrigine.cumulee, 1)}
+                        {fmtPct(perfOrigine.cumulee, 2)}
                         {perfOrigine.annualisee !== null && (
                           <span className="block text-[10px] font-normal text-slate-400">
                             {fmtPct(perfOrigine.annualisee, 1)} par an sur{" "}

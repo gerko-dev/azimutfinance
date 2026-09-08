@@ -164,7 +164,10 @@ export default async function FCPDetailPage({
   const comparatif = comparatifPerformances(
     vlSeries,
     cohortRebased,
-    benchmark ? benchmark.serie : null
+    benchmark ? benchmark.serie : null,
+    fund.bocSnapshot?.vlOrigine && fund.bocSnapshot.dateOrigine
+      ? { date: fund.bocSnapshot.dateOrigine, vl: fund.bocSnapshot.vlOrigine }
+      : null
   );
 
   // === BLOCK 2 - TABLEAU DE PERFORMANCE ===
