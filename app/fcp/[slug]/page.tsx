@@ -17,10 +17,8 @@ import {
 import {
   perfWindow,
   perfYTD,
-  perfLastPeriod,
   cohortMedianPerf,
   cohortMedianYTD,
-  cohortMedianLastPeriod,
   cohortMedianRebasedSeries,
   excessVsCategory,
   aumGrowthDecomposition,
@@ -31,6 +29,7 @@ import {
   quartileInCohort,
   quarterlyCalendar,
   aumDecomposition,
+  statsRisque,
 } from "@/lib/fcpMath";
 import { pageMetadata } from "@/lib/seo";
 
@@ -131,8 +130,11 @@ export default async function FCPDetailPage({
       : null;
 
   // === BLOCK 2 - TABLEAU DE PERFORMANCE ===
+  // « Dernière » n'y figure pas : sa fenêtre va du dernier trimestre publié à
+  // la VL la plus récente du fonds, donc sa durée varie d'un fonds à l'autre.
+  // Comparer le fonds à la médiane de sa catégorie sur une fenêtre dont la
+  // durée n'est pas la même pour tout le monde ne dit rien d'exploitable.
   const perfTable = [
-    { key: "lastPeriod", label: "Dernière", win: perfLastPeriod(fund), median: cohortMedianLastPeriod(cohort) },
     { key: "ytd", label: "YTD", win: ytd, median: cohortMedianYTD(cohort) },
     { key: "m3", label: "3 mois", win: perfWindow(fund, 0.25, "3M"), median: cohortMedianPerf(cohort, 0.25).totalReturn },
     { key: "m6", label: "6 mois", win: perfWindow(fund, 0.5, "6M"), median: cohortMedianPerf(cohort, 0.5).totalReturn },
@@ -248,6 +250,11 @@ export default async function FCPDetailPage({
   // === BLOCK 12 - QUALITE DE PUBLICATION ===
   const cadence = publicationCadence(fund, latestVLGlobal || refQuarter, quarterEnds);
 
+  // === BLOCK 14 - STATISTIQUES DE RISQUE ===
+  // Calculees sur la serie de VL et non sur les trimestres ; rendent null
+  // quand le fonds ne publie pas assez souvent (cf. lib/fcpMath).
+  const stats = statsRisque(fund, cohort);
+
   // === BLOCK 13 - ROLLING 1Y ===
   const rolling = rolling1YStats(fund, quarterEnds, 8);
 
@@ -306,6 +313,8 @@ export default async function FCPDetailPage({
         cadence={cadence}
         // rolling
         rolling={rolling}
+        // statistiques de risque
+        stats={stats}
         // BOC banner
         latestBocDate={getLatestBocDate(funds)}
       />

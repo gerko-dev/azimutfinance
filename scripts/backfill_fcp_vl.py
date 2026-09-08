@@ -250,6 +250,25 @@ SEUIL_FRACTIONNEMENT = 0.35
 SEUIL_ABERRATION = 1.5
 TOLERANCE_VOISINS = 0.15
 
+# Le seuil ci-dessus ne voit que les ecarts grossiers. Les erreurs de saisie
+# d'un chiffre passent dessous : SECURITAS a ete publie a 9 292 un 7 fevrier
+# 2023 entre deux 7 290 — un « 7 » lu « 9 », soit +27 %, et le filtre ne
+# bronchait pas. Deux bulletins ont aussi INTERVERTI les VL de deux fonds
+# voisins du tableau (SAPHIR DYNAMIQUE et SAPHIR QUIETUDE, BAM TRESOR d'un jour
+# a l'autre) : chacun prend la valeur de l'autre pour un jour, puis revient.
+#
+# On resserre donc : un ecart de 5 % qui REVIENT a moins de 1 % du point
+# precedent, en moins de deux semaines, n'est pas un aller-retour de marche
+# credible pour un OPCVM de la zone. Le test porte sur le retour et non sur
+# l'ampleur seule, ce qui laisse intacts les vrais decrochages — un fonds qui
+# chute reste bas, il ne revient pas au centime le lendemain.
+#
+# Perdre une observation sur neuf cents ne coute rien ; en garder une fausse
+# fausse la volatilite et la perte maximale de toute la fiche.
+SEUIL_PIC = 0.05
+TOLERANCE_RETOUR = 0.01
+FENETRE_PIC_JOURS = 14
+
 
 def indexer_series(
     obs: dict[tuple[str, str, str], list[str]],
@@ -277,17 +296,35 @@ def retirer_aberrations(obs: dict[tuple[str, str, str], list[str]]) -> int:
     retires = 0
     for (gest, nom), points in indexer_series(obs).items():
         for i in range(1, len(points) - 1):
-            (_, avant), (d, val), (_, apres) = points[i - 1], points[i], points[i + 1]
+            (d_av, avant), (d, val), (d_ap, apres) = (
+                points[i - 1],
+                points[i],
+                points[i + 1],
+            )
             if avant <= 0 or apres <= 0 or val <= 0:
                 continue
+
+            # Ecart grossier : colonne mal decoupee dans le PDF.
             ecart_avant = max(val / avant, avant / val)
             ecart_apres = max(val / apres, apres / val)
-            voisins_daccord = abs(apres / avant - 1) <= TOLERANCE_VOISINS
-            if (
+            grossier = (
                 ecart_avant >= SEUIL_ABERRATION
                 and ecart_apres >= SEUIL_ABERRATION
-                and voisins_daccord
-            ):
+                and abs(apres / avant - 1) <= TOLERANCE_VOISINS
+            )
+
+            # Pic fin : un chiffre de saisie, ou deux fonds intervertis.
+            try:
+                jours = (date.fromisoformat(d_ap) - date.fromisoformat(d_av)).days
+            except ValueError:
+                jours = FENETRE_PIC_JOURS + 1
+            pic = (
+                jours <= FENETRE_PIC_JOURS
+                and abs(val / avant - 1) >= SEUIL_PIC
+                and abs(apres / avant - 1) <= TOLERANCE_RETOUR
+            )
+
+            if grossier or pic:
                 obs.pop((gest, nom, d), None)
                 retires += 1
     return retires

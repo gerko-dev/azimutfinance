@@ -2,8 +2,16 @@
 //
 // Métriques retenues : performance cumulée TWR, perf annualisée, quartiles
 // catégorie, dynamique d'AUM, flux nets implicites, persistance.
-// PAS de volatilité / Sharpe / drawdown — fréquence d'observation hétérogène
-// entre fonds (cf. lib/fcp.ts).
+//
+// Volatilité, perte maximale et statistiques de distribution : longtemps
+// exclues d'ici, parce que le référentiel ne portait que les quatre points
+// trimestriels de l'ASGOP — quatorze observations, dont on ne tire aucun
+// écart-type digne de ce nom. L'historique BOC a changé la donne : 35 000
+// relevés, quotidiens pour la plupart des fonds. Elles sont donc calculées,
+// mais SOUS CONDITION DE DENSITÉ (cf. `statsRisque`) : la fréquence reste
+// hétérogène d'un fonds à l'autre (cf. lib/fcp.ts), et un fonds qui ne publie
+// qu'au trimestre doit rendre « null », pas un chiffre rassurant tiré de
+// quatorze points.
 
 import type { Fund, FundObservation } from "./fcp";
 import { obsAt } from "./fcp";
@@ -1177,4 +1185,340 @@ export function quarterlyCalendar(fund: Fund, quarterEnds: string[]): CalendarCe
     out.push({ year, quarter, perf });
   }
   return out;
+}
+
+// ==========================================
+// STATISTIQUES DE RISQUE
+// ==========================================
+//
+// Tout ce qui suit se calcule sur la serie de VL, et non sur les trimestres.
+// Deux garde-fous encadrent l'ensemble, parce qu'une statistique de risque
+// fausse est pire qu'une case vide :
+//
+//   1. DENSITE. Sous vingt rendements dans la fenetre, on rend `null`. Un
+//      ecart-type sur douze points n'estime rien.
+//   2. ANNUALISATION. On annualise par l'ecart MEDIAN entre deux releves, pas
+//      par un √252 emprunte aux actions. Les fonds ne publient pas au meme
+//      rythme — quotidien, hebdomadaire, trimestriel — et certains changent de
+//      rythme en cours de route. La mediane resiste aux trous de publication la
+//      ou une moyenne se ferait emporter par un seul intervalle de six mois.
+
+/** Nombre minimal de rendements pour qu'un ecart-type veuille dire quelque chose. */
+const MIN_RENDEMENTS = 20;
+/** Idem pour les statistiques mensuelles (un an de recul). */
+const MIN_MOIS = 12;
+/** Au-dela, les releves sont trop espaces pour parler de risque. */
+const PAS_MAX_JOURS = 45;
+
+type PointVL = { date: string; vl: number };
+
+/** Serie de VL du fonds, triee, sans les trous. */
+function serieVL(fund: Fund): PointVL[] {
+  return fund.observations
+    .filter((o) => o.vl !== null && o.vl > 0)
+    .map((o) => ({ date: o.date, vl: o.vl as number }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/** Dernier releve de chaque mois calendaire. */
+function serieMensuelle(pts: PointVL[]): Array<{ mois: string; date: string; vl: number }> {
+  const parMois = new Map<string, PointVL>();
+  for (const p of pts) parMois.set(p.date.slice(0, 7), p); // la serie est triee
+  return [...parMois.entries()]
+    .map(([mois, p]) => ({ mois, date: p.date, vl: p.vl }))
+    .sort((a, b) => a.mois.localeCompare(b.mois));
+}
+
+function ecartType(xs: number[]): number | null {
+  if (xs.length < 2) return null;
+  const moy = xs.reduce((s, x) => s + x, 0) / xs.length;
+  const v = xs.reduce((s, x) => s + (x - moy) ** 2, 0) / (xs.length - 1);
+  return Math.sqrt(v);
+}
+
+/** Volatilite annualisee d'une serie de VL, ou null si elle est trop maigre. */
+function volatiliteAnnualisee(pts: PointVL[]): number | null {
+  const rendements: number[] = [];
+  const ecarts: number[] = [];
+  for (let i = 1; i < pts.length; i++) {
+    const jours = (toMs(pts[i].date) - toMs(pts[i - 1].date)) / MS_PER_DAY;
+    if (jours <= 0) continue;
+    rendements.push(Math.log(pts[i].vl / pts[i - 1].vl));
+    ecarts.push(jours);
+  }
+  if (rendements.length < MIN_RENDEMENTS) return null;
+  const sigma = ecartType(rendements);
+  const pas = percentile(ecarts, 0.5);
+  if (sigma === null || pas === null || pas <= 0 || pas > PAS_MAX_JOURS) return null;
+  return sigma * Math.sqrt(365.25 / pas);
+}
+
+/**
+ * Plus forte baisse de pic a creux sur la periode, et ce qu'il est advenu
+ * ensuite. `recuperee` porte la date a laquelle la VL a retrouve son pic —
+ * null si elle ne l'a pas encore fait, ce qui est l'information la plus utile
+ * des quatre.
+ */
+export type PerteMax = {
+  amplitude: number;
+  pic: string;
+  creux: string;
+  recuperee: string | null;
+  joursBaisse: number;
+  joursRecuperation: number | null;
+};
+
+function calculePerteMax(pts: PointVL[]): PerteMax | null {
+  if (pts.length < MIN_RENDEMENTS) return null;
+  let sommet = pts[0];
+  let pire: PerteMax | null = null;
+  for (const p of pts) {
+    if (p.vl >= sommet.vl) {
+      sommet = p;
+      continue;
+    }
+    const amplitude = p.vl / sommet.vl - 1;
+    if (pire === null || amplitude < pire.amplitude) {
+      pire = {
+        amplitude,
+        pic: sommet.date,
+        creux: p.date,
+        recuperee: null,
+        joursBaisse: Math.round((toMs(p.date) - toMs(sommet.date)) / MS_PER_DAY),
+        joursRecuperation: null,
+      };
+    }
+  }
+  if (pire === null) return null;
+  const seuil = pts.find((p) => p.date === pire!.pic)?.vl;
+  if (seuil !== undefined) {
+    const retour = pts.find((p) => p.date > pire!.creux && p.vl >= seuil);
+    if (retour) {
+      pire.recuperee = retour.date;
+      pire.joursRecuperation = Math.round(
+        (toMs(retour.date) - toMs(pire.creux)) / MS_PER_DAY,
+      );
+    }
+  }
+  return pire;
+}
+
+/** Une fenetre du tableau de statistiques. */
+export type StatsFenetre = {
+  cle: string;
+  label: string;
+  fromDate: string;
+  toDate: string;
+  nbPoints: number;
+  perfCumulee: number | null;
+  perfAnnualisee: number | null;
+  volatilite: number | null;
+  /** Perf annualisee rapportee a la volatilite. Ce N'EST PAS un Sharpe : il n'y
+   *  a pas de taux sans risque UEMOA publie a la frequence qu'il faudrait. */
+  rendementSurRisque: number | null;
+  perteMax: number | null;
+  moisPositifs: number | null;
+  meilleurMois: number | null;
+  pireMois: number | null;
+};
+
+/** Comportement du fonds face a la mediane de sa categorie, en mensuel. */
+export type StatsCategorie = {
+  nbMois: number;
+  correlation: number | null;
+  beta: number | null;
+  trackingError: number | null;
+  ratioInformation: number | null;
+};
+
+export type StatsRisque = {
+  fenetres: StatsFenetre[];
+  perteMax: PerteMax | null;
+  categorie: StatsCategorie | null;
+  mensuels: Array<{ mois: string; perf: number }>;
+  histogramme: Array<{ label: string; centre: number; n: number }>;
+  /** Ecart median entre deux releves, en jours. Dit au lecteur sur quoi repose
+   *  tout le reste — et pourquoi certaines cases sont vides. */
+  pasMedianJours: number | null;
+  nbPointsTotal: number;
+};
+
+/** Mediane de la cohorte au dernier releve de chaque mois.
+ *
+ *  On ne reutilise pas `cohortMedianRebasedSeries` : elle exige une date EXACTE
+ *  et les fonds d'une meme categorie ne publient pas le meme jour. Ici chaque
+ *  fonds apporte son dernier releve connu a la fin du mois.
+ */
+function medianeCohorteMensuelle(
+  cohort: Fund[],
+  mois: string[],
+): Array<{ mois: string; valeur: number | null }> {
+  const series = cohort.map((f) => serieMensuelle(serieVL(f)));
+  return mois.map((m, i) => {
+    if (i === 0) return { mois: m, valeur: null };
+    const rendements: number[] = [];
+    for (const s of series) {
+      const cur = s.find((x) => x.mois === m);
+      const prev = s.find((x) => x.mois === mois[i - 1]);
+      if (cur && prev && prev.vl > 0) rendements.push(cur.vl / prev.vl - 1);
+    }
+    return { mois: m, valeur: percentile(rendements, 0.5) };
+  });
+}
+
+/**
+ * Statistiques de risque du fonds, calculees sur la serie de VL.
+ *
+ * Rend des `null` en cascade plutot que des approximations : un fonds
+ * trimestriel ressort avec un tableau vide et la fiche le dit franchement.
+ */
+export function statsRisque(fund: Fund, cohort: Fund[]): StatsRisque {
+  const pts = serieVL(fund);
+  const vide: StatsRisque = {
+    fenetres: [],
+    perteMax: null,
+    categorie: null,
+    mensuels: [],
+    histogramme: [],
+    pasMedianJours: null,
+    nbPointsTotal: pts.length,
+  };
+  if (pts.length < 2) return vide;
+
+  const fin = pts[pts.length - 1].date;
+  const ecarts: number[] = [];
+  for (let i = 1; i < pts.length; i++) {
+    const j = (toMs(pts[i].date) - toMs(pts[i - 1].date)) / MS_PER_DAY;
+    if (j > 0) ecarts.push(j);
+  }
+  const pasMedian = percentile(ecarts, 0.5);
+
+  // --- Rendements mensuels, socle des statistiques de distribution ---
+  const mensuel = serieMensuelle(pts);
+  const mensuels: Array<{ mois: string; perf: number }> = [];
+  for (let i = 1; i < mensuel.length; i++) {
+    if (mensuel[i - 1].vl > 0) {
+      mensuels.push({
+        mois: mensuel[i].mois,
+        perf: mensuel[i].vl / mensuel[i - 1].vl - 1,
+      });
+    }
+  }
+
+  // --- Fenetres ---
+  const fenetres: StatsFenetre[] = [
+    { cle: "y1", label: "1 an", annees: 1 },
+    { cle: "y3", label: "3 ans", annees: 3 },
+    { cle: "origine", label: "Depuis l'origine", annees: null as number | null },
+  ].map(({ cle, label, annees }) => {
+    const debut =
+      annees === null
+        ? pts[0].date
+        : new Date(toMs(fin) - annees * 365.25 * MS_PER_DAY).toISOString().slice(0, 10);
+    const fenetre = pts.filter((p) => p.date >= debut);
+    const moisFenetre = mensuels.filter((m) => m.mois >= debut.slice(0, 7));
+    const positifs = moisFenetre.filter((m) => m.perf > 0).length;
+
+    if (fenetre.length < 2) {
+      return {
+        cle,
+        label,
+        fromDate: debut,
+        toDate: fin,
+        nbPoints: fenetre.length,
+        perfCumulee: null,
+        perfAnnualisee: null,
+        volatilite: null,
+        rendementSurRisque: null,
+        perteMax: null,
+        moisPositifs: null,
+        meilleurMois: null,
+        pireMois: null,
+      };
+    }
+
+    const cumulee = twr(fenetre[0].vl, fenetre[fenetre.length - 1].vl);
+    const duree = yearsBetween(fenetre[0].date, fenetre[fenetre.length - 1].date);
+    const annualisee = duree >= 0.75 ? annualize(cumulee, duree) : null;
+    const vol = volatiliteAnnualisee(fenetre);
+    const dd = calculePerteMax(fenetre);
+    return {
+      cle,
+      label,
+      fromDate: fenetre[0].date,
+      toDate: fin,
+      nbPoints: fenetre.length,
+      perfCumulee: cumulee,
+      perfAnnualisee: annualisee,
+      volatilite: vol,
+      rendementSurRisque:
+        annualisee !== null && vol !== null && vol > 0 ? annualisee / vol : null,
+      perteMax: dd ? dd.amplitude : null,
+      moisPositifs: moisFenetre.length >= MIN_MOIS ? positifs / moisFenetre.length : null,
+      meilleurMois:
+        moisFenetre.length >= MIN_MOIS ? Math.max(...moisFenetre.map((m) => m.perf)) : null,
+      pireMois:
+        moisFenetre.length >= MIN_MOIS ? Math.min(...moisFenetre.map((m) => m.perf)) : null,
+    };
+  });
+
+  // --- Face a la categorie, en mensuel ---
+  let categorie: StatsCategorie | null = null;
+  if (mensuels.length >= MIN_MOIS) {
+    const moisCles = mensuel.map((m) => m.mois);
+    const medianes = medianeCohorteMensuelle(cohort, moisCles);
+    const paires: Array<{ f: number; c: number }> = [];
+    for (const m of mensuels) {
+      const ref = medianes.find((x) => x.mois === m.mois);
+      if (ref && ref.valeur !== null) paires.push({ f: m.perf, c: ref.valeur });
+    }
+    if (paires.length >= MIN_MOIS) {
+      const mf = paires.reduce((s, p) => s + p.f, 0) / paires.length;
+      const mc = paires.reduce((s, p) => s + p.c, 0) / paires.length;
+      const cov = paires.reduce((s, p) => s + (p.f - mf) * (p.c - mc), 0) / (paires.length - 1);
+      const sf = ecartType(paires.map((p) => p.f));
+      const sc = ecartType(paires.map((p) => p.c));
+      const ecarts = paires.map((p) => p.f - p.c);
+      const te = ecartType(ecarts);
+      const teAnnuel = te !== null ? te * Math.sqrt(12) : null;
+      const excesMoyen = ecarts.reduce((s, e) => s + e, 0) / ecarts.length;
+      categorie = {
+        nbMois: paires.length,
+        correlation: sf !== null && sc !== null && sf > 0 && sc > 0 ? cov / (sf * sc) : null,
+        beta: sc !== null && sc > 0 ? cov / sc ** 2 : null,
+        trackingError: teAnnuel,
+        ratioInformation:
+          teAnnuel !== null && teAnnuel > 0 ? (excesMoyen * 12) / teAnnuel : null,
+      };
+    }
+  }
+
+  // --- Histogramme des rendements mensuels ---
+  const histogramme: Array<{ label: string; centre: number; n: number }> = [];
+  if (mensuels.length >= MIN_MOIS) {
+    const vals = mensuels.map((m) => m.perf);
+    const lo = Math.min(...vals);
+    const hi = Math.max(...vals);
+    const nbClasses = 9;
+    const largeur = (hi - lo) / nbClasses || 0.001;
+    for (let i = 0; i < nbClasses; i++) {
+      const a = lo + i * largeur;
+      const b = i === nbClasses - 1 ? hi + 1e-12 : a + largeur;
+      histogramme.push({
+        label: `${(a * 100).toFixed(1).replace(".", ",")}%`,
+        centre: a + largeur / 2,
+        n: vals.filter((v) => v >= a && v < b).length,
+      });
+    }
+  }
+
+  return {
+    fenetres,
+    perteMax: calculePerteMax(pts),
+    categorie,
+    mensuels,
+    histogramme,
+    pasMedianJours: pasMedian,
+    nbPointsTotal: pts.length,
+  };
 }

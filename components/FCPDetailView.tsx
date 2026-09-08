@@ -16,6 +16,7 @@ import {
   Tooltip,
   Legend,
   ReferenceLine,
+  Cell,
 } from "recharts";
 import { ResponsiveContainer } from "@/components/ui/ChartContainer";
 
@@ -115,6 +116,49 @@ type Cadence = {
   daysSinceLast: number | null;
 };
 
+type PerteMax = {
+  amplitude: number;
+  pic: string;
+  creux: string;
+  recuperee: string | null;
+  joursBaisse: number;
+  joursRecuperation: number | null;
+};
+
+type StatsFenetre = {
+  cle: string;
+  label: string;
+  fromDate: string;
+  toDate: string;
+  nbPoints: number;
+  perfCumulee: number | null;
+  perfAnnualisee: number | null;
+  volatilite: number | null;
+  rendementSurRisque: number | null;
+  perteMax: number | null;
+  moisPositifs: number | null;
+  meilleurMois: number | null;
+  pireMois: number | null;
+};
+
+type StatsCategorie = {
+  nbMois: number;
+  correlation: number | null;
+  beta: number | null;
+  trackingError: number | null;
+  ratioInformation: number | null;
+};
+
+type StatsRisque = {
+  fenetres: StatsFenetre[];
+  perteMax: PerteMax | null;
+  categorie: StatsCategorie | null;
+  mensuels: Array<{ mois: string; perf: number }>;
+  histogramme: Array<{ label: string; centre: number; n: number }>;
+  pasMedianJours: number | null;
+  nbPointsTotal: number;
+};
+
 type Rolling = {
   points: Array<{ asOf: string; perf1Y: number | null }>;
   min: number | null;
@@ -163,6 +207,7 @@ type Props = {
   growth3Y: AumGrowth | null;
   cadence: Cadence;
   rolling: Rolling;
+  stats: StatsRisque;
   /** Date BOC la plus récente toutes valeurs confondues (ISO). */
   latestBocDate: string;
 };
@@ -320,6 +365,7 @@ function cutoffFor(lastDate: string, p: ChartPeriod): string {
 type Tab =
   | "overview"
   | "performance"
+  | "statistiques"
   | "regularite"
   | "encours"
   | "comparatif"
@@ -328,6 +374,7 @@ type Tab =
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: "overview", label: "Vue d'ensemble" },
   { id: "performance", label: "Performance" },
+  { id: "statistiques", label: "Statistiques" },
   { id: "regularite", label: "Régularité" },
   { id: "encours", label: "Encours" },
   { id: "comparatif", label: "Comparatif" },
@@ -360,6 +407,7 @@ export default function FCPDetailView(props: Props) {
     growth3Y,
     cadence,
     rolling,
+    stats,
     latestBocDate,
   } = props;
 
@@ -839,22 +887,6 @@ export default function FCPDetailView(props: Props) {
                       {fund.frequenceCalcul || "NC"}
                     </dd>
                   </div>
-                  <div className="flex justify-between gap-3 pt-3 border-t border-slate-100">
-                    <dt className="text-slate-500">VL relevées</dt>
-                    <dd className="font-medium text-right">{vlSeries.length}</dd>
-                  </div>
-                  <div className="flex justify-between gap-3">
-                    <dt className="text-slate-500">Première VL</dt>
-                    <dd className="font-medium text-right">
-                      {fund.firstObsDate ? fmtDateFR(fund.firstObsDate) : "NC"}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between gap-3">
-                    <dt className="text-slate-500">Dernière VL</dt>
-                    <dd className="font-medium text-right">
-                      {headVL ? fmtDateFR(headVL.date) : "NC"}
-                    </dd>
-                  </div>
                 </dl>
               </div>
             </div>
@@ -1089,6 +1121,295 @@ export default function FCPDetailView(props: Props) {
                 </div>
             </section>
 
+          </>
+        )}
+
+        {activeTab === "statistiques" && (
+          <>
+            {stats.fenetres.length === 0 ? (
+              <section className="bg-white border border-slate-200 rounded-lg p-8 text-center">
+                <p className="text-sm text-slate-600">
+                  Statistiques indisponibles pour ce fonds.
+                </p>
+                <p className="text-xs text-slate-400 mt-1">
+                  {stats.nbPointsTotal} VL relevées — il en faut une vingtaine sur
+                  la fenêtre pour qu&apos;un écart-type veuille dire quelque chose.
+                </p>
+              </section>
+            ) : (
+              <>
+                {/* Tableau risque / rendement */}
+                <section className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+                  <div className="px-6 pt-5 pb-3">
+                    <h2 className="text-lg font-semibold text-slate-900">
+                      Risque et rendement
+                    </h2>
+                    <p className="text-xs text-slate-500">
+                      Calculé sur les VL publiées
+                      {stats.pasMedianJours !== null && (
+                        <>
+                          {" "}
+                          · un relevé tous les{" "}
+                          {stats.pasMedianJours < 1.5
+                            ? "jours"
+                            : `${Math.round(stats.pasMedianJours)} jours`}{" "}
+                          en médiane
+                        </>
+                      )}
+                    </p>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-50 border-y border-slate-200">
+                        <tr>
+                          <th className="text-left px-6 py-2 text-xs font-semibold text-slate-600">
+                            Mesure
+                          </th>
+                          {stats.fenetres.map((f) => (
+                            <th
+                              key={f.cle}
+                              className="text-right px-4 py-2 text-xs font-semibold text-slate-600 whitespace-nowrap"
+                            >
+                              {f.label}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        <StatRow
+                          label="Performance cumulée"
+                          cells={stats.fenetres.map((f) => f.perfCumulee)}
+                          render={(v) => fmtPct(v, 2)}
+                          colore
+                        />
+                        <StatRow
+                          label="Performance annualisée"
+                          cells={stats.fenetres.map((f) => f.perfAnnualisee)}
+                          render={(v) => fmtPct(v, 2)}
+                          colore
+                        />
+                        <StatRow
+                          label="Volatilité annualisée"
+                          cells={stats.fenetres.map((f) => f.volatilite)}
+                          render={(v) => fmtPctRaw(v, 2)}
+                        />
+                        <StatRow
+                          label="Rendement / volatilité"
+                          cells={stats.fenetres.map((f) => f.rendementSurRisque)}
+                          render={(v) => v.toFixed(2).replace(".", ",")}
+                        />
+                        <StatRow
+                          label="Perte maximale"
+                          cells={stats.fenetres.map((f) => f.perteMax)}
+                          render={(v) => fmtPct(v, 2)}
+                          colore
+                        />
+                        <StatRow
+                          label="Mois positifs"
+                          cells={stats.fenetres.map((f) => f.moisPositifs)}
+                          render={(v) => fmtPctRaw(v, 0)}
+                        />
+                        <StatRow
+                          label="Meilleur mois"
+                          cells={stats.fenetres.map((f) => f.meilleurMois)}
+                          render={(v) => fmtPct(v, 2)}
+                          colore
+                        />
+                        <StatRow
+                          label="Pire mois"
+                          cells={stats.fenetres.map((f) => f.pireMois)}
+                          render={(v) => fmtPct(v, 2)}
+                          colore
+                        />
+                        <tr>
+                          <td className="px-6 py-2.5 text-slate-500 text-xs">
+                            Relevés dans la fenêtre
+                          </td>
+                          {stats.fenetres.map((f) => (
+                            <td
+                              key={f.cle}
+                              className="px-4 py-2.5 text-right text-xs text-slate-400 tabular-nums"
+                            >
+                              {f.nbPoints}
+                            </td>
+                          ))}
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="px-6 py-3 text-[11px] text-slate-400 border-t border-slate-100">
+                    « Rendement / volatilité » n&apos;est pas un ratio de Sharpe : il
+                    ne retranche aucun taux sans risque, faute d&apos;une référence
+                    UEMOA publiée à la fréquence qu&apos;il faudrait. Une case vide
+                    signifie que la fenêtre ne porte pas assez de relevés — jamais
+                    que le risque est nul.
+                  </p>
+                </section>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+                  {/* Perte maximale */}
+                  <section className="bg-white border border-slate-200 rounded-lg p-5">
+                    <div className="mb-3">
+                      <h2 className="text-lg font-semibold text-slate-900">
+                        Plus forte baisse
+                      </h2>
+                      <p className="text-xs text-slate-500">
+                        De sommet à creux, sur tout l&apos;historique
+                      </p>
+                    </div>
+                    {stats.perteMax === null ? (
+                      <p className="text-sm text-slate-400 py-6 text-center">
+                        Historique trop court pour la mesurer.
+                      </p>
+                    ) : (
+                      <dl className="space-y-3 text-sm">
+                        <div className="flex justify-between gap-3">
+                          <dt className="text-slate-500">Amplitude</dt>
+                          <dd className="font-semibold text-red-700 tabular-nums">
+                            {fmtPct(stats.perteMax.amplitude, 2)}
+                          </dd>
+                        </div>
+                        <div className="flex justify-between gap-3">
+                          <dt className="text-slate-500">Sommet</dt>
+                          <dd className="font-medium">{fmtDateFR(stats.perteMax.pic)}</dd>
+                        </div>
+                        <div className="flex justify-between gap-3">
+                          <dt className="text-slate-500">Creux</dt>
+                          <dd className="font-medium">
+                            {fmtDateFR(stats.perteMax.creux)} · {stats.perteMax.joursBaisse} j
+                          </dd>
+                        </div>
+                        <div className="flex justify-between gap-3 pt-3 border-t border-slate-100">
+                          <dt className="text-slate-500">Retour au sommet</dt>
+                          <dd className="font-medium text-right">
+                            {stats.perteMax.recuperee ? (
+                              <>
+                                {fmtDateFR(stats.perteMax.recuperee)}
+                                <span className="text-slate-400">
+                                  {" "}
+                                  · {stats.perteMax.joursRecuperation} j
+                                </span>
+                              </>
+                            ) : (
+                              <span className="text-amber-700">Pas encore</span>
+                            )}
+                          </dd>
+                        </div>
+                      </dl>
+                    )}
+                  </section>
+
+                  {/* Face a la categorie */}
+                  <section className="bg-white border border-slate-200 rounded-lg p-5">
+                    <div className="mb-3">
+                      <h2 className="text-lg font-semibold text-slate-900">
+                        Face à la catégorie
+                      </h2>
+                      <p className="text-xs text-slate-500">
+                        Contre la médiane {fund.categorie.toLowerCase()}, en mensuel
+                        {stats.categorie && <> · {stats.categorie.nbMois} mois</>}
+                      </p>
+                    </div>
+                    {stats.categorie === null ? (
+                      <p className="text-sm text-slate-400 py-6 text-center">
+                        Moins de douze mois communs avec la catégorie.
+                      </p>
+                    ) : (
+                      <dl className="space-y-3 text-sm">
+                        <div className="flex justify-between gap-3">
+                          <dt className="text-slate-500">Corrélation</dt>
+                          <dd className="font-medium tabular-nums">
+                            {stats.categorie.correlation === null
+                              ? "NC"
+                              : stats.categorie.correlation.toFixed(2).replace(".", ",")}
+                          </dd>
+                        </div>
+                        <div className="flex justify-between gap-3">
+                          <dt className="text-slate-500">Bêta</dt>
+                          <dd className="font-medium tabular-nums">
+                            {stats.categorie.beta === null
+                              ? "NC"
+                              : stats.categorie.beta.toFixed(2).replace(".", ",")}
+                          </dd>
+                        </div>
+                        <div className="flex justify-between gap-3">
+                          <dt className="text-slate-500">Tracking error</dt>
+                          <dd className="font-medium tabular-nums">
+                            {fmtPctRaw(stats.categorie.trackingError, 2)}
+                          </dd>
+                        </div>
+                        <div className="flex justify-between gap-3 pt-3 border-t border-slate-100">
+                          <dt className="text-slate-500">Ratio d&apos;information</dt>
+                          <dd
+                            className={`font-semibold tabular-nums ${
+                              stats.categorie.ratioInformation === null
+                                ? "text-slate-400"
+                                : stats.categorie.ratioInformation >= 0
+                                  ? "text-green-700"
+                                  : "text-red-700"
+                            }`}
+                          >
+                            {stats.categorie.ratioInformation === null
+                              ? "NC"
+                              : stats.categorie.ratioInformation
+                                  .toFixed(2)
+                                  .replace(".", ",")}
+                          </dd>
+                        </div>
+                      </dl>
+                    )}
+                    <p className="text-[11px] text-slate-400 mt-4 pt-3 border-t border-slate-100">
+                      Le bêta se lit contre la médiane de la catégorie, pas contre un
+                      indice de marché : un bêta de 1 dit que le fonds bouge comme ses
+                      concurrents, pas comme la BRVM.
+                    </p>
+                  </section>
+                </div>
+
+                {/* Distribution des rendements mensuels */}
+                {stats.histogramme.length > 0 && (
+                  <section className="bg-white border border-slate-200 rounded-lg p-5">
+                    <div className="mb-3">
+                      <h2 className="text-lg font-semibold text-slate-900">
+                        Distribution des rendements mensuels
+                      </h2>
+                      <p className="text-xs text-slate-500">
+                        {stats.mensuels.length} mois observés, de{" "}
+                        {stats.mensuels[0]?.mois} à{" "}
+                        {stats.mensuels[stats.mensuels.length - 1]?.mois}
+                      </p>
+                    </div>
+                    <div style={{ width: "100%", height: 240 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={stats.histogramme}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                          <XAxis
+                            dataKey="label"
+                            tick={{ fontSize: 10, fill: "#94a3b8" }}
+                            interval={0}
+                          />
+                          <YAxis
+                            tick={{ fontSize: 10, fill: "#94a3b8" }}
+                            allowDecimals={false}
+                            width={30}
+                          />
+                          <Tooltip
+                            formatter={(v) => [`${v} mois`, "Effectif"]}
+                            labelFormatter={(l) => `À partir de ${l}`}
+                            contentStyle={{ fontSize: 12 }}
+                          />
+                          <Bar dataKey="n" radius={[3, 3, 0, 0]}>
+                            {stats.histogramme.map((h, i) => (
+                              <Cell key={i} fill={h.centre >= 0 ? "#16a34a" : "#dc2626"} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </section>
+                )}
+              </>
+            )}
           </>
         )}
 
@@ -1396,6 +1717,45 @@ export default function FCPDetailView(props: Props) {
 // ==========================================
 // SOUS-COMPOSANTS
 // ==========================================
+/** Une ligne du tableau de statistiques.
+ *
+ *  `null` s'affiche « NC » et non « 0 % » : sur une mesure de risque, un zero
+ *  se lit comme « aucun risque » alors qu'il veut dire « pas assez de
+ *  releves ». */
+function StatRow({
+  label,
+  cells,
+  render,
+  colore = false,
+}: {
+  label: string;
+  cells: Array<number | null>;
+  render: (v: number) => string;
+  colore?: boolean;
+}) {
+  return (
+    <tr>
+      <td className="px-6 py-2.5 text-slate-700">{label}</td>
+      {cells.map((v, i) => (
+        <td
+          key={i}
+          className={`px-4 py-2.5 text-right tabular-nums font-medium ${
+            v === null
+              ? "text-slate-300"
+              : colore
+                ? v >= 0
+                  ? "text-green-700"
+                  : "text-red-700"
+                : "text-slate-900"
+          }`}
+        >
+          {v === null ? "NC" : render(v)}
+        </td>
+      ))}
+    </tr>
+  );
+}
+
 function KPI({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div className="p-3 rounded-lg border border-slate-200 bg-slate-50">
