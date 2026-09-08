@@ -75,7 +75,15 @@ const PERIOD_LABEL: Record<PeriodKey, string> = {
   m9: "9 mois",
   y1: "1 an",
 };
-const PERIOD_ORDER: PeriodKey[] = ["lastPeriod", "ytd", "m3", "m6", "m9", "y1"];
+/** Périodes offertes au classement.
+ *
+ *  « Dernière » en est retirée : sa fenêtre va du dernier trimestre publié à
+ *  la VL la plus récente du fonds, donc sa DUREE change d'un fonds a l'autre —
+ *  de 16 jours a 313 selon la fraicheur des publications, 57 a 66 jours pour
+ *  la moitie centrale. Classer sur une colonne dont l'unite varie d'une ligne
+ *  a l'autre n'a pas de sens. La mesure reste calculee et affichee ailleurs,
+ *  ou elle repond a « depuis la derniere cloture », sans mise en concurrence. */
+const PERIOD_ORDER: PeriodKey[] = ["ytd", "m3", "m6", "m9", "y1"];
 
 /** Fond d'une pastille de risque : du vert pâle au rouge pâle.
  *
@@ -243,8 +251,8 @@ export default function FCPMarketView(props: Props) {
   const [rankCategory, setRankCategory] = useState<string>("all");
   /** Forme du classement.
    *
-   *  "global"  : un seul palmarès, tous fonds confondus.
-   *  "risque"  : un palmarès PAR niveau de risque. Comparer la performance
+   *  "global"  : un seul classement, tous fonds confondus.
+   *  "risque"  : un classement PAR niveau de risque. Comparer la performance
    *              d'un obligataire de niveau 2 à celle d'un fonds actions de
    *              niveau 6 n'a pas de sens — le second doit rapporter plus, il
    *              expose davantage. Le classement n'est loyal qu'entre pairs. */
@@ -305,13 +313,13 @@ export default function FCPMarketView(props: Props) {
     return out;
   }, [treemapCards]);
 
-  // === Classement : un palmarès global, ou un palmarès par niveau de risque ===
+  // === Classement : global, ou un par niveau de risque ===
   //
   // Toujours trié par PERFORMANCE. Le niveau de risque ne change pas le
   // critère, il change le périmètre de comparaison : on ne met en concurrence
   // que des fonds qui exposent l'épargnant au même degré.
   type GroupeClassement = {
-    /** Niveau de risque du groupe, null pour le palmarès global ou pour les
+    /** Niveau de risque du groupe, null pour le classement global ou pour les
      *  fonds dont la société de gestion ne publie rien. */
     niveau: number | null;
     echelle: number | null;
@@ -626,7 +634,7 @@ export default function FCPMarketView(props: Props) {
             {rankMode === "risque" && (
               <>
                 {" "}
-                · un palmarès par niveau de risque, pour ne comparer que des
+                · un classement par niveau de risque, pour ne comparer que des
                 fonds qui exposent autant
               </>
             )}
@@ -634,10 +642,10 @@ export default function FCPMarketView(props: Props) {
         </div>
 
         {/* Filtres : juste au-dessus du tableau, n'affectent que celui-ci */}
-        <div className="bg-white border border-slate-200 rounded-lg p-4 flex flex-col md:flex-row md:items-center gap-4">
-          <div className="flex items-center gap-2">
+        <div className="bg-white border border-slate-200 rounded-lg p-4 flex flex-col md:flex-row md:flex-wrap md:items-center gap-4">
+          <div className="flex items-center gap-2 shrink-0">
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              Palmarès
+              Classement
             </span>
             <div className="inline-flex rounded-md border border-slate-200 overflow-hidden">
               {(
@@ -649,7 +657,7 @@ export default function FCPMarketView(props: Props) {
                 <button
                   key={o.v}
                   onClick={() => setRankMode(o.v)}
-                  className={`px-3 py-1.5 text-xs font-medium transition ${
+                  className={`px-3 py-1.5 text-xs font-medium whitespace-nowrap transition ${
                     rankMode === o.v
                       ? "bg-slate-900 text-white"
                       : "bg-white text-slate-600 hover:bg-slate-50"
@@ -660,7 +668,7 @@ export default function FCPMarketView(props: Props) {
               ))}
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
               Période
             </span>
@@ -669,7 +677,7 @@ export default function FCPMarketView(props: Props) {
                 <button
                   key={p}
                   onClick={() => setRankPeriod(p)}
-                  className={`px-3 py-1.5 text-xs font-medium transition ${
+                  className={`px-3 py-1.5 text-xs font-medium whitespace-nowrap transition ${
                     rankPeriod === p
                       ? "bg-slate-900 text-white"
                       : "bg-white text-slate-600 hover:bg-slate-50"
@@ -680,7 +688,7 @@ export default function FCPMarketView(props: Props) {
               ))}
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
               Catégorie
             </span>
@@ -696,11 +704,6 @@ export default function FCPMarketView(props: Props) {
                 </option>
               ))}
             </select>
-          </div>
-          <div className="md:ml-auto text-xs text-slate-500">
-            {nbFondsClasses} fonds classés
-            {rankMode === "risque" && <> · {rankingGroups.length} palmarès</>} ·{" "}
-            {cardsAtRef.length - eligibleCards.length} exclus (VL stale)
           </div>
         </div>
 
