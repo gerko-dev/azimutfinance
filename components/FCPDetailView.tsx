@@ -919,11 +919,11 @@ export default function FCPDetailView(props: Props) {
                 )}
 
                 {showBench && benchmark !== null && (
-                  <p className="text-[11px] text-slate-400 mt-2">{benchmark.note}</p>
+                  <p className="text-[11px] text-slate-400 mt-1.5">{benchmark.note}</p>
                 )}
 
                 {/* Reperes de la fenetre affichee */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4 pt-4 border-t border-slate-100">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 mt-3 pt-3 border-t border-slate-100">
                   <div>
                     <div className="text-xs text-slate-500">Plus haut</div>
                     <div className="text-sm font-medium">{fmtVL(vlBounds.max)}</div>
@@ -961,13 +961,13 @@ export default function FCPDetailView(props: Props) {
 
               {/* Carte donnees cles */}
               <div className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
-                <h3 className="text-base font-medium mb-4">Données clés</h3>
-                <dl className="space-y-3 text-sm">
+                <h3 className="text-sm font-medium mb-3">Données clés</h3>
+                <dl className="space-y-2 text-[13px]">
                   <div className="flex justify-between gap-3">
                     <dt className="text-slate-500">Encours</dt>
                     <dd className="font-medium text-right tabular-nums">
                       {fmtBigFCFA(aumRef)}
-                      <span className="block text-[11px] font-normal text-slate-400">
+                      <span className="block text-[10px] font-normal text-slate-400">
                         {aumDelta1Y !== null
                           ? `${fmtPct(aumDelta1Y)} sur 1 an`
                           : `au ${fmtDateFR(refQuarter)}`}
@@ -987,7 +987,7 @@ export default function FCPDetailView(props: Props) {
                     >
                       {fmtPct(ytdRow?.fundValue ?? null, 2)}
                       {ytdQuartile !== null && (
-                        <span className="block text-[11px] font-normal text-slate-400">
+                        <span className="block text-[10px] font-normal text-slate-400">
                           {QUARTILE_LABELS[ytdQuartile]}
                         </span>
                       )}
@@ -1001,7 +1001,7 @@ export default function FCPDetailView(props: Props) {
                       ) : (
                         <>
                           {rangFR(ytdRank)}
-                          <span className="block text-[11px] font-normal text-slate-400">
+                          <span className="block text-[10px] font-normal text-slate-400">
                             sur {ytdRankBase} {fund.categorie.toLowerCase()} · YTD
                           </span>
                         </>
@@ -1014,7 +1014,7 @@ export default function FCPDetailView(props: Props) {
                       {lastShare?.rank ? (
                         <>
                           {rangFR(lastShare.rank)}
-                          <span className="block text-[11px] font-normal text-slate-400">
+                          <span className="block text-[10px] font-normal text-slate-400">
                             sur {lastShare.nbInCat} · {fmtPctRaw(lastShare.share)} de la
                             catégorie
                           </span>
@@ -1024,7 +1024,7 @@ export default function FCPDetailView(props: Props) {
                       )}
                     </dd>
                   </div>
-                  <div className="flex justify-between gap-3 pt-3 border-t border-slate-100">
+                  <div className="flex justify-between gap-3 pt-2 border-t border-slate-100">
                     <dt className="text-slate-500">Société de gestion</dt>
                     <dd className="font-medium text-right">
                       <Link
@@ -1053,7 +1053,7 @@ export default function FCPDetailView(props: Props) {
                       {fund.frequenceCalcul || "NC"}
                     </dd>
                   </div>
-                  <div className="flex justify-between gap-3 pt-3 border-t border-slate-100">
+                  <div className="flex justify-between gap-3 pt-2 border-t border-slate-100">
                     <dt className="text-slate-500">Volatilité 1 an</dt>
                     <dd className="font-medium text-right tabular-nums">
                       {volatilite1An === null ? "NC" : fmtPctRaw(volatilite1An, 2)}
@@ -1076,7 +1076,7 @@ export default function FCPDetailView(props: Props) {
                         : fmtPct(stats.perteMax.amplitude, 2)}
                     </dd>
                   </div>
-                  <div className="flex justify-between gap-3 pt-3 border-t border-slate-100">
+                  <div className="flex justify-between gap-3 pt-2 border-t border-slate-100">
                     <dt className="text-slate-500">VL d&apos;origine</dt>
                     <dd className="font-medium text-right tabular-nums">
                       {vlSeries.length > 0 ? fmtVL(vlSeries[0].vl) : "NC"}
