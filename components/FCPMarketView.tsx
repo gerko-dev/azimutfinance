@@ -77,6 +77,17 @@ const PERIOD_LABEL: Record<PeriodKey, string> = {
 };
 const PERIOD_ORDER: PeriodKey[] = ["lastPeriod", "ytd", "m3", "m6", "m9", "y1"];
 
+/** Fond d'une pastille de risque : du vert pâle au rouge pâle.
+ *
+ *  Normalisé sur l'échelle du fonds et non sur 7 en dur — un 5/7 et un 7/10
+ *  n'ont pas la même signification, et les colorer pareil les rendrait
+ *  faussement comparables. Teintes pâles à dessein : le chiffre doit rester
+ *  lisible, et un aplat vif suggérerait un jugement que nous ne portons pas. */
+function risqueFond(niveau: number, echelle: number): string {
+  const t = Math.max(0, Math.min(1, (niveau - 1) / Math.max(1, echelle - 1)));
+  return interpolateHex("#dcfce7", "#fee2e2", t);
+}
+
 // Échelle perf → couleur
 function perfColor(p: number | null): string {
   if (p === null || !Number.isFinite(p)) return "#cbd5e1";
@@ -230,6 +241,9 @@ export default function FCPMarketView(props: Props) {
   // États LOCAUX au tableau de classement (n'affectent rien d'autre)
   const [rankPeriod, setRankPeriod] = useState<PeriodKey>("ytd");
   const [rankCategory, setRankCategory] = useState<string>("all");
+  /** Critère de tri : performance sur la période choisie, ou niveau de risque
+   *  du moins au plus exposé. */
+  const [rankSort, setRankSort] = useState<"perf" | "risque">("perf");
 
   // === Pool éligible : avec AUM au refDate ET non stale ===
   const eligibleCards = useMemo(
@@ -291,10 +305,28 @@ export default function FCPMarketView(props: Props) {
     const scope = rankCategory === "all"
       ? eligibleCards
       : eligibleCards.filter((c) => c.categorieAtRef === rankCategory);
+
+    if (rankSort === "risque") {
+      // Un fonds sans niveau publié n'est pas un fonds sans risque : le
+      // classer à zéro le placerait en tête des « moins risqués », ce qui
+      // serait faux et dangereux sur un site financier. Ces fonds sont
+      // rejetés en fin de liste et leur cellule affiche « — ».
+      return [...scope].sort((a, b) => {
+        if (a.risque === null && b.risque === null) {
+          return (b.aumAtRef ?? 0) - (a.aumAtRef ?? 0);
+        }
+        if (a.risque === null) return 1;
+        if (b.risque === null) return -1;
+        if (a.risque !== b.risque) return a.risque - b.risque;
+        // À niveau égal, le plus gros encours d'abord.
+        return (b.aumAtRef ?? 0) - (a.aumAtRef ?? 0);
+      });
+    }
+
     return scope
       .filter((c) => c.perf[rankPeriod] !== null)
       .sort((a, b) => (b.perf[rankPeriod] as number) - (a.perf[rankPeriod] as number));
-  }, [eligibleCards, rankCategory, rankPeriod]);
+  }, [eligibleCards, rankCategory, rankPeriod, rankSort]);
 
   // === Heatmap : derniers trimestres ===
   const heatmapDates = useMemo(
@@ -538,12 +570,51 @@ export default function FCPMarketView(props: Props) {
         <div>
           <h2 className="text-lg font-semibold text-slate-900">Classement des fonds</h2>
           <p className="text-xs text-slate-500">
-            Tri par performance · fonds avec dernière VL ≥ {fmtDateFR(stalenessCutoff)} (sinon exclus)
+            {rankSort === "perf" ? (
+              <>
+                Tri par performance · fonds avec dernière VL ≥{" "}
+                {fmtDateFR(stalenessCutoff)} (sinon exclus)
+              </>
+            ) : (
+              <>
+                Tri par niveau de risque publié, du moins au plus exposé · les
+                fonds dont la société de gestion ne publie pas de niveau sont
+                rejetés en fin de liste
+              </>
+            )}
           </p>
         </div>
 
         {/* Filtres : juste au-dessus du tableau, n'affectent que celui-ci */}
         <div className="bg-white border border-slate-200 rounded-lg p-4 flex flex-col md:flex-row md:items-center gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              Classer par
+            </span>
+            <div className="inline-flex rounded-md border border-slate-200 overflow-hidden">
+              {(
+                [
+                  { v: "perf" as const, l: "Performance" },
+                  { v: "risque" as const, l: "Risque" },
+                ]
+              ).map((o) => (
+                <button
+                  key={o.v}
+                  onClick={() => setRankSort(o.v)}
+                  className={`px-3 py-1.5 text-xs font-medium transition ${
+                    rankSort === o.v
+                      ? "bg-slate-900 text-white"
+                      : "bg-white text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  {o.l}
+                </button>
+              ))}
+            </div>
+          </div>
+          {/* La période ne pilote plus le tri quand on classe par risque, mais
+              elle continue de choisir la performance AFFICHÉE : on veut voir
+              ce que rapporte un niveau de risque donné. */}
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
               Période
@@ -606,6 +677,9 @@ export default function FCPMarketView(props: Props) {
                 <th className="text-right px-3 py-2 text-xs font-semibold text-slate-600 hidden sm:table-cell">
                   VL (BOC) · Δ jour
                 </th>
+                <th className="text-center px-3 py-2 text-xs font-semibold text-slate-600">
+                  Risque
+                </th>
                 <th className="text-right px-3 py-2 text-xs font-semibold text-slate-600">
                   Perf {PERIOD_LABEL[rankPeriod].toLowerCase()}
                 </th>
@@ -614,7 +688,7 @@ export default function FCPMarketView(props: Props) {
             <tbody>
               {rankingTable.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-3 py-6 text-center text-sm text-slate-500">
+                  <td colSpan={8} className="px-3 py-6 text-center text-sm text-slate-500">
                     Aucun fonds éligible pour ce filtre.
                   </td>
                 </tr>
@@ -684,6 +758,30 @@ export default function FCPMarketView(props: Props) {
                         </div>
                       ) : (
                         <span className="text-slate-400">{fmtDateFR(c.latestVLDate)}</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      {c.risque !== null && c.risqueEchelle !== null ? (
+                        <span
+                          className="inline-flex items-baseline gap-0.5 px-2 py-0.5 rounded text-xs font-medium tabular-nums"
+                          style={{
+                            backgroundColor: risqueFond(c.risque, c.risqueEchelle),
+                            color: "#0f172a",
+                          }}
+                          title={`Niveau ${c.risque} sur ${c.risqueEchelle}, publié par la société de gestion`}
+                        >
+                          {c.risque}
+                          <span className="text-[9px] text-slate-600">
+                            /{c.risqueEchelle}
+                          </span>
+                        </span>
+                      ) : (
+                        <span
+                          className="text-xs text-slate-300"
+                          title="La société de gestion ne publie pas de niveau de risque pour ce fonds"
+                        >
+                          —
+                        </span>
                       )}
                     </td>
                     <td

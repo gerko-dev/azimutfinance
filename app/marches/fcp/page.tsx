@@ -49,6 +49,10 @@ export type FundCard = {
   vlPrev: number | null;
   dayChange: number | null;   // (vlLatest / vlPrev - 1)
   bocDate: string;            // ISO de la date du BOC d'origine
+  /** Niveau de risque publié par la société de gestion, et borne de l'échelle.
+   *  Null quand elle ne le publie pas — jamais déduit de la catégorie. */
+  risque: number | null;
+  risqueEchelle: number | null;
 };
 
 export type CategoryStat = {
@@ -120,6 +124,8 @@ export default async function Page() {
       vlPrev: f.bocSnapshot?.vlPrecedente ?? null,
       dayChange: f.bocSnapshot?.dayChange ?? null,
       bocDate: f.bocSnapshot?.bocDate ?? "",
+      risque: f.risque?.niveau ?? null,
+      risqueEchelle: f.risque?.echelleMax ?? null,
     };
   });
 
