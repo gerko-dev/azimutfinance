@@ -31,6 +31,7 @@ import {
   aumDecomposition,
   statsRisque,
 } from "@/lib/fcpMath";
+import { benchmarkPourCategorie } from "@/lib/fcpBenchmarks";
 import { pageMetadata } from "@/lib/seo";
 
 // userRole lu via cookies → rendu dynamique requis pour le gating premium.
@@ -179,6 +180,14 @@ export default async function FCPDetailPage({
       )
     : [];
 
+  // === BLOCK 3 bis - REFERENCE DE MARCHE ===
+  // Alignee sur les dates de VL du fonds, pour que le graphe n'ait qu'une
+  // ligne par point. null pour les categories sans reference defendable.
+  const benchmark = benchmarkPourCategorie(
+    fund.categorie,
+    vlSeries.map((p) => p.date)
+  );
+
   // === BLOCK 4 - FRISE QUARTILES ===
   const quartileFrame = quartileHistory(fund, cohort, quarterEnds.slice(-16));
   const top2Pct =
@@ -287,6 +296,7 @@ export default async function FCPDetailPage({
         rebasedFundSeries={rebasedFundSeries}
         cohortRebased={cohortRebased}
         vlSeries={vlSeries}
+        benchmark={benchmark}
         // quartile frieze
         quartileFrame={quartileFrame}
         top2Pct={top2Pct}

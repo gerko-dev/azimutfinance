@@ -45,6 +45,16 @@ type RebasedPoint = { date: string; rebased: number; kind: ObsKind };
 type VLPoint = { date: string; vl: number; kind: ObsKind };
 type CohortRebasedPoint = { date: string; value: number | null };
 
+/** Reference de marche de la categorie, base 100 a la premiere date de la
+ *  serie du fonds. `null` sur un point signale un trou, pas une performance
+ *  nulle : la ligne s'interrompt. */
+type Benchmark = {
+  cle: string;
+  label: string;
+  note: string;
+  serie: Array<{ date: string; value: number | null }>;
+};
+
 type QuartileFrame = { date: string; quartile: 1 | 2 | 3 | 4 | null; perf: number | null };
 
 type AumPoint = {
@@ -195,6 +205,8 @@ type Props = {
   cohortRebased: CohortRebasedPoint[];
   /** Historique de VL brut, du premier releve au dernier bulletin. */
   vlSeries: VLPoint[];
+  /** null pour les categories sans reference defendable. */
+  benchmark: Benchmark | null;
   quartileFrame: QuartileFrame[];
   top2Pct: number | null;
   aumDecomp: AumPoint[];
@@ -292,6 +304,11 @@ const QUARTILE_LABELS: Record<number, string> = {
   3: "Q3",
   4: "Q4 (bas)",
 };
+
+/** Couleurs des comparateurs du graphe de VL. Distinctes du vert/rouge de la
+ *  VL elle-meme, qui code deja la hausse et la baisse. */
+const BENCH_COLOR = "#2563eb";
+const MEDIANE_COLOR = "#7c3aed";
 
 const CATEGORY_COLORS: Record<string, string> = {
   Obligataire: "#185FA5",
@@ -395,6 +412,7 @@ export default function FCPDetailView(props: Props) {
     rebasedFundSeries,
     cohortRebased,
     vlSeries,
+    benchmark,
     quartileFrame,
     top2Pct,
     aumDecomp,
@@ -414,6 +432,10 @@ export default function FCPDetailView(props: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [chartPeriod, setChartPeriod] = useState<ChartPeriod>("3A");
   const [vlPeriod, setVlPeriod] = useState<VLPeriod>("1A");
+  // Comparateurs du graphe de VL. Les activer bascule l'echelle en base 100 :
+  // un indice boursier et une VL en FCFA n'ont pas d'axe commun.
+  const [showBench, setShowBench] = useState(false);
+  const [showMediane, setShowMediane] = useState(false);
 
   // === Chiffre de tete : VL du dernier bulletin, sinon dernier point connu ===
   const headVL = useMemo(() => {
@@ -439,6 +461,34 @@ export default function FCPDetailView(props: Props) {
     return vlSeries.filter((p) => !cutoff || p.date >= cutoff);
   }, [vlSeries, vlPeriod]);
 
+  const compare = (showBench && benchmark !== null) || showMediane;
+
+  /** Serie tracee. Sans comparateur, la VL en FCFA. Avec, tout est rebase a 100
+   *  au premier point AFFICHE — et non a l'origine du fonds : c'est la fenetre
+   *  choisie que le lecteur regarde, la comparaison doit y commencer a egalite. */
+  const vlTrace = useMemo(() => {
+    if (vlChartRaw.length === 0) return [];
+    if (!compare) return vlChartRaw.map((p) => ({ ...p, trace: p.vl }));
+
+    const parDateBench = new Map(benchmark?.serie.map((b) => [b.date, b.value]));
+    const parDateMed = new Map(cohortRebased.map((c) => [c.date, c.value]));
+    const debut = vlChartRaw[0];
+    // Base de chaque serie : sa valeur au premier point affiche. Une serie qui
+    // n'y a pas de valeur ne peut pas etre rebasee, donc n'est pas tracee.
+    const baseBench = parDateBench.get(debut.date) ?? null;
+    const baseMed = parDateMed.get(debut.date) ?? null;
+    return vlChartRaw.map((p) => {
+      const b = parDateBench.get(p.date) ?? null;
+      const m = parDateMed.get(p.date) ?? null;
+      return {
+        ...p,
+        trace: (p.vl / debut.vl) * 100,
+        bench: b !== null && baseBench ? (b / baseBench) * 100 : null,
+        mediane: m !== null && baseMed ? (m / baseMed) * 100 : null,
+      };
+    });
+  }, [vlChartRaw, compare, benchmark, cohortRebased]);
+
   /** Variation sur la fenetre affichee : elle donne sa couleur au trace. */
   const vlWindowChange = useMemo(() => {
     if (vlChartRaw.length < 2) return null;
@@ -453,6 +503,10 @@ export default function FCPDetailView(props: Props) {
   }, [vlChartRaw]);
 
   const vlColor = (vlWindowChange ?? 0) >= 0 ? "#16a34a" : "#dc2626";
+  /** Reference stable pour « Donnees cles » : celle du graphe suit la fenetre
+   *  choisie et changerait sous le curseur. */
+  const volatilite1An =
+    stats.fenetres.find((f) => f.cle === "y1")?.volatilite ?? null;
   /** Volatilite annualisee sur la fenetre affichee.
    *
    *  Les VL ne tombent pas a pas regulier : un fonds passe de quotidien a
@@ -756,6 +810,55 @@ export default function FCPDetailView(props: Props) {
                   </div>
                 </div>
 
+                {/* Comparateurs */}
+                {vlChartRaw.length >= 2 && (benchmark !== null || cohortRebased.length > 0) && (
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {benchmark !== null && (
+                      <button
+                        type="button"
+                        onClick={() => setShowBench(!showBench)}
+                        aria-pressed={showBench}
+                        title={benchmark.note}
+                        className={`text-xs px-2.5 py-1 rounded-md border transition ${
+                          showBench
+                            ? "border-blue-300 bg-blue-50 text-blue-800"
+                            : "border-slate-200 text-slate-500 bg-slate-50 hover:bg-white"
+                        }`}
+                      >
+                        <span
+                          className="inline-block w-2 h-2 rounded-full mr-1.5 align-middle"
+                          style={{ backgroundColor: showBench ? BENCH_COLOR : "#cbd5e1" }}
+                        />
+                        {benchmark.label}
+                      </button>
+                    )}
+                    {cohortRebased.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setShowMediane(!showMediane)}
+                        aria-pressed={showMediane}
+                        title={`Mediane des ${cohortSize} fonds ${fund.categorie.toLowerCase()}`}
+                        className={`text-xs px-2.5 py-1 rounded-md border transition ${
+                          showMediane
+                            ? "border-violet-300 bg-violet-50 text-violet-800"
+                            : "border-slate-200 text-slate-500 bg-slate-50 hover:bg-white"
+                        }`}
+                      >
+                        <span
+                          className="inline-block w-2 h-2 rounded-full mr-1.5 align-middle"
+                          style={{ backgroundColor: showMediane ? MEDIANE_COLOR : "#cbd5e1" }}
+                        />
+                        Médiane catégorie
+                      </button>
+                    )}
+                    {compare && (
+                      <span className="text-[11px] text-slate-400 self-center ml-1">
+                        Base 100 au début de la période
+                      </span>
+                    )}
+                  </div>
+                )}
+
                 {vlSeries.length === 0 ? (
                   <div className="h-64 md:h-72 flex flex-col items-center justify-center text-center text-slate-500">
                     <div className="text-4xl mb-2">📊</div>
@@ -771,7 +874,7 @@ export default function FCPDetailView(props: Props) {
                 ) : (
                   <div className="h-64 md:h-72">
                     <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={vlChartRaw}>
+                      <AreaChart data={vlTrace}>
                         <defs>
                           <linearGradient id="vlGradient" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="0%" stopColor={vlColor} stopOpacity={0.25} />
@@ -791,9 +894,11 @@ export default function FCPDetailView(props: Props) {
                           fontSize={11}
                           domain={["auto", "auto"]}
                           tickFormatter={(v) =>
-                            Math.round(Number(v)).toLocaleString("fr-FR").replace(/,/g, " ")
+                            compare
+                              ? Number(v).toFixed(0)
+                              : Math.round(Number(v)).toLocaleString("fr-FR").replace(/,/g, " ")
                           }
-                          width={62}
+                          width={compare ? 44 : 62}
                         />
                         <Tooltip
                           contentStyle={{
@@ -802,19 +907,58 @@ export default function FCPDetailView(props: Props) {
                             borderRadius: "6px",
                             fontSize: "12px",
                           }}
-                          formatter={(v) => [fmtVL(Number(v)) + " FCFA", "VL"]}
+                          formatter={(v, name) => {
+                            const x = Number(v);
+                            const libelle =
+                              name === "bench"
+                                ? benchmark?.label ?? "Référence"
+                                : name === "mediane"
+                                  ? "Médiane catégorie"
+                                  : fund.nom;
+                            return [
+                              compare
+                                ? x.toFixed(2).replace(".", ",")
+                                : fmtVL(x) + " FCFA",
+                              libelle,
+                            ];
+                          }}
                           labelFormatter={(d) => fmtDateFR(String(d))}
                         />
                         <Area
                           type="monotone"
-                          dataKey="vl"
+                          dataKey="trace"
                           stroke={vlColor}
                           strokeWidth={2}
                           fill="url(#vlGradient)"
                         />
+                        {showBench && benchmark !== null && (
+                          <Line
+                            type="monotone"
+                            dataKey="bench"
+                            stroke={BENCH_COLOR}
+                            strokeWidth={1.5}
+                            dot={false}
+                            connectNulls={false}
+                          />
+                        )}
+                        {showMediane && (
+                          <Line
+                            type="monotone"
+                            dataKey="mediane"
+                            stroke={MEDIANE_COLOR}
+                            strokeWidth={1.5}
+                            strokeDasharray="4 3"
+                            dot={false}
+                            connectNulls={false}
+                          />
+                        )}
                       </AreaChart>
                     </ResponsiveContainer>
                   </div>
+                )}
+
+                {showBench && benchmark !== null && (
+                  <p className="text-[11px] text-slate-400 mt-2">{benchmark.note}</p>
                 )}
 
                 {/* Reperes de la fenetre affichee */}
@@ -885,6 +1029,44 @@ export default function FCPDetailView(props: Props) {
                     <dt className="text-slate-500">Fréquence de VL</dt>
                     <dd className="font-medium text-right">
                       {fund.frequenceCalcul || "NC"}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-3 pt-3 border-t border-slate-100">
+                    <dt className="text-slate-500">Volatilité 1 an</dt>
+                    <dd className="font-medium text-right tabular-nums">
+                      {volatilite1An === null ? "NC" : fmtPctRaw(volatilite1An, 2)}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-slate-500">Perte maximale</dt>
+                    <dd
+                      className={`font-medium text-right tabular-nums ${
+                        stats.perteMax === null ? "" : "text-red-700"
+                      }`}
+                      title={
+                        stats.perteMax
+                          ? `Du ${fmtDateFR(stats.perteMax.pic)} au ${fmtDateFR(stats.perteMax.creux)}`
+                          : undefined
+                      }
+                    >
+                      {stats.perteMax === null
+                        ? "NC"
+                        : fmtPct(stats.perteMax.amplitude, 2)}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-3 pt-3 border-t border-slate-100">
+                    <dt className="text-slate-500">VL d&apos;origine</dt>
+                    <dd className="font-medium text-right tabular-nums">
+                      {vlSeries.length > 0 ? fmtVL(vlSeries[0].vl) : "NC"}
+                    </dd>
+                  </div>
+                  <div
+                    className="flex justify-between gap-3"
+                    title="Premier relevé connu de nos sources, pas nécessairement la création du fonds"
+                  >
+                    <dt className="text-slate-500">Première VL</dt>
+                    <dd className="font-medium text-right">
+                      {vlSeries.length > 0 ? fmtDateFR(vlSeries[0].date) : "NC"}
                     </dd>
                   </div>
                 </dl>
