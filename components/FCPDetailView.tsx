@@ -8,6 +8,7 @@ import {
   BarChart,
   Bar,
   ComposedChart,
+  AreaChart,
   Area,
   XAxis,
   YAxis,
@@ -36,6 +37,11 @@ type PerfRow = {
 };
 
 type RebasedPoint = { date: string; rebased: number; kind: ObsKind };
+/** VL telle que publiee, en FCFA. Le graphe rebase de l'onglet Performance
+ *  repond a « ce fonds fait-il mieux que sa categorie » ; celui-ci repond a
+ *  « combien vaut une part, et depuis quand » — une base 100 efface
+ *  justement le niveau de la VL. */
+type VLPoint = { date: string; vl: number; kind: ObsKind };
 type CohortRebasedPoint = { date: string; value: number | null };
 
 type QuartileFrame = { date: string; quartile: 1 | 2 | 3 | 4 | null; perf: number | null };
@@ -143,6 +149,8 @@ type Props = {
   perfTable: PerfRow[];
   rebasedFundSeries: RebasedPoint[];
   cohortRebased: CohortRebasedPoint[];
+  /** Historique de VL brut, du premier releve au dernier bulletin. */
+  vlSeries: VLPoint[];
   quartileFrame: QuartileFrame[];
   top2Pct: number | null;
   aumDecomp: AumPoint[];
@@ -188,6 +196,18 @@ function fmtPctRaw(v: number | null, digits = 1): string {
   if (v === null || !Number.isFinite(v)) return "—";
   return (v * 100).toFixed(digits).replace(".", ",") + "%";
 }
+/** VL a deux decimales, separateur francais. */
+function fmtVL(v: number | null): string {
+  if (v === null || !Number.isFinite(v)) return "—";
+  return v
+    .toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    .replace(/\u202f|\u00a0/g, " ");
+}
+/** « 03/26 » — assez court pour un axe de graphe. */
+function fmtDateShort(iso: string): string {
+  if (!iso || iso.length < 7) return iso;
+  return `${iso.slice(5, 7)}/${iso.slice(2, 4)}`;
+}
 function fmtDateFR(iso: string): string {
   if (!iso) return "—";
   return new Date(iso + "T00:00:00Z").toLocaleDateString("fr-FR", {
@@ -205,6 +225,15 @@ function managerSlug(name: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 }
+
+/** D'ou vient la VL affichee. Les trois origines n'ont pas la meme fraicheur :
+ *  un trimestre publie peut dater de plusieurs mois quand le dernier bulletin
+ *  date du jour, et le lecteur doit pouvoir faire la difference. */
+const ORIGINE: Record<ObsKind, string> = {
+  quarter: "trimestre publié",
+  boc: "BOC",
+  latest: "dernier bulletin",
+};
 
 const QUARTILE_COLORS: Record<number, string> = {
   1: "#15803d",
@@ -251,6 +280,60 @@ function interpolate(a: string, b: string, t: number): string {
 type ChartPeriod = "1A" | "3A" | "5A" | "MAX";
 const CHART_PERIODS: ChartPeriod[] = ["1A", "3A", "5A", "MAX"];
 
+/** Fenetres du graphe de VL. Sept crans comme sur la fiche action : sous un an
+ *  les mouvements d'un fonds obligataire sont si petits qu'une echelle 3A les
+ *  aplatit completement. */
+type VLPeriod = "1M" | "3M" | "6M" | "1A" | "3A" | "5A" | "Max";
+const VL_PERIODS: VLPeriod[] = ["1M", "3M", "6M", "1A", "3A", "5A", "Max"];
+const VL_MOIS: Record<VLPeriod, number | null> = {
+  "1M": 1,
+  "3M": 3,
+  "6M": 6,
+  "1A": 12,
+  "3A": 36,
+  "5A": 60,
+  Max: null,
+};
+
+/** Borne inferieure d'une fenetre exprimee en mois ; "" si elle est ouverte. */
+function cutoffMois(lastDate: string, mois: number | null): string {
+  if (mois === null) return "";
+  const ms = new Date(lastDate + "T00:00:00Z").getTime() - mois * 30.4375 * 86400000;
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+/** Borne inferieure d'une fenetre de graphe ; "" pour MAX. */
+function cutoffFor(lastDate: string, p: ChartPeriod): string {
+  if (p === "MAX") return "";
+  const years = p === "1A" ? 1 : p === "3A" ? 3 : 5;
+  const ms = new Date(lastDate + "T00:00:00Z").getTime() - years * 365.25 * 86400000;
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+/** Onglets de la fiche.
+ *
+ *  Meme decoupage que les fiches action et obligation : une vue d'ensemble qui
+ *  repond aux questions courantes, puis un onglet par angle d'analyse. La fiche
+ *  faisait auparavant treize blocs d'affilee dans un seul defilement, ou la
+ *  cadence de publication se retrouvait aussi loin du titre que la performance.
+ */
+type Tab =
+  | "overview"
+  | "performance"
+  | "regularite"
+  | "encours"
+  | "comparatif"
+  | "publication";
+
+const TABS: Array<{ id: Tab; label: string }> = [
+  { id: "overview", label: "Vue d'ensemble" },
+  { id: "performance", label: "Performance" },
+  { id: "regularite", label: "Régularité" },
+  { id: "encours", label: "Encours" },
+  { id: "comparatif", label: "Comparatif" },
+  { id: "publication", label: "Publication" },
+];
+
 export default function FCPDetailView(props: Props) {
   const {
     fund,
@@ -264,6 +347,7 @@ export default function FCPDetailView(props: Props) {
     perfTable,
     rebasedFundSeries,
     cohortRebased,
+    vlSeries,
     quartileFrame,
     top2Pct,
     aumDecomp,
@@ -279,18 +363,90 @@ export default function FCPDetailView(props: Props) {
     latestBocDate,
   } = props;
 
+  const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [chartPeriod, setChartPeriod] = useState<ChartPeriod>("3A");
+  const [vlPeriod, setVlPeriod] = useState<VLPeriod>("1A");
+
+  // === Chiffre de tete : VL du dernier bulletin, sinon dernier point connu ===
+  const headVL = useMemo(() => {
+    if (fund.bocVL !== null && fund.bocDate) {
+      return { vl: fund.bocVL, date: fund.bocDate, source: "BOC" };
+    }
+    if (latestVL) {
+      return { vl: latestVL.vl, date: latestVL.date, source: ORIGINE[latestVL.kind] };
+    }
+    return null;
+  }, [fund.bocVL, fund.bocDate, latestVL]);
+
+  const ytdRow = useMemo(() => perfTable.find((r) => r.label === "YTD"), [perfTable]);
+  const lastShare = useMemo(
+    () => [...marketShare].reverse().find((m) => m.share !== null) ?? null,
+    [marketShare]
+  );
+
+  // === Evolution de la VL, en FCFA ===
+  const vlChartRaw = useMemo(() => {
+    if (vlSeries.length === 0) return [];
+    const cutoff = cutoffMois(vlSeries[vlSeries.length - 1].date, VL_MOIS[vlPeriod]);
+    return vlSeries.filter((p) => !cutoff || p.date >= cutoff);
+  }, [vlSeries, vlPeriod]);
+
+  /** Variation sur la fenetre affichee : elle donne sa couleur au trace. */
+  const vlWindowChange = useMemo(() => {
+    if (vlChartRaw.length < 2) return null;
+    const a = vlChartRaw[0].vl;
+    return a > 0 ? vlChartRaw[vlChartRaw.length - 1].vl / a - 1 : null;
+  }, [vlChartRaw]);
+
+  const vlBounds = useMemo(() => {
+    if (vlChartRaw.length === 0) return { min: null as number | null, max: null as number | null };
+    const vals = vlChartRaw.map((p) => p.vl);
+    return { min: Math.min(...vals), max: Math.max(...vals) };
+  }, [vlChartRaw]);
+
+  const vlColor = (vlWindowChange ?? 0) >= 0 ? "#16a34a" : "#dc2626";
+  /** Volatilite annualisee sur la fenetre affichee.
+   *
+   *  Les VL ne tombent pas a pas regulier : un fonds passe de quotidien a
+   *  hebdomadaire, un autre ne publie qu'au trimestre. Annualiser par √252
+   *  comme pour une action donnerait donc n'importe quoi. On annualise par
+   *  l'ecart MEDIAN entre deux relevés, qui resiste aux trous de publication
+   *  la ou une moyenne se ferait emporter par un seul intervalle de six mois.
+   *  En dessous de vingt points l'estimateur ne veut plus rien dire : on
+   *  prefere « NC » a un chiffre que personne ne pourrait interpreter. */
+  const vlVolatilite = useMemo(() => {
+    if (vlChartRaw.length < 21) return null;
+    const rends: number[] = [];
+    const ecarts: number[] = [];
+    for (let i = 1; i < vlChartRaw.length; i++) {
+      const a = vlChartRaw[i - 1];
+      const b = vlChartRaw[i];
+      if (a.vl <= 0 || b.vl <= 0) continue;
+      const jours =
+        (new Date(b.date + "T00:00:00Z").getTime() -
+          new Date(a.date + "T00:00:00Z").getTime()) /
+        86400000;
+      if (jours <= 0) continue;
+      rends.push(Math.log(b.vl / a.vl));
+      ecarts.push(jours);
+    }
+    if (rends.length < 20) return null;
+    const moy = rends.reduce((s, r) => s + r, 0) / rends.length;
+    const variance =
+      rends.reduce((s, r) => s + (r - moy) ** 2, 0) / (rends.length - 1);
+    const tries = [...ecarts].sort((a, b) => a - b);
+    const pas = tries[Math.floor(tries.length / 2)];
+    if (!(pas > 0)) return null;
+    return Math.sqrt(variance) * Math.sqrt(365.25 / pas);
+  }, [vlChartRaw]);
 
   // === Filtrage du graphe VL selon la période ===
   const vlChartData = useMemo(() => {
     if (rebasedFundSeries.length === 0) return [];
-    const lastDate = rebasedFundSeries[rebasedFundSeries.length - 1].date;
-    let cutoff = "";
-    if (chartPeriod !== "MAX") {
-      const years = chartPeriod === "1A" ? 1 : chartPeriod === "3A" ? 3 : 5;
-      const ms = new Date(lastDate + "T00:00:00Z").getTime() - years * 365.25 * 86400000;
-      cutoff = new Date(ms).toISOString().slice(0, 10);
-    }
+    const cutoff = cutoffFor(
+      rebasedFundSeries[rebasedFundSeries.length - 1].date,
+      chartPeriod
+    );
     const cohortMap = new Map(cohortRebased.map((c) => [c.date, c.value]));
     return rebasedFundSeries
       .filter((p) => !cutoff || p.date >= cutoff)
@@ -352,59 +508,128 @@ export default function FCPDetailView(props: Props) {
 
   return (
     <>
-      {/* === HERO === */}
-      <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-b border-slate-800">
-        <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10">
-          <div className="text-xs text-slate-400 mb-2 flex items-center gap-1.5 flex-wrap">
-            <Link href="/" className="hover:text-white">Accueil</Link>
+      {/* En-tete fiche — meme charpente que les fiches action et obligation :
+          identite, chiffre de tete, puis la barre d'onglets. */}
+      <div className="bg-white border-b border-slate-200">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 pt-4 md:pt-5">
+          <div className="text-xs text-slate-500 mb-3 flex items-center gap-1.5 flex-wrap">
+            <Link href="/" className="hover:text-slate-900">Accueil</Link>
             <span>›</span>
-            <Link href="/marches/fcp" className="hover:text-white">FCP / OPCVM</Link>
+            <Link href="/marches/fcp" className="hover:text-slate-900">FCP / OPCVM</Link>
             <span>›</span>
             <Link
               href={`/sgo/${managerSlug(fund.gestionnaire)}`}
-              className="hover:text-white"
+              className="hover:text-slate-900"
             >
               {fund.gestionnaire}
             </Link>
             <span>›</span>
-            <span className="text-slate-200 truncate">{fund.nom}</span>
+            <span className="text-slate-700 truncate">{fund.nom}</span>
           </div>
-          <h1 className="text-2xl md:text-3xl font-semibold text-white">
-            {fund.nom}
-          </h1>
-          <div className="flex items-center gap-2 flex-wrap mt-3">
-            <span
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md"
-              style={{
-                background: CATEGORY_COLORS[fund.categorie] + "33" || "#1e293b",
-                color: "#ffffff",
-              }}
-            >
-              <span
-                className="w-2 h-2 rounded-full"
-                style={{ background: CATEGORY_COLORS[fund.categorie] || "#94a3b8" }}
-              />
-              {fund.categorie}
-            </span>
-            <span className="px-2.5 py-1 text-xs font-medium rounded-md bg-white/10 text-slate-200">
-              {fund.type}
-            </span>
-            {ytdQuartile !== null && (
-              <span
-                className="px-2.5 py-1 text-xs font-bold rounded-md"
+
+          <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4 mb-4">
+            <div className="flex gap-4 items-center">
+              <div
+                className="w-12 h-12 md:w-14 md:h-14 rounded-lg flex items-center justify-center font-semibold text-sm md:text-base shrink-0"
                 style={{
-                  background: QUARTILE_COLORS[ytdQuartile] + "44",
-                  color: "#ffffff",
+                  background: (CATEGORY_COLORS[fund.categorie] || "#94a3b8") + "1f",
+                  color: CATEGORY_COLORS[fund.categorie] || "#475569",
                 }}
               >
-                {QUARTILE_LABELS[ytdQuartile]} YTD
+                {fund.nom.slice(0, 3).toUpperCase()}
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap mb-1">
+                  <h1 className="text-xl md:text-2xl font-semibold">{fund.nom}</h1>
+                  <span
+                    className="inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-medium rounded"
+                    style={{
+                      background: (CATEGORY_COLORS[fund.categorie] || "#94a3b8") + "1f",
+                      color: CATEGORY_COLORS[fund.categorie] || "#475569",
+                    }}
+                  >
+                    <span
+                      className="w-1.5 h-1.5 rounded-full"
+                      style={{ background: CATEGORY_COLORS[fund.categorie] || "#94a3b8" }}
+                    />
+                    {fund.categorie}
+                  </span>
+                  <span className="text-xs px-2 py-0.5 bg-slate-100 rounded text-slate-600">
+                    {fund.type}
+                  </span>
+                  {ytdQuartile !== null && (
+                    <span
+                      className="text-xs px-2 py-0.5 rounded font-medium"
+                      style={{
+                        background: QUARTILE_COLORS[ytdQuartile] + "22",
+                        color: QUARTILE_COLORS[ytdQuartile],
+                      }}
+                    >
+                      {QUARTILE_LABELS[ytdQuartile]} YTD
+                    </span>
+                  )}
+                </div>
+                <div className="text-xs md:text-sm text-slate-500">
+                  <Link
+                    href={`/sgo/${managerSlug(fund.gestionnaire)}`}
+                    className="hover:underline"
+                  >
+                    {fund.gestionnaire}
+                  </Link>
+                  {fund.depositaire && ` · Dépositaire ${fund.depositaire}`}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* VL de tete */}
+          <div className="flex flex-wrap items-baseline gap-4 md:gap-7 mb-4">
+            <div>
+              <span className="text-3xl md:text-4xl font-semibold">
+                {headVL ? fmtVL(headVL.vl) : "—"}
               </span>
+              <span className="text-sm text-slate-500 ml-2">FCFA</span>
+            </div>
+            {fund.bocDayChange !== null && (
+              <div
+                className={`font-medium ${
+                  fund.bocDayChange >= 0 ? "text-green-600" : "text-red-600"
+                }`}
+              >
+                <span className="text-base md:text-lg">
+                  {fmtPct(fund.bocDayChange, 2)}
+                </span>
+                <span className="text-sm ml-1 text-slate-500">sur la séance</span>
+              </div>
             )}
+            <div className="text-xs text-slate-400">
+              {headVL
+                ? `VL du ${fmtDateFR(headVL.date)} · ${headVL.source}`
+                : "VL non publiée"}
+            </div>
+          </div>
+
+          {/* Onglets */}
+          <div className="flex gap-0 text-sm overflow-x-auto border-b border-slate-200 -mb-px">
+            {TABS.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`px-3 md:px-4 py-3 whitespace-nowrap border-b-2 transition ${
+                  activeTab === tab.id
+                    ? "border-blue-700 text-blue-700 font-medium"
+                    : "border-transparent text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
         </div>
       </div>
 
-      <main className="mx-auto max-w-7xl px-4 py-8 space-y-8">
+
+      <main className="max-w-7xl mx-auto px-4 md:px-6 py-4 md:py-6 space-y-4 md:space-y-6">
         {/* === BANDEAU FRAÎCHEUR BOC === */}
         {latestBocDate && (
           <div className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs font-semibold text-emerald-900">
@@ -413,568 +638,752 @@ export default function FCPDetailView(props: Props) {
           </div>
         )}
 
-        {/* ============================================ */}
-        {/* BLOCK 1 : KPIs identité OPC (titre + tags dans hero ci-dessus) */}
-        {/* ============================================ */}
-        <section className="bg-white border border-slate-200 rounded-lg p-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <KPI
-              label="Encours"
-              value={fmtBigFCFA(aumRef) + " FCFA"}
-              sub={
-                aumDelta1Y !== null
-                  ? `1 an · ${fmtPct(aumDelta1Y)}`
-                  : `au ${fmtDateFR(refQuarter)}`
-              }
-            />
-            <KPI
-              label="Dernière VL"
-              value={
-                fund.bocVL !== null
-                  ? fund.bocVL.toLocaleString("fr-FR", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })
-                  : latestVL
-                    ? Math.round(latestVL.vl).toLocaleString("fr-FR").replace(/,/g, " ")
-                    : "—"
-              }
-              sub={
-                fund.bocVL !== null && fund.bocDate
-                  ? `${fmtDateFR(fund.bocDate)} (BOC)` +
-                    (fund.bocDayChange !== null
-                      ? ` · ${fmtPct(fund.bocDayChange, 2)} j`
-                      : "")
-                  : latestVL
-                    ? fmtDateFR(latestVL.date) +
-                      (latestVL.kind === "latest" ? " · intra-trim" : "")
-                    : "—"
-              }
-            />
-          </div>
-
-          {/* Caractéristiques OPC (issu du BOC : dépositaire + fréquence calcul) */}
-          {(fund.depositaire || fund.frequenceCalcul) && (
-            <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-1.5 border-t border-slate-100 pt-3 text-xs text-slate-600">
-              {fund.depositaire && (
-                <span>
-                  <span className="text-slate-400">Dépositaire · </span>
-                  <span className="font-medium text-slate-800">{fund.depositaire}</span>
-                </span>
-              )}
-              {fund.frequenceCalcul && (
-                <span>
-                  <span className="text-slate-400">Fréquence VL · </span>
-                  <span className="font-medium text-slate-800">{fund.frequenceCalcul}</span>
-                </span>
-              )}
-            </div>
-          )}
-        </section>
-
-      {/* ============================================ */}
-      {/* BLOCK 2 : TABLEAU DE PERFORMANCE */}
-      {/* ============================================ */}
-      <section className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-        <div className="px-6 pt-5 pb-3">
-          <h2 className="text-lg font-semibold text-slate-900">Performance vs catégorie</h2>
-          <p className="text-xs text-slate-500">
-            Comparaison à la médiane des {cohortSize} fonds {fund.categorie.toLowerCase()}
-          </p>
-        </div>
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 border-y border-slate-200">
-            <tr>
-              <th className="text-left px-6 py-2 text-xs font-semibold text-slate-600">Fenêtre</th>
-              <th className="text-right px-3 py-2 text-xs font-semibold text-slate-600">Fonds</th>
-              <th className="text-right px-3 py-2 text-xs font-semibold text-slate-600">
-                Médiane catégorie
-              </th>
-              <th className="text-right px-3 py-2 text-xs font-semibold text-slate-600">Écart</th>
-              <th className="text-right px-6 py-2 text-xs font-semibold text-slate-600 hidden md:table-cell">
-                Période
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {perfTable.map((r) => (
-              <tr key={r.label} className="border-b border-slate-100 last:border-0">
-                <td className="px-6 py-2.5 font-medium text-slate-700">{r.label}</td>
-                <td
-                  className={`px-3 py-2.5 text-right tabular-nums font-semibold ${
-                    r.fundValue !== null && r.fundValue >= 0 ? "text-emerald-700" : "text-rose-700"
-                  }`}
-                >
-                  {fmtPct(r.fundValue, 2)}
-                </td>
-                <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">
-                  {fmtPct(r.cohortValue, 2)}
-                </td>
-                <td
-                  className={`px-3 py-2.5 text-right tabular-nums font-semibold ${
-                    r.excess !== null && r.excess >= 0 ? "text-emerald-700" : "text-rose-700"
-                  }`}
-                >
-                  {fmtPct(r.excess, 2)}
-                </td>
-                <td className="px-6 py-2.5 text-right text-xs text-slate-400 hidden md:table-cell">
-                  {r.fromDate ? `${fmtDateFR(r.fromDate)} → ${fmtDateFR(r.toDate)}` : "—"}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
-
-      {/* ============================================ */}
-      {/* BLOCK 3 : GRAPHE VL REBASE */}
-      {/* ============================================ */}
-      <section className="bg-white border border-slate-200 rounded-lg p-5">
-        <div className="flex items-baseline justify-between flex-wrap gap-3 mb-3">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900">VL rebasée à 100</h2>
-            <p className="text-xs text-slate-500">
-              Fonds vs médiane catégorie · base = {fmtDateFR(rebasedFundSeries[0]?.date || "")}
-            </p>
-          </div>
-          <div className="inline-flex rounded-md border border-slate-200 overflow-hidden">
-            {CHART_PERIODS.map((p) => (
-              <button
-                key={p}
-                onClick={() => setChartPeriod(p)}
-                className={`px-3 py-1.5 text-xs font-medium transition ${
-                  chartPeriod === p
-                    ? "bg-slate-900 text-white"
-                    : "bg-white text-slate-600 hover:bg-slate-50"
-                }`}
-              >
-                {p}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div style={{ width: "100%", height: 360 }}>
-          <ResponsiveContainer>
-            <LineChart data={vlChartData}>
-              <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
-              <XAxis
-                dataKey="date"
-                tick={{ fontSize: 11 }}
-                tickFormatter={(d) => String(d).slice(0, 7)}
-              />
-              <YAxis tick={{ fontSize: 11 }} domain={["auto", "auto"]} />
-              <Tooltip
-                formatter={(v, name) => [
-                  Number(v).toFixed(2),
-                  name === "fund" ? fund.nom : "Médiane catégorie",
-                ]}
-                labelFormatter={(d) => fmtDateFR(String(d))}
-              />
-              <Legend
-                wrapperStyle={{ fontSize: 12 }}
-                formatter={(value) => (value === "fund" ? fund.nom : "Médiane catégorie")}
-              />
-              <ReferenceLine y={100} stroke="#cbd5e1" strokeDasharray="3 3" />
-              <Line
-                type="monotone"
-                dataKey="fund"
-                stroke="#185FA5"
-                strokeWidth={2.5}
-                dot={false}
-                connectNulls
-                isAnimationActive={false}
-              />
-              <Line
-                type="monotone"
-                dataKey="cohort"
-                stroke="#94a3b8"
-                strokeWidth={1.5}
-                strokeDasharray="4 4"
-                dot={false}
-                connectNulls
-                isAnimationActive={false}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-        {latestVL && latestVL.kind === "latest" && (
-          <p className="text-[11px] text-slate-400 mt-1">
-            ● Dernier point ({fmtDateFR(latestVL.date)}) = VL intra-trim publiée par la SGO
-          </p>
-        )}
-      </section>
-
-      {/* ============================================ */}
-      {/* BLOCK 4 + 13 : QUARTILES + ROLLING 1Y */}
-      {/* ============================================ */}
-      <section className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        {/* Frise quartiles */}
-        <div className="bg-white border border-slate-200 rounded-lg p-5">
-          <div className="mb-3">
-            <h2 className="text-lg font-semibold text-slate-900">Régularité — quartiles</h2>
-            <p className="text-xs text-slate-500">
-              Quartile dans la catégorie sur chaque trimestre (Q1 = top, Q4 = bas)
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-1 mb-3">
-            {quartileFrame.map((q) => (
-              <div
-                key={q.date}
-                title={`${q.date} · ${q.quartile ? `Q${q.quartile}` : "—"} · perf ${fmtPct(
-                  q.perf
-                )}`}
-                className="w-7 h-10 rounded flex flex-col items-center justify-center text-[9px] font-bold text-white"
-                style={{
-                  background: q.quartile ? QUARTILE_COLORS[q.quartile] : "#e2e8f0",
-                  color: q.quartile ? "#fff" : "#94a3b8",
-                }}
-              >
-                <span>{q.quartile ? `Q${q.quartile}` : "—"}</span>
-                <span className="text-[8px] opacity-80">{q.date.slice(2, 7)}</span>
+        {activeTab === "overview" && (
+          <>
+            {/* ============================================ */}
+            {/* BLOCK 1 : les trois chiffres de tete (la VL est dans l'en-tete) */}
+            {/* ============================================ */}
+            <section className="bg-white border border-slate-200 rounded-lg p-6">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <KPI
+                  label="Encours"
+                  value={fmtBigFCFA(aumRef) + " FCFA"}
+                  sub={
+                    aumDelta1Y !== null
+                      ? `1 an · ${fmtPct(aumDelta1Y)}`
+                      : `au ${fmtDateFR(refQuarter)}`
+                  }
+                />
+                <KPI
+                  label="Performance YTD"
+                  value={fmtPct(ytdRow?.fundValue ?? null)}
+                  sub={
+                    ytdQuartile !== null
+                      ? `${QUARTILE_LABELS[ytdQuartile]} sur ${cohortSize} fonds`
+                      : `catégorie ${fund.categorieAtRef.toLowerCase()}`
+                  }
+                />
+                <KPI
+                  label="Rang par encours"
+                  value={
+                    lastShare?.rank
+                      ? `${lastShare.rank}${lastShare.rank === 1 ? "er" : "e"}`
+                      : "—"
+                  }
+                  sub={
+                    lastShare
+                      ? `sur ${lastShare.nbInCat} · ${fmtPctRaw(lastShare.share)} de la catégorie`
+                      : `au ${fmtDateFR(refQuarter)}`
+                  }
+                />
               </div>
-            ))}
-          </div>
-          <div className="text-xs text-slate-600">
-            <strong>{fmtPct(top2Pct, 0)}</strong> des trimestres en Q1+Q2 · {quartileFrame.filter((q) => q.quartile !== null).length} trimestres évalués
-          </div>
-        </div>
+            </section>
 
-        {/* Rolling 1Y */}
-        <div className="bg-white border border-slate-200 rounded-lg p-5">
-          <div className="mb-3">
-            <h2 className="text-lg font-semibold text-slate-900">Performances 1 an glissantes</h2>
-            <p className="text-xs text-slate-500">
-              Évite l&apos;effet « année calendaire » — fenêtre 1A à chaque fin de trimestre
-            </p>
-          </div>
-          <div className="grid grid-cols-3 gap-3 mb-3">
-            <Stat label="Min" value={fmtPct(rolling.min, 1)} tone={rolling.min !== null && rolling.min < 0 ? "rose" : "neutral"} />
-            <Stat label="Médiane" value={fmtPct(rolling.median, 1)} tone="neutral" />
-            <Stat label="Max" value={fmtPct(rolling.max, 1)} tone={rolling.max !== null && rolling.max >= 0 ? "emerald" : "neutral"} />
-          </div>
-          <div style={{ width: "100%", height: 140 }}>
-            <ResponsiveContainer>
-              <BarChart data={rolling.points.map((p) => ({ date: p.asOf.slice(0, 7), perf: p.perf1Y !== null ? p.perf1Y * 100 : null }))}>
-                <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
-                <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-                <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => v + "%"} width={40} />
-                <Tooltip formatter={(v) => Number(v).toFixed(2) + "%"} />
-                <ReferenceLine y={0} stroke="#94a3b8" />
-                <Bar dataKey="perf" fill="#185FA5" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </section>
+            {/* ============================================ */}
+            {/* BLOCK 1 bis : EVOLUTION DE LA VL + DONNEES CLES */}
+            {/* ============================================ */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
+              <div className="lg:col-span-2 bg-white rounded-lg border border-slate-200 p-4 md:p-6">
+                <div className="flex justify-between items-center mb-3 flex-wrap gap-2">
+                  <div>
+                    <h3 className="text-base font-medium">Évolution de la VL</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {vlChartRaw.length} points · en FCFA · source BOC / SGO
+                    </p>
+                  </div>
+                  <div className="flex gap-1.5 text-xs flex-wrap">
+                    {VL_PERIODS.map((p) => (
+                      <button
+                        key={p}
+                        onClick={() => setVlPeriod(p)}
+                        className={`px-2.5 py-1 rounded border ${
+                          vlPeriod === p
+                            ? "bg-blue-50 text-blue-700 border-blue-200"
+                            : "border-slate-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-      {/* ============================================ */}
-      {/* BLOCK 6 : EXCES VS CATEGORIE */}
-      {/* ============================================ */}
-      <section className="bg-white border border-slate-200 rounded-lg p-5">
-        <div className="mb-3">
-          <h2 className="text-lg font-semibold text-slate-900">
-            Excès trimestriel vs médiane catégorie
-          </h2>
-          <p className="text-xs text-slate-500">
-            Barre = perf trim − perf médiane cat · ligne = excès cumulé composé
-          </p>
-        </div>
-        <div style={{ width: "100%", height: 280 }}>
-          <ResponsiveContainer>
-            <ComposedChart data={excessData}>
-              <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
-              <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-              <YAxis
-                yAxisId="bar"
-                tick={{ fontSize: 11 }}
-                tickFormatter={(v) => v + "%"}
-                width={50}
-              />
-              <YAxis
-                yAxisId="line"
-                orientation="right"
-                tick={{ fontSize: 11 }}
-                tickFormatter={(v) => v + "%"}
-                width={50}
-              />
-              <Tooltip formatter={(v) => Number(v).toFixed(2) + "%"} />
-              <ReferenceLine y={0} yAxisId="bar" stroke="#94a3b8" />
-              <Bar
-                yAxisId="bar"
-                dataKey="excess"
-                name="Excès trimestriel"
-                fill="#185FA5"
-              />
-              <Line
-                yAxisId="line"
-                type="monotone"
-                dataKey="cumulative"
-                name="Excès cumulé"
-                stroke="#dc2626"
-                strokeWidth={2}
-                dot={false}
-              />
-            </ComposedChart>
-          </ResponsiveContainer>
-        </div>
-      </section>
+                {vlSeries.length === 0 ? (
+                  <div className="h-64 md:h-72 flex flex-col items-center justify-center text-center text-slate-500">
+                    <div className="text-4xl mb-2">📊</div>
+                    <p className="text-sm">Aucune VL relevée pour ce fonds</p>
+                  </div>
+                ) : vlChartRaw.length < 2 ? (
+                  <div className="h-64 md:h-72 flex flex-col items-center justify-center text-center text-slate-500">
+                    <p className="text-sm">Pas de données sur la période {vlPeriod}</p>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Historique disponible depuis le {fmtDateFR(vlSeries[0].date)}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="h-64 md:h-72">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={vlChartRaw}>
+                        <defs>
+                          <linearGradient id="vlGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor={vlColor} stopOpacity={0.25} />
+                            <stop offset="100%" stopColor={vlColor} stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <XAxis
+                          dataKey="date"
+                          stroke="#94a3b8"
+                          fontSize={11}
+                          tickFormatter={(d) => fmtDateShort(String(d))}
+                          minTickGap={30}
+                        />
+                        <YAxis
+                          stroke="#94a3b8"
+                          fontSize={11}
+                          domain={["auto", "auto"]}
+                          tickFormatter={(v) =>
+                            Math.round(Number(v)).toLocaleString("fr-FR").replace(/,/g, " ")
+                          }
+                          width={62}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: "white",
+                            border: "1px solid #e2e8f0",
+                            borderRadius: "6px",
+                            fontSize: "12px",
+                          }}
+                          formatter={(v) => [fmtVL(Number(v)) + " FCFA", "VL"]}
+                          labelFormatter={(d) => fmtDateFR(String(d))}
+                        />
+                        <Area
+                          type="monotone"
+                          dataKey="vl"
+                          stroke={vlColor}
+                          strokeWidth={2}
+                          fill="url(#vlGradient)"
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
 
-      {/* ============================================ */}
-      {/* BLOCK 5 + 11 : DECOMPOSITION AUM + CROISSANCE */}
-      {/* ============================================ */}
-      <section className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <div className="lg:col-span-2 bg-white border border-slate-200 rounded-lg p-5">
-          <div className="mb-3">
-            <h2 className="text-lg font-semibold text-slate-900">
-              Dynamique d&apos;encours — perf vs collecte
-            </h2>
-            <p className="text-xs text-slate-500">
-              Décomposition trimestrielle ΔAUM = effet performance + collecte nette implicite
-            </p>
-          </div>
-          <div style={{ width: "100%", height: 280 }}>
-            <ResponsiveContainer>
-              <ComposedChart data={aumDecompData}>
-                <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
-                <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                <YAxis
-                  yAxisId="aum"
-                  tick={{ fontSize: 11 }}
-                  tickFormatter={(v) => v.toFixed(0) + " Mds"}
-                  width={70}
-                />
-                <YAxis
-                  yAxisId="flow"
-                  orientation="right"
-                  tick={{ fontSize: 11 }}
-                  tickFormatter={(v) => v.toFixed(1) + " Mds"}
-                  width={60}
-                />
-                <Tooltip
-                  formatter={(v, name) => {
-                    const num = Number(v);
-                    if (name === "aum") return [num.toFixed(2) + " Mds", "AUM"];
-                    if (name === "perfEffect") return [num.toFixed(2) + " Mds", "Effet perf"];
-                    if (name === "netFlow") return [num.toFixed(2) + " Mds", "Collecte nette"];
-                    return [num.toFixed(2), String(name)];
-                  }}
-                />
-                <ReferenceLine yAxisId="flow" y={0} stroke="#94a3b8" />
-                <Bar yAxisId="flow" dataKey="netFlow" fill="#0F6E56" name="Collecte nette" />
-                <Bar yAxisId="flow" dataKey="perfEffect" fill="#94a3b8" name="Effet perf" />
-                <Line
-                  yAxisId="aum"
-                  type="monotone"
-                  dataKey="aum"
-                  stroke="#185FA5"
-                  strokeWidth={2}
-                  name="AUM"
-                  dot={false}
-                />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-        <div className="bg-white border border-slate-200 rounded-lg p-5 space-y-4">
-          <div>
-            <h3 className="text-sm font-semibold text-slate-900">Croissance décomposée</h3>
-            <p className="text-xs text-slate-500">
-              D&apos;où vient la variation d&apos;encours ?
-            </p>
-          </div>
-          <GrowthBlock title="Sur 1 an" g={growth1Y} />
-          <GrowthBlock title="Sur 3 ans" g={growth3Y} />
-        </div>
-      </section>
+                {/* Reperes de la fenetre affichee */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4 pt-4 border-t border-slate-100">
+                  <div>
+                    <div className="text-xs text-slate-500">Plus haut</div>
+                    <div className="text-sm font-medium">{fmtVL(vlBounds.max)}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-slate-500">Plus bas</div>
+                    <div className="text-sm font-medium">{fmtVL(vlBounds.min)}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-slate-500">Var. {vlPeriod}</div>
+                    <div
+                      className={`text-sm font-medium ${
+                        vlWindowChange === null
+                          ? "text-slate-400"
+                          : vlWindowChange >= 0
+                            ? "text-green-600"
+                            : "text-red-600"
+                      }`}
+                    >
+                      {fmtPct(vlWindowChange, 2)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-slate-500">Volatilité annualisée</div>
+                    <div
+                      className={`text-sm font-medium ${
+                        vlVolatilite === null ? "text-slate-400" : ""
+                      }`}
+                    >
+                      {vlVolatilite === null ? "NC" : fmtPctRaw(vlVolatilite, 2)}
+                    </div>
+                  </div>
+                </div>
+              </div>
 
-      {/* ============================================ */}
-      {/* BLOCK 9 + 10 : MARKET SHARE + CALENDRIER */}
-      {/* ============================================ */}
-      <section className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        {/* Market share */}
-        <div className="bg-white border border-slate-200 rounded-lg p-5">
-          <div className="mb-3">
-            <h2 className="text-lg font-semibold text-slate-900">
-              Part de marché dans la catégorie
-            </h2>
-            <p className="text-xs text-slate-500">
-              {marketShareData.length > 0 && marketShareData[marketShareData.length - 1].rank !== null
-                ? `Rang ${marketShareData[marketShareData.length - 1].rank} sur ${
-                    marketShare[marketShare.length - 1]?.nbInCat ?? "—"
-                  } fonds dans la catégorie`
-                : "Évolution de la part de marché"}
-            </p>
-          </div>
-          <div style={{ width: "100%", height: 240 }}>
-            <ResponsiveContainer>
-              <ComposedChart data={marketShareData}>
-                <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
-                <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                <YAxis
-                  tick={{ fontSize: 11 }}
-                  tickFormatter={(v) => v.toFixed(1) + "%"}
-                  width={50}
-                />
-                <Tooltip formatter={(v) => Number(v).toFixed(2) + "%"} />
-                <Area
-                  type="monotone"
-                  dataKey="share"
-                  stroke="#185FA5"
-                  fill="#185FA5"
-                  fillOpacity={0.25}
-                />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+              {/* Carte donnees cles */}
+              <div className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
+                <h3 className="text-base font-medium mb-4">Données clés</h3>
+                <dl className="space-y-3 text-sm">
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-slate-500">Société de gestion</dt>
+                    <dd className="font-medium text-right">
+                      <Link
+                        href={`/sgo/${managerSlug(fund.gestionnaire)}`}
+                        className="hover:underline text-blue-700"
+                      >
+                        {fund.gestionnaire}
+                      </Link>
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-slate-500">Catégorie</dt>
+                    <dd className="font-medium text-right">{fund.categorie}</dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-slate-500">Forme</dt>
+                    <dd className="font-medium text-right">{fund.type}</dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-slate-500">Dépositaire</dt>
+                    <dd className="font-medium text-right">{fund.depositaire || "NC"}</dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-slate-500">Fréquence de VL</dt>
+                    <dd className="font-medium text-right">
+                      {fund.frequenceCalcul || "NC"}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-3 pt-3 border-t border-slate-100">
+                    <dt className="text-slate-500">VL relevées</dt>
+                    <dd className="font-medium text-right">{vlSeries.length}</dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-slate-500">Première VL</dt>
+                    <dd className="font-medium text-right">
+                      {fund.firstObsDate ? fmtDateFR(fund.firstObsDate) : "NC"}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-slate-500">Dernière VL</dt>
+                    <dd className="font-medium text-right">
+                      {headVL ? fmtDateFR(headVL.date) : "NC"}
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+            </div>
 
-        {/* Calendrier */}
-        <div className="bg-white border border-slate-200 rounded-lg p-5">
-          <div className="mb-3">
-            <h2 className="text-lg font-semibold text-slate-900">Calendrier des trimestres</h2>
-            <p className="text-xs text-slate-500">Performance trimestrielle du fonds</p>
-          </div>
-          <table className="w-full text-sm">
-            <thead>
-              <tr>
-                <th className="text-left text-xs font-semibold text-slate-600 px-2 py-1.5"></th>
-                {[1, 2, 3, 4].map((q) => (
-                  <th
-                    key={q}
-                    className="text-center text-xs font-semibold text-slate-600 px-2 py-1.5"
-                  >
-                    Q{q}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {calendarMatrix.map((row) => (
-                <tr key={row.year}>
-                  <td className="text-xs font-bold text-slate-700 px-2 py-1.5">{row.year}</td>
-                  {row.cells.map((c, idx) => (
-                    <td
-                      key={idx}
-                      className="px-1.5 py-2 text-center text-xs font-medium"
+            {/* ============================================ */}
+            {/* BLOCK 2 : TABLEAU DE PERFORMANCE */}
+            {/* ============================================ */}
+            <section className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+              <div className="px-6 pt-5 pb-3">
+                <h2 className="text-lg font-semibold text-slate-900">Performance vs catégorie</h2>
+                <p className="text-xs text-slate-500">
+                  Comparaison à la médiane des {cohortSize} fonds {fund.categorie.toLowerCase()}
+                </p>
+              </div>
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 border-y border-slate-200">
+                  <tr>
+                    <th className="text-left px-6 py-2 text-xs font-semibold text-slate-600">Fenêtre</th>
+                    <th className="text-right px-3 py-2 text-xs font-semibold text-slate-600">Fonds</th>
+                    <th className="text-right px-3 py-2 text-xs font-semibold text-slate-600">
+                      Médiane catégorie
+                    </th>
+                    <th className="text-right px-3 py-2 text-xs font-semibold text-slate-600">Écart</th>
+                    <th className="text-right px-6 py-2 text-xs font-semibold text-slate-600 hidden md:table-cell">
+                      Période
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {perfTable.map((r) => (
+                    <tr key={r.label} className="border-b border-slate-100 last:border-0">
+                      <td className="px-6 py-2.5 font-medium text-slate-700">{r.label}</td>
+                      <td
+                        className={`px-3 py-2.5 text-right tabular-nums font-semibold ${
+                          r.fundValue !== null && r.fundValue >= 0 ? "text-emerald-700" : "text-rose-700"
+                        }`}
+                      >
+                        {fmtPct(r.fundValue, 2)}
+                      </td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">
+                        {fmtPct(r.cohortValue, 2)}
+                      </td>
+                      <td
+                        className={`px-3 py-2.5 text-right tabular-nums font-semibold ${
+                          r.excess !== null && r.excess >= 0 ? "text-emerald-700" : "text-rose-700"
+                        }`}
+                      >
+                        {fmtPct(r.excess, 2)}
+                      </td>
+                      <td className="px-6 py-2.5 text-right text-xs text-slate-400 hidden md:table-cell">
+                        {r.fromDate ? `${fmtDateFR(r.fromDate)} → ${fmtDateFR(r.toDate)}` : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+
+          </>
+        )}
+
+        {activeTab === "performance" && (
+          <>
+            {/* ============================================ */}
+            {/* BLOCK 3 : GRAPHE VL REBASE */}
+            {/* ============================================ */}
+            <section className="bg-white border border-slate-200 rounded-lg p-5">
+              <div className="flex items-baseline justify-between flex-wrap gap-3 mb-3">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">VL rebasée à 100</h2>
+                  <p className="text-xs text-slate-500">
+                    Fonds vs médiane catégorie · base = {fmtDateFR(rebasedFundSeries[0]?.date || "")}
+                  </p>
+                </div>
+                <div className="inline-flex rounded-md border border-slate-200 overflow-hidden">
+                  {CHART_PERIODS.map((p) => (
+                    <button
+                      key={p}
+                      onClick={() => setChartPeriod(p)}
+                      className={`px-3 py-1.5 text-xs font-medium transition ${
+                        chartPeriod === p
+                          ? "bg-slate-900 text-white"
+                          : "bg-white text-slate-600 hover:bg-slate-50"
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ width: "100%", height: 360 }}>
+                <ResponsiveContainer>
+                  <LineChart data={vlChartData}>
+                    <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fontSize: 11 }}
+                      tickFormatter={(d) => String(d).slice(0, 7)}
+                    />
+                    <YAxis tick={{ fontSize: 11 }} domain={["auto", "auto"]} />
+                    <Tooltip
+                      formatter={(v, name) => [
+                        Number(v).toFixed(2),
+                        name === "fund" ? fund.nom : "Médiane catégorie",
+                      ]}
+                      labelFormatter={(d) => fmtDateFR(String(d))}
+                    />
+                    <Legend
+                      wrapperStyle={{ fontSize: 12 }}
+                      formatter={(value) => (value === "fund" ? fund.nom : "Médiane catégorie")}
+                    />
+                    <ReferenceLine y={100} stroke="#cbd5e1" strokeDasharray="3 3" />
+                    <Line
+                      type="monotone"
+                      dataKey="fund"
+                      stroke="#185FA5"
+                      strokeWidth={2.5}
+                      dot={false}
+                      connectNulls
+                      isAnimationActive={false}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="cohort"
+                      stroke="#94a3b8"
+                      strokeWidth={1.5}
+                      strokeDasharray="4 4"
+                      dot={false}
+                      connectNulls
+                      isAnimationActive={false}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+              {latestVL && latestVL.kind === "latest" && (
+                <p className="text-[11px] text-slate-400 mt-1">
+                  ● Dernier point ({fmtDateFR(latestVL.date)}) = VL intra-trim publiée par la SGO
+                </p>
+              )}
+            </section>
+
+            <section className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+              <div className="lg:col-span-2 bg-white border border-slate-200 rounded-lg p-5">
+            <div className="mb-3">
+              <h2 className="text-lg font-semibold text-slate-900">
+                Excès trimestriel vs médiane catégorie
+              </h2>
+              <p className="text-xs text-slate-500">
+                Barre = perf trim − perf médiane cat · ligne = excès cumulé composé
+              </p>
+            </div>
+            <div style={{ width: "100%", height: 280 }}>
+              <ResponsiveContainer>
+                <ComposedChart data={excessData}>
+                  <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
+                  <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                  <YAxis
+                    yAxisId="bar"
+                    tick={{ fontSize: 11 }}
+                    tickFormatter={(v) => v + "%"}
+                    width={50}
+                  />
+                  <YAxis
+                    yAxisId="line"
+                    orientation="right"
+                    tick={{ fontSize: 11 }}
+                    tickFormatter={(v) => v + "%"}
+                    width={50}
+                  />
+                  <Tooltip formatter={(v) => Number(v).toFixed(2) + "%"} />
+                  <ReferenceLine y={0} yAxisId="bar" stroke="#94a3b8" />
+                  <Bar
+                    yAxisId="bar"
+                    dataKey="excess"
+                    name="Excès trimestriel"
+                    fill="#185FA5"
+                  />
+                  <Line
+                    yAxisId="line"
+                    type="monotone"
+                    dataKey="cumulative"
+                    name="Excès cumulé"
+                    stroke="#dc2626"
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+              </div>
+
+                {/* Calendrier */}
+                <div className="bg-white border border-slate-200 rounded-lg p-5">
+                  <div className="mb-3">
+                    <h2 className="text-lg font-semibold text-slate-900">Calendrier des trimestres</h2>
+                    <p className="text-xs text-slate-500">Performance trimestrielle du fonds</p>
+                  </div>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr>
+                        <th className="text-left text-xs font-semibold text-slate-600 px-2 py-1.5"></th>
+                        {[1, 2, 3, 4].map((q) => (
+                          <th
+                            key={q}
+                            className="text-center text-xs font-semibold text-slate-600 px-2 py-1.5"
+                          >
+                            Q{q}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {calendarMatrix.map((row) => (
+                        <tr key={row.year}>
+                          <td className="text-xs font-bold text-slate-700 px-2 py-1.5">{row.year}</td>
+                          {row.cells.map((c, idx) => (
+                            <td
+                              key={idx}
+                              className="px-1.5 py-2 text-center text-xs font-medium"
+                              style={{
+                                background: perfHeatColor(c.perf),
+                                color: "#0f172a",
+                              }}
+                            >
+                              {fmtPct(c.perf, 1)}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+            </section>
+
+          </>
+        )}
+
+        {activeTab === "regularite" && (
+          <>
+            {/* ============================================ */}
+            {/* BLOCK 4 + 13 : QUARTILES + ROLLING 1Y */}
+            {/* ============================================ */}
+            <section className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              {/* Frise quartiles */}
+              <div className="bg-white border border-slate-200 rounded-lg p-5">
+                <div className="mb-3">
+                  <h2 className="text-lg font-semibold text-slate-900">Régularité — quartiles</h2>
+                  <p className="text-xs text-slate-500">
+                    Quartile dans la catégorie sur chaque trimestre (Q1 = top, Q4 = bas)
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-1 mb-3">
+                  {quartileFrame.map((q) => (
+                    <div
+                      key={q.date}
+                      title={`${q.date} · ${q.quartile ? `Q${q.quartile}` : "—"} · perf ${fmtPct(
+                        q.perf
+                      )}`}
+                      className="w-7 h-10 rounded flex flex-col items-center justify-center text-[9px] font-bold text-white"
                       style={{
-                        background: perfHeatColor(c.perf),
-                        color: "#0f172a",
+                        background: q.quartile ? QUARTILE_COLORS[q.quartile] : "#e2e8f0",
+                        color: q.quartile ? "#fff" : "#94a3b8",
                       }}
                     >
-                      {fmtPct(c.perf, 1)}
-                    </td>
+                      <span>{q.quartile ? `Q${q.quartile}` : "—"}</span>
+                      <span className="text-[8px] opacity-80">{q.date.slice(2, 7)}</span>
+                    </div>
                   ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+                </div>
+                <div className="text-xs text-slate-600">
+                  <strong>{fmtPct(top2Pct, 0)}</strong> des trimestres en Q1+Q2 · {quartileFrame.filter((q) => q.quartile !== null).length} trimestres évalués
+                </div>
+              </div>
 
-      {/* ============================================ */}
-      {/* BLOCK 7 + 8 : PEER GROUP + AUTRES FONDS GESTIONNAIRE */}
-      {/* ============================================ */}
-      <section className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <PeerTable
-          title="Concurrents directs (catégorie)"
-          subtitle={`Top 10 ${fund.categorie.toLowerCase()} par AUM`}
-          rows={peerEntries.map((e) => ({
-            id: e.id,
-            nom: e.nom,
-            sub: e.gestionnaire,
-            aum: e.aum,
-            ytd: e.ytd,
-            y1: e.y1,
-          }))}
-        />
-        <PeerTable
-          title={
-            <>
-              Autres fonds{" "}
-              <Link
-                href={`/sgo/${managerSlug(fund.gestionnaire)}`}
-                className="hover:underline text-blue-700"
-              >
-                {fund.gestionnaire}
-              </Link>
-            </>
-          }
-          subtitle={`${managerEntries.length} fonds gérés par la même SGO`}
-          rows={managerEntries.map((e) => ({
-            id: e.id,
-            nom: e.nom,
-            sub: e.categorie,
-            aum: e.aum,
-            ytd: e.ytd,
-            y1: e.y1,
-          }))}
-        />
-      </section>
+              {/* Rolling 1Y */}
+              <div className="bg-white border border-slate-200 rounded-lg p-5">
+                <div className="mb-3">
+                  <h2 className="text-lg font-semibold text-slate-900">Performances 1 an glissantes</h2>
+                  <p className="text-xs text-slate-500">
+                    Évite l&apos;effet « année calendaire » — fenêtre 1A à chaque fin de trimestre
+                  </p>
+                </div>
+                <div className="grid grid-cols-3 gap-3 mb-3">
+                  <Stat label="Min" value={fmtPct(rolling.min, 1)} tone={rolling.min !== null && rolling.min < 0 ? "rose" : "neutral"} />
+                  <Stat label="Médiane" value={fmtPct(rolling.median, 1)} tone="neutral" />
+                  <Stat label="Max" value={fmtPct(rolling.max, 1)} tone={rolling.max !== null && rolling.max >= 0 ? "emerald" : "neutral"} />
+                </div>
+                <div style={{ width: "100%", height: 140 }}>
+                  <ResponsiveContainer>
+                    <BarChart data={rolling.points.map((p) => ({ date: p.asOf.slice(0, 7), perf: p.perf1Y !== null ? p.perf1Y * 100 : null }))}>
+                      <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
+                      <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                      <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => v + "%"} width={40} />
+                      <Tooltip formatter={(v) => Number(v).toFixed(2) + "%"} />
+                      <ReferenceLine y={0} stroke="#94a3b8" />
+                      <Bar dataKey="perf" fill="#185FA5" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </section>
 
-      {/* ============================================ */}
-      {/* BLOCK 12 : CADENCE DE PUBLICATION */}
-      {/* ============================================ */}
-      <section className="bg-white border border-slate-200 rounded-lg p-5">
-        <div className="flex items-baseline justify-between flex-wrap gap-3 mb-3">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900">Qualité de publication</h2>
-            <p className="text-xs text-slate-500">
-              Cadence et régularité de publication des VL par la SGO
-            </p>
-          </div>
-          <span
-            className="px-3 py-1.5 text-xs font-bold rounded-md uppercase tracking-wider"
-            style={{
-              background:
-                cadence.kind === "quotidienne"
-                  ? "#15803d22"
-                  : cadence.kind === "hebdomadaire"
-                  ? "#0F6E5622"
-                  : cadence.kind === "trimestrielle"
-                  ? "#185FA522"
-                  : "#dc262622",
-              color:
-                cadence.kind === "quotidienne"
-                  ? "#15803d"
-                  : cadence.kind === "hebdomadaire"
-                  ? "#0F6E56"
-                  : cadence.kind === "trimestrielle"
-                  ? "#185FA5"
-                  : "#dc2626",
-            }}
-          >
-            Cadence {cadence.kind}
-          </span>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <Stat
-            label="Trimestres publiés"
-            value={`${cadence.publishedQuarters} / ${cadence.expectedQuarters}`}
-            sub={`régularité ${fmtPctRaw(cadence.regularity, 0)}`}
-            tone="neutral"
-          />
-          <Stat
-            label="Points 365 j"
-            value={String(cadence.intraTrim365)}
-            sub="VL intra-trimestre"
-            tone="neutral"
-          />
-          <Stat
-            label="Gap moyen"
-            value={cadence.avgGapDays !== null ? Math.round(cadence.avgGapDays) + " j" : "—"}
-            sub="entre publications"
-            tone="neutral"
-          />
-          <Stat
-            label="Délai depuis dernière VL"
-            value={cadence.daysSinceLast !== null ? Math.round(cadence.daysSinceLast) + " j" : "—"}
-            sub={`au ${fmtDateFR(latestVLGlobal)}`}
-            tone={
-              cadence.daysSinceLast !== null && cadence.daysSinceLast > 15 ? "rose" : "emerald"
-            }
-          />
-        </div>
-      </section>
+          </>
+        )}
+
+        {activeTab === "encours" && (
+          <>
+            {/* ============================================ */}
+            {/* BLOCK 5 + 11 : DECOMPOSITION AUM + CROISSANCE */}
+            {/* ============================================ */}
+            <section className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+              <div className="lg:col-span-2 bg-white border border-slate-200 rounded-lg p-5">
+                <div className="mb-3">
+                  <h2 className="text-lg font-semibold text-slate-900">
+                    Dynamique d&apos;encours — perf vs collecte
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Décomposition trimestrielle ΔAUM = effet performance + collecte nette implicite
+                  </p>
+                </div>
+                <div style={{ width: "100%", height: 280 }}>
+                  <ResponsiveContainer>
+                    <ComposedChart data={aumDecompData}>
+                      <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
+                      <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                      <YAxis
+                        yAxisId="aum"
+                        tick={{ fontSize: 11 }}
+                        tickFormatter={(v) => v.toFixed(0) + " Mds"}
+                        width={70}
+                      />
+                      <YAxis
+                        yAxisId="flow"
+                        orientation="right"
+                        tick={{ fontSize: 11 }}
+                        tickFormatter={(v) => v.toFixed(1) + " Mds"}
+                        width={60}
+                      />
+                      <Tooltip
+                        formatter={(v, name) => {
+                          const num = Number(v);
+                          if (name === "aum") return [num.toFixed(2) + " Mds", "AUM"];
+                          if (name === "perfEffect") return [num.toFixed(2) + " Mds", "Effet perf"];
+                          if (name === "netFlow") return [num.toFixed(2) + " Mds", "Collecte nette"];
+                          return [num.toFixed(2), String(name)];
+                        }}
+                      />
+                      <ReferenceLine yAxisId="flow" y={0} stroke="#94a3b8" />
+                      <Bar yAxisId="flow" dataKey="netFlow" fill="#0F6E56" name="Collecte nette" />
+                      <Bar yAxisId="flow" dataKey="perfEffect" fill="#94a3b8" name="Effet perf" />
+                      <Line
+                        yAxisId="aum"
+                        type="monotone"
+                        dataKey="aum"
+                        stroke="#185FA5"
+                        strokeWidth={2}
+                        name="AUM"
+                        dot={false}
+                      />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+              <div className="bg-white border border-slate-200 rounded-lg p-5 space-y-4">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-900">Croissance décomposée</h3>
+                  <p className="text-xs text-slate-500">
+                    D&apos;où vient la variation d&apos;encours ?
+                  </p>
+                </div>
+                <GrowthBlock title="Sur 1 an" g={growth1Y} />
+                <GrowthBlock title="Sur 3 ans" g={growth3Y} />
+              </div>
+            </section>
+
+            {/* Market share */}
+            <div className="bg-white border border-slate-200 rounded-lg p-5">
+              <div className="mb-3">
+                <h2 className="text-lg font-semibold text-slate-900">
+                  Part de marché dans la catégorie
+                </h2>
+                <p className="text-xs text-slate-500">
+                  {marketShareData.length > 0 && marketShareData[marketShareData.length - 1].rank !== null
+                    ? `Rang ${marketShareData[marketShareData.length - 1].rank} sur ${
+                        marketShare[marketShare.length - 1]?.nbInCat ?? "—"
+                      } fonds dans la catégorie`
+                    : "Évolution de la part de marché"}
+                </p>
+              </div>
+              <div style={{ width: "100%", height: 240 }}>
+                <ResponsiveContainer>
+                  <ComposedChart data={marketShareData}>
+                    <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
+                    <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                    <YAxis
+                      tick={{ fontSize: 11 }}
+                      tickFormatter={(v) => v.toFixed(1) + "%"}
+                      width={50}
+                    />
+                    <Tooltip formatter={(v) => Number(v).toFixed(2) + "%"} />
+                    <Area
+                      type="monotone"
+                      dataKey="share"
+                      stroke="#185FA5"
+                      fill="#185FA5"
+                      fillOpacity={0.25}
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+          </>
+        )}
+
+        {activeTab === "comparatif" && (
+          <>
+            {/* ============================================ */}
+            {/* BLOCK 7 + 8 : PEER GROUP + AUTRES FONDS GESTIONNAIRE */}
+            {/* ============================================ */}
+            <section className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              <PeerTable
+                title="Concurrents directs (catégorie)"
+                subtitle={`Top 10 ${fund.categorie.toLowerCase()} par AUM`}
+                rows={peerEntries.map((e) => ({
+                  id: e.id,
+                  nom: e.nom,
+                  sub: e.gestionnaire,
+                  aum: e.aum,
+                  ytd: e.ytd,
+                  y1: e.y1,
+                }))}
+              />
+              <PeerTable
+                title={
+                  <>
+                    Autres fonds{" "}
+                    <Link
+                      href={`/sgo/${managerSlug(fund.gestionnaire)}`}
+                      className="hover:underline text-blue-700"
+                    >
+                      {fund.gestionnaire}
+                    </Link>
+                  </>
+                }
+                subtitle={`${managerEntries.length} fonds gérés par la même SGO`}
+                rows={managerEntries.map((e) => ({
+                  id: e.id,
+                  nom: e.nom,
+                  sub: e.categorie,
+                  aum: e.aum,
+                  ytd: e.ytd,
+                  y1: e.y1,
+                }))}
+              />
+            </section>
+
+          </>
+        )}
+
+        {activeTab === "publication" && (
+          <>
+            {/* ============================================ */}
+            {/* BLOCK 12 : CADENCE DE PUBLICATION */}
+            {/* ============================================ */}
+            <section className="bg-white border border-slate-200 rounded-lg p-5">
+              <div className="flex items-baseline justify-between flex-wrap gap-3 mb-3">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">Qualité de publication</h2>
+                  <p className="text-xs text-slate-500">
+                    Cadence et régularité de publication des VL par la SGO
+                  </p>
+                </div>
+                <span
+                  className="px-3 py-1.5 text-xs font-bold rounded-md uppercase tracking-wider"
+                  style={{
+                    background:
+                      cadence.kind === "quotidienne"
+                        ? "#15803d22"
+                        : cadence.kind === "hebdomadaire"
+                        ? "#0F6E5622"
+                        : cadence.kind === "trimestrielle"
+                        ? "#185FA522"
+                        : "#dc262622",
+                    color:
+                      cadence.kind === "quotidienne"
+                        ? "#15803d"
+                        : cadence.kind === "hebdomadaire"
+                        ? "#0F6E56"
+                        : cadence.kind === "trimestrielle"
+                        ? "#185FA5"
+                        : "#dc2626",
+                  }}
+                >
+                  Cadence {cadence.kind}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <Stat
+                  label="Trimestres publiés"
+                  value={`${cadence.publishedQuarters} / ${cadence.expectedQuarters}`}
+                  sub={`régularité ${fmtPctRaw(cadence.regularity, 0)}`}
+                  tone="neutral"
+                />
+                <Stat
+                  label="Points 365 j"
+                  value={String(cadence.intraTrim365)}
+                  sub="VL intra-trimestre"
+                  tone="neutral"
+                />
+                <Stat
+                  label="Gap moyen"
+                  value={cadence.avgGapDays !== null ? Math.round(cadence.avgGapDays) + " j" : "—"}
+                  sub="entre publications"
+                  tone="neutral"
+                />
+                <Stat
+                  label="Délai depuis dernière VL"
+                  value={cadence.daysSinceLast !== null ? Math.round(cadence.daysSinceLast) + " j" : "—"}
+                  sub={`au ${fmtDateFR(latestVLGlobal)}`}
+                  tone={
+                    cadence.daysSinceLast !== null && cadence.daysSinceLast > 15 ? "rose" : "emerald"
+                  }
+                />
+              </div>
+            </section>
+
+          </>
+        )}
 
         <p className="text-xs text-slate-400">
           Source : <span className="font-medium text-slate-600">BRVM</span>.

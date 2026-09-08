@@ -284,6 +284,7 @@ export default async function FCPDetailPage({
         // VL chart
         rebasedFundSeries={rebasedFundSeries}
         cohortRebased={cohortRebased}
+        vlSeries={vlSeries}
         // quartile frieze
         quartileFrame={quartileFrame}
         top2Pct={top2Pct}
