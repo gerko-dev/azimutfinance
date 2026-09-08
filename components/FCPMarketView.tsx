@@ -241,9 +241,14 @@ export default function FCPMarketView(props: Props) {
   // États LOCAUX au tableau de classement (n'affectent rien d'autre)
   const [rankPeriod, setRankPeriod] = useState<PeriodKey>("ytd");
   const [rankCategory, setRankCategory] = useState<string>("all");
-  /** Critère de tri : performance sur la période choisie, ou niveau de risque
-   *  du moins au plus exposé. */
-  const [rankSort, setRankSort] = useState<"perf" | "risque">("perf");
+  /** Forme du classement.
+   *
+   *  "global"  : un seul palmarès, tous fonds confondus.
+   *  "risque"  : un palmarès PAR niveau de risque. Comparer la performance
+   *              d'un obligataire de niveau 2 à celle d'un fonds actions de
+   *              niveau 6 n'a pas de sens — le second doit rapporter plus, il
+   *              expose davantage. Le classement n'est loyal qu'entre pairs. */
+  const [rankMode, setRankMode] = useState<"global" | "risque">("global");
 
   // === Pool éligible : avec AUM au refDate ET non stale ===
   const eligibleCards = useMemo(
@@ -300,33 +305,79 @@ export default function FCPMarketView(props: Props) {
     return out;
   }, [treemapCards]);
 
-  // === Classement unique : un seul tableau filtrable par période + catégorie ===
-  const rankingTable = useMemo(() => {
-    const scope = rankCategory === "all"
-      ? eligibleCards
-      : eligibleCards.filter((c) => c.categorieAtRef === rankCategory);
+  // === Classement : un palmarès global, ou un palmarès par niveau de risque ===
+  //
+  // Toujours trié par PERFORMANCE. Le niveau de risque ne change pas le
+  // critère, il change le périmètre de comparaison : on ne met en concurrence
+  // que des fonds qui exposent l'épargnant au même degré.
+  type GroupeClassement = {
+    /** Niveau de risque du groupe, null pour le palmarès global ou pour les
+     *  fonds dont la société de gestion ne publie rien. */
+    niveau: number | null;
+    echelle: number | null;
+    /** Vrai pour le bloc « niveau non publié », à distinguer du global. */
+    sansNiveau: boolean;
+    fonds: FundCard[];
+  };
 
-    if (rankSort === "risque") {
-      // Un fonds sans niveau publié n'est pas un fonds sans risque : le
-      // classer à zéro le placerait en tête des « moins risqués », ce qui
-      // serait faux et dangereux sur un site financier. Ces fonds sont
-      // rejetés en fin de liste et leur cellule affiche « — ».
-      return [...scope].sort((a, b) => {
-        if (a.risque === null && b.risque === null) {
-          return (b.aumAtRef ?? 0) - (a.aumAtRef ?? 0);
-        }
-        if (a.risque === null) return 1;
-        if (b.risque === null) return -1;
-        if (a.risque !== b.risque) return a.risque - b.risque;
-        // À niveau égal, le plus gros encours d'abord.
-        return (b.aumAtRef ?? 0) - (a.aumAtRef ?? 0);
-      });
+  const rankingGroups = useMemo<GroupeClassement[]>(() => {
+    const scope = (
+      rankCategory === "all"
+        ? eligibleCards
+        : eligibleCards.filter((c) => c.categorieAtRef === rankCategory)
+    ).filter((c) => c.perf[rankPeriod] !== null);
+
+    const parPerf = (a: FundCard, b: FundCard) =>
+      (b.perf[rankPeriod] as number) - (a.perf[rankPeriod] as number);
+
+    if (rankMode === "global") {
+      return [
+        {
+          niveau: null,
+          echelle: null,
+          sansNiveau: false,
+          fonds: [...scope].sort(parPerf),
+        },
+      ];
     }
 
-    return scope
-      .filter((c) => c.perf[rankPeriod] !== null)
-      .sort((a, b) => (b.perf[rankPeriod] as number) - (a.perf[rankPeriod] as number));
-  }, [eligibleCards, rankCategory, rankPeriod, rankSort]);
+    const parNiveau = new Map<number, FundCard[]>();
+    const sans: FundCard[] = [];
+    for (const c of scope) {
+      if (c.risque === null) sans.push(c);
+      else {
+        const l = parNiveau.get(c.risque) ?? [];
+        l.push(c);
+        parNiveau.set(c.risque, l);
+      }
+    }
+
+    const groupes: GroupeClassement[] = Array.from(parNiveau.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([niveau, fonds]) => ({
+        niveau,
+        echelle: fonds[0]?.risqueEchelle ?? null,
+        sansNiveau: false,
+        fonds: fonds.sort(parPerf),
+      }));
+
+    // Les fonds sans niveau publié forment leur propre bloc, en dernier. Les
+    // fondre dans un groupe existant reviendrait à leur en attribuer un.
+    if (sans.length > 0) {
+      groupes.push({
+        niveau: null,
+        echelle: null,
+        sansNiveau: true,
+        fonds: sans.sort(parPerf),
+      });
+    }
+    return groupes;
+  }, [eligibleCards, rankCategory, rankPeriod, rankMode]);
+
+  const nbFondsClasses = useMemo(
+    () => rankingGroups.reduce((s, g) => s + g.fonds.length, 0),
+    [rankingGroups]
+  );
 
   // === Heatmap : derniers trimestres ===
   const heatmapDates = useMemo(
@@ -570,16 +621,13 @@ export default function FCPMarketView(props: Props) {
         <div>
           <h2 className="text-lg font-semibold text-slate-900">Classement des fonds</h2>
           <p className="text-xs text-slate-500">
-            {rankSort === "perf" ? (
+            Tri par performance · fonds avec dernière VL ≥{" "}
+            {fmtDateFR(stalenessCutoff)} (sinon exclus)
+            {rankMode === "risque" && (
               <>
-                Tri par performance · fonds avec dernière VL ≥{" "}
-                {fmtDateFR(stalenessCutoff)} (sinon exclus)
-              </>
-            ) : (
-              <>
-                Tri par niveau de risque publié, du moins au plus exposé · les
-                fonds dont la société de gestion ne publie pas de niveau sont
-                rejetés en fin de liste
+                {" "}
+                · un palmarès par niveau de risque, pour ne comparer que des
+                fonds qui exposent autant
               </>
             )}
           </p>
@@ -589,20 +637,20 @@ export default function FCPMarketView(props: Props) {
         <div className="bg-white border border-slate-200 rounded-lg p-4 flex flex-col md:flex-row md:items-center gap-4">
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              Classer par
+              Palmarès
             </span>
             <div className="inline-flex rounded-md border border-slate-200 overflow-hidden">
               {(
                 [
-                  { v: "perf" as const, l: "Performance" },
-                  { v: "risque" as const, l: "Risque" },
+                  { v: "global" as const, l: "Tous fonds" },
+                  { v: "risque" as const, l: "Par niveau de risque" },
                 ]
               ).map((o) => (
                 <button
                   key={o.v}
-                  onClick={() => setRankSort(o.v)}
+                  onClick={() => setRankMode(o.v)}
                   className={`px-3 py-1.5 text-xs font-medium transition ${
-                    rankSort === o.v
+                    rankMode === o.v
                       ? "bg-slate-900 text-white"
                       : "bg-white text-slate-600 hover:bg-slate-50"
                   }`}
@@ -612,9 +660,6 @@ export default function FCPMarketView(props: Props) {
               ))}
             </div>
           </div>
-          {/* La période ne pilote plus le tri quand on classe par risque, mais
-              elle continue de choisir la performance AFFICHÉE : on veut voir
-              ce que rapporte un niveau de risque donné. */}
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
               Période
@@ -653,8 +698,9 @@ export default function FCPMarketView(props: Props) {
             </select>
           </div>
           <div className="md:ml-auto text-xs text-slate-500">
-            {rankingTable.length} fonds classés · {cardsAtRef.length - eligibleCards.length} exclus
-            (VL stale)
+            {nbFondsClasses} fonds classés
+            {rankMode === "risque" && <> · {rankingGroups.length} palmarès</>} ·{" "}
+            {cardsAtRef.length - eligibleCards.length} exclus (VL stale)
           </div>
         </div>
 
@@ -685,15 +731,42 @@ export default function FCPMarketView(props: Props) {
                 </th>
               </tr>
             </thead>
-            <tbody>
-              {rankingTable.length === 0 && (
+            {nbFondsClasses === 0 && (
+              <tbody>
                 <tr>
                   <td colSpan={8} className="px-3 py-6 text-center text-sm text-slate-500">
                     Aucun fonds éligible pour ce filtre.
                   </td>
                 </tr>
+              </tbody>
+            )}
+            {rankingGroups.map((g) => (
+            <tbody key={g.sansNiveau ? "sans" : (g.niveau ?? "global")}>
+              {rankMode === "risque" && (
+                <tr className="bg-slate-100/70 border-y border-slate-200">
+                  <td colSpan={8} className="px-3 py-1.5">
+                    <span className="text-xs font-semibold text-slate-700">
+                      {g.sansNiveau ? (
+                        "Niveau de risque non publié"
+                      ) : (
+                        <>
+                          Niveau de risque {g.niveau}
+                          {g.echelle !== null && (
+                            <span className="font-normal text-slate-500">
+                              {" "}
+                              sur {g.echelle}
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </span>
+                    <span className="text-xs text-slate-500 ml-2">
+                      {g.fonds.length} fonds
+                    </span>
+                  </td>
+                </tr>
               )}
-              {rankingTable.map((c, i) => {
+              {g.fonds.map((c, i) => {
                 const v = c.perf[rankPeriod];
                 return (
                   <tr key={c.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
@@ -795,6 +868,7 @@ export default function FCPMarketView(props: Props) {
                 );
               })}
             </tbody>
+            ))}
           </table>
         </div>
       </section>
