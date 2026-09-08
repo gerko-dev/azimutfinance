@@ -238,9 +238,28 @@ export default function FCPMarketView(props: Props) {
   );
 
   // === Treemap (perf YTD figée) ===
+  //
+  // Le filtre est LOCAL à la cartographie : le classement plus bas a le sien,
+  // et lier les deux ferait bouger un tableau qu'on ne regarde pas quand on
+  // clique sur une tuile.
+  const [treemapCategory, setTreemapCategory] = useState<string>("all");
+
+  const treemapCards = useMemo(
+    () =>
+      treemapCategory === "all"
+        ? cardsAtRef
+        : cardsAtRef.filter((c) => c.categorieAtRef === treemapCategory),
+    [cardsAtRef, treemapCategory]
+  );
+
+  const treemapTotal = useMemo(
+    () => treemapCards.reduce((s, c) => s + (c.aumAtRef ?? 0), 0),
+    [treemapCards]
+  );
+
   const treemapData = useMemo(() => {
     const byCat = new Map<string, FundCard[]>();
-    for (const c of cardsAtRef) {
+    for (const c of treemapCards) {
       const list = byCat.get(c.categorieAtRef) || [];
       list.push(c);
       byCat.set(c.categorieAtRef, list);
@@ -265,7 +284,7 @@ export default function FCPMarketView(props: Props) {
     }
     out.sort((a, b) => b.size - a.size);
     return out;
-  }, [cardsAtRef]);
+  }, [treemapCards]);
 
   // === Classement unique : un seul tableau filtrable par période + catégorie ===
   const rankingTable = useMemo(() => {
@@ -398,8 +417,57 @@ export default function FCPMarketView(props: Props) {
             </p>
           </div>
           <span className="text-xs text-slate-400">
-            {totalFundsAtRef} fonds · {fmtBigFCFA(totalAUM)} FCFA
+            {treemapCards.length} fonds · {fmtBigFCFA(treemapTotal)} FCFA
+            {treemapCategory !== "all" && (
+              <> · {Math.round((treemapTotal / totalAUM) * 100)} % du marché</>
+            )}
           </span>
+        </div>
+
+        {/* Filtre par type de fonds. En pastilles et non en menu déroulant :
+            au-dessus d'un graphique, la répartition doit rester lisible sans
+            ouvrir quoi que ce soit, et l'encours de chaque type se compare
+            d'un coup d'œil. */}
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          <button
+            type="button"
+            onClick={() => setTreemapCategory("all")}
+            aria-pressed={treemapCategory === "all"}
+            className={`text-xs px-2.5 py-1 rounded-md border transition ${
+              treemapCategory === "all"
+                ? "border-slate-800 bg-slate-800 text-white font-medium"
+                : "border-slate-200 text-slate-600 hover:border-slate-300"
+            }`}
+          >
+            Tous les types
+          </button>
+          {categoryStats.map((c) => {
+            const actif = treemapCategory === c.categorie;
+            return (
+              <button
+                key={c.categorie}
+                type="button"
+                onClick={() =>
+                  setTreemapCategory(actif ? "all" : c.categorie)
+                }
+                aria-pressed={actif}
+                className={`text-xs px-2.5 py-1 rounded-md border transition inline-flex items-center gap-1.5 ${
+                  actif
+                    ? "border-slate-800 bg-slate-50 font-medium text-slate-900"
+                    : "border-slate-200 text-slate-600 hover:border-slate-300"
+                }`}
+              >
+                <span
+                  className="inline-block w-2 h-2 rounded-full"
+                  style={{
+                    backgroundColor: CATEGORY_COLORS[c.categorie] ?? "#94a3b8",
+                  }}
+                />
+                {c.categorie}
+                <span className="text-slate-400">{c.nbFundsAtRef}</span>
+              </button>
+            );
+          })}
         </div>
         <div style={{ width: "100%", height: 460 }}>
           <ResponsiveContainer>
