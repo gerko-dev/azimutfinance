@@ -14,7 +14,7 @@
 // quatorze points.
 
 import type { Fund, FundObservation } from "./fcp";
-import { obsAt } from "./fcp";
+import { obsAt, aumAt } from "./fcp";
 
 /** Observation d'un fonds a une date, seulement si elle porte une VL.
  *
@@ -1779,4 +1779,145 @@ export function comparatifPerformances(
   const totauxAnnuels = annees.map((a) => ({ annee: a.annee, perf: a.fonds }));
 
   return { fenetres, annees, mois, totauxAnnuels, aReference: reference.length > 0 };
+}
+
+// ==========================================
+// FENETRES GLISSANTES ET NUAGE DE CATEGORIE
+// ==========================================
+
+/** Une fenetre de douze mois s'achevant a `date`. */
+export type FenetreGlissante = {
+  date: string;
+  fonds: number | null;
+  mediane: number | null;
+};
+
+export type Glissantes = {
+  points: FenetreGlissante[];
+  /** Sur les fenetres ou les deux sont connues. */
+  nbComparables: number;
+  /** Part des fenetres ou le fonds fait mieux que la mediane de sa categorie. */
+  tauxSurperformance: number | null;
+  /** Part des fenetres ou le fonds gagne de l'argent. */
+  tauxPositif: number | null;
+  pire: number | null;
+  mediane: number | null;
+  meilleure: number | null;
+};
+
+/**
+ * Performances sur douze mois glissants, mois par mois.
+ *
+ * Une performance annuelle calendaire depend du jour ou l'on coupe l'annee :
+ * un fonds peut afficher une mauvaise annee 2024 et une excellente periode
+ * juin 2024 - juin 2025. Le glissant supprime cet arbitraire et repond a la
+ * seule question qui compte pour un souscripteur : « si j'etais entre n'importe
+ * quand, qu'aurais-je gagne au bout d'un an ? »
+ */
+export function fenetresGlissantes(
+  vl: Array<{ date: string; vl: number }>,
+  medianeSerie: Array<{ date: string; value: number | null }>,
+): Glissantes {
+  const vide: Glissantes = {
+    points: [],
+    nbComparables: 0,
+    tauxSurperformance: null,
+    tauxPositif: null,
+    pire: null,
+    mediane: null,
+    meilleure: null,
+  };
+  if (vl.length < 2) return vide;
+
+  const fonds = vl.map((p) => ({ date: p.date, valeur: p.vl as number | null }));
+  const mediane = medianeSerie.map((p) => ({ date: p.date, valeur: p.value }));
+
+  // Une observation par mois suffit : douze mois glissants pas a pas quotidien
+  // donneraient neuf cents points quasi identiques pour la meme information.
+  const parMois = new Map<string, string>();
+  for (const p of vl) parMois.set(p.date.slice(0, 7), p.date);
+  const dates = [...parMois.values()].sort();
+
+  const points: FenetreGlissante[] = [];
+  for (const d of dates) {
+    const debut = new Date(toMs(d) - 365.25 * MS_PER_DAY).toISOString().slice(0, 10);
+    if (debut < vl[0].date) continue; // fenetre incomplete : on n'invente pas
+    points.push({
+      date: d,
+      fonds: perfEntre(fonds, debut, d),
+      mediane: perfEntre(mediane, debut, d),
+    });
+  }
+
+  const duFonds = points.map((p) => p.fonds).filter((v): v is number => v !== null);
+  const comparables = points.filter((p) => p.fonds !== null && p.mediane !== null);
+  return {
+    points,
+    nbComparables: comparables.length,
+    tauxSurperformance:
+      comparables.length > 0
+        ? comparables.filter((p) => (p.fonds as number) > (p.mediane as number)).length /
+          comparables.length
+        : null,
+    tauxPositif:
+      duFonds.length > 0 ? duFonds.filter((v) => v > 0).length / duFonds.length : null,
+    pire: duFonds.length > 0 ? Math.min(...duFonds) : null,
+    mediane: percentile(duFonds, 0.5),
+    meilleure: duFonds.length > 0 ? Math.max(...duFonds) : null,
+  };
+}
+
+/** Un fonds de la categorie, place sur le plan risque / rendement. */
+export type PointNuage = {
+  id: string;
+  nom: string;
+  gestionnaire: string;
+  volatilite: number;
+  perf1An: number;
+  aum: number | null;
+  courant: boolean;
+};
+
+/**
+ * Nuage risque / rendement de la categorie.
+ *
+ * Classer des fonds sur la seule performance revient a feliciter celui qui a
+ * pris le plus de risque dans un marche haussier. Le nuage remet les deux
+ * dimensions cote a cote : a rendement egal, le fonds le plus a gauche est le
+ * mieux gere.
+ *
+ * Les fonds dont la serie ne permet pas d'estimer une volatilite honnete en
+ * sont absents plutot que places a zero — un point colle contre l'axe se lit
+ * « sans risque ».
+ */
+export function nuageRisqueRendement(
+  cohort: Fund[],
+  fondsCourantId: string,
+  refQuarter: string,
+): PointNuage[] {
+  const out: PointNuage[] = [];
+  for (const f of cohort) {
+    const pts = f.observations
+      .filter((o) => o.vl !== null && o.vl > 0)
+      .map((o) => ({ date: o.date, vl: o.vl as number }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+    if (pts.length < 2) continue;
+    const debut = new Date(toMs(pts[pts.length - 1].date) - 365.25 * MS_PER_DAY)
+      .toISOString()
+      .slice(0, 10);
+    const fenetre = pts.filter((p) => p.date >= debut);
+    const vol = volatiliteAnnualisee(fenetre);
+    const perf = perfWindow(f, 1, "1Y");
+    if (vol === null || !perf.available) continue;
+    out.push({
+      id: f.id,
+      nom: f.nom,
+      gestionnaire: f.gestionnaire,
+      volatilite: vol,
+      perf1An: perf.totalReturn,
+      aum: aumAt(f, refQuarter),
+      courant: f.id === fondsCourantId,
+    });
+  }
+  return out.sort((a, b) => a.volatilite - b.volatilite);
 }

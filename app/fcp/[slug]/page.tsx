@@ -20,13 +20,14 @@ import {
   excessVsCategory,
   aumGrowthDecomposition,
   publicationCadence,
-  rolling1YStats,
   marketShareHistory,
   quartileHistory,
   quartileInCohort,
   aumDecomposition,
   statsRisque,
   comparatifPerformances,
+  fenetresGlissantes,
+  nuageRisqueRendement,
 } from "@/lib/fcpMath";
 import { benchmarkPourCategorie } from "@/lib/fcpBenchmarks";
 import { pageMetadata } from "@/lib/seo";
@@ -185,6 +186,12 @@ export default async function FCPDetailPage({
     excess: f.fonds !== null && f.mediane !== null ? f.fonds - f.mediane : null,
   }));
 
+  // === BLOCK 3 quater - OUTILS TRANSVERSAUX ===
+  // Douze mois glissants : une annee calendaire depend du jour ou l'on coupe.
+  const glissantes = fenetresGlissantes(vlSeries, cohortRebased);
+  // Nuage risque / rendement de la categorie, fonds courant compris.
+  const nuage = nuageRisqueRendement(cohort, fund.id, refQuarter);
+
   // === BLOCK 4 - FRISE QUARTILES ===
   const quartileFrame = quartileHistory(fund, cohort, quarterEnds.slice(-16));
   const top2Pct =
@@ -253,9 +260,6 @@ export default async function FCPDetailPage({
   // quand le fonds ne publie pas assez souvent (cf. lib/fcpMath).
   const stats = statsRisque(fund, cohort);
 
-  // === BLOCK 13 - ROLLING 1Y ===
-  const rolling = rolling1YStats(fund, quarterEnds, 8);
-
   return (
     <div className="min-h-screen bg-slate-50">
       <Header />
@@ -297,6 +301,8 @@ export default async function FCPDetailPage({
         ytdRank={ytdRank}
         ytdRankBase={ytdRankBase}
         comparatif={comparatif}
+        glissantes={glissantes}
+        nuage={nuage}
         // quartile frieze
         quartileFrame={quartileFrame}
         top2Pct={top2Pct}
@@ -314,8 +320,6 @@ export default async function FCPDetailPage({
         growth3Y={growth3Y}
         // cadence
         cadence={cadence}
-        // rolling
-        rolling={rolling}
         // statistiques de risque
         stats={stats}
       />

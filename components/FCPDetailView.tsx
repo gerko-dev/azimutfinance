@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
+  LineChart,
   Line,
   BarChart,
   Bar,
@@ -16,6 +17,9 @@ import {
   Legend,
   ReferenceLine,
   Cell,
+  ScatterChart,
+  Scatter,
+  ZAxis,
 } from "recharts";
 import { ResponsiveContainer } from "@/components/ui/ChartContainer";
 
@@ -191,11 +195,24 @@ type Comparatif = {
   aReference: boolean;
 };
 
-type Rolling = {
-  points: Array<{ asOf: string; perf1Y: number | null }>;
-  min: number | null;
-  median: number | null;
-  max: number | null;
+type Glissantes = {
+  points: Array<{ date: string; fonds: number | null; mediane: number | null }>;
+  nbComparables: number;
+  tauxSurperformance: number | null;
+  tauxPositif: number | null;
+  pire: number | null;
+  mediane: number | null;
+  meilleure: number | null;
+};
+
+type PointNuage = {
+  id: string;
+  nom: string;
+  gestionnaire: string;
+  volatilite: number;
+  perf1An: number;
+  aum: number | null;
+  courant: boolean;
 };
 
 type Props = {
@@ -249,9 +266,10 @@ type Props = {
   growth1Y: AumGrowth | null;
   growth3Y: AumGrowth | null;
   cadence: Cadence;
-  rolling: Rolling;
   stats: StatsRisque;
   comparatif: Comparatif;
+  glissantes: Glissantes;
+  nuage: PointNuage[];
 };
 
 // ==========================================
@@ -337,6 +355,84 @@ function Cellule({
       {v === null ? "—" : fmtPct(v, 2)}
     </td>
   );
+}
+
+/** Un resultat du simulateur : montant final et plus-value. */
+function Resultat({
+  titre,
+  montantInitial,
+  valeur,
+  vedette = false,
+}: {
+  titre: string;
+  montantInitial: number;
+  valeur: number | null;
+  vedette?: boolean;
+}) {
+  const gain = valeur !== null ? valeur - montantInitial : null;
+  return (
+    <div
+      className={`rounded-lg border p-4 ${
+        vedette ? "border-slate-900 bg-slate-50" : "border-slate-200"
+      }`}
+    >
+      <div className="text-xs text-slate-500 truncate" title={titre}>
+        {titre}
+      </div>
+      <div className="text-xl font-semibold tabular-nums mt-1">
+        {valeur === null ? "—" : fmtEntier(valeur)}
+        {valeur !== null && (
+          <span className="text-xs font-normal text-slate-400 ml-1">FCFA</span>
+        )}
+      </div>
+      {gain !== null && (
+        <div
+          className={`text-sm font-medium tabular-nums ${
+            gain >= 0 ? "text-green-700" : "text-red-700"
+          }`}
+        >
+          {gain >= 0 ? "+" : "−"}
+          {fmtEntier(Math.abs(gain))}
+          <span className="text-xs font-normal ml-1">
+            ({fmtPct(gain / montantInitial, 1)})
+          </span>
+        </div>
+      )}
+      {valeur === null && (
+        <div className="text-xs text-slate-400 mt-1">
+          Pas de donnée sur cette période
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Un repere chiffre au-dessus d'un graphe. */
+function Repere({
+  label,
+  valeur,
+  sous,
+  ton = "neutre",
+}: {
+  label: string;
+  valeur: string;
+  sous?: string;
+  ton?: "bon" | "mauvais" | "neutre";
+}) {
+  const couleur =
+    ton === "bon" ? "text-green-700" : ton === "mauvais" ? "text-red-700" : "text-slate-900";
+  return (
+    <div className="rounded-md border border-slate-200 px-3 py-2">
+      <div className="text-[11px] text-slate-500">{label}</div>
+      <div className={`text-base font-semibold tabular-nums ${couleur}`}>{valeur}</div>
+      {sous && <div className="text-[10px] text-slate-400">{sous}</div>}
+    </div>
+  );
+}
+
+/** Montant entier, separateurs francais. */
+function fmtEntier(v: number): string {
+  return Math.round(v).toLocaleString("fr-FR").replace(/\u202f|\u00a0|,/g, " ");
 }
 
 /** Duree en annees, accordee. « 1 ans » se remarque tout de suite. */
@@ -492,9 +588,10 @@ export default function FCPDetailView(props: Props) {
     growth1Y,
     growth3Y,
     cadence,
-    rolling,
     stats,
     comparatif,
+    glissantes,
+    nuage,
   } = props;
 
   const [activeTab, setActiveTab] = useState<Tab>("overview");
@@ -503,6 +600,11 @@ export default function FCPDetailView(props: Props) {
   // un indice boursier et une VL en FCFA n'ont pas d'axe commun.
   const [showBench, setShowBench] = useState(false);
   const [showMediane, setShowMediane] = useState(false);
+  // Simulateur : le montant est tenu en TEXTE. Un `Number(v) || 100000` remet
+  // une valeur des que le champ est vide, et l'utilisateur ne peut plus effacer
+  // son montant pour en saisir un autre.
+  const [montantTxt, setMontantTxt] = useState("1000000");
+  const [dateEntree, setDateEntree] = useState("");
 
   // === Chiffre de tete : VL du dernier bulletin, sinon dernier point connu ===
   const headVL = useMemo(() => {
@@ -595,6 +697,113 @@ export default function FCPDetailView(props: Props) {
     return { vl: null, date: "", repli: false, note: "" };
   }, [fund.vlOrigine, fund.dateOrigine, vlSeries]);
 
+  // === Simulateur d'investissement ===
+  //
+  //  Un pourcentage ne parle pas ; un montant en francs, si. La simulation
+  //  achete des parts a la VL du jour choisi et les valorise a la derniere VL
+  //  connue. Elle ignore les frais d'entree et de gestion prelevés hors VL —
+  //  c'est dit sous le resultat, faute de quoi le chiffre serait trop flatteur.
+  const dateDepart = useMemo(() => {
+    if (vlSeries.length === 0) return "";
+    const min = vlSeries[0].date;
+    const max = vlSeries[vlSeries.length - 1].date;
+    if (dateEntree && dateEntree >= min && dateEntree <= max) return dateEntree;
+    // Par defaut : trois ans en arriere, ou l'origine de la serie si elle est
+    // plus recente.
+    const troisAns = new Date(
+      new Date(max + "T00:00:00Z").getTime() - 3 * 365.25 * 86400000
+    )
+      .toISOString()
+      .slice(0, 10);
+    return troisAns > min ? troisAns : min;
+  }, [dateEntree, vlSeries]);
+
+  const simulation = useMemo(() => {
+    const montant = Number((montantTxt || "").replace(/[^0-9]/g, ""));
+    if (!Number.isFinite(montant) || montant <= 0 || vlSeries.length < 2) return null;
+
+    /** Valeur d'une serie a la date, ou au dernier point connu avant. */
+    const auPlusTard = (
+      serie: Array<{ date: string; v: number | null }>,
+      d: string
+    ): number | null => {
+      let trouve: number | null = null;
+      for (const p of serie) {
+        if (p.date > d) break;
+        if (p.v !== null) trouve = p.v;
+      }
+      return trouve;
+    };
+
+    const sVl = vlSeries.map((p) => ({ date: p.date, v: p.vl as number | null }));
+    const sMed = cohortRebased.map((p) => ({ date: p.date, v: p.value }));
+    const sBench = (benchmark?.serie ?? []).map((p) => ({ date: p.date, v: p.value }));
+    const fin = vlSeries[vlSeries.length - 1].date;
+
+    const gain = (serie: Array<{ date: string; v: number | null }>) => {
+      const a = auPlusTard(serie, dateDepart);
+      const b = auPlusTard(serie, fin);
+      return a !== null && b !== null && a > 0 ? montant * (b / a) : null;
+    };
+
+    const valeur = gain(sVl);
+    if (valeur === null) return null;
+    return {
+      montant,
+      dateDepart,
+      dateFin: fin,
+      valeur,
+      mediane: gain(sMed),
+      marche: sBench.length > 0 ? gain(sBench) : null,
+      annees:
+        (new Date(fin + "T00:00:00Z").getTime() -
+          new Date(dateDepart + "T00:00:00Z").getTime()) /
+        (365.25 * 86400000),
+    };
+  }, [montantTxt, dateDepart, vlSeries, cohortRebased, benchmark]);
+
+  // === Courbe de perte : l'ecart a chaque instant au plus haut atteint ===
+  //
+  //  « Plus forte baisse : -5,80 % » ne dit pas combien de fois le fonds a
+  //  decroche, ni combien de temps il est reste sous son sommet. Cette courbe
+  //  le montre : chaque creux est une periode ou un souscripteur entre au plus
+  //  haut etait en moins-value.
+  const courbePerte = useMemo(() => {
+    // Boucle explicite et non `.map` : le sommet courant se reporte d'un point
+    // au suivant, et le compilateur React refuse qu'une fermeture reaffecte une
+    // variable de rendu.
+    const out: Array<{ date: string; perte: number }> = [];
+    let sommet = 0;
+    for (const p of vlSeries) {
+      if (p.vl > sommet) sommet = p.vl;
+      out.push({ date: p.date, perte: sommet > 0 ? (p.vl / sommet - 1) * 100 : 0 });
+    }
+    return out;
+  }, [vlSeries]);
+
+  // === Douze mois glissants ===
+  const glissantesData = useMemo(
+    () =>
+      glissantes.points.map((p) => ({
+        date: p.date,
+        fonds: p.fonds !== null ? p.fonds * 100 : null,
+        mediane: p.mediane !== null ? p.mediane * 100 : null,
+      })),
+    [glissantes]
+  );
+
+  // === Nuage risque / rendement, en pourcents ===
+  const nuageData = useMemo(
+    () =>
+      nuage.map((n) => ({
+        ...n,
+        x: n.volatilite * 100,
+        y: n.perf1An * 100,
+        z: n.aum && n.aum > 0 ? n.aum : 1,
+      })),
+    [nuage]
+  );
+
   /** Performance depuis la creation du fonds.
    *
    *  Elle n'a pas sa place dans le tableau comparatif : la mediane de categorie
@@ -666,6 +875,44 @@ export default function FCPDetailView(props: Props) {
       })),
     [aumDecomp]
   );
+
+  // === Collecte nette cumulee ===
+  //
+  //  La decomposition trimestrielle montre la collecte trimestre par
+  //  trimestre ; l'oeil n'en tire pas la tendance. Le cumul repond a la
+  //  question de fond : depuis trois ans, ce fonds attire-t-il de l'argent, ou
+  //  se contente-t-il de faire fructifier celui qu'il a deja ? Un fonds peut
+  //  gagner 40 % et perdre des souscripteurs — les deux courbes se lisent alors
+  //  en sens contraire.
+  const collecteCumulee = useMemo(() => {
+    const out: Array<{ date: string; cumul: number; trimestre: number | null }> = [];
+    let cumul = 0;
+    for (const p of aumDecomp) {
+      if (p.netFlowAmount !== null) cumul += p.netFlowAmount;
+      out.push({
+        date: p.date.slice(0, 7),
+        cumul: cumul / 1e9,
+        trimestre: p.netFlowAmount !== null ? p.netFlowAmount / 1e9 : null,
+      });
+    }
+    return out.slice(-16);
+  }, [aumDecomp]);
+
+  // === Delais entre deux VL publiees ===
+  const delais = useMemo(() => {
+    const jours: number[] = [];
+    for (let i = 1; i < vlSeries.length; i++) {
+      const d =
+        (new Date(vlSeries[i].date + "T00:00:00Z").getTime() -
+          new Date(vlSeries[i - 1].date + "T00:00:00Z").getTime()) /
+        86400000;
+      if (d > 0) jours.push(d);
+    }
+    if (jours.length === 0) return null;
+    const tries = [...jours].sort((a, b) => a - b);
+    const q = (x: number) => tries[Math.min(tries.length - 1, Math.floor(tries.length * x))];
+    return { median: q(0.5), p90: q(0.9), max: tries[tries.length - 1], n: jours.length };
+  }, [vlSeries]);
 
   // === Excess data : 12 derniers trimestres ===
   const excessData = useMemo(
@@ -1229,6 +1476,76 @@ export default function FCPDetailView(props: Props) {
               </div>
             </div>
 
+
+            {/* ============================================ */}
+            {/* SIMULATEUR : ET SI J'AVAIS INVESTI ?          */}
+            {/* ============================================ */}
+            {simulation !== null && (
+              <section className="bg-white border border-slate-200 rounded-lg p-5">
+                <div className="flex flex-wrap items-end justify-between gap-4 mb-4">
+                  <div>
+                    <h2 className="text-lg font-semibold text-slate-900">
+                      Et si j&apos;avais investi ?
+                    </h2>
+                    <p className="text-xs text-slate-500">
+                      Achat de parts à la VL du jour choisi, valorisées à la
+                      dernière VL connue
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-3">
+                    <label className="text-xs">
+                      <span className="block text-slate-500 mb-1">Montant (FCFA)</span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={montantTxt}
+                        onChange={(e) => setMontantTxt(e.target.value)}
+                        className="w-36 px-3 py-1.5 border border-slate-200 rounded-md text-sm tabular-nums"
+                      />
+                    </label>
+                    <label className="text-xs">
+                      <span className="block text-slate-500 mb-1">Date d&apos;entrée</span>
+                      <input
+                        type="date"
+                        value={simulation.dateDepart}
+                        min={vlSeries[0].date}
+                        max={vlSeries[vlSeries.length - 1].date}
+                        onChange={(e) => setDateEntree(e.target.value)}
+                        className="px-3 py-1.5 border border-slate-200 rounded-md text-sm"
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <Resultat
+                    titre={fund.nom}
+                    montantInitial={simulation.montant}
+                    valeur={simulation.valeur}
+                    vedette
+                  />
+                  <Resultat
+                    titre="Médiane de la catégorie"
+                    montantInitial={simulation.montant}
+                    valeur={simulation.mediane}
+                  />
+                  <Resultat
+                    titre={benchmark?.label ?? "Référence de marché"}
+                    montantInitial={simulation.montant}
+                    valeur={simulation.marche}
+                  />
+                </div>
+
+                <p className="text-[11px] text-slate-400 mt-3">
+                  Du {fmtDateFR(simulation.dateDepart)} au{" "}
+                  {fmtDateFR(simulation.dateFin)}, soit{" "}
+                  {fmtAnnees(simulation.annees)}. Hors droits d&apos;entrée et de
+                  sortie : ils se retranchent du résultat et varient d&apos;une SGO à
+                  l&apos;autre. Les frais de gestion, eux, sont déjà dans la VL.
+                </p>
+              </section>
+            )}
+
             {/* ============================================ */}
             {/* BLOCK 2 : TABLEAU DE PERFORMANCE */}
             {/* ============================================ */}
@@ -1786,6 +2103,62 @@ export default function FCPDetailView(props: Props) {
                   </section>
                 </div>
 
+
+                {courbePerte.length > 2 && (
+                  <section className="bg-white border border-slate-200 rounded-lg p-5">
+                    <div className="mb-3">
+                      <h2 className="text-lg font-semibold text-slate-900">
+                        Écart au plus haut
+                      </h2>
+                      <p className="text-xs text-slate-500">
+                        Ce que perdait, à chaque date, un souscripteur entré au
+                        sommet précédent. Le retour à zéro marque un nouveau
+                        record.
+                      </p>
+                    </div>
+                    <div style={{ width: "100%", height: 220 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={courbePerte}>
+                          <defs>
+                            <linearGradient id="perteGrad" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#dc2626" stopOpacity={0.05} />
+                              <stop offset="100%" stopColor="#dc2626" stopOpacity={0.3} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                          <XAxis
+                            dataKey="date"
+                            tick={{ fontSize: 10, fill: "#94a3b8" }}
+                            tickFormatter={(d) => fmtDateShort(String(d))}
+                            minTickGap={30}
+                          />
+                          <YAxis
+                            tick={{ fontSize: 10, fill: "#94a3b8" }}
+                            tickFormatter={(v) => `${v}%`}
+                            width={44}
+                          />
+                          <Tooltip
+                            formatter={(v) => [
+                              Number(v).toFixed(2).replace(".", ",") + " %",
+                              "Écart au plus haut",
+                            ]}
+                            labelFormatter={(d) => fmtDateFR(String(d))}
+                            contentStyle={{ fontSize: 12 }}
+                          />
+                          <Area
+                            type="monotone"
+                            dataKey="perte"
+                            stroke="#dc2626"
+                            strokeWidth={1.5}
+                            fill="url(#perteGrad)"
+                            isAnimationActive={false}
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </section>
+                )}
+
                 {/* Distribution des rendements mensuels */}
                 {stats.histogramme.length > 0 && (
                   <section className="bg-white border border-slate-200 rounded-lg p-5">
@@ -1835,10 +2208,101 @@ export default function FCPDetailView(props: Props) {
 
         {activeTab === "regularite" && (
           <>
+            {glissantesData.length > 2 && (
+              <section className="bg-white border border-slate-200 rounded-lg p-5">
+                <div className="mb-3">
+                  <h2 className="text-lg font-semibold text-slate-900">
+                    Douze mois glissants
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Ce qu&apos;aurait rapporté une entrée à n&apos;importe quel mois,
+                    revendue un an plus tard — l&apos;année calendaire dépend du jour
+                    où on la coupe, pas celle-ci
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                  <Repere
+                    label="Pire fenêtre"
+                    valeur={fmtPct(glissantes.pire, 1)}
+                    ton={glissantes.pire !== null && glissantes.pire < 0 ? "mauvais" : "neutre"}
+                  />
+                  <Repere label="Médiane" valeur={fmtPct(glissantes.mediane, 1)} />
+                  <Repere label="Meilleure fenêtre" valeur={fmtPct(glissantes.meilleure, 1)} ton="bon" />
+                  <Repere
+                    label="Fenêtres gagnantes"
+                    valeur={
+                      glissantes.tauxPositif === null
+                        ? "NC"
+                        : fmtPctRaw(glissantes.tauxPositif, 0)
+                    }
+                    sous={`${glissantesData.length} fenêtres`}
+                  />
+                </div>
+
+                <div style={{ width: "100%", height: 260 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={glissantesData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                      <XAxis
+                        dataKey="date"
+                        tick={{ fontSize: 10, fill: "#94a3b8" }}
+                        tickFormatter={(d) => fmtDateShort(String(d))}
+                        minTickGap={30}
+                      />
+                      <YAxis
+                        tick={{ fontSize: 10, fill: "#94a3b8" }}
+                        tickFormatter={(v) => `${v}%`}
+                        width={44}
+                      />
+                      <Tooltip
+                        formatter={(v, n) => [
+                          Number(v).toFixed(2).replace(".", ",") + " %",
+                          n === "fonds" ? fund.nom : "Médiane catégorie",
+                        ]}
+                        labelFormatter={(d) => `12 mois au ${fmtDateFR(String(d))}`}
+                        contentStyle={{ fontSize: 12 }}
+                      />
+                      <ReferenceLine y={0} stroke="#94a3b8" />
+                      <Line
+                        type="monotone"
+                        dataKey="fonds"
+                        stroke="#185FA5"
+                        strokeWidth={2}
+                        dot={false}
+                        connectNulls={false}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="mediane"
+                        stroke={MEDIANE_COLOR}
+                        strokeWidth={1.5}
+                        strokeDasharray="4 3"
+                        dot={false}
+                        connectNulls={false}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {glissantes.tauxSurperformance !== null && (
+                  <p className="text-xs text-slate-600 mt-3 pt-3 border-t border-slate-100">
+                    Le fonds fait mieux que la médiane de sa catégorie sur{" "}
+                    <span className="font-semibold text-slate-900">
+                      {fmtPctRaw(glissantes.tauxSurperformance, 0)}
+                    </span>{" "}
+                    des {glissantes.nbComparables} fenêtres de douze mois.
+                    Battre sa catégorie une fois est un accident ; la battre
+                    quatre fois sur cinq est une méthode.
+                  </p>
+                )}
+              </section>
+            )}
+
             {/* ============================================ */}
             {/* BLOCK 4 + 13 : QUARTILES + ROLLING 1Y */}
             {/* ============================================ */}
-            <section className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <section className="grid grid-cols-1 gap-5">
               {/* Frise quartiles */}
               <div className="bg-white border border-slate-200 rounded-lg p-5">
                 <div className="mb-3">
@@ -1870,32 +2334,6 @@ export default function FCPDetailView(props: Props) {
                 </div>
               </div>
 
-              {/* Rolling 1Y */}
-              <div className="bg-white border border-slate-200 rounded-lg p-5">
-                <div className="mb-3">
-                  <h2 className="text-lg font-semibold text-slate-900">Performances 1 an glissantes</h2>
-                  <p className="text-xs text-slate-500">
-                    Évite l&apos;effet « année calendaire » — fenêtre 1A à chaque fin de trimestre
-                  </p>
-                </div>
-                <div className="grid grid-cols-3 gap-3 mb-3">
-                  <Stat label="Min" value={fmtPct(rolling.min, 1)} tone={rolling.min !== null && rolling.min < 0 ? "rose" : "neutral"} />
-                  <Stat label="Médiane" value={fmtPct(rolling.median, 1)} tone="neutral" />
-                  <Stat label="Max" value={fmtPct(rolling.max, 1)} tone={rolling.max !== null && rolling.max >= 0 ? "emerald" : "neutral"} />
-                </div>
-                <div style={{ width: "100%", height: 140 }}>
-                  <ResponsiveContainer>
-                    <BarChart data={rolling.points.map((p) => ({ date: p.asOf.slice(0, 7), perf: p.perf1Y !== null ? p.perf1Y * 100 : null }))}>
-                      <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
-                      <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-                      <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => v + "%"} width={40} />
-                      <Tooltip formatter={(v) => Number(v).toFixed(2) + "%"} />
-                      <ReferenceLine y={0} stroke="#94a3b8" />
-                      <Bar dataKey="perf" fill="#185FA5" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
             </section>
 
           </>
@@ -1903,6 +2341,63 @@ export default function FCPDetailView(props: Props) {
 
         {activeTab === "encours" && (
           <>
+            {collecteCumulee.length > 2 && (
+              <section className="bg-white border border-slate-200 rounded-lg p-5">
+                <div className="mb-3">
+                  <h2 className="text-lg font-semibold text-slate-900">
+                    Collecte nette cumulée
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Souscriptions moins rachats, cumulées trimestre après
+                    trimestre. Une courbe qui monte pendant que la performance
+                    monte aussi : le marché suit le gérant. Une courbe qui
+                    descend malgré une bonne performance : il ne le suit pas.
+                  </p>
+                </div>
+                <div style={{ width: "100%", height: 260 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={collecteCumulee}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                      <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#94a3b8" }} />
+                      <YAxis
+                        tick={{ fontSize: 10, fill: "#94a3b8" }}
+                        tickFormatter={(v) => `${Number(v).toFixed(0)}`}
+                        width={44}
+                        label={{
+                          value: "Mds FCFA",
+                          angle: -90,
+                          position: "insideLeft",
+                          style: { fontSize: 10, fill: "#94a3b8" },
+                        }}
+                      />
+                      <Tooltip
+                        formatter={(v, n) => [
+                          Number(v).toFixed(2).replace(".", ",") + " Mds FCFA",
+                          n === "cumul" ? "Cumul" : "Sur le trimestre",
+                        ]}
+                        contentStyle={{ fontSize: 12 }}
+                      />
+                      <ReferenceLine y={0} stroke="#94a3b8" />
+                      <Bar dataKey="trimestre" fill="#cbd5e1" radius={[2, 2, 0, 0]} />
+                      <Line
+                        type="monotone"
+                        dataKey="cumul"
+                        stroke="#185FA5"
+                        strokeWidth={2}
+                        dot={false}
+                      />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-2">
+                  La collecte n&apos;est pas publiée : elle est déduite de la
+                  variation d&apos;encours dont on retire l&apos;effet de la
+                  performance. Ce qui reste est ce que les souscripteurs ont
+                  apporté ou retiré — au bruit d&apos;arrondi près.
+                </p>
+              </section>
+            )}
+
             {/* ============================================ */}
             {/* BLOCK 5 + 11 : DECOMPOSITION AUM + CROISSANCE */}
             {/* ============================================ */}
@@ -2013,6 +2508,95 @@ export default function FCPDetailView(props: Props) {
 
         {activeTab === "comparatif" && (
           <>
+            {nuageData.length >= 4 && (
+              <section className="bg-white border border-slate-200 rounded-lg p-5">
+                <div className="mb-3">
+                  <h2 className="text-lg font-semibold text-slate-900">
+                    Risque et rendement dans la catégorie
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    {nuageData.length} fonds {fund.categorie.toLowerCase()} sur un an.
+                    Classer sur la seule performance revient à féliciter celui qui a
+                    pris le plus de risque : à rendement égal, le mieux géré est le
+                    plus à gauche.
+                  </p>
+                </div>
+                <div style={{ width: "100%", height: 340 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ScatterChart margin={{ top: 8, right: 12, bottom: 24, left: 4 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                      <XAxis
+                        type="number"
+                        dataKey="x"
+                        name="Volatilité"
+                        tick={{ fontSize: 10, fill: "#94a3b8" }}
+                        tickFormatter={(v) => `${Number(v).toFixed(0)}%`}
+                        label={{
+                          value: "Volatilité annualisée",
+                          position: "insideBottom",
+                          offset: -12,
+                          style: { fontSize: 11, fill: "#64748b" },
+                        }}
+                      />
+                      <YAxis
+                        type="number"
+                        dataKey="y"
+                        name="Performance"
+                        tick={{ fontSize: 10, fill: "#94a3b8" }}
+                        tickFormatter={(v) => `${Number(v).toFixed(0)}%`}
+                        width={46}
+                      />
+                      <ZAxis type="number" dataKey="z" range={[40, 400]} />
+                      <ReferenceLine y={0} stroke="#94a3b8" />
+                      <Tooltip
+                        cursor={{ strokeDasharray: "3 3" }}
+                        contentStyle={{ fontSize: 12 }}
+                        content={({ active, payload }) => {
+                          if (!active || !payload || payload.length === 0) return null;
+                          const d = payload[0].payload as PointNuage & {
+                            x: number;
+                            y: number;
+                          };
+                          return (
+                            <div className="bg-white border border-slate-200 rounded-md px-3 py-2 shadow-sm">
+                              <div className="font-medium text-slate-900">{d.nom}</div>
+                              <div className="text-[11px] text-slate-500">
+                                {d.gestionnaire}
+                              </div>
+                              <div className="text-xs mt-1 tabular-nums">
+                                1 an {fmtPct(d.perf1An, 2)} · volatilité{" "}
+                                {fmtPctRaw(d.volatilite, 2)}
+                              </div>
+                              <div className="text-[11px] text-slate-500 tabular-nums">
+                                Encours {fmtBigFCFA(d.aum)} FCFA
+                              </div>
+                            </div>
+                          );
+                        }}
+                      />
+                      <Scatter data={nuageData} isAnimationActive={false}>
+                        {nuageData.map((d) => (
+                          <Cell
+                            key={d.id}
+                            fill={d.courant ? "#0f172a" : CATEGORY_COLORS[fund.categorie] || "#94a3b8"}
+                            fillOpacity={d.courant ? 1 : 0.45}
+                            stroke={d.courant ? "#0f172a" : "none"}
+                            strokeWidth={d.courant ? 2 : 0}
+                          />
+                        ))}
+                      </Scatter>
+                    </ScatterChart>
+                  </ResponsiveContainer>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-2">
+                  La taille du point est l&apos;encours. {fund.nom} est en noir. Les
+                  fonds dont la série ne permet pas d&apos;estimer une volatilité
+                  honnête sont absents du nuage plutôt que collés contre
+                  l&apos;axe, où ils se liraient « sans risque ».
+                </p>
+              </section>
+            )}
+
             {/* ============================================ */}
             {/* BLOCK 7 + 8 : PEER GROUP + AUTRES FONDS GESTIONNAIRE */}
             {/* ============================================ */}
@@ -2058,6 +2642,40 @@ export default function FCPDetailView(props: Props) {
 
         {activeTab === "publication" && (
           <>
+            {delais !== null && (
+              <section className="bg-white border border-slate-200 rounded-lg p-5">
+                <div className="mb-3">
+                  <h2 className="text-lg font-semibold text-slate-900">
+                    Délai entre deux VL
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Sur {delais.n} intervalles observés. Un investisseur ne peut
+                    entrer ni sortir entre deux VL : ce délai est le temps
+                    pendant lequel son argent est immobilisé sans prix connu.
+                  </p>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <Repere
+                    label="Délai médian"
+                    valeur={`${Math.round(delais.median)} j`}
+                    sous="une VL sur deux"
+                  />
+                  <Repere
+                    label="9 fois sur 10"
+                    valeur={`${Math.round(delais.p90)} j`}
+                    sous="au plus"
+                    ton={delais.p90 > 45 ? "mauvais" : "neutre"}
+                  />
+                  <Repere
+                    label="Plus longue attente"
+                    valeur={`${Math.round(delais.max)} j`}
+                    sous="sur tout l'historique"
+                    ton={delais.max > 120 ? "mauvais" : "neutre"}
+                  />
+                </div>
+              </section>
+            )}
+
             {/* ============================================ */}
             {/* BLOCK 12 : CADENCE DE PUBLICATION */}
             {/* ============================================ */}
