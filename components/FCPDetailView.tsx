@@ -199,6 +199,11 @@ type Props = {
   aumDelta1Y: number | null;
   latestVL: LatestVL;
   ytdQuartile: 1 | 2 | 3 | 4 | null;
+  /** Rang du fonds par performance YTD dans sa categorie, et nombre de
+   *  fonds classes. Le quartile dit « dans le premier quart », le rang dit
+   *  « 12e sur 66 » — pas la meme chose en bord de quartile. */
+  ytdRank: number | null;
+  ytdRankBase: number;
   cohortSize: number;
   perfTable: PerfRow[];
   rebasedFundSeries: RebasedPoint[];
@@ -220,8 +225,6 @@ type Props = {
   cadence: Cadence;
   rolling: Rolling;
   stats: StatsRisque;
-  /** Date BOC la plus récente toutes valeurs confondues (ISO). */
-  latestBocDate: string;
 };
 
 // ==========================================
@@ -273,6 +276,10 @@ function fmtDateFR(iso: string): string {
     year: "numeric",
     timeZone: "UTC",
   });
+}
+/** Ordinal francais : 1er, puis 2e, 3e... */
+function rangFR(n: number): string {
+  return `${n}${n === 1 ? "er" : "e"}`;
 }
 function managerSlug(name: string): string {
   return name
@@ -407,6 +414,8 @@ export default function FCPDetailView(props: Props) {
     aumDelta1Y,
     latestVL,
     ytdQuartile,
+    ytdRank,
+    ytdRankBase,
     cohortSize,
     perfTable,
     rebasedFundSeries,
@@ -426,7 +435,6 @@ export default function FCPDetailView(props: Props) {
     cadence,
     rolling,
     stats,
-    latestBocDate,
   } = props;
 
   const [activeTab, setActiveTab] = useState<Tab>("overview");
@@ -701,7 +709,7 @@ export default function FCPDetailView(props: Props) {
                 <span className="text-base md:text-lg">
                   {fmtPct(fund.bocDayChange, 2)}
                 </span>
-                <span className="text-sm ml-1 text-slate-500">sur la séance</span>
+                <span className="text-sm ml-1 text-slate-500">vs VL précédente</span>
               </div>
             )}
             <div className="text-xs text-slate-400">
@@ -732,55 +740,8 @@ export default function FCPDetailView(props: Props) {
 
 
       <main className="max-w-7xl mx-auto px-4 md:px-6 py-4 md:py-6 space-y-4 md:space-y-6">
-        {/* === BANDEAU FRAÎCHEUR BOC === */}
-        {latestBocDate && (
-          <div className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs font-semibold text-emerald-900">
-            <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
-            Données au {fmtDateFR(latestBocDate)}
-          </div>
-        )}
-
         {activeTab === "overview" && (
           <>
-            {/* ============================================ */}
-            {/* BLOCK 1 : les trois chiffres de tete (la VL est dans l'en-tete) */}
-            {/* ============================================ */}
-            <section className="bg-white border border-slate-200 rounded-lg p-6">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <KPI
-                  label="Encours"
-                  value={fmtBigFCFA(aumRef) + " FCFA"}
-                  sub={
-                    aumDelta1Y !== null
-                      ? `1 an · ${fmtPct(aumDelta1Y)}`
-                      : `au ${fmtDateFR(refQuarter)}`
-                  }
-                />
-                <KPI
-                  label="Performance YTD"
-                  value={fmtPct(ytdRow?.fundValue ?? null)}
-                  sub={
-                    ytdQuartile !== null
-                      ? `${QUARTILE_LABELS[ytdQuartile]} sur ${cohortSize} fonds`
-                      : `catégorie ${fund.categorieAtRef.toLowerCase()}`
-                  }
-                />
-                <KPI
-                  label="Rang par encours"
-                  value={
-                    lastShare?.rank
-                      ? `${lastShare.rank}${lastShare.rank === 1 ? "er" : "e"}`
-                      : "—"
-                  }
-                  sub={
-                    lastShare
-                      ? `sur ${lastShare.nbInCat} · ${fmtPctRaw(lastShare.share)} de la catégorie`
-                      : `au ${fmtDateFR(refQuarter)}`
-                  }
-                />
-              </div>
-            </section>
-
             {/* ============================================ */}
             {/* BLOCK 1 bis : EVOLUTION DE LA VL + DONNEES CLES */}
             {/* ============================================ */}
@@ -1003,6 +964,67 @@ export default function FCPDetailView(props: Props) {
                 <h3 className="text-base font-medium mb-4">Données clés</h3>
                 <dl className="space-y-3 text-sm">
                   <div className="flex justify-between gap-3">
+                    <dt className="text-slate-500">Encours</dt>
+                    <dd className="font-medium text-right tabular-nums">
+                      {fmtBigFCFA(aumRef)}
+                      <span className="block text-[11px] font-normal text-slate-400">
+                        {aumDelta1Y !== null
+                          ? `${fmtPct(aumDelta1Y)} sur 1 an`
+                          : `au ${fmtDateFR(refQuarter)}`}
+                      </span>
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-slate-500">Performance YTD</dt>
+                    <dd
+                      className={`font-medium text-right tabular-nums ${
+                        ytdRow?.fundValue == null
+                          ? "text-slate-400"
+                          : ytdRow.fundValue >= 0
+                            ? "text-green-700"
+                            : "text-red-700"
+                      }`}
+                    >
+                      {fmtPct(ytdRow?.fundValue ?? null, 2)}
+                      {ytdQuartile !== null && (
+                        <span className="block text-[11px] font-normal text-slate-400">
+                          {QUARTILE_LABELS[ytdQuartile]}
+                        </span>
+                      )}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-slate-500">Rang par performance</dt>
+                    <dd className="font-medium text-right tabular-nums">
+                      {ytdRank === null ? (
+                        "NC"
+                      ) : (
+                        <>
+                          {rangFR(ytdRank)}
+                          <span className="block text-[11px] font-normal text-slate-400">
+                            sur {ytdRankBase} {fund.categorie.toLowerCase()} · YTD
+                          </span>
+                        </>
+                      )}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-slate-500">Rang par encours</dt>
+                    <dd className="font-medium text-right tabular-nums">
+                      {lastShare?.rank ? (
+                        <>
+                          {rangFR(lastShare.rank)}
+                          <span className="block text-[11px] font-normal text-slate-400">
+                            sur {lastShare.nbInCat} · {fmtPctRaw(lastShare.share)} de la
+                            catégorie
+                          </span>
+                        </>
+                      ) : (
+                        "NC"
+                      )}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-3 pt-3 border-t border-slate-100">
                     <dt className="text-slate-500">Société de gestion</dt>
                     <dd className="font-medium text-right">
                       <Link
@@ -1938,15 +1960,6 @@ function StatRow({
   );
 }
 
-function KPI({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <div className="p-3 rounded-lg border border-slate-200 bg-slate-50">
-      <div className="text-[10px] uppercase tracking-wider text-slate-500">{label}</div>
-      <div className="text-lg font-bold text-slate-900 mt-0.5">{value}</div>
-      {sub && <div className="text-[10px] text-slate-500 mt-0.5">{sub}</div>}
-    </div>
-  );
-}
 
 function Stat({
   label,

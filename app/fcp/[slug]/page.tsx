@@ -12,7 +12,6 @@ import {
   subtractCalendarDays,
   aumAt,
   categoryAt,
-  getLatestBocDate,
 } from "@/lib/fcp";
 import {
   perfWindow,
@@ -120,6 +119,15 @@ export default async function FCPDetailPage({
     .filter((p) => p.available)
     .map((p) => p.totalReturn);
   const ytdQuartile = ytd.available ? quartileInCohort(ytd.totalReturn, cohortYTDPerfs) : null;
+
+  // Rang de performance dans la categorie. Le quartile dit « dans le premier
+  // quart » ; le rang dit « 12e sur 66 », ce qui n'est pas la meme information
+  // pour un fonds en bord de quartile. Les fonds sans YTD exploitable ne sont
+  // pas classes, donc pas comptes dans la base.
+  const ytdRank = ytd.available
+    ? cohortYTDPerfs.filter((p) => p > ytd.totalReturn).length + 1
+    : null;
+  const ytdRankBase = cohortYTDPerfs.length;
 
   // Δ AUM 1Y : AUM au refQuarter vs AUM au même trim un an avant (4 trim canoniques)
   const refIdx = quarterEnds.indexOf(refQuarter);
@@ -297,6 +305,8 @@ export default async function FCPDetailPage({
         cohortRebased={cohortRebased}
         vlSeries={vlSeries}
         benchmark={benchmark}
+        ytdRank={ytdRank}
+        ytdRankBase={ytdRankBase}
         // quartile frieze
         quartileFrame={quartileFrame}
         top2Pct={top2Pct}
@@ -320,8 +330,6 @@ export default async function FCPDetailPage({
         rolling={rolling}
         // statistiques de risque
         stats={stats}
-        // BOC banner
-        latestBocDate={getLatestBocDate(funds)}
       />
     </div>
   );
