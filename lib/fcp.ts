@@ -500,8 +500,17 @@ export function loadFunds(): Fund[] {
     const dateISO = normalizeDateISO(r["Date"] || "");
     if (!gestionnaire || !nom || !dateISO) continue;
 
-    const vl = parseNumOrNull(r["Valeur Liquidative"]);
-    const aum = parseNumOrNull(r["Actif net"]);
+    // Une VL de zéro n'est pas un prix, c'est une case que l'ASGOP laisse à
+    // zéro quand le fonds n'a rien à déclarer — clôture pour CMT SONABEL, BRM
+    // OBLIGATAIRE et BRM DYNAMIQUE au 31/12/2024, simple trou pour CAPITAL SUR
+    // qui reprend ensuite jusqu'en 2025. La traiter comme un prix donnait une
+    // performance de −100 % : sur la fiche, dans le comparatif, et dans la
+    // médiane de la catégorie, qu'une observation à −100 % tire vers le bas.
+    // Six lignes sur 1 978 sont concernées.
+    const vlBrute = parseNumOrNull(r["Valeur Liquidative"]);
+    const vl = vlBrute !== null && vlBrute > 0 ? vlBrute : null;
+    const aumBrut = parseNumOrNull(r["Actif net"]);
+    const aum = aumBrut !== null && aumBrut > 0 ? aumBrut : null;
     // Si VL absente ET AUM absent, la ligne ne porte aucune info → skip
     if (vl === null && aum === null) continue;
 

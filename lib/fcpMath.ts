@@ -1680,7 +1680,7 @@ export function comparatifPerformances(
     { cle: "m6", label: "6 mois", debut: recule(6) },
     { cle: "y1", label: "1 an", debut: recule(12) },
     { cle: "y3", label: "3 ans", debut: recule(36) },
-    { cle: "origine", label: "Depuis l'origine", debut: debutHisto },
+    { cle: "origine", label: "Depuis le 1er relevé", debut: debutHisto },
   ];
 
   const fenetres: LigneComparatif[] = bornes

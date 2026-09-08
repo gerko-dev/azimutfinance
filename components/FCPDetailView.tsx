@@ -339,6 +339,12 @@ function Cellule({
   );
 }
 
+/** Duree en annees, accordee. « 1 ans » se remarque tout de suite. */
+function fmtAnnees(n: number): string {
+  const a = Math.max(1, Math.round(n));
+  return a === 1 ? "1 an" : `${a} ans`;
+}
+
 /** Ordinal francais : 1er, puis 2e, 3e... */
 function rangFR(n: number): string {
   return `${n}${n === 1 ? "er" : "e"}`;
@@ -588,6 +594,27 @@ export default function FCPDetailView(props: Props) {
     }
     return { vl: null, date: "", repli: false, note: "" };
   }, [fund.vlOrigine, fund.dateOrigine, vlSeries]);
+
+  /** Performance depuis la creation du fonds.
+   *
+   *  Elle n'a pas sa place dans le tableau comparatif : la mediane de categorie
+   *  et la reference de marche ne remontent qu'a notre premier bulletin, et
+   *  mettre un fonds ne en 2013 en face de concurrents mesures depuis 2022
+   *  ferait passer dix ans d'avance pour de la surperformance. Ici, aucune
+   *  comparaison n'est sous-entendue. */
+  const perfOrigine = useMemo(() => {
+    if (origine.vl === null || origine.vl <= 0 || !origine.date || !headVL) return null;
+    const cumulee = headVL.vl / origine.vl - 1;
+    const annees =
+      (new Date(headVL.date + "T00:00:00Z").getTime() -
+        new Date(origine.date + "T00:00:00Z").getTime()) /
+      (365.25 * 86400000);
+    return {
+      cumulee,
+      annualisee: annees >= 1 ? Math.pow(1 + cumulee, 1 / annees) - 1 : null,
+      annees,
+    };
+  }, [origine, headVL]);
 
   /** Reference stable pour « Donnees cles » : celle du graphe suit la fenetre
    *  choisie et changerait sous le curseur. */
@@ -1161,7 +1188,7 @@ export default function FCPDetailView(props: Props) {
                     </dd>
                   </div>
                   <div className="flex justify-between gap-3" title={origine.note}>
-                    <dt className="text-slate-500">Première VL</dt>
+                    <dt className="text-slate-500">Date première VL</dt>
                     <dd className="font-medium text-right">
                       {origine.date ? fmtDateFR(origine.date) : "NC"}
                       {origine.repli && (
@@ -1171,6 +1198,33 @@ export default function FCPDetailView(props: Props) {
                       )}
                     </dd>
                   </div>
+                  {perfOrigine !== null && (
+                    <div
+                      className="flex justify-between gap-3"
+                      title={
+                        origine.repli
+                          ? "Depuis notre premier relevé, faute d'origine publiée"
+                          : "Depuis la création du fonds"
+                      }
+                    >
+                      <dt className="text-slate-500">
+                        {origine.repli ? "Perf. depuis le 1er relevé" : "Perf. depuis l'origine"}
+                      </dt>
+                      <dd
+                        className={`font-medium text-right tabular-nums ${
+                          perfOrigine.cumulee >= 0 ? "text-green-700" : "text-red-700"
+                        }`}
+                      >
+                        {fmtPct(perfOrigine.cumulee, 1)}
+                        {perfOrigine.annualisee !== null && (
+                          <span className="block text-[10px] font-normal text-slate-400">
+                            {fmtPct(perfOrigine.annualisee, 1)} par an sur{" "}
+                            {fmtAnnees(perfOrigine.annees)}
+                          </span>
+                        )}
+                      </dd>
+                    </div>
+                  )}
                 </dl>
               </div>
             </div>
