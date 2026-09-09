@@ -165,7 +165,7 @@ export default async function FCPDetailPage({
   const comparatif = comparatifPerformances(
     vlSeries,
     cohortRebased,
-    benchmark ? benchmark.serie : null,
+    benchmark ? benchmark.jambes : null,
     fund.bocSnapshot?.vlOrigine && fund.bocSnapshot.dateOrigine
       ? { date: fund.bocSnapshot.dateOrigine, vl: fund.bocSnapshot.vlOrigine }
       : null

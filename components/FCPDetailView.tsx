@@ -55,7 +55,14 @@ type Benchmark = {
   cle: string;
   label: string;
   note: string;
+  /** Melange reequilibre a chaque pas. Sert au SIMULATEUR : des francs
+   *  investis decrivent une gestion, pas une moyenne. */
   serie: Array<{ date: string; value: number | null }>;
+  /** Jambes separees. Servent partout ou l'on compare des POURCENTAGES : la
+   *  reference y vaut la moyenne ponderee des performances de chaque jambe
+   *  depuis le debut de la fenetre affichee. Une seule jambe hors diversifie,
+   *  auquel cas les deux lectures coincident. */
+  jambes: Array<{ poids: number; serie: Array<{ date: string; value: number | null }> }>;
 };
 
 type QuartileFrame = { date: string; quartile: 1 | 2 | 3 | 4 | null; perf: number | null };
@@ -647,20 +654,43 @@ export default function FCPDetailView(props: Props) {
     if (vlChartRaw.length === 0) return [];
     if (!compare) return vlChartRaw.map((p) => ({ ...p, trace: p.vl }));
 
-    const parDateBench = new Map(benchmark?.serie.map((b) => [b.date, b.value]));
     const parDateMed = new Map(cohortRebased.map((c) => [c.date, c.value]));
     const debut = vlChartRaw[0];
-    // Base de chaque serie : sa valeur au premier point affiche. Une serie qui
-    // n'y a pas de valeur ne peut pas etre rebasee, donc n'est pas tracee.
-    const baseBench = parDateBench.get(debut.date) ?? null;
     const baseMed = parDateMed.get(debut.date) ?? null;
+
+    // La reference se recompose depuis ses jambes, chacune rebasee au premier
+    // point AFFICHE — meme convention que le tableau comparatif. Tracer
+    // l'indice deja melange et le rebaser donnerait la courbe d'un
+    // portefeuille reequilibre en continu, donc un point d'arrivee different
+    // de la valeur lue dans le tableau pour la meme fenetre.
+    const jambes = (benchmark?.jambes ?? []).map((j) => ({
+      poids: j.poids,
+      parDate: new Map(j.serie.map((b) => [b.date, b.value])),
+    }));
+    const bases = jambes.map((j) => j.parDate.get(debut.date) ?? null);
+    const poidsTotal = jambes.reduce((s, j) => s + j.poids, 0);
+
     return vlChartRaw.map((p) => {
-      const b = parDateBench.get(p.date) ?? null;
       const m = parDateMed.get(p.date) ?? null;
+      let bench: number | null = null;
+      if (jambes.length > 0 && poidsTotal > 0) {
+        let somme = 0;
+        let complet = true;
+        for (let i = 0; i < jambes.length; i++) {
+          const v = jambes[i].parDate.get(p.date) ?? null;
+          const base = bases[i];
+          if (v === null || base === null || base === 0) {
+            complet = false;
+            break;
+          }
+          somme += jambes[i].poids * (v / base);
+        }
+        if (complet) bench = (somme / poidsTotal) * 100;
+      }
       return {
         ...p,
         trace: (p.vl / debut.vl) * 100,
-        bench: b !== null && baseBench ? (b / baseBench) * 100 : null,
+        bench,
         mediane: m !== null && baseMed ? (m / baseMed) * 100 : null,
       };
     });
@@ -1560,6 +1590,15 @@ export default function FCPDetailView(props: Props) {
                 </div>
 
                 <p className="text-[11px] text-slate-400 mt-3">
+                  {benchmark && benchmark.jambes.length > 1 && (
+                    <>
+                      La référence de marché est ici un portefeuille rééquilibré
+                      en continu à 50/50, ce qui est le métier d&apos;un fonds
+                      diversifié — d&apos;où un chiffre un peu différent de la
+                      colonne « Marché » de l&apos;onglet Performance, qui répond
+                      à une autre question : la moyenne des deux performances.{" "}
+                    </>
+                  )}
                   Du {fmtDateFR(fenetreSim.debut)} au{" "}
                   {fmtDateFR(fenetreSim.fin)}, soit{" "}
                   {fmtAnnees(fenetreSim.annees)}. Hors droits d&apos;entrée et de

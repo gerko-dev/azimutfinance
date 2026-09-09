@@ -1648,7 +1648,11 @@ export type Comparatif = {
 export function comparatifPerformances(
   vl: Array<{ date: string; vl: number }>,
   medianeSerie: Array<{ date: string; value: number | null }>,
-  referenceSerie: Array<{ date: string; value: number | null }> | null,
+  /** Jambes de la reference de marche, avec leurs poids. Une seule pour les
+   *  categories a reference unique, deux pour les diversifies. */
+  referenceJambes:
+    | Array<{ poids: number; serie: Array<{ date: string; value: number | null }> }>
+    | null,
   origine?: { date: string; vl: number } | null,
 ): Comparatif {
   const vide: Comparatif = {
@@ -1662,10 +1666,36 @@ export function comparatifPerformances(
 
   const fonds = vl.map((p) => ({ date: p.date, valeur: p.vl as number | null }));
   const mediane = medianeSerie.map((p) => ({ date: p.date, valeur: p.value }));
-  const reference = (referenceSerie ?? []).map((p) => ({
-    date: p.date,
-    valeur: p.value,
+  const jambes = (referenceJambes ?? []).map((j) => ({
+    poids: j.poids,
+    serie: j.serie.map((p) => ({ date: p.date, valeur: p.value })),
   }));
+
+  /** Performance de la reference sur une fenetre.
+   *
+   *  On mesure CHAQUE jambe depuis le debut de la fenetre, puis on en fait la
+   *  moyenne ponderee — et non l'inverse. Pour un diversifie, la reference vaut
+   *  donc « la moitie de ce qu'ont fait les actions, plus la moitie de ce qu'a
+   *  rapporte l'obligataire », un chiffre que le lecteur retrouve de tete a
+   *  partir des deux autres colonnes.
+   *
+   *  Composer d'abord un melange pas a pas, puis lire l'ecart entre deux dates,
+   *  donnerait un autre chiffre : celui d'un portefeuille reequilibre en
+   *  continu. Cette version existe aussi — c'est `Benchmark.serie`, et le
+   *  simulateur s'en sert, parce que des francs investis decrivent une gestion
+   *  et non une moyenne. */
+  const perfReference = (debut: string, fin: string): number | null => {
+    if (jambes.length === 0) return null;
+    let somme = 0;
+    let poids = 0;
+    for (const j of jambes) {
+      const r = perfEntre(j.serie, debut, fin);
+      if (r === null) return null;
+      somme += j.poids * r;
+      poids += j.poids;
+    }
+    return poids > 0 ? somme / poids : null;
+  };
 
   const debutHisto = vl[0].date;
   const fin = vl[vl.length - 1].date;
@@ -1720,7 +1750,7 @@ export function comparatifPerformances(
         toDate: bornesEffectives(fonds, b.debut, fin).a,
         fonds: perfEntre(fonds, b.debut, fin),
         mediane: perfEntre(mediane, b.debut, fin),
-        reference: reference.length > 0 ? perfEntre(reference, b.debut, fin) : null,
+        reference: perfReference(b.debut, fin),
       };
     });
 
@@ -1740,7 +1770,7 @@ export function comparatifPerformances(
         annee: a,
         fonds: perfEntre(fonds, debutHisto, cloture),
         mediane: perfEntre(mediane, debutHisto, cloture),
-        reference: reference.length > 0 ? perfEntre(reference, debutHisto, cloture) : null,
+        reference: perfReference(debutHisto, cloture),
         partielle: true,
       });
       continue;
@@ -1750,7 +1780,7 @@ export function comparatifPerformances(
       annee: a,
       fonds: perfEntre(fonds, ouverture, cloture),
       mediane: perfEntre(mediane, ouverture, cloture),
-      reference: reference.length > 0 ? perfEntre(reference, ouverture, cloture) : null,
+      reference: perfReference(ouverture, cloture),
       partielle,
     });
   }
@@ -1778,7 +1808,7 @@ export function comparatifPerformances(
 
   const totauxAnnuels = annees.map((a) => ({ annee: a.annee, perf: a.fonds }));
 
-  return { fenetres, annees, mois, totauxAnnuels, aReference: reference.length > 0 };
+  return { fenetres, annees, mois, totauxAnnuels, aReference: jambes.length > 0 };
 }
 
 // ==========================================

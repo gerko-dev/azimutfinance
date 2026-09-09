@@ -33,8 +33,26 @@ export type Benchmark = {
   label: string;
   /** Une phrase de methode, affichee sous le graphe. */
   note: string;
-  /** Indice base 100 au premier point, aligne sur les dates demandees. */
+  /** Indice base 100 au premier point, aligne sur les dates demandees.
+   *
+   *  Melange REEQUILIBRE a chaque pas : on moyenne les rendements, puis on
+   *  compose. C'est le portefeuille d'un gerant qui tient son allocation
+   *  cible, et c'est la version que le simulateur emploie — quand on parle de
+   *  francs investis, on decrit une gestion. */
   serie: BenchPoint[];
+  /** Les jambes separees, avec leur poids.
+   *
+   *  Pour comparer des POURCENTAGES sur une fenetre, on ne veut pas de
+   *  reequilibrage : la reference doit valoir « moitie de la performance
+   *  actions, moitie de la performance obligataire », un chiffre que le
+   *  lecteur retrouve de tete a partir des deux autres. On recompose donc a
+   *  partir des jambes, en repartant de 50/50 au debut de chaque fenetre.
+   *
+   *  Moyenner puis composer, ou composer puis moyenner, ne donne pas la meme
+   *  chose des qu'il y a plus d'un pas : +20 % deux fois donne +44 %, et la
+   *  moyenne avec un actif a +4,04 % vaut 24,02 % par la premiere voie contre
+   *  23,21 % par la seconde. Une seule jambe : les deux voies coincident. */
+  jambes: Array<{ poids: number; serie: BenchPoint[] }>;
 };
 
 // Bandes de maturite, en duree de vie moyenne et en annees.
@@ -232,6 +250,7 @@ export function benchmarkPourCategorie(
   let label: string;
   let note: string;
   let pas: Array<number | null>;
+  let jambesPas: Array<{ poids: number; pas: Array<number | null> }>;
 
   switch (categorie) {
     case "Actions":
@@ -239,6 +258,7 @@ export function benchmarkPourCategorie(
       label = "BRVM Composite";
       note = "Indice BRVM Composite, hors dividendes.";
       pas = actions();
+      jambesPas = [{ poids: 1, pas }];
       break;
     case "Obligataire":
       cle = "souv5a";
@@ -246,6 +266,7 @@ export function benchmarkPourCategorie(
       note =
         "Rendement moyen pondéré des adjudications UMOA-Titres de durée de vie moyenne 4 à 6,5 ans, capitalisé jour après jour. Portage seul : l'effet prix d'une variation de taux n'y figure pas.";
       pas = souverains(BANDE_5A);
+      jambesPas = [{ poids: 1, pas }];
       break;
     case "Monétaire":
       cle = "souvcourt";
@@ -253,13 +274,22 @@ export function benchmarkPourCategorie(
       note =
         "Rendement moyen pondéré des adjudications UMOA-Titres de durée de vie moyenne inférieure à 2 ans, capitalisé jour après jour.";
       pas = souverains(BANDE_COURT);
+      jambesPas = [{ poids: 1, pas }];
       break;
     case "Diversifié":
       cle = "mixte";
       label = "50 % BRVMC + 50 % souverains 5 ans";
       note =
-        "Moitié BRVM Composite, moitié rendement des adjudications UMOA-Titres 4 à 6,5 ans capitalisé. Rééquilibré à chaque relevé de VL, donc en continu.";
-      pas = melanger(actions(), souverains(BANDE_5A), 0.5);
+        "Moitié BRVM Composite, moitié rendement des adjudications UMOA-Titres 4 à 6,5 ans capitalisé. Sur une fenêtre, la référence vaut la moyenne des deux performances, chacune mesurée depuis le début de la fenêtre.";
+      {
+        const a = actions();
+        const b = souverains(BANDE_5A);
+        pas = melanger(a, b, 0.5);
+        jambesPas = [
+          { poids: 0.5, pas: a },
+          { poids: 0.5, pas: b },
+        ];
+      }
       break;
     default:
       return null;
@@ -268,5 +298,9 @@ export function benchmarkPourCategorie(
   const serie = chainer(dates, pas);
   // Une référence qui ne couvre presque aucune date n'aide personne.
   if (serie.filter((p) => p.value !== null).length < dates.length / 2) return null;
-  return { cle, label, note, serie };
+  const jambes = jambesPas.map((j) => ({
+    poids: j.poids,
+    serie: chainer(dates, j.pas),
+  }));
+  return { cle, label, note, serie, jambes };
 }
