@@ -170,6 +170,18 @@ type Tab =
   | "characteristics"
   | "history";
 
+/** Lendemain calendaire d'une date ISO.
+ *
+ *  Sert de repli quand les cours ne permettent pas de reperer la seance ou le
+ *  palier a pris effet : on garde alors l'ancienne regle, « le nominal
+ *  s'applique apres la tombee ». Un lendemain calendaire suffit, la
+ *  comparaison qui suit etant faite sur des dates de seance. */
+function apresLaTombee(dateISO: string): string {
+  return new Date(new Date(dateISO + "T00:00:00Z").getTime() + 86400000)
+    .toISOString()
+    .slice(0, 10);
+}
+
 export default function BondDetailView({
   bond,
   priceHistory,
@@ -731,21 +743,72 @@ export default function BondDetailView({
     // renseigne. Un recalage rendrait la courbe jolie en dissimulant l'erreur.
     const initial =
       steps.length > 0 ? steps[0].nominal + steps[0].amount : bond.nominalValue;
-    // Comparaison STRICTE : le nouveau nominal ne s'applique qu'a
-    // partir de la seance SUIVANT la tombee. Verifie sur les cours BRVM —
-    // TPCI.O47 cote 4 100 jusqu'au 16/06/2026 inclus (jour de la tombee
-    // 4 000 -> 2 000) puis 2 050 le 17/06. Avec un "<=" on divisait 4 100 par
-    // 2 000 et la serie affichait 205 % le jour meme, exactement le decrochage
-    // que ce mode est cense supprimer.
+
+    // A QUELLE SEANCE le palier prend-il effet ?
+    //
+    // Un amortissement n'est pas un mouvement de marche : le jour ou il
+    // s'applique, le cours et le nominal baissent ENSEMBLE et le pourcentage
+    // doit rester plat. Encore faut-il savoir quel jour, et la BRVM n'est pas
+    // constante :
+    //   TPCI.O47  cote 4 100 jusqu'au 16/06/2026 inclus, jour de la tombee,
+    //             puis 2 050 le 17/06 — le nominal s'applique la seance
+    //             SUIVANTE.
+    //   EOM.O8    cote 10 000 jusqu'au 04/09/2026 puis 8 572 des le 07/09,
+    //             jour meme de la tombee.
+    // Aucune convention fixe ne convient aux deux. Figee sur « la seance
+    // suivante », elle divisait le cours DEJA reduit d'EOM.O8 par l'ancien
+    // nominal et affichait 85,7 % pour une seule seance : un decrochage a
+    // l'ecran, la ou il ne s'est rien passe.
+    //
+    // On lit donc la date dans les cours eux-memes. Autour de l'echeance
+    // theorique, on cherche la seance ou le cours chute dans le RAPPORT de
+    // l'amortissement ; c'est elle qui fait palier. A defaut de cours
+    // exploitable — titre non cote sur la periode — on retombe sur la seance
+    // suivant la tombee, l'ancien comportement.
+    const cours = priceSeries.filter((p) => p.cleanPrice > 0);
+    const JOURS_AVANT = 7;
+    const JOURS_APRES = 12;
+    const TOLERANCE = 0.02;
+
+    // Rend null quand aucune seance ne porte la trace de l'amortissement : le
+    // repli doit se distinguer d'une detection tombant pile sur la date
+    // theorique, cas d'EOM.O8 justement.
+    const dateEffective = (theorique: string, ratio: number): string | null => {
+      if (cours.length < 2 || !(ratio > 0) || ratio >= 1) return null;
+      const t = new Date(theorique + "T00:00:00Z").getTime();
+      const min = new Date(t - JOURS_AVANT * 86400000).toISOString().slice(0, 10);
+      const max = new Date(t + JOURS_APRES * 86400000).toISOString().slice(0, 10);
+      for (let i = 1; i < cours.length; i++) {
+        const d = cours[i].date;
+        if (d < min) continue;
+        if (d > max) break;
+        const r = cours[i].cleanPrice / cours[i - 1].cleanPrice;
+        if (Math.abs(r - ratio) <= TOLERANCE) return d;
+      }
+      return null;
+    };
+
+    // Le palier s'applique A PARTIR de la seance retenue, incluse : c'est
+    // celle ou le cours a deja rebase.
+    let precedent = initial;
+    const paliers = steps.map((s) => {
+      const effet = dateEffective(s.date, precedent > 0 ? s.nominal / precedent : 0);
+      precedent = s.nominal;
+      // Detecte : le palier s'applique a la seance ou le cours a rebase, quelle
+      // qu'elle soit. Non detecte : on garde l'ancienne regle, le lendemain de
+      // la tombee.
+      return { date: effet ?? apresLaTombee(s.date), nominal: s.nominal };
+    });
+
     return (date: string) => {
       let n = initial;
-      for (const s of steps) {
-        if (s.date < date) n = s.nominal;
+      for (const s of paliers) {
+        if (s.date <= date) n = s.nominal;
         else break;
       }
       return n > 0 ? n : bond.nominalValue;
     };
-  }, [events, bond.nominalValue, bond.amortizationMode, bond.amortizationType]);
+  }, [events, priceSeries, bond.nominalValue, bond.amortizationMode, bond.amortizationType]);
 
   const visiblePriceSeries = useMemo(() => {
     let base = priceSeries;
