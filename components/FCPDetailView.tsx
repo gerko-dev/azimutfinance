@@ -370,7 +370,10 @@ function Resultat({
   valeur: number | null;
   vedette?: boolean;
 }) {
-  const gain = valeur !== null ? valeur - montantInitial : null;
+  // Sans montant valide, on n'affiche ni valeur ni plus-value : diviser par
+  // zero pour le pourcentage donnerait « Infinity% ».
+  const gain =
+    valeur !== null && montantInitial > 0 ? valeur - montantInitial : null;
   return (
     <div
       className={`rounded-lg border p-4 ${
@@ -401,7 +404,9 @@ function Resultat({
       )}
       {valeur === null && (
         <div className="text-xs text-slate-400 mt-1">
-          Pas de donnée sur cette période
+          {montantInitial > 0
+            ? "Pas de donnée sur cette période"
+            : "Saisissez un montant"}
         </div>
       )}
     </div>
@@ -720,6 +725,21 @@ export default function FCPDetailView(props: Props) {
       .slice(0, 10);
     return troisAns > min ? troisAns : min;
   }, [dateEntree, vlSeries]);
+
+  /** Bornes de la simulation. Independantes du montant saisi : la periode
+   *  reste affichee quand le champ est vide. */
+  const fenetreSim = useMemo(() => {
+    if (vlSeries.length < 2) return null;
+    const fin = vlSeries[vlSeries.length - 1].date;
+    return {
+      debut: dateDepart,
+      fin,
+      annees:
+        (new Date(fin + "T00:00:00Z").getTime() -
+          new Date(dateDepart + "T00:00:00Z").getTime()) /
+        (365.25 * 86400000),
+    };
+  }, [dateDepart, vlSeries]);
 
   const simulation = useMemo(() => {
     const montant = Number((montantTxt || "").replace(/[^0-9]/g, ""));
@@ -1483,7 +1503,7 @@ export default function FCPDetailView(props: Props) {
             {/* ============================================ */}
             {/* SIMULATEUR : ET SI J'AVAIS INVESTI ?          */}
             {/* ============================================ */}
-            {simulation !== null && (
+            {fenetreSim !== null && (
               <section className="bg-white border border-slate-200 rounded-lg p-5">
                 <div className="flex flex-wrap items-end justify-between gap-4 mb-4">
                   <div>
@@ -1510,7 +1530,7 @@ export default function FCPDetailView(props: Props) {
                       <span className="block text-slate-500 mb-1">Date d&apos;entrée</span>
                       <input
                         type="date"
-                        value={simulation.dateDepart}
+                        value={dateDepart}
                         min={vlSeries[0].date}
                         max={vlSeries[vlSeries.length - 1].date}
                         onChange={(e) => setDateEntree(e.target.value)}
@@ -1523,26 +1543,26 @@ export default function FCPDetailView(props: Props) {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <Resultat
                     titre={fund.nom}
-                    montantInitial={simulation.montant}
-                    valeur={simulation.valeur}
+                    montantInitial={simulation?.montant ?? 0}
+                    valeur={simulation?.valeur ?? null}
                     vedette
                   />
                   <Resultat
                     titre="Médiane de la catégorie"
-                    montantInitial={simulation.montant}
-                    valeur={simulation.mediane}
+                    montantInitial={simulation?.montant ?? 0}
+                    valeur={simulation?.mediane ?? null}
                   />
                   <Resultat
                     titre={benchmark?.label ?? "Référence de marché"}
-                    montantInitial={simulation.montant}
-                    valeur={simulation.marche}
+                    montantInitial={simulation?.montant ?? 0}
+                    valeur={simulation?.marche ?? null}
                   />
                 </div>
 
                 <p className="text-[11px] text-slate-400 mt-3">
-                  Du {fmtDateFR(simulation.dateDepart)} au{" "}
-                  {fmtDateFR(simulation.dateFin)}, soit{" "}
-                  {fmtAnnees(simulation.annees)}. Hors droits d&apos;entrée et de
+                  Du {fmtDateFR(fenetreSim.debut)} au{" "}
+                  {fmtDateFR(fenetreSim.fin)}, soit{" "}
+                  {fmtAnnees(fenetreSim.annees)}. Hors droits d&apos;entrée et de
                   sortie : ils se retranchent du résultat et varient d&apos;une SGO à
                   l&apos;autre. Les frais de gestion, eux, sont déjà dans la VL.
                 </p>
