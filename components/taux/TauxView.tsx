@@ -22,6 +22,8 @@ import type { SeriesPoint, TauxSeries } from "@/lib/tauxTypes";
 import type { SeriesDescriptor } from "@/lib/tauxLoader";
 import { fmtMdsFCFA, fmtMFCFA, fmtRate, fmtRatio } from "@/lib/tauxFormat";
 import TauxStudio from "./TauxStudio";
+import CommerceExterieurSection from "./CommerceExterieurSection";
+import DonneesSection from "./DonneesSection";
 import TauxComparator from "./TauxComparator";
 
 // ---------- Filtre pills (toggle visibilité des courbes d'un chart) ----------
@@ -1113,70 +1115,147 @@ export type TauxViewProps = {
   changeYoy: { pair: string; value: number }[];
   studioDescriptors: SeriesDescriptor[];
   studioRows: import("@/lib/tauxTypes").TauxRow[];
+  commerce: import("@/lib/commerceExterieur").CommerceExterieur;
   source: string;
 };
 
+/** Onglets de la page.
+ *
+ *  Elle presentait quatorze sections dans un seul defilement, avec une barre
+ *  d'ancres pour s'y retrouver : le lecteur venu pour le taux interbancaire
+ *  traversait la politique monetaire, l'inflation et les reserves avant de le
+ *  trouver. Le decoupage suit les questions posees, pas l'ordre du bulletin.
+ */
+type OngletTaux =
+  | "apercu"
+  | "politique"
+  | "interbancaire"
+  | "conditions"
+  | "commerce"
+  | "outils"
+  | "donnees";
+
+const ONGLETS: Array<{ id: OngletTaux; label: string }> = [
+  { id: "apercu", label: "Vue d'ensemble" },
+  { id: "politique", label: "Politique monétaire" },
+  { id: "interbancaire", label: "Interbancaire" },
+  { id: "conditions", label: "Conditions banques" },
+  { id: "commerce", label: "Commerce extérieur" },
+  { id: "outils", label: "Outils d'analyse" },
+  { id: "donnees", label: "Données" },
+];
+
 export default function TauxView(props: TauxViewProps) {
+  const [onglet, setOnglet] = useState<OngletTaux>("apercu");
+
   return (
     <div className="space-y-4 md:space-y-6">
-      {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-        {props.kpis.map((k) => (
-          <KPICard key={k.label} k={k} />
+      {/* Onglets */}
+      <div className="flex gap-0 text-sm overflow-x-auto border-b border-slate-200 bg-white rounded-t-lg px-1">
+        {ONGLETS.map((o) => (
+          <button
+            key={o.id}
+            onClick={() => setOnglet(o.id)}
+            className={`px-3 md:px-4 py-3 whitespace-nowrap border-b-2 transition ${
+              onglet === o.id
+                ? "border-blue-700 text-blue-700 font-medium"
+                : "border-transparent text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            {o.label}
+          </button>
         ))}
       </div>
 
-      <PolitiqueBCEAOSection
-        pretMarginal={props.pretMarginal}
-        pension={props.pension}
-        bceaoChanges={props.bceaoChanges}
-      />
+      {onglet === "apercu" && (
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+            {props.kpis.map((k) => (
+              <KPICard key={k.label} k={k} />
+            ))}
+          </div>
 
-      <MarcheMonetaireSection
-        tmpHebdo={props.tmpHebdo}
-        tmpMensuel={props.tmpMensuel}
-        encoursRefi={props.encoursRefi}
-      />
+          <InflationSection series={props.inflationSeries} />
 
-      <InterbancaireSection
-        taux={props.interbancaireTaux}
-        volumes={props.interbancaireVolumes}
-      />
+          <ActiviteSection activite={props.activiteSeries} climat={props.climatSeries} />
+        </>
+      )}
 
-      <InflationSection series={props.inflationSeries} />
+      {onglet === "politique" && (
+        <>
+          <PolitiqueBCEAOSection
+            pretMarginal={props.pretMarginal}
+            pension={props.pension}
+            bceaoChanges={props.bceaoChanges}
+          />
 
-      <InflationComposanteSection series={props.inflationComposante} />
+          <MarcheMonetaireSection
+            tmpHebdo={props.tmpHebdo}
+            tmpMensuel={props.tmpMensuel}
+            encoursRefi={props.encoursRefi}
+          />
 
-      <ActiviteSection activite={props.activiteSeries} climat={props.climatSeries} />
+          <InflationComposanteSection series={props.inflationComposante} />
 
-      <ConditionsSection
-        cat={props.conditionsCat}
-        obj={props.conditionsObj}
-        period={props.conditionsPeriod}
-      />
+          <ReservesSection data={props.reserves} period={props.reservesPeriod} />
 
-      <CreditsDepotsSection
-        credits={props.credits}
-        depots={props.depots}
-        marge={props.marge}
-        volumes={props.volumes}
-      />
+          <AgregatsSection data={props.agregats} />
 
-      <ReservesSection data={props.reserves} period={props.reservesPeriod} />
+          <PartenairesSection series={props.partenaires} />
+        </>
+      )}
 
-      <AgregatsSection data={props.agregats} />
+      {onglet === "interbancaire" && (
+        <InterbancaireSection
+          taux={props.interbancaireTaux}
+          volumes={props.interbancaireVolumes}
+        />
+      )}
 
-      <PartenairesSection series={props.partenaires} />
+      {onglet === "conditions" && (
+        <>
+          <ConditionsSection
+            cat={props.conditionsCat}
+            obj={props.conditionsObj}
+            period={props.conditionsPeriod}
+          />
 
-      <ChangeSection spots={props.changeSpots} yoyVar={props.changeYoy} />
+          <CreditsDepotsSection
+            credits={props.credits}
+            depots={props.depots}
+            marge={props.marge}
+            volumes={props.volumes}
+          />
+        </>
+      )}
 
-      <TauxComparator rows={props.studioRows} />
+      {onglet === "commerce" && (
+        <CommerceExterieurSection data={props.commerce} changeSpots={props.changeSpots} />
+      )}
 
-      <TauxStudio descriptors={props.studioDescriptors} rows={props.studioRows} bceaoChanges={props.bceaoChanges} />
+      {onglet === "outils" && (
+        <>
+          <TauxComparator rows={props.studioRows} />
 
-      <div className="bg-blue-50 rounded-lg border border-blue-200 p-4 text-xs text-blue-900">
-        <span className="font-medium">Source :</span> {props.source}. Toutes les valeurs en pourcentage sont exprimées en taux annualisé (sauf mention contraire). Les ratios de réserves sont sans unité.
-      </div>
+          <TauxStudio
+            descriptors={props.studioDescriptors}
+            rows={props.studioRows}
+            bceaoChanges={props.bceaoChanges}
+          />
+
+          <ChangeSection spots={props.changeSpots} yoyVar={props.changeYoy} />
+        </>
+      )}
+
+      {onglet === "donnees" && (
+        <DonneesSection rows={props.studioRows} source={props.source} />
+      )}
+
+      {onglet !== "donnees" && onglet !== "commerce" && (
+        <div className="bg-blue-50 rounded-lg border border-blue-200 p-4 text-xs text-blue-900">
+          <span className="font-medium">Source :</span> {props.source}. Toutes les valeurs en pourcentage sont exprimées en taux annualisé (sauf mention contraire). Les ratios de réserves sont sans unité.
+        </div>
+      )}
     </div>
   );
 }

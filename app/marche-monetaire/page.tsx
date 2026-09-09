@@ -18,6 +18,7 @@ import {
 import { fmtPct, fmtBp, fmtMdsFCFA, fmtRate } from "@/lib/tauxFormat";
 import { pageMetadata, breadcrumbJsonLd } from "@/lib/seo";
 import JsonLd from "@/components/JsonLd";
+import { loadCommerceExterieur } from "@/lib/commerceExterieur";
 
 export const dynamic = "force-static";
 
@@ -309,6 +310,11 @@ export default async function MarcheMonetairePage() {
     return { pair: p, value: v?.value ?? NaN };
   });
 
+  // ---- Commerce extérieur : balance des paiements BPM6 ----
+  // Autre source et autre fréquence que le reste de la page — le bulletin
+  // mensuel BCEAO ne porte aucune donnée d'échanges extérieurs.
+  const commerce = loadCommerceExterieur(25);
+
   // ---- Studio : passe l'intégralité du dataset au client ----
   const studioDescriptors = listAllSeriesDescriptors();
   const studioRows = loadTauxRaw();
@@ -329,35 +335,9 @@ export default async function MarcheMonetairePage() {
           <div className="text-xs md:text-sm text-slate-400 mb-2">Accueil › Taux BCEAO &amp; UEMOA</div>
           <h1 className="text-2xl md:text-3xl font-semibold mb-2 text-white">Taux BCEAO &amp; UEMOA</h1>
           <p className="text-sm md:text-base text-slate-300">
-            Suivi exhaustif des taux directeurs, marché monétaire et interbancaire, inflation, conditions de banque et change.
-            Studio d&apos;analyse interactif pour explorer toutes les séries.
+            Taux directeurs, marché interbancaire, conditions de banque, commerce
+            extérieur — et l&apos;intégralité des séries à explorer ou à télécharger.
           </p>
-          <div className="mt-3 flex flex-wrap gap-2 text-xs">
-            {[
-              ["#politique", "Politique BCEAO"],
-              ["#marche-monetaire", "Marché monétaire"],
-              ["#interbancaire", "Interbancaire"],
-              ["#inflation", "Inflation"],
-              ["#inflation-composante", "Décomposition inflation"],
-              ["#activite", "Activité & climat"],
-              ["#conditions", "Conditions banque"],
-              ["#credits-depots", "Crédits / dépôts"],
-              ["#reserves", "Réserves"],
-              ["#agregats", "Agrégats"],
-              ["#partenaires", "Partenaires"],
-              ["#change", "Change"],
-              ["#comparateur", "Comparateur pays"],
-              ["#studio", "Studio d'analyse"],
-            ].map(([href, label]) => (
-              <a
-                key={href}
-                href={href}
-                className="px-2.5 py-1 rounded-full bg-slate-800/60 hover:bg-slate-700 text-slate-200 border border-slate-700"
-              >
-                {label}
-              </a>
-            ))}
-          </div>
         </div>
       </div>
 
@@ -391,6 +371,7 @@ export default async function MarcheMonetairePage() {
           changeYoy={changeYoy}
           studioDescriptors={studioDescriptors}
           studioRows={studioRows}
+          commerce={commerce}
           source={getSourceLabel()}
         />
       </main>
