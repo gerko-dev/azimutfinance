@@ -42,6 +42,20 @@ type PdfItem = { str: string; x: number; y: number };
 type PdfLine = { y: number; items: PdfItem[] };
 type PdfPage = { page: number; width: number; height: number; lines: PdfLine[] };
 
+/** Retire l'appel de note d'un libelle : « Bénin (**) » devient « Bénin ».
+ *
+ *  La BCEAO en ajoute et en retire d'un bulletin a l'autre, sur n'importe quelle
+ *  ligne. Le tableau du climat des affaires portait « Niger (**) » en dur, ce
+ *  qui a tenu jusqu'a ce que juin 2026 marque le Benin et le Burkina : leurs
+ *  deux series ont disparu sans bruit. Un libelle se nettoie, il ne se catalogue
+ *  pas. */
+function sansAppelDeNote(brut: string): string {
+  return brut
+    .replace(/\s*\((?:\*+|\d+)\)\s*$/, "")
+    .replace(/\s*\*+\s*$/, "")
+    .trim();
+}
+
 function parseFrNum(s: string | undefined): number {
   if (s == null) return NaN;
   const t = String(s).trim().replace(/ /g, " ");
@@ -63,6 +77,38 @@ function snapToColumn(x: number, anchors: number[], tol = 25): number {
     }
   }
   return best;
+}
+
+/** Texte d'une ligne, items remis dans l'ordre horizontal et espaces
+ *  normalises.
+ *
+ *  A PREFERER a `cellsByColumn` quand la structure de la ligne suffit a
+ *  identifier les colonnes. Les abscisses des tableaux BCEAO bougent d'un
+ *  bulletin a l'autre sans que le contenu change : entre avril et juin 2026, la
+ *  table des taux directeurs a garde ses six colonnes mais les a decalees de
+ *  quarante points, ce qui suffisait a faire tomber tous les items hors de la
+ *  tolerance des ancres — section entiere perdue, page en erreur 500.
+ */
+function lineText(items: PdfItem[]): string {
+  return items
+    .slice()
+    .sort((a, b) => a.x - b.x)
+    .map((i) => i.str)
+    .join(" ")
+    .replace(/ | /g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Nombres d'une ligne, dans l'ordre de lecture. Accepte le separateur de
+ *  milliers par espace insecable, que le PDF emploie sans regularite. */
+function numbersInLine(texte: string): number[] {
+  const out: number[] = [];
+  for (const m of texte.matchAll(/-?\d{1,3}(?: \d{3})*(?:,\d+)?|-?\d+,\d+/g)) {
+    const v = parseFloat(m[0].replace(/ /g, "").replace(",", "."));
+    if (Number.isFinite(v)) out.push(v);
+  }
+  return out;
 }
 
 function cellsByColumn(items: PdfItem[], anchors: number[], tol = 25): string[] {
@@ -172,24 +218,23 @@ function parse_1_2(pages: PdfPage[], bulletinLatest: string, source: string): Pa
   if (!page37) return [];
   const rows: ParsedRow[] = [];
 
-  const changeAnchors = [93, 145, 210, 263, 315, 380];
   const changes: { iso: string; marginal: number; min: number }[] = [];
   const monthMap: Record<string, number> = { janv: 1, "fév": 2, fevr: 2, "févr": 2, fev: 2, mars: 3, avr: 4, avril: 4, mai: 5, juin: 6, juil: 7, "août": 8, aout: 8, sept: 9, oct: 10, nov: 11, "déc": 12, dec: 12 };
 
+  // « 2016 16-dec 4,50 1,00 2,50 0,00 » : annee, jour-mois, puis les deux
+  // niveaux encadres chacun de leur variation. La forme de la ligne identifie
+  // les colonnes a elle seule — aucune abscisse n'intervient.
+  const LIGNE_TAUX =
+    /^(\d{4})\s+(\d{1,2})\s*-\s*([A-Za-zÀ-ſ.]+)\s+(-?\d+,\d+)\s+(-?\d+,\d+)\s+(-?\d+,\d+)\s+(-?\d+,\d+)/;
   for (const line of page37.lines) {
-    const cells = cellsByColumn(line.items, changeAnchors);
-    const year = cells[0];
-    const day = cells[1];
-    const marg = parseFrNum(cells[2]);
-    const minR = parseFrNum(cells[4]);
-    if (!/^\d{4}$/.test(year) || !/^\d{1,2}-\w+$/.test(day)) continue;
+    const m = lineText(line.items).match(LIGNE_TAUX);
+    if (!m) continue;
+    const marg = parseFrNum(m[4]);
+    const minR = parseFrNum(m[6]);
     if (!Number.isFinite(marg) || !Number.isFinite(minR)) continue;
-    const dm = day.match(/^(\d{1,2})-(\w+)/);
-    if (!dm) continue;
-    const monthKey = dm[2].toLowerCase().replace(/\./g, "");
-    const month = monthMap[monthKey];
+    const month = monthMap[m[3].toLowerCase().replace(/\./g, "")];
     if (!month) continue;
-    const iso = `${year}-${String(month).padStart(2, "0")}-${String(parseInt(dm[1], 10)).padStart(2, "0")}`;
+    const iso = `${m[1]}-${String(month).padStart(2, "0")}-${String(parseInt(m[2], 10)).padStart(2, "0")}`;
     changes.push({ iso, marginal: marg / 100, min: minR / 100 });
   }
   changes.sort((a, b) => a.iso.localeCompare(b.iso));
@@ -233,48 +278,61 @@ function parse_1_2(pages: PdfPage[], bulletinLatest: string, source: string): Pa
     rows.push(makeRow("1_Taux_directeurs_BCEAO", "Taux minimum appels offres", "UEMOA", t.label, r.min, "pct", source));
   }
 
-  const monthlyAnchors = [71, 206.8, 259.5, 309, 374];
   // Build month-header → canonical month-key map. The PDF prefixes monthly aggregates
   // with abbreviations like "Nov. 2025", "Déc. 2025", "Jan. 2026", "Fév-2026", "Mar.2026".
   // We detect them by prefix match.
-  const monthAbbrev: { pat: string; key: string }[] = [
-    { pat: "Janv. ", key: "janv" }, { pat: "Jan. ", key: "janv" }, { pat: "Jan.", key: "janv" },
-    { pat: "Févr. ", key: "fév" }, { pat: "Fév. ", key: "fév" }, { pat: "Fév-", key: "fév" },
-    { pat: "Mars ", key: "mars" }, { pat: "Mar.", key: "mars" },
-    { pat: "Avr. ", key: "avr" }, { pat: "Avril ", key: "avr" },
-    { pat: "Mai ", key: "mai" },
-    { pat: "Juin ", key: "juin" },
-    { pat: "Juil. ", key: "juil" }, { pat: "Juillet ", key: "juil" },
-    { pat: "Août ", key: "août" }, { pat: "Aout ", key: "août" },
-    { pat: "Sept. ", key: "sept" }, { pat: "Sept-", key: "sept" },
-    { pat: "Oct. ", key: "oct" }, { pat: "Oct-", key: "oct" },
-    { pat: "Nov. ", key: "nov" }, { pat: "Nov-", key: "nov" },
-    { pat: "Déc. ", key: "déc" }, { pat: "Déc-", key: "déc" }, { pat: "Dec. ", key: "déc" },
-  ];
-  // Scan first 4 chars after pattern for year.
+  // Libelle d'agregat mensuel : « Jan. 2026 », « Fév-2026 », « Mar.2026 »,
+  // « Juin-2026 ». Le separateur entre le mois et l'annee change d'un bulletin
+  // a l'autre, parfois au sein du meme : le catalogue de prefixes qui tenait
+  // lieu de detection ne connaissait ni « Jan- » ni « Mar- » ni « Juin- », et
+  // le bulletin de juin 2026 a perdu ses agregats mensuels de ce seul fait.
+  const MOIS_COURTS: Record<string, string> = {
+    jan: "janv", janv: "janv", janvier: "janv",
+    fev: "fév", "fév": "fév", fevr: "fév", "févr": "fév", "février": "fév",
+    mar: "mars", mars: "mars",
+    avr: "avr", avril: "avr",
+    mai: "mai",
+    juin: "juin",
+    juil: "juil", juillet: "juil",
+    aout: "août", "août": "août",
+    sep: "sept", sept: "sept", septembre: "sept",
+    oct: "oct", octobre: "oct",
+    nov: "nov", novembre: "nov",
+    dec: "déc", "déc": "déc", "décembre": "déc",
+  };
+  const normaliseMois = (brut: string): string | null =>
+    MOIS_COURTS[
+      brut
+        .toLowerCase()
+        .replace(/\./g, "")
+        .normalize("NFC")
+    ] ?? null;
+
   const detectMonthAggKey = (full: string): string | null => {
-    for (const { pat, key } of monthAbbrev) {
-      if (full.startsWith(pat)) {
-        const rest = full.slice(pat.length);
-        const ym = rest.match(/^(\d{4})/);
-        if (ym) return `${key}-${ym[1].slice(-2)}`;
-      }
-    }
-    return null;
+    const m = full.match(/^([A-Za-zÀ-ſ]{3,10})\.?\s*[-\s]\s*(\d{4})/);
+    if (!m) return null;
+    const mois = normaliseMois(m[1]);
+    return mois ? `${mois}-${m[2].slice(-2)}` : null;
   };
 
   const weeklyByMonth: Record<string, { hebdoSum: number; hebdoCount: number; mensuelle: number }> = {};
 
   for (const line of page37.lines) {
-    const full = line.items.map((i) => i.str).join(" ").trim();
+    // Trie par abscisse : l'ordre interne du PDF n'est pas l'ordre de lecture,
+    // et le bulletin de juin place le premier nombre avant le libelle de mois.
+    // La ligne commencait alors par un chiffre, ce que le test ci-dessous prend
+    // pour une seance hebdomadaire — tous les agregats mensuels etaient perdus.
+    const full = lineText(line.items);
     const aggKey = detectMonthAggKey(full);
     if (aggKey && !/^\d/.test(full)) {
-      const cells = cellsByColumn(line.items, monthlyAnchors);
-      const hebdo = parseFrNum(cells[1]);
-      const mens = parseFrNum(cells[2]);
-      const refiB = parseFrNum(cells[3]);
+      // Sur une ligne d'agregat mensuel, la colonne « adjudication
+      // hebdomadaire » est vide : le premier nombre est le TAUX MENSUEL, le
+      // suivant le montant de refinancement. La forme de la ligne suffit,
+      // inutile de savoir a quelle abscisse tombe chaque colonne.
+      const nb = numbersInLine(full.replace(/^\S+\s*\d{4}/, ""));
+      const mens = nb[0];
+      const refiB = nb[1];
       if (Number.isFinite(mens)) rows.push(makeRow("2_Marche_monetaire", "TMP adjudication mensuelle", "UEMOA", aggKey, mens / 100, "pct", source));
-      if (Number.isFinite(hebdo)) rows.push(makeRow("2_Marche_monetaire", "TMP adjudication hebdomadaire", "UEMOA", aggKey, hebdo / 100, "pct", source));
       if (Number.isFinite(refiB)) rows.push(makeRow("2_Marche_monetaire", "Encours refinancement banques", "UEMOA", aggKey, refiB, "Mds_FCFA", source));
       continue;
     }
@@ -297,12 +355,13 @@ function parse_1_2(pages: PdfPage[], bulletinLatest: string, source: string): Pa
     const ms = monthShortMap[wk[2].toLowerCase().replace(/\./g, "")];
     if (!ms) continue;
     const monthKey = `${ms}-${wk[3].slice(-2)}`;
-    const cells = cellsByColumn(line.items, monthlyAnchors);
-    const hebdo = parseFrNum(cells[1]);
-    const mens = parseFrNum(cells[2]);
+    // Sur une ligne de seance, c'est la colonne mensuelle qui est vide : le
+    // premier nombre apres la date est le taux HEBDOMADAIRE. La moyenne des
+    // seances sert de repli quand le bulletin n'imprime pas l'agregat.
+    const apresDate = full.replace(/^\d{1,2}\s+\S+\s+\d{4}/, "");
+    const hebdo = numbersInLine(apresDate)[0];
     const slot = weeklyByMonth[monthKey] ?? (weeklyByMonth[monthKey] = { hebdoSum: 0, hebdoCount: 0, mensuelle: NaN });
     if (Number.isFinite(hebdo)) { slot.hebdoSum += hebdo; slot.hebdoCount++; }
-    if (Number.isFinite(mens) && !Number.isFinite(slot.mensuelle)) slot.mensuelle = mens;
   }
   for (const [key, w] of Object.entries(weeklyByMonth)) {
     const hasHebdo = rows.some((r) => r.section === "2_Marche_monetaire" && r.indicator === "TMP adjudication hebdomadaire" && r.period === key);
@@ -721,11 +780,12 @@ function parse_9(pages: PdfPage[], source: string): ParsedRow[] {
     53: ["Cote d'Ivoire", "Guinee-Bissau", "Mali"],
     54: ["Niger", "Senegal", "Togo"],
   };
-  const blockAnchors = [
-    { req: 182, cons: 245 },
-    { req: 395, cons: 451 },
-    { req: 595, cons: 649 },
-  ];
+  // Trois pays par page, chacun sur trois colonnes : requises, constituees,
+  // solde. On les lit DANS L'ORDRE plutot qu'a des abscisses fixes — celles-ci
+  // ont bouge entre les bulletins d'avril et de juin 2026, et six pays sur neuf
+  // avaient disparu de la page sans que rien ne le signale.
+  const NB_BLOCS = 3;
+  const COLONNES_PAR_BLOC = 3;
 
   // Find the latest period: scan lines of "page 52" for the bottommost "X/Y/ZZ au A/B/CC" entry.
   const findLatestPeriodLine = (page: PdfPage): { line: PdfLine; period: string } | null => {
@@ -747,20 +807,29 @@ function parse_9(pages: PdfPage[], source: string): ParsedRow[] {
     if (!page) continue;
     const latest = findLatestPeriodLine(page);
     if (!latest) continue;
-    const valueItems = latest.line.items.filter((i) => i.x > 140);
+    // Neuf valeurs apres la periode : trois blocs de trois colonnes.
+    //
+    // On lit les ITEMS du PDF, un par cellule, et non le texte recolle : les
+    // milliers y sont separes par une espace, si bien que « 48 268 49 443
+    // 1 175 274 838 » se relit « 48 268 | 49 443 | 1 175 274 | 838 » au lieu de
+    // « 48 268 | 49 443 | 1 175 | 274 838 ». Une page entiere de reserves
+    // sortait fausse, ou vide, selon la taille des nombres du mois.
+    const chiffres = latest.line.items
+      .filter((i) => !/^\d{1,2}\/\d{1,2}\/\d{2}$/.test(i.str.trim()) && i.str.trim() !== "au")
+      .sort((a, b) => a.x - b.x)
+      .map((i) => parseFrNum(i.str))
+      .filter((v) => Number.isFinite(v));
 
-    blockAnchors.forEach((block, idx) => {
+    for (let idx = 0; idx < NB_BLOCS; idx++) {
       const country = countriesOnPage[idx];
-      const reqCells = cellsByColumn(valueItems, [block.req]);
-      const consCells = cellsByColumn(valueItems, [block.cons]);
-      const req = parseFrNum(reqCells[0]);
-      const cons = parseFrNum(consCells[0]);
-      if (!Number.isFinite(req) || !Number.isFinite(cons)) return;
+      const req = chiffres[idx * COLONNES_PAR_BLOC];
+      const cons = chiffres[idx * COLONNES_PAR_BLOC + 1];
+      if (!Number.isFinite(req) || !Number.isFinite(cons)) continue;
       rows.push(makeRow("9_Reserves_const_vs_req", "Reserves requises", country, latest.period, req, "M_FCFA", source));
       rows.push(makeRow("9_Reserves_const_vs_req", "Reserves constituees", country, latest.period, cons, "M_FCFA", source));
       rows.push(makeRow("9_Reserves_const_vs_req", "Solde net", country, latest.period, cons - req, "M_FCFA", source));
       rows.push(makeRow("9_Reserves_const_vs_req", "Ratio constituees sur requises", country, latest.period, cons / req, "x", source));
-    });
+    }
   }
   return rows;
 }
@@ -789,8 +858,57 @@ function parse_10(pages: PdfPage[], bulletinLatest: string, source: string): Par
     "Togo": "Togo",
   };
 
-  // Both tables: data appears at these mars-26 column anchors (feb anchors sit ~47 left).
-  const marsAnchors = [185.9, 280.3, 374.6, 468.9, 563.2, 657.6, 751.9];
+  // Le tableau est transpose : une ligne par pays, une colonne par categorie,
+  // et DEUX blocs cote a cote — le mois precedent puis le mois courant.
+  //
+  // Les abscisses de ces colonnes ne sont pas stables d'un bulletin a l'autre.
+  // On les calibre donc sur la ligne la plus complete du bloc, celle ou aucune
+  // cellule ne manque, et on y accroche les autres lignes.
+  //
+  // Pourquoi ne pas simplement lire les nombres dans l'ordre : ce tableau a des
+  // TROUS. En juin 2026, le Benin et le Senegal n'ont aucun credit aux
+  // administrations publiques. Une lecture par rang decalerait alors toutes les
+  // colonnes suivantes et attribuerait au Senegal le taux de son voisin — une
+  // valeur fausse, bien pire qu'une case vide.
+  const calibreColonnes = (
+    lignesPays: PdfLine[],
+    nbColonnes: number,
+  ): number[] | null => {
+    // On regroupe les abscisses de TOUTES les lignes du bloc, pas d'une seule :
+    // aucune ligne ne porte forcement les quatorze cellules — en juin 2026, la
+    // plus complete en a treize — mais chaque colonne est renseignee chez au
+    // moins un pays. Les abscisses se groupent alors naturellement en colonnes,
+    // et les sept dernieres a droite sont le mois courant.
+    const xs: number[] = [];
+    for (const l of lignesPays) {
+      for (const i of l.items.slice(1)) {
+        if (Number.isFinite(parseFrNum(i.str))) xs.push(i.x);
+      }
+    }
+    if (xs.length === 0) return null;
+    xs.sort((a, b) => a - b);
+
+    const ECART_COLONNE = 12; // les colonnes du tableau sont espacees de ~94 pt
+    const groupes: number[][] = [[xs[0]]];
+    for (let k = 1; k < xs.length; k++) {
+      const dernier = groupes[groupes.length - 1];
+      if (xs[k] - dernier[dernier.length - 1] <= ECART_COLONNE) dernier.push(xs[k]);
+      else groupes.push([xs[k]]);
+    }
+    const centre = (g: number[]) => g.reduce((t, v) => t + v, 0) / g.length;
+
+    // Les deux mois ne sont pas cote a cote, ils sont ENTRELACES : les colonnes
+    // tombent a 139, 186, 231, 278... espacees de 47 points, le mois precedent
+    // aux rangs pairs et le mois courant aux rangs impairs. Prendre « les sept
+    // dernieres colonnes » melangeait donc les deux mois et attribuait aux
+    // menages de Cote d'Ivoire un taux qui n'etait pas le leur.
+    if (groupes.length === 2 * nbColonnes) {
+      return groupes.filter((_, i) => i % 2 === 1).map(centre);
+    }
+    if (groupes.length === nbColonnes) return groupes.map(centre);
+    return null;
+  };
+
   const catIndicators = ["Autres institutions de depots", "Societes financieres", "Societes non financieres", "Menages", "ISBLM", "Administrations Publiques", "Ensemble"];
   const objIndicators = ["Consommation", "Exportation", "Tresorerie", "Equipement", "Immobilier", "Autres", "Ensemble"];
 
@@ -806,14 +924,21 @@ function parse_10(pages: PdfPage[], bulletinLatest: string, source: string): Par
   const yDep = findTitleY("Tableau 2.2.2.4.3") ?? 1e9;
 
   const extract = (yStart: number, yEnd: number, indicators: string[], sectionLabel: TauxSection) => {
-    for (const line of page.lines) {
-      if (line.y < yStart || line.y >= yEnd) continue;
-      if (!line.items.length) continue;
-      const head = line.items[0].str.trim();
-      const country = countryMap[head];
+    const lignesPays = page.lines.filter(
+      (l) =>
+        l.y >= yStart &&
+        l.y < yEnd &&
+        l.items.length > 0 &&
+        countryMap[sansAppelDeNote(l.items[0].str)] !== undefined,
+    );
+    const anchors = calibreColonnes(lignesPays, indicators.length);
+    if (!anchors) return;
+
+    for (const line of lignesPays) {
+      const country = countryMap[sansAppelDeNote(line.items[0].str)];
       if (!country) continue;
       const items = line.items.slice(1);
-      const cells = cellsByColumn(items, marsAnchors, 20);
+      const cells = cellsByColumn(items, anchors, 20);
       indicators.forEach((indicator, i) => {
         const v = parseFrNum(cells[i]);
         if (Number.isFinite(v)) rows.push(makeRow(sectionLabel, indicator, country, bulletinLatest || "mars-26", v / 100, "pct", source));
@@ -1025,7 +1150,6 @@ function parse_13(pages: PdfPage[], bulletinLatest: string, source: string): Par
     "Côte d'Ivoire": "Cote d'Ivoire",
     "Guinée-Bissau": "Guinee-Bissau",
     "Mali": "Mali",
-    "Niger (**)": "Niger",
     "Niger": "Niger",
     "Sénégal": "Senegal",
     "Togo": "Togo",
@@ -1040,8 +1164,7 @@ function parse_13(pages: PdfPage[], bulletinLatest: string, source: string): Par
   for (const line of page.lines) {
     if (line.y <= yStart || line.y >= yEnd) continue;
     if (!line.items.length) continue;
-    const head = line.items[0].str.trim();
-    const country = countryMap[head];
+    const country = countryMap[sansAppelDeNote(line.items[0].str)];
     if (!country) continue;
     const items = line.items.slice(1);
     const cells = cellsByColumn(items, anchors);
