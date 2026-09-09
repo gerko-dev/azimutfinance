@@ -813,6 +813,18 @@ def split_gestionnaire(libelle: str, current: str) -> tuple[str, str]:
     return current, libelle
 
 
+def est_colonne_depositaire(x: int, col_gest: int, col_depo: int | None) -> bool:
+    """Une cellule de tete isolee tombe-t-elle dans la colonne du depositaire ?
+
+    Avant d'avoir vu une premiere ligne a deux cellules, on n'a pas encore
+    appris les colonnes : on repond non, ce qui revient a l'ancien comportement
+    et ne peut pas faire pire.
+    """
+    if col_depo is None:
+        return False
+    return abs(x - col_depo) < abs(x - col_gest)
+
+
 def extract_fcp(text: str) -> list[dict[str, str]]:
     """
     Parse la derniere page du BOC (layout-aware) pour extraire les FCP/SICAV.
@@ -828,8 +840,16 @@ def extract_fcp(text: str) -> list[dict[str, str]]:
       MENSUELLES   → freq = "Mensuelle"
 
     La Société de gestion peut s'etaler sur 2 lignes (nom long). Le Dépositaire
-    n'apparait qu'a la 1ere ligne de chaque groupe. Les lignes suivantes du
-    meme groupe heritent du gestionnaire et du depositaire.
+    n'est reimprime que lorsqu'il CHANGE — et il change a l'interieur d'un
+    groupe : NSIA AM confie NSIA FONDS DIVERSIFIE a BOA CI, AURORE
+    OPPORTUNITES a UBA CI, AURORE SECURITE a NSIA BANQUE CI et AURORE
+    SECURITE II a NSIA FINANCE, sur quatre lignes consecutives. Une ligne
+    sans depositaire herite du dernier lu, pas du premier du groupe.
+
+    Une cellule de tete seule est donc ambigue en texte : « UBA CI » peut
+    etre un nouveau depositaire, et « MANAGEMENT » la suite d'un nom de
+    gestionnaire trop long. On tranche par la POSITION : le layout du PDF
+    aligne le gestionnaire en colonne 0 et le depositaire en colonne 34.
 
     Retourne une liste de dicts avec les champs bruts (gestionnaire,
     depositaire, opcvm, categorieCode, vlOrigine, valeurPrecedente,
@@ -842,6 +862,12 @@ def extract_fcp(text: str) -> list[dict[str, str]]:
     current_freq = ""
     gest_buffer = ""
     current_depo = ""
+    # Colonnes apprises sur les lignes qui portent les DEUX cellules de tete,
+    # c'est-a-dire la premiere ligne de chaque groupe. Le BOC ne bouge pas ses
+    # colonnes en cours de page, mais on ne les code pas en dur pour autant :
+    # une refonte de la mise en page les deplacerait ensemble.
+    col_gest = 0
+    col_depo: int | None = None
     rows: list[dict[str, str]] = []
 
     for raw_line in lines:
@@ -854,6 +880,7 @@ def extract_fcp(text: str) -> list[dict[str, str]]:
             current_freq = FREQ_SECTIONS[stripped]
             gest_buffer = ""
             current_depo = ""
+            col_depo = None
             continue
 
         # Skip lignes d'entete (sans donnees numeriques).
@@ -866,11 +893,27 @@ def extract_fcp(text: str) -> list[dict[str, str]]:
         # colonnes du layout PDF tout en supportant les valeurs avec un seul
         # espace interne ("5 000", "12 192,88").
         cells = [c.strip() for c in re.split(r"\s{2,}", stripped) if c.strip()]
+        # Position de depart de chaque cellule dans la ligne BRUTE. C'est elle
+        # qui distingue la colonne du gestionnaire de celle du depositaire ;
+        # `strip()` la detruit, d'ou cette relecture de la ligne d'origine.
+        positions: list[int] = []
+        curseur = 0
+        for c in cells:
+            i = raw_line.find(c, curseur)
+            if i < 0:
+                i = curseur
+            positions.append(i)
+            curseur = i + len(c)
         if len(cells) < 6:
-            # Trop peu de cellules pour etre une ligne de donnees.
-            # Possible continuation multi-ligne du gestionnaire seul.
+            # Trop peu de cellules pour etre une ligne de donnees : soit la
+            # suite d'un nom de gestionnaire, soit un depositaire sans fonds.
             if len(cells) == 1 and not re.search(r"\d", cells[0]):
-                gest_buffer = (gest_buffer + " " + cells[0]).strip() if gest_buffer else cells[0]
+                if est_colonne_depositaire(positions[0], col_gest, col_depo):
+                    current_depo = cells[0]
+                else:
+                    gest_buffer = (
+                        (gest_buffer + " " + cells[0]).strip() if gest_buffer else cells[0]
+                    )
             continue
 
         # Localise le code categorie : 1ere cellule dont la valeur appartient
@@ -894,18 +937,20 @@ def extract_fcp(text: str) -> list[dict[str, str]]:
         head = prefix[:-1]  # 0, 1, ou 2 cellules avant OPCVM
 
         # Gestion du gestionnaire / depositaire :
-        # - 0 cell  : ligne de continuation (meme groupe)
-        # - 1 cell  : continuation multi-ligne du gestionnaire (e.g. "MANAGEMENT")
-        #             OU nouveau gestionnaire+depositaire concatenes (rare quirk pypdf)
-        # - 2 cells : nouveau groupe (gestionnaire, depositaire)
+        # - 0 cell  : ligne de continuation, tout est herite
+        # - 1 cell  : selon sa COLONNE, un nouveau depositaire ou la suite d'un
+        #             nom de gestionnaire trop long
+        # - 2 cells : nouveau gestionnaire ET nouveau depositaire
         if len(head) == 2:
             gest_buffer = head[0]
             current_depo = head[1]
+            col_gest, col_depo = positions[0], positions[1]
         elif len(head) == 1:
-            # Si le cell ne contient pas de mot-cle de SDG/depo, on l'ajoute au
-            # gestionnaire (continuation multi-ligne). Sinon on suppose un
-            # nouveau groupe ou hybride — on remplace le gestionnaire.
-            gest_buffer = (gest_buffer + " " + head[0]).strip() if gest_buffer else head[0]
+            x = positions[0]
+            if est_colonne_depositaire(x, col_gest, col_depo):
+                current_depo = head[0]
+            else:
+                gest_buffer = (gest_buffer + " " + head[0]).strip() if gest_buffer else head[0]
 
         # Parse data : vl_orig, val_prec, date_prec, val_day, date_day, [date_orig]
         vl_orig = data[0]
