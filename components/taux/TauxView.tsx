@@ -1116,6 +1116,8 @@ export type TauxViewProps = {
   studioDescriptors: SeriesDescriptor[];
   studioRows: import("@/lib/tauxTypes").TauxRow[];
   commerce: import("@/lib/commerceExterieur").CommerceExterieur;
+  catalogueMacro: import("@/lib/commerceExterieur").FeuilleMacro[];
+  userRole: import("@/lib/auth/userRole").UserRole;
   source: string;
 };
 
@@ -1248,7 +1250,12 @@ export default function TauxView(props: TauxViewProps) {
       )}
 
       {onglet === "donnees" && (
-        <DonneesSection rows={props.studioRows} source={props.source} />
+        <DonneesSection
+          rows={props.studioRows}
+          source={props.source}
+          catalogue={props.catalogueMacro}
+          userRole={props.userRole}
+        />
       )}
 
       {onglet !== "donnees" && onglet !== "commerce" && (

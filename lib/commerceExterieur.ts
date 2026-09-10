@@ -12,7 +12,7 @@
 // huit pays, au prix d'une frequence ANNUELLE et d'un decalage de publication
 // que la fiche annonce.
 
-import { getMultiCountrySeries } from "./macroLoader";
+import { getMultiCountrySeries, loadMacroRaw } from "./macroLoader";
 import { MACRO_COUNTRIES, type MacroCountryCode } from "./macroTypes";
 
 const FEUILLE = "BP VI";
@@ -163,4 +163,72 @@ export function loadCommerceExterieur(annees = 25): CommerceExterieur {
       totalExports !== null && totalImports !== null ? totalExports - totalImports : null,
     sommePaysExports: sommePays > 0 ? sommePays : null,
   };
+}
+
+/** Catalogue des feuilles de data/macro.csv, pour l'onglet Donnees.
+ *
+ *  Seuls les LIBELLES partent au navigateur — 563 indicateurs sur seize
+ *  feuilles, une quarantaine de kilo-octets. Les 719 000 observations restent
+ *  au serveur et ne sortent que filtrees, via /api/donnees-bceao.
+ */
+export type FeuilleMacro = {
+  feuille: string;
+  lignes: number;
+  indicateurs: string[];
+  pays: string[];
+  premiere: string;
+  derniere: string;
+  periodicite: "mensuelle" | "annuelle" | "mixte";
+};
+
+export function catalogueMacro(): FeuilleMacro[] {
+  const par = new Map<
+    string,
+    {
+      lignes: number;
+      indicateurs: Set<string>;
+      pays: Set<string>;
+      premiere: string;
+      derniere: string;
+      mensuel: boolean;
+      annuel: boolean;
+    }
+  >();
+  for (const r of loadMacroRaw()) {
+    const e =
+      par.get(r.feuille) ??
+      par
+        .set(r.feuille, {
+          lignes: 0,
+          indicateurs: new Set(),
+          pays: new Set(),
+          premiere: r.iso,
+          derniere: r.iso,
+          mensuel: false,
+          annuel: false,
+        })
+        .get(r.feuille)!;
+    e.lignes++;
+    e.indicateurs.add(r.indicator);
+    e.pays.add(r.country);
+    if (r.iso < e.premiere) e.premiere = r.iso;
+    if (r.iso > e.derniere) e.derniere = r.iso;
+    if (r.periodicity === "monthly") e.mensuel = true;
+    else e.annuel = true;
+  }
+  return [...par.entries()]
+    .map(([feuille, e]) => ({
+      feuille,
+      lignes: e.lignes,
+      indicateurs: [...e.indicateurs].sort((a, b) => a.localeCompare(b, "fr")),
+      pays: [...e.pays].sort(),
+      premiere: e.premiere,
+      derniere: e.derniere,
+      periodicite: (e.mensuel && e.annuel
+        ? "mixte"
+        : e.mensuel
+          ? "mensuelle"
+          : "annuelle") as FeuilleMacro["periodicite"],
+    }))
+    .sort((a, b) => b.lignes - a.lignes);
 }

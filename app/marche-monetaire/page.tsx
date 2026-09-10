@@ -18,9 +18,14 @@ import {
 import { fmtPct, fmtBp, fmtMdsFCFA, fmtRate } from "@/lib/tauxFormat";
 import { pageMetadata, breadcrumbJsonLd } from "@/lib/seo";
 import JsonLd from "@/components/JsonLd";
-import { loadCommerceExterieur } from "@/lib/commerceExterieur";
+import { loadCommerceExterieur, catalogueMacro } from "@/lib/commerceExterieur";
+import { fetchUserRole } from "@/lib/auth/userRole";
 
-export const dynamic = "force-static";
+// Le telechargement des series est reserve aux abonnes Premium, et le role se
+// lit dans les cookies : la page ne peut plus etre generee une fois pour
+// toutes. Le parsing du bulletin reste memoise sur la mtime du PDF, seule la
+// premiere requete apres un changement de fichier le paie.
+export const dynamic = "force-dynamic";
 
 export const metadata = pageMetadata({
   title: "Taux BCEAO & UEMOA — AzimutFinance",
@@ -315,6 +320,11 @@ export default async function MarcheMonetairePage() {
   // mensuel BCEAO ne porte aucune donnée d'échanges extérieurs.
   const commerce = loadCommerceExterieur(25);
 
+  // Catalogue des seize feuilles de data/macro.csv : seuls les libelles
+  // partent au navigateur, les 719 000 observations restent au serveur.
+  const catalogue = catalogueMacro();
+  const userRole = await fetchUserRole();
+
   // ---- Studio : passe l'intégralité du dataset au client ----
   const studioDescriptors = listAllSeriesDescriptors();
   const studioRows = loadTauxRaw();
@@ -372,6 +382,8 @@ export default async function MarcheMonetairePage() {
           studioDescriptors={studioDescriptors}
           studioRows={studioRows}
           commerce={commerce}
+          catalogueMacro={catalogue}
+          userRole={userRole}
           source={getSourceLabel()}
         />
       </main>
