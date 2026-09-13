@@ -28,10 +28,10 @@ export default async function AdminCompteTitrePage() {
             Admin
           </Link>{" "}
           &rsaquo;{" "}
-          <span className="text-slate-700">Suivi de compte titre</span>
+          <span className="text-slate-700">Mon portefeuille</span>
         </div>
         <h1 className="text-2xl font-bold text-slate-900 mt-1">
-          Suivi de compte titre — administration
+          Mon portefeuille — administration
         </h1>
         <p className="text-sm text-slate-500 mt-1">
           Statistiques globales, frais marché (BRVM, DC/BR) et taux TPS par pays UEMOA.

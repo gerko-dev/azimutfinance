@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import Header from "@/components/Header";
 import PageHero from "@/components/PageHero";
-import AccountForm from "@/components/academie/compte-titre/AccountForm";
+import AccountForm from "@/components/outils/portefeuille/AccountForm";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { listTpsRates } from "@/lib/comptetitre/queries";
 
@@ -16,7 +16,7 @@ export default async function NouveauComptePage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect("/connexion?redirect=/academie/compte-titre/nouveau");
+  if (!user) redirect("/connexion?redirect=/outils/portefeuille/nouveau");
 
   const tpsRates = await listTpsRates();
 
@@ -26,7 +26,7 @@ export default async function NouveauComptePage() {
       <PageHero
         breadcrumb={[
           { label: "Accueil", href: "/" },
-          { label: "Suivi de compte titre", href: "/academie/compte-titre" },
+          { label: "Mon portefeuille", href: "/outils/portefeuille" },
           { label: "Nouveau compte" },
         ]}
         title="Créer un compte titre"

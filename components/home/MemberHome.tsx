@@ -473,7 +473,7 @@ export default async function MemberHome({ user }: { user: User }) {
             <ExploreTile href="/marches/matieres-premieres" icon="🌾" label="Matières premières" hint="Cacao, or, pétrole…" />
             <ExploreTile href="/marches/devises" icon="💱" label="Devises & FX" hint="FCFA face aux majors" />
             <ExploreTile href="/academie/glossaire" icon="📖" label="Glossaire" hint="65+ termes contextualisés" />
-            <ExploreTile href="/academie/compte-titre" icon="💼" label="Suivi compte-titre" hint="Pilotez votre portefeuille réel" />
+            <ExploreTile href="/outils/portefeuille" icon="💼" label="Mon portefeuille" hint="Pilotez votre portefeuille réel" />
             <ExploreTile href="/communaute/forum" icon="💬" label="Forum investisseurs" hint="Échangez avec la communauté" />
             <ExploreTile href="/communaute/newsletter" icon="✉️" label="Newsletter" hint="L'essentiel chaque semaine" />
           </div>

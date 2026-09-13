@@ -1,4 +1,4 @@
-// === Queries server-side : Suivi de compte titre ===
+// === Queries server-side : Mon portefeuille ===
 
 import "server-only";
 

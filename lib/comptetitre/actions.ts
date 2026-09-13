@@ -200,7 +200,7 @@ export async function createBrokerageAccount(
     });
   }
 
-  revalidatePath("/academie/compte-titre");
+  revalidatePath("/outils/portefeuille");
   return { ok: true, data: { id: account.id as string } };
 }
 
@@ -234,8 +234,8 @@ export async function updateBrokerageAccount(
     .eq("user_id", auth.userId);
   if (error) return { ok: false, error: error.message };
 
-  revalidatePath("/academie/compte-titre");
-  revalidatePath(`/academie/compte-titre/${id}`);
+  revalidatePath("/outils/portefeuille");
+  revalidatePath(`/outils/portefeuille/${id}`);
   return { ok: true, data: undefined };
 }
 
@@ -250,7 +250,7 @@ export async function deleteBrokerageAccount(id: string): Promise<ActionResult> 
     .eq("id", id)
     .eq("user_id", auth.userId);
   if (error) return { ok: false, error: error.message };
-  revalidatePath("/academie/compte-titre");
+  revalidatePath("/outils/portefeuille");
   return { ok: true, data: undefined };
 }
 
@@ -549,7 +549,7 @@ export async function addBrokerageTransaction(
     .single();
   if (error) return { ok: false, error: error.message };
 
-  revalidatePath(`/academie/compte-titre/${accountId}`);
+  revalidatePath(`/outils/portefeuille/${accountId}`);
   return { ok: true, data: { id: data.id as string } };
 }
 
@@ -633,7 +633,7 @@ export async function updateBrokerageTransaction(
     .eq("user_id", auth.userId);
   if (error) return { ok: false, error: error.message };
 
-  revalidatePath(`/academie/compte-titre/${accountId}`);
+  revalidatePath(`/outils/portefeuille/${accountId}`);
   return { ok: true, data: undefined };
 }
 
@@ -659,7 +659,7 @@ export async function deleteBrokerageTransaction(txnId: string): Promise<ActionR
     .eq("user_id", auth.userId);
   if (error) return { ok: false, error: error.message };
 
-  revalidatePath(`/academie/compte-titre/${accountId}`);
+  revalidatePath(`/outils/portefeuille/${accountId}`);
   return { ok: true, data: undefined };
 }
 
@@ -695,7 +695,7 @@ export async function adminUpdateMarketFee(
   });
   if (error) return { ok: false, error: error.message };
   revalidatePath("/admin/compte-titre");
-  revalidatePath("/academie/compte-titre");
+  revalidatePath("/outils/portefeuille");
   return { ok: true, data: undefined };
 }
 
@@ -722,6 +722,6 @@ export async function adminUpdateTpsRate(
   });
   if (error) return { ok: false, error: error.message };
   revalidatePath("/admin/compte-titre");
-  revalidatePath("/academie/compte-titre");
+  revalidatePath("/outils/portefeuille");
   return { ok: true, data: undefined };
 }

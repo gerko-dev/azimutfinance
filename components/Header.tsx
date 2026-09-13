@@ -83,7 +83,7 @@ const menuSections: MenuSection[] = [
     label: "Outils",
     items: [
       { label: "Comparateur de titres", href: "/outils/comparateur", badge: "Premium" },
-      { label: "Mon portefeuille", href: "/outils/portefeuille", badge: "Bientôt" },
+      { label: "Mon portefeuille", href: "/outils/portefeuille", requiresAuth: true },
       { label: "Ma watchlist", href: "/outils/watchlist", requiresAuth: true },
       { label: "Mes alertes", href: "/outils/alertes", requiresAuth: true },
       {
@@ -102,7 +102,6 @@ const menuSections: MenuSection[] = [
     items: [
       { label: "Catalogue formations", href: "/academie/formations" },
       { label: "Glossaire financier", href: "/academie/glossaire" },
-      { label: "Suivi de compte titre", href: "/academie/compte-titre" },
       { label: "Ligue Azimut", href: "/academie/simulateur" },
     ],
   },

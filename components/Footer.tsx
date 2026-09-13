@@ -84,7 +84,7 @@ export default function Footer() {
           <Column title="Académie">
             <Item href="/academie/formations">Catalogue formations</Item>
             <Item href="/academie/glossaire">Glossaire financier</Item>
-            <Item href="/academie/compte-titre">Suivi compte titre</Item>
+            <Item href="/outils/portefeuille">Mon portefeuille</Item>
             <Item href="/academie/simulateur">Ligue Azimut</Item>
             <Item
               href="/academie/magazine"

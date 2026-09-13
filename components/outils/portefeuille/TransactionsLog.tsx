@@ -17,7 +17,7 @@ export default function TransactionsLog({
       <div className="bg-white rounded-lg border border-slate-200 p-6 text-center">
         <div className="text-sm text-slate-500">Aucune transaction enregistrée.</div>
         <Link
-          href={`/academie/compte-titre/${accountId}/transactions/nouvelle`}
+          href={`/outils/portefeuille/${accountId}/transactions/nouvelle`}
           className="inline-block mt-3 text-xs bg-slate-900 hover:bg-slate-700 text-white font-medium px-3 py-1.5 rounded"
         >
           + Saisir la première transaction
@@ -35,7 +35,7 @@ export default function TransactionsLog({
           </span>
         </h3>
         <Link
-          href={`/academie/compte-titre/${accountId}/transactions/nouvelle`}
+          href={`/outils/portefeuille/${accountId}/transactions/nouvelle`}
           className="text-xs bg-slate-900 hover:bg-slate-700 text-white font-medium px-2.5 py-1 rounded"
         >
           + Nouvelle transaction
@@ -99,7 +99,7 @@ export default function TransactionsLog({
                   </td>
                   <td className="py-2 pr-4 pl-2 text-right">
                     <Link
-                      href={`/academie/compte-titre/${accountId}/transactions/${t.id}`}
+                      href={`/outils/portefeuille/${accountId}/transactions/${t.id}`}
                       className="text-[11px] text-blue-700 hover:underline"
                     >
                       Éditer

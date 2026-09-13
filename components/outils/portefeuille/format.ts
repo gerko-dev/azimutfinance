@@ -1,4 +1,4 @@
-// === Helpers de formatage : Suivi de compte titre ===
+// === Helpers de formatage : Mon portefeuille ===
 
 // Rendu « montant entier FCFA » — centralisé dans @/lib/format.
 // Ré-exporté ici pour ne pas toucher aux imports `./format` des composants.

@@ -720,7 +720,7 @@ export default async function Home() {
               "Marchés BRVM : cours quotidiens, indices, top mouvements",
               "Obligations · souverains UMOA-Titres · FCP · sociétés de gestion",
               "Macro UEMOA : BCEAO, inflation, immobilier, matières premières",
-              `Académie : ${catalog.freeCount} formation${catalog.freeCount > 1 ? "s" : ""} gratuite${catalog.freeCount > 1 ? "s" : ""} + glossaire 65+ termes + suivi compte titre`,
+              `Académie : ${catalog.freeCount} formation${catalog.freeCount > 1 ? "s" : ""} gratuite${catalog.freeCount > 1 ? "s" : ""} + glossaire 65+ termes + suivi de portefeuille`,
               "Simulateur Ligue Azimut avec classement saisonnier",
               "Magazine éditorial · articles libres",
               "Newsletter",

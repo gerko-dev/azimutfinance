@@ -31,9 +31,20 @@ const TYPES: BrokerageTxnType[] = [
   "split",
 ];
 
-const SEC_TYPES: SecurityType[] = ["stock", "bond", "fcp", "other"];
+// Categories PROPOSEES a la saisie. Le type SecurityType en compte deux autres,
+// fcp et other, volontairement conservees : d'anciennes transactions peuvent les
+// porter, et les retirer du type casserait leur affichage. Elles ne sont
+// simplement plus offertes a la creation — le portefeuille suit des titres
+// cotes, pour lesquels un referentiel et un cours existent.
+const SEC_TYPES: SecurityType[] = ["stock", "bond"];
 
 type StockHint = { code: string; name: string; sector: string; price: number };
+
+/** Categories adossees a un referentiel : le choix du titre s'y limite. */
+const REFERENTIELS: Partial<Record<SecurityType, string>> = {
+  stock: "actions cotées",
+  bond: "obligations cotées",
+};
 
 type Availability = {
   cash: number;
@@ -45,6 +56,7 @@ export default function TransactionForm({
   account,
   initial,
   stocks,
+  bonds,
   marketFees,
   tpsRates,
   availability,
@@ -53,6 +65,7 @@ export default function TransactionForm({
   account: BrokerageAccount;
   initial?: BrokerageTransaction;
   stocks: StockHint[];
+  bonds: StockHint[];
   marketFees: MarketFee[];
   tpsRates: TpsRate[];
   availability: Availability;
@@ -93,14 +106,31 @@ export default function TransactionForm({
     ? tpsRates.find((r) => r.country === account.sgiCountry)?.rate ?? 0
     : 0;
 
+  // Le referentiel depend de la categorie : une obligation ne figure pas dans
+  // la cote des actions, et proposer les deux melangees ferait saisir des
+  // tickers qui n'existent pas dans la categorie retenue.
+  const referentiel = useMemo(() => {
+    if (securityType === "stock") return stocks;
+    if (securityType === "bond") return bonds;
+    return [];
+  }, [securityType, stocks, bonds]);
+
   function onCodeChange(code: string) {
     const upper = code.toUpperCase();
     setSecurityCode(upper);
-    const hint = stocks.find((s) => s.code === upper);
+    const hint = referentiel.find((s) => s.code === upper);
     if (hint) {
       setSecurityName(hint.name);
-      if (!price) setPrice(String(hint.price));
+      if (!price && hint.price > 0) setPrice(String(hint.price));
     }
+  }
+
+  function onTypeChange(next: SecurityType) {
+    setSecurityType(next);
+    // Le code precedent appartient a l'ancien referentiel : le garder
+    // laisserait un ticker d'action sur une ligne d'obligation.
+    setSecurityCode("");
+    setSecurityName("");
   }
 
   // Calculs en live
@@ -192,11 +222,11 @@ export default function TransactionForm({
     startTransition(async () => {
       if (mode === "create") {
         const res = await addBrokerageTransaction(account.id, fd);
-        if (res.ok) router.push(`/academie/compte-titre/${account.id}`);
+        if (res.ok) router.push(`/outils/portefeuille/${account.id}`);
         else setFeedback({ ok: false, msg: res.error });
       } else {
         const res = await updateBrokerageTransaction(initial!.id, fd);
-        if (res.ok) router.push(`/academie/compte-titre/${account.id}`);
+        if (res.ok) router.push(`/outils/portefeuille/${account.id}`);
         else setFeedback({ ok: false, msg: res.error });
       }
     });
@@ -207,7 +237,7 @@ export default function TransactionForm({
     if (!confirm("Supprimer cette transaction ?")) return;
     startTransition(async () => {
       const res = await deleteBrokerageTransaction(initial.id);
-      if (res.ok) router.push(`/academie/compte-titre/${account.id}`);
+      if (res.ok) router.push(`/outils/portefeuille/${account.id}`);
       else setFeedback({ ok: false, msg: res.error });
     });
   }
@@ -290,21 +320,63 @@ export default function TransactionForm({
       </div>
 
       {needsSecurity && (
-        <div className="grid grid-cols-1 md:grid-cols-[140px_1fr_180px] gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-[180px_160px_1fr] gap-3">
+          {/* La categorie EN PREMIER : c'est elle qui determine dans quel
+              referentiel on cherche le titre. L'inverse obligeait a saisir un
+              ticker avant de savoir dans quelle liste il serait cherche. */}
           <div>
             <label className="block text-[11px] font-medium text-slate-700 uppercase mb-1">
-              Ticker
+              Catégorie
+            </label>
+            <select
+              value={securityType}
+              onChange={(e) => onTypeChange(e.target.value as SecurityType)}
+              className="w-full text-sm border border-slate-300 rounded px-2 py-1.5 bg-white"
+            >
+              {SEC_TYPES.map((s) => (
+                <option key={s} value={s}>
+                  {SECURITY_TYPE_LABELS[s]}
+                </option>
+              ))}
+              {/* Transaction ancienne portant une categorie retiree : on la
+                  laisse visible pour ne pas la reecrire a l'insu de son
+                  auteur en ouvrant simplement le formulaire. */}
+              {!SEC_TYPES.includes(securityType) && (
+                <option value={securityType}>
+                  {SECURITY_TYPE_LABELS[securityType]} (catégorie retirée)
+                </option>
+              )}
+            </select>
+            <div className="text-[10px] text-slate-500 mt-1">
+              {REFERENTIELS[securityType]
+                ? `${referentiel.length} ${REFERENTIELS[securityType]}`
+                : "catégorie héritée"}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-medium text-slate-700 uppercase mb-1">
+              {securityType === "bond" ? "Code" : "Ticker"}
             </label>
             <input
               type="text"
               value={securityCode}
               onChange={(e) => onCodeChange(e.target.value)}
-              list="stock-tickers"
-              placeholder="SNTS, BOAS…"
+              list="titres-referentiel"
+              placeholder={
+                securityType === "stock"
+                  ? "SNTS, BOAS…"
+                  : securityType === "bond"
+                    ? "TPCI.O12…"
+                    : "Code libre"
+              }
               className="w-full text-sm border border-slate-300 rounded px-2 py-1.5 font-mono uppercase tabular-nums"
             />
-            <datalist id="stock-tickers">
-              {stocks.map((s) => (
+            {/* Une seule datalist, dont le contenu suit la categorie : deux
+                listes concurrentes laisseraient le navigateur proposer des
+                tickers de l'autre univers. */}
+            <datalist id="titres-referentiel">
+              {referentiel.map((s) => (
                 <option key={s.code} value={s.code}>
                   {s.name}
                 </option>
@@ -316,6 +388,7 @@ export default function TransactionForm({
               </div>
             )}
           </div>
+
           <div>
             <label className="block text-[11px] font-medium text-slate-700 uppercase mb-1">
               Nom (snapshot)
@@ -327,22 +400,6 @@ export default function TransactionForm({
               placeholder="Sonatel, BOA Sénégal…"
               className="w-full text-sm border border-slate-300 rounded px-2 py-1.5"
             />
-          </div>
-          <div>
-            <label className="block text-[11px] font-medium text-slate-700 uppercase mb-1">
-              Catégorie
-            </label>
-            <select
-              value={securityType}
-              onChange={(e) => setSecurityType(e.target.value as SecurityType)}
-              className="w-full text-sm border border-slate-300 rounded px-2 py-1.5 bg-white"
-            >
-              {SEC_TYPES.map((s) => (
-                <option key={s} value={s}>
-                  {SECURITY_TYPE_LABELS[s]}
-                </option>
-              ))}
-            </select>
           </div>
         </div>
       )}
@@ -515,7 +572,7 @@ export default function TransactionForm({
         <div className="flex items-center gap-2 ml-auto">
           <button
             type="button"
-            onClick={() => router.push(`/academie/compte-titre/${account.id}`)}
+            onClick={() => router.push(`/outils/portefeuille/${account.id}`)}
             className="text-sm bg-white hover:bg-slate-50 text-slate-700 font-medium px-3 py-2 rounded border border-slate-300"
           >
             Annuler

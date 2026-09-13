@@ -41,7 +41,7 @@ const STATIC_ROUTES: { path: string; priority: number; freq: Freq }[] = [
   { path: "/academie/formations", priority: 0.7, freq: "weekly" },
   { path: "/academie/glossaire", priority: 0.7, freq: "monthly" },
   { path: "/academie/simulateur", priority: 0.6, freq: "weekly" },
-  { path: "/academie/compte-titre", priority: 0.4, freq: "monthly" },
+  { path: "/outils/portefeuille", priority: 0.4, freq: "monthly" },
   { path: "/actualites", priority: 0.8, freq: "daily" },
   { path: "/communaute/forum", priority: 0.6, freq: "daily" },
   { path: "/communaute/newsletter", priority: 0.5, freq: "monthly" },

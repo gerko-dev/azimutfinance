@@ -106,6 +106,19 @@ const nextConfig: NextConfig = {
         destination: "/outils/simulateur-adjudication",
         permanent: true,
       },
+      // Le suivi de compte titre etait loge sous Academie, ou il n'avait rien a
+      // faire : c'est un outil de gestion, pas un contenu pedagogique. Ses URL
+      // sont indexees et les utilisateurs les ont en favori.
+      {
+        source: "/academie/compte-titre",
+        destination: "/outils/portefeuille",
+        permanent: true,
+      },
+      {
+        source: "/academie/compte-titre/:path*",
+        destination: "/outils/portefeuille/:path*",
+        permanent: true,
+      },
       // L'ancien /outils/screener pointait vers le Pro Terminal. Le screener
       // actions est revenu dans l'espace Outils, en acces Premium : la
       // redirection doit suivre, sinon elle renverrait les liens indexes vers

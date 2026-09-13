@@ -69,7 +69,7 @@ export default function robots(): MetadataRoute.Robots {
     "/suspendu",
     "/compte",
     "/messagerie",
-    "/academie/compte-titre/",
+    "/outils/portefeuille/",
     "/premium/paiement",
     "/communaute/newsletter/desinscrire",
   ];

@@ -1,4 +1,4 @@
-// === Types partages : Suivi de compte titre (real money) ===
+// === Types partages : Mon portefeuille (argent reel) ===
 //
 // Comptes-titres reels d'un utilisateur (BRVM, FCFA).
 // Importable cote server ET client.

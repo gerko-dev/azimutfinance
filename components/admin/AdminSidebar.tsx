@@ -43,7 +43,7 @@ const GROUPS: NavGroup[] = [
       { href: "/admin/abonnements", label: "Abonnements Premium", icon: "⭐", minLevel: 2 },
       { href: "/admin/demandes-pro", label: "Demandes Pro", icon: "🏢", minLevel: 2 },
       { href: "/admin/tarification", label: "Tarification", icon: "💰", minLevel: 1 },
-      { href: "/admin/compte-titre", label: "Suivi compte titre", icon: "💼", minLevel: 2 },
+      { href: "/admin/compte-titre", label: "Mon portefeuille", icon: "💼", minLevel: 2 },
     ],
   },
   {

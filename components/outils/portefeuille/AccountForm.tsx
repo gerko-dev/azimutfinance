@@ -95,7 +95,7 @@ export default function AccountForm({
     startTransition(async () => {
       if (mode === "create") {
         const res = await createBrokerageAccount(fd);
-        if (res.ok) router.push(`/academie/compte-titre/${res.data.id}`);
+        if (res.ok) router.push(`/outils/portefeuille/${res.data.id}`);
         else setFeedback({ ok: false, msg: res.error });
       } else {
         const res = await updateBrokerageAccount(initial!.id, fd);
@@ -119,7 +119,7 @@ export default function AccountForm({
       return;
     startTransition(async () => {
       const res = await deleteBrokerageAccount(initial.id);
-      if (res.ok) router.push("/academie/compte-titre");
+      if (res.ok) router.push("/outils/portefeuille");
       else setFeedback({ ok: false, msg: res.error });
     });
   }

@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import Header from "@/components/Header";
 import PageHero from "@/components/PageHero";
-import AccountForm from "@/components/academie/compte-titre/AccountForm";
+import AccountForm from "@/components/outils/portefeuille/AccountForm";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getMyAccount, listTpsRates } from "@/lib/comptetitre/queries";
 
@@ -17,7 +17,7 @@ export default async function ParametresPage({
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect(`/connexion?redirect=/academie/compte-titre/${id}/parametres`);
+  if (!user) redirect(`/connexion?redirect=/outils/portefeuille/${id}/parametres`);
 
   const [account, tpsRates] = await Promise.all([
     getMyAccount(id),
@@ -31,8 +31,8 @@ export default async function ParametresPage({
       <PageHero
         breadcrumb={[
           { label: "Accueil", href: "/" },
-          { label: "Suivi de compte titre", href: "/academie/compte-titre" },
-          { label: account.name, href: `/academie/compte-titre/${id}` },
+          { label: "Mon portefeuille", href: "/outils/portefeuille" },
+          { label: account.name, href: `/outils/portefeuille/${id}` },
           { label: "Paramètres" },
         ]}
         title="Paramètres du compte"
