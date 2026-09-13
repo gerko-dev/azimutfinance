@@ -1,0 +1,7 @@
+# PDF identifies comme n etant pas des avis de prix : ni periode ni
+# montant detecte. Ils ne sont plus re-ocerises a chaque passage.
+# Supprimer une ligne force une nouvelle tentative.
+COMMUNIQUE-PROROGATION-DELAI.pdf
+COMMUNIQUE-RESULTAT-AMI-N°S002-3.pdf
+SCAN-COMMUNIQUE-AGREMENT-ACHETEUR-FONDS-DE-TASSE-2026.pdf
+plublication_0001.pdf
