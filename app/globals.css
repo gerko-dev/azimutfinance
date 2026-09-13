@@ -316,3 +316,92 @@ body[data-pro="1"]::-webkit-scrollbar-button {
     print-color-adjust: exact;
   }
 }
+/* ============================================================
+   Menu principal — entree des panneaux deroulants.
+   Une translation de 4px seulement : le menu doit paraitre
+   reactif, pas anime. Au-dela, le survol accidentel devient
+   une animation qu'on subit.
+   ============================================================ */
+@keyframes az-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes az-flyout-in {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.az-menu-in {
+  animation: az-menu-in 0.14s ease-out;
+}
+
+.az-flyout-in {
+  animation: az-flyout-in 0.14s ease-out;
+}
+
+/* Respect de la preference systeme : pas de mouvement impose. */
+@media (prefers-reduced-motion: reduce) {
+  .az-menu-in,
+  .az-flyout-in {
+    animation: none;
+  }
+}
+
+/* ============================================================
+   Illustration du hero — respiration des noeuds UEMOA.
+   Une pulsation lente et decalee par noeud : le dessin doit
+   sembler vivant sans jamais attirer l'oeil hors du titre.
+   ============================================================ */
+@keyframes az-pulse {
+  0%,
+  100% {
+    opacity: 0.18;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.25);
+  }
+}
+
+@keyframes az-drift {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+.az-pulse {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: az-pulse 3.6s ease-in-out infinite;
+}
+
+.az-drift {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: az-drift 7s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .az-pulse,
+  .az-drift {
+    animation: none;
+  }
+}

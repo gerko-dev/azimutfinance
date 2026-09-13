@@ -59,6 +59,22 @@ export function formatFcfa(n: number): string {
   return `${n.toLocaleString("fr-FR")} FCFA`;
 }
 
+/**
+ * Remise a annoncer publiquement : la plus forte parmi les plans actifs.
+ *
+ * C'est `discount_pct` qui fait foi — la « reduction affichee » pilotee depuis
+ * Admin > Tarification > Plans, et la seule des deux sources de remise que la
+ * RLS laisse lire a un visiteur anonyme (`pricing_plans` est en select public
+ * sur `active = true`, `promo_codes` est reserve a l'admin niveau 1).
+ *
+ * Renvoie 0 quand aucun plan n'affiche de remise : les appelants s'en servent
+ * pour ne rien afficher du tout plutot qu'une pastille « -0 % ».
+ */
+export function bestDiscountPct(plans: { discountPct: number }[]): number {
+  if (plans.length === 0) return 0;
+  return Math.max(0, ...plans.map((p) => Math.round(p.discountPct || 0)));
+}
+
 export function isValidPlanCode(code: string): code is PlanCode {
   return code === "m1" || code === "m6" || code === "y1";
 }

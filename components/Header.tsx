@@ -2,12 +2,15 @@
 
 import { useState, useRef, useEffect, useMemo } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { signOutAction } from "@/lib/auth/actions";
+import { bestDiscountPct } from "@/lib/premium/plans";
 import MessagerieIconBadge from "@/components/messagerie/MessagerieIconBadge";
 import NotificationsBell from "@/components/notifications/NotificationsBell";
 import HeartbeatPinger from "@/components/HeartbeatPinger";
+import PremiumDiscountBadge from "@/components/premium/PremiumDiscountBadge";
 
 type MenuItem = {
   label: string;
@@ -41,7 +44,7 @@ const menuSections: MenuSection[] = [
         href: "/marches/obligations",
         children: [
           { label: "Obligations cotées", href: "/marches/obligations" },
-          { label: "OAT / BAT souverains", href: "/marches/souverains-non-cotes" },
+          { label: "OAT/BAT", href: "/marches/souverains-non-cotes" },
         ],
       },
       {
@@ -104,14 +107,35 @@ const menuSections: MenuSection[] = [
   },
 ];
 
+// Un lien est « actif » s'il est la page courante ou l'un de ses parents.
+// La comparaison passe par le separateur pour que /marches/actions ne se laisse
+// pas revendiquer par /marches/action-truc.
+function matchesPath(href: string, pathname: string): boolean {
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function sectionIsActive(section: MenuSection, pathname: string): boolean {
+  return section.items.some(
+    (item) =>
+      matchesPath(item.href, pathname) ||
+      (item.children ?? []).some((child) => matchesPath(child.href, pathname)),
+  );
+}
+
 function BadgeLabel({ badge }: { badge: string }) {
+  // Pastilles a anneau : le badge se lit sans peser autant qu'un aplat, et
+  // reste lisible pose sur le bleu tres pale du survol.
   const styles: Record<string, string> = {
-    Premium: "bg-blue-100 text-blue-700",
-    Pro: "bg-purple-100 text-purple-700",
-    Bientôt: "bg-slate-100 text-slate-500",
+    Premium: "bg-amber-50 text-amber-700 ring-amber-600/20",
+    Pro: "bg-violet-50 text-violet-700 ring-violet-600/20",
+    "Bientôt": "bg-slate-50 text-slate-500 ring-slate-500/20",
   };
   return (
-    <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded ${styles[badge] || styles.Bientôt}`}>
+    <span
+      className={`ml-2 shrink-0 text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full ring-1 ring-inset ${
+        styles[badge] || styles["Bientôt"]
+      }`}
+    >
       {badge}
     </span>
   );
@@ -139,9 +163,35 @@ export default function Header() {
   const [adminLevel, setAdminLevel] = useState<number | null>(null);
   const [userRole, setUserRole] = useState<"member" | "premium" | "pro" | null>(null);
   const [hasActiveSub, setHasActiveSub] = useState(false);
+  const [discountPct, setDiscountPct] = useState(0);
   const headerRef = useRef<HTMLElement>(null);
+  const pathname = usePathname();
 
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+
+  // Remise Premium en cours. Requete separee de l'auth : `pricing_plans` est en
+  // select public sur `active = true`, donc un visiteur anonyme la lit aussi —
+  // c'est justement lui qu'on veut convaincre.
+  useEffect(() => {
+    let cancelled = false;
+    supabase
+      .from("pricing_plans")
+      .select("discount_pct")
+      .eq("active", true)
+      .then(({ data }) => {
+        if (cancelled || !data) return;
+        setDiscountPct(
+          bestDiscountPct(
+            (data as { discount_pct: number }[]).map((r) => ({
+              discountPct: r.discount_pct,
+            })),
+          ),
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase]);
 
   // Charger la session au montage + ecouter les changements (login / logout / refresh)
   useEffect(() => {
@@ -218,12 +268,23 @@ export default function Header() {
             .filter((s) => s.items.length > 0),
     [user],
   );
-  // CTA "Passer a Premium" : reserve aux comptes Membres connectes uniquement.
-  // - userRole === "member" exclut implicitement guests (null), pro, premium, admins
+  // CTA Premium : permanent pour qui n'a pas encore Premium — invites comme
+  // Membres. L'invite est la premiere cible de l'offre ; le lui cacher jusqu'a
+  // l'inscription revenait a ne la montrer qu'a ceux qui avaient deja franchi
+  // une porte.
+  // - userRole null = invite, "member" = compte gratuit ; pro et premium sortis
+  // - adminLevel exclut les admins, qui ont deja tout
   // - !hasActiveSub double-securise contre un userRole perime
   // - profileLoaded gate evite le flash entre auth resolve et profil resolve
-  const showPremiumCta =
-    authLoaded && profileLoaded && userRole === "member" && !hasActiveSub;
+  //   (il passe a true dans les deux branches, invite compris)
+  // Meme portee que l'ancien CTA : invites et Membres, ni Premium ni Pro ni
+  // admins — annoncer une remise a qui a deja l'abonnement n'a pas de sens.
+  const showDiscount =
+    authLoaded &&
+    profileLoaded &&
+    adminLevel === null &&
+    !hasActiveSub &&
+    (userRole === null || userRole === "member");
 
   // Fermer les menus au clic exterieur
   useEffect(() => {
@@ -238,49 +299,82 @@ export default function Header() {
   }, []);
 
   return (
-    <header ref={headerRef} className="bg-white border-b border-slate-200 relative z-30">
+    // Barre collante sur verre depoli : le contenu defile dessous sans que la
+    // navigation quitte l'ecran. `supports-[backdrop-filter]` garde un fond
+    // opaque la ou le flou n'existe pas, sinon le texte passe sur le contenu.
+    <header
+      ref={headerRef}
+      className="sticky top-0 z-30 bg-white/95 supports-[backdrop-filter]:bg-white/75 backdrop-blur-xl border-b border-slate-900/[0.07] shadow-[0_1px_3px_0_rgb(15_23_42_/_0.04)]"
+    >
       <HeartbeatPinger user={user} />
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 md:py-4 flex items-center justify-between">
         {/* Logo + Menu desktop */}
         <div className="flex items-center gap-4 lg:gap-8">
-          <Link href="/" className="text-lg md:text-xl font-semibold tracking-tight">
+          <Link
+            href="/"
+            className="text-lg md:text-xl font-semibold tracking-tight transition-opacity hover:opacity-80"
+          >
             <span className="text-blue-700">Azimut</span>
             <span className="text-slate-900">Finance</span>
           </Link>
 
           {/* Menu desktop */}
-          <nav className="hidden lg:flex gap-1 text-sm">
-            {visibleMenuSections.map((section) => (
+          <nav className="hidden lg:flex gap-0.5 text-sm">
+            {visibleMenuSections.map((section) => {
+              const isOpen = activeDesktopMenu === section.label;
+              const isActive = sectionIsActive(section, pathname);
+              return (
               <div key={section.label} className="relative">
                 <button
                   onClick={() =>
-                    setActiveDesktopMenu(
-                      activeDesktopMenu === section.label ? null : section.label
-                    )
+                    setActiveDesktopMenu(isOpen ? null : section.label)
                   }
                   onMouseEnter={() => setActiveDesktopMenu(section.label)}
-                  className={`px-3 py-2 rounded-md hover:bg-slate-50 flex items-center gap-1 ${
-                    activeDesktopMenu === section.label
-                      ? "bg-slate-50 text-slate-900"
-                      : "text-slate-600 hover:text-slate-900"
+                  aria-expanded={isOpen}
+                  aria-haspopup="true"
+                  className={`relative px-3 py-2 rounded-lg flex items-center gap-1.5 font-medium transition-colors duration-150 ${
+                    isOpen
+                      ? "bg-blue-50 text-blue-700"
+                      : isActive
+                        ? "text-blue-700 hover:bg-blue-50/70"
+                        : "text-slate-600 hover:bg-slate-100/70 hover:text-slate-900"
                   }`}
                 >
                   {section.label}
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <svg
+                    width="10"
+                    height="10"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    className={`transition-transform duration-200 ${
+                      isOpen ? "rotate-180" : ""
+                    } ${isOpen || isActive ? "opacity-90" : "opacity-50"}`}
+                  >
                     <path d="M6 9l6 6 6-6" />
                   </svg>
+                  {/* Soulignement de la section courante : un trait fin sous
+                      l'onglet, pas un aplat — on doit savoir ou l'on est sans
+                      que la barre se transforme en damier. */}
+                  {isActive && (
+                    <span className="absolute inset-x-3 -bottom-px h-0.5 rounded-full bg-blue-600" />
+                  )}
                 </button>
 
                 {/* Sous-menu */}
-                {activeDesktopMenu === section.label && (
+                {isOpen && (
                   <div
                     onMouseLeave={() => {
                       setActiveDesktopMenu(null);
                       setActiveFlyout(null);
                     }}
-                    className="absolute left-0 top-full mt-1 bg-white border border-slate-200 rounded-md shadow-lg py-2 min-w-[260px]"
+                    className="az-menu-in absolute left-0 top-full mt-2 bg-white rounded-xl ring-1 ring-slate-900/[0.07] shadow-xl shadow-slate-900/[0.08] p-1.5 min-w-[268px]"
                   >
-                    {section.items.map((item) => (
+                    {section.items.map((item) => {
+                      const itemActive = matchesPath(item.href, pathname);
+                      const flyoutOpen = activeFlyout === item.href;
+                      return (
                       <div
                         key={item.href}
                         className="relative"
@@ -294,22 +388,28 @@ export default function Header() {
                             setActiveDesktopMenu(null);
                             setActiveFlyout(null);
                           }}
-                          className={`flex items-center justify-between px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-slate-900 ${
-                            activeFlyout === item.href ? "bg-slate-50" : ""
+                          className={`group flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm transition-colors duration-150 ${
+                            itemActive
+                              ? "bg-blue-50 text-blue-700 font-medium"
+                              : flyoutOpen
+                                ? "bg-slate-50 text-slate-900"
+                                : "text-slate-600 hover:bg-blue-50 hover:text-blue-700"
                           }`}
                         >
-                          <span className={item.children ? "font-medium" : ""}>{item.label}</span>
-                          <span className="flex items-center gap-1.5">
+                          <span className={item.children ? "font-medium" : ""}>
+                            {item.label}
+                          </span>
+                          <span className="flex items-center gap-1">
                             {item.badge && <BadgeLabel badge={item.badge} />}
                             {item.children && (
                               <svg
-                                width="10"
-                                height="10"
+                                width="11"
+                                height="11"
                                 viewBox="0 0 24 24"
                                 fill="none"
                                 stroke="currentColor"
                                 strokeWidth="2.5"
-                                className="text-slate-400"
+                                className="text-slate-400 transition-transform duration-150 group-hover:translate-x-0.5"
                               >
                                 <path d="M9 6l6 6-6 6" />
                               </svg>
@@ -317,8 +417,8 @@ export default function Header() {
                           </span>
                         </Link>
                         {/* Flyout enfants : visible seulement au hover sur l'item */}
-                        {item.children && activeFlyout === item.href && (
-                          <div className="absolute left-full top-0 ml-1 bg-white border border-slate-200 rounded-md shadow-lg py-2 min-w-[220px]">
+                        {item.children && flyoutOpen && (
+                          <div className="az-flyout-in absolute left-full top-0 ml-1.5 bg-white rounded-xl ring-1 ring-slate-900/[0.07] shadow-xl shadow-slate-900/[0.08] p-1.5 min-w-[228px]">
                             {item.children.map((child) => (
                               <Link
                                 key={child.href}
@@ -327,7 +427,11 @@ export default function Header() {
                                   setActiveDesktopMenu(null);
                                   setActiveFlyout(null);
                                 }}
-                                className="flex items-center justify-between px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                                className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors duration-150 ${
+                                  matchesPath(child.href, pathname)
+                                    ? "bg-blue-50 text-blue-700 font-medium"
+                                    : "text-slate-600 hover:bg-blue-50 hover:text-blue-700"
+                                }`}
                               >
                                 <span>{child.label}</span>
                                 {child.badge && <BadgeLabel badge={child.badge} />}
@@ -336,24 +440,20 @@ export default function Header() {
                           </div>
                         )}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
-            ))}
+              );
+            })}
           </nav>
         </div>
 
         {/* Boutons desktop : auth-aware */}
         <div className="hidden md:flex items-center gap-2">
-          {showPremiumCta && (
-            <Link
-              href="/premium"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-semibold bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-sm hover:shadow transition"
-            >
-              <span aria-hidden>⭐</span>
-              <span>Passer à Premium</span>
-            </Link>
+          {showDiscount && discountPct > 0 && (
+            <PremiumDiscountBadge pct={discountPct} />
           )}
           {!authLoaded ? (
             <div className="h-9 w-24 bg-slate-100 rounded-md animate-pulse" />
@@ -484,7 +584,9 @@ export default function Header() {
         {/* Bouton hamburger mobile */}
         <button
           onClick={() => setMenuOpen(!menuOpen)}
-          className="lg:hidden p-2 rounded-md hover:bg-slate-100"
+          className={`lg:hidden p-2 rounded-lg transition-colors ${
+            menuOpen ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-100"
+          }`}
           aria-label="Menu"
         >
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -499,8 +601,14 @@ export default function Header() {
 
       {/* Menu mobile deroulant */}
       {menuOpen && (
-        <nav className="lg:hidden border-t border-slate-200 bg-white max-h-[70vh] overflow-y-auto">
+        <nav className="az-menu-in lg:hidden border-t border-slate-900/[0.07] bg-white max-h-[70vh] overflow-y-auto">
           <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col gap-1">
+            {showDiscount && discountPct > 0 && (
+              <PremiumDiscountBadge
+                pct={discountPct}
+                className="justify-center mb-2"
+              />
+            )}
             {showProButton && (
               <Link
                 href="/pros"
@@ -525,15 +633,21 @@ export default function Header() {
                 Espace Pro
               </Link>
             )}
-            {visibleMenuSections.map((section) => (
+            {visibleMenuSections.map((section) => {
+              const open = activeMobileMenu === section.label;
+              const isActive = sectionIsActive(section, pathname);
+              return (
               <div key={section.label}>
                 <button
                   onClick={() =>
-                    setActiveMobileMenu(
-                      activeMobileMenu === section.label ? null : section.label
-                    )
+                    setActiveMobileMenu(open ? null : section.label)
                   }
-                  className="w-full flex items-center justify-between py-2 text-sm font-medium text-slate-900"
+                  aria-expanded={open}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                    open || isActive
+                      ? "bg-blue-50 text-blue-700"
+                      : "text-slate-900 hover:bg-slate-50"
+                  }`}
                 >
                   {section.label}
                   <svg
@@ -543,18 +657,21 @@ export default function Header() {
                     fill="none"
                     stroke="currentColor"
                     strokeWidth="2"
-                    className={`transition-transform ${
-                      activeMobileMenu === section.label ? "rotate-180" : ""
+                    className={`transition-transform duration-200 ${
+                      open ? "rotate-180" : "opacity-50"
                     }`}
                   >
                     <path d="M6 9l6 6 6-6" />
                   </svg>
                 </button>
-                {activeMobileMenu === section.label && (
-                  <div className="pl-4 py-1 flex flex-col gap-1 border-l-2 border-slate-100">
-                    {section.items.map((item) => (
+                {open && (
+                  <div className="az-menu-in mt-0.5 ml-3 pl-3 py-0.5 flex flex-col gap-0.5 border-l border-slate-200">
+                    {section.items.map((item) => {
+                      const itemActive = matchesPath(item.href, pathname);
+                      const flyoutOpen = activeMobileFlyout === item.href;
+                      return (
                       <div key={item.href}>
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center">
                           <Link
                             href={item.href}
                             onClick={() => {
@@ -562,23 +679,26 @@ export default function Header() {
                               setActiveMobileMenu(null);
                               setActiveMobileFlyout(null);
                             }}
-                            className="flex-1 py-1.5 text-sm text-slate-600"
+                            className={`flex-1 flex items-center px-2.5 py-2 rounded-lg text-sm transition-colors ${
+                              itemActive
+                                ? "bg-blue-50 text-blue-700 font-medium"
+                                : "text-slate-600 active:bg-slate-50"
+                            }`}
                           >
                             <span className={item.children ? "font-medium text-slate-800" : ""}>
                               {item.label}
                             </span>
+                            {item.badge && <BadgeLabel badge={item.badge} />}
                           </Link>
-                          {item.badge && <BadgeLabel badge={item.badge} />}
                           {item.children && (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setActiveMobileFlyout(
-                                  activeMobileFlyout === item.href ? null : item.href
-                                );
+                                setActiveMobileFlyout(flyoutOpen ? null : item.href);
                               }}
                               aria-label="Sous-menu"
-                              className="p-1.5 -mr-1.5"
+                              aria-expanded={flyoutOpen}
+                              className="p-2 rounded-lg text-slate-400 active:bg-slate-50"
                             >
                               <svg
                                 width="14"
@@ -587,8 +707,8 @@ export default function Header() {
                                 fill="none"
                                 stroke="currentColor"
                                 strokeWidth="2.5"
-                                className={`text-slate-500 transition-transform ${
-                                  activeMobileFlyout === item.href ? "rotate-180" : ""
+                                className={`transition-transform duration-200 ${
+                                  flyoutOpen ? "rotate-180" : ""
                                 }`}
                               >
                                 <path d="M6 9l6 6 6-6" />
@@ -596,8 +716,8 @@ export default function Header() {
                             </button>
                           )}
                         </div>
-                        {item.children && activeMobileFlyout === item.href && (
-                          <div className="pl-4 flex flex-col gap-0.5 border-l-2 border-slate-100 ml-1 mb-1">
+                        {item.children && flyoutOpen && (
+                          <div className="az-menu-in ml-2.5 pl-3 flex flex-col gap-0.5 border-l border-slate-200 mb-1">
                             {item.children.map((child) => (
                               <Link
                                 key={child.href}
@@ -607,7 +727,11 @@ export default function Header() {
                                   setActiveMobileMenu(null);
                                   setActiveMobileFlyout(null);
                                 }}
-                                className="flex items-center justify-between py-1 text-xs text-slate-500"
+                                className={`flex items-center px-2.5 py-1.5 rounded-lg text-[13px] transition-colors ${
+                                  matchesPath(child.href, pathname)
+                                    ? "bg-blue-50 text-blue-700 font-medium"
+                                    : "text-slate-500 active:bg-slate-50"
+                                }`}
                               >
                                 <span>{child.label}</span>
                                 {child.badge && <BadgeLabel badge={child.badge} />}
@@ -616,11 +740,13 @@ export default function Header() {
                           </div>
                         )}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
-            ))}
+              );
+            })}
             <div className="pt-3 mt-2 border-t border-slate-100">
               {!authLoaded ? (
                 <div className="h-9 bg-slate-100 rounded-md animate-pulse" />

@@ -10,6 +10,7 @@ import {
 import { getBrvmIndicesSnapshot } from "@/lib/brvm/liveIndices";
 import { getBrvmSnapshot } from "@/lib/brvm/liveQuotes";
 import LivePriceBadge from "@/components/LivePriceBadge";
+import HeroArtwork from "@/components/home/HeroArtwork";
 import {
   listPublishedArticles,
   listPublishedIssues,
@@ -42,6 +43,7 @@ const fmtPct = (v: number | null, dec = 1) =>
 
 const fmtNum = (v: number, dec = 0) =>
   v.toLocaleString("fr-FR", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+
 
 export default async function Home() {
   // Membre connecté → cockpit personnalisé (MemberHome). Les rôles premium et
@@ -103,6 +105,7 @@ export default async function Home() {
     indicesSnapshot.indices.map((i) => [i.code, i]),
   );
   const brvmcLive = liveIndexByCode.get("BRVMC");
+
   const brvm30Live = liveIndexByCode.get("BRVM30");
   const brvmPrestigeLive = liveIndexByCode.get("BRVMPR");
 
@@ -194,6 +197,10 @@ export default async function Home() {
         <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-indigo-500/15 rounded-full blur-3xl" />
 
         <div className="relative max-w-7xl mx-auto px-4 md:px-6 pt-12 md:pt-20 pb-16 md:pb-24">
+          {/* Deux colonnes a partir de lg : le discours a gauche, la preuve a
+              droite. En dessous, l'illustration passe sous les boutons plutot
+              que de comprimer le titre. */}
+          <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,400px)] gap-10 lg:gap-14 items-center">
           <div className="max-w-3xl">
             <span className="inline-block text-[11px] uppercase tracking-wider font-semibold bg-blue-500/15 text-blue-300 border border-blue-500/30 px-2.5 py-1 rounded">
               ★ Le portail des investisseurs UEMOA
@@ -220,12 +227,15 @@ export default async function Home() {
                 Créer un compte gratuit →
               </Link>
               <Link
-                href="/marches/actions"
+                href="/premium"
                 className="bg-white/10 hover:bg-white/15 border border-white/20 text-white font-medium px-6 py-3 rounded-md text-sm md:text-base transition"
               >
-                Explorer les marchés
+                Découvrir Premium
               </Link>
             </div>
+          </div>
+
+          <HeroArtwork />
           </div>
 
           {/* Section BRVM */}
