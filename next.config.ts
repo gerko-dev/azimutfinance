@@ -108,6 +108,16 @@ const nextConfig: NextConfig = {
         destination: "/pros",
         permanent: true,
       },
+      {
+        source: "/pros/fund-management",
+        destination: "/gestion-portefeuille",
+        permanent: true,
+      },
+      {
+        source: "/pros/fund-management/:path*",
+        destination: "/gestion-portefeuille/:path*",
+        permanent: true,
+      },
     ];
   },
 };

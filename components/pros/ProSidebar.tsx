@@ -68,7 +68,8 @@ const NAV: NavSection[] = [
     items: [
       { label: "Place de marché OTC", href: "/pros/otc" },
       { label: "API & exports", href: "/pros/api" },
-      { label: "Fund management", href: "/pros/fund-management" },
+      // « Fund management » a quitte le Pro Terminal pour /gestion-portefeuille,
+      // module pleine page reserve au niveau 1 le temps de son rodage.
       { label: "Reporting", href: "/pros/reporting", soon: true },
     ],
   },

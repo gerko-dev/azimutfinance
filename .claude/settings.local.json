@@ -396,7 +396,19 @@
       "Bash(git -C /c/Users/hp/GerKo/azimutfinance status --porcelain)",
       "PowerShell(foreach \\($p in @\\(\"/pros\",\"/pros/ytm\",\"/pros/screener\",\"/pros/actions\",\"/\"\\)\\) { try { $r = Invoke-WebRequest -Uri \"http://localhost:3000$p\" -UseBasicParsing -MaximumRedirection 0 -ErrorAction Stop; \"$p -> $\\($r.StatusCode\\)\" } catch { \"$p -> ERR $\\($_.Exception.Response.StatusCode.value__\\)\" } })",
       "PowerShell($env:Path = \"C:\\\\Program Files\\\\nodejs;\" + $env:Path; node \"C:\\\\Users\\\\BROU~1.KOU\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-brou-kouame-Desktop-Project-azimutfinance\\\\581757fd-592a-4d21-8645-91bd80593685\\\\scratchpad\\\\read-inv.mjs\" \"C:\\\\Users\\\\brou.kouame\\\\Desktop\\\\Project\\\\azimutfinance\\\\Inventaire du FCP NSIA FONDS DIVERSIFIE au 2262026.xlsx\")",
-      "PowerShell($env:Path = \"C:\\\\Program Files\\\\nodejs;\" + $env:Path; node \"_tmp_read_inv.mjs\" \"Inventaire du FCP NSIA FONDS DIVERSIFIE au 2262026.xlsx\")"
+      "PowerShell($env:Path = \"C:\\\\Program Files\\\\nodejs;\" + $env:Path; node \"_tmp_read_inv.mjs\" \"Inventaire du FCP NSIA FONDS DIVERSIFIE au 2262026.xlsx\")",
+      "Bash(PYTHONIOENCODING=utf-8 timeout 400 python scripts/backfill_fcp_vl.py --depuis 2026-08-03 --jusqu-a 2026-08-14)",
+      "Bash(PYTHONIOENCODING=utf-8 timeout 600 python scripts/backfill_fcp_vl.py --depuis 2026-08-03 --jusqu-a 2026-08-14)",
+      "WebFetch(domain:funds360.euronext.com)",
+      "PowerShell(& \"C:\\\\Program Files\\\\nodejs\\\\node.exe\" _q.cjs)",
+      "PowerShell(npx --no-install tsc --noEmit 2>&1)",
+      "PowerShell(npx --no-install eslint \"components/gestion-portefeuille/PortfolioPanel.tsx\" 2>&1)",
+      "PowerShell(& \"C:\\\\Program Files\\\\nodejs\\\\node.exe\" -e \"fetch\\('http://localhost:3000/gestion-portefeuille/fonds/8046b0e9-379b-4b46-9188-51c681ec4796',{redirect:'manual',headers:{'user-agent':'Mozilla/5.0'}}\\).then\\(r=>console.log\\('fonds:',r.status\\)\\)\")",
+      "PowerShell(& \"C:\\\\Program Files\\\\nodejs\\\\node.exe\" \"C:\\\\Users\\\\BROU~1.KOU\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-brou-kouame-Desktop-Project-azimutfinance\\\\d6dec858-0881-4f71-a756-b3baf87f180f\\\\scratchpad\\\\coverage.cjs\" 2>&1 | Select-Object -First 60)",
+      "PowerShell(& \"C:\\\\Program Files\\\\nodejs\\\\node.exe\" \"C:\\\\Users\\\\BROU~1.KOU\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-brou-kouame-Desktop-Project-azimutfinance\\\\d6dec858-0881-4f71-a756-b3baf87f180f\\\\scratchpad\\\\coverage2.cjs\" 2>&1 | Select-Object -First 70)",
+      "PowerShell(& \"C:\\\\Program Files\\\\nodejs\\\\node.exe\" -e \"fetch\\('http://localhost:3000/gestion-portefeuille/fonds/8046b0e9-379b-4b46-9188-51c681ec4796',{redirect:'manual',headers:{'user-agent':'Mozilla/5.0'}}\\).then\\(r=>console.log\\('fonds:',r.status\\)\\).catch\\(\\(\\)=>console.log\\('serveur down'\\)\\)\")",
+      "PowerShell(Set-Content *)",
+      "PowerShell(npx --no-install eslint \"app/gestion-portefeuille/portfolio-actions.ts\" 2>&1)"
     ]
   }
 }

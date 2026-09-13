@@ -66,6 +66,8 @@ __pycache__/
 # La regle est ancree sur la racine (/) pour ne pas toucher les documents
 # legitimement versionnes sous data/ — avis de prix CHPH, notices publiques.
 /*.xlsx
+/*.xlsm
+/*.xlsb
 /*.pptx
 /*.pdf
 /*.docx

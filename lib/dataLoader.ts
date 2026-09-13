@@ -218,7 +218,7 @@ export function loadStockByCode(code: string): StockRow | undefined {
  * "0" (cas BICB, dont l'ISIN n'est pas publie par la BRVM) : on la traite comme
  * une absence plutot que de la laisser fuiter jusqu'a l'UI, ou elle s'afficherait
  * comme un identifiant valide. Cf. le contournement historique
- * `s.isin !== "0"` dans app/pros/fund-management/portfolio-match.ts.
+ * `s.isin !== "0"` dans app/gestion-portefeuille/portfolio-match.ts.
  */
 function cleanIsin(raw: string | undefined): string {
   const v = (raw ?? "").trim();

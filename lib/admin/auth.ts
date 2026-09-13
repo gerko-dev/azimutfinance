@@ -33,8 +33,16 @@ export async function getMyAdminLevel(): Promise<AdminLevel | null> {
  *
  * Usage cote server component :
  *   const { level } = await requireAdmin(2);
+ *
+ * `redirectTo` est la page ou revenir apres connexion. Elle vaut /admin par
+ * defaut, ce qui convient a toute la console ; les modules qui vivent HORS de
+ * /admin doivent passer leur propre route, sinon l'utilisateur se connecte et
+ * atterrit ailleurs que la ou il allait.
  */
-export async function requireAdmin(maxLevelNumber: AdminLevel = 3): Promise<{
+export async function requireAdmin(
+  maxLevelNumber: AdminLevel = 3,
+  redirectTo = "/admin",
+): Promise<{
   userId: string;
   level: AdminLevel;
 }> {
@@ -43,7 +51,7 @@ export async function requireAdmin(maxLevelNumber: AdminLevel = 3): Promise<{
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) {
-    redirect("/connexion?redirect=/admin");
+    redirect(`/connexion?redirect=${encodeURIComponent(redirectTo)}`);
   }
   const level = await getMyAdminLevel();
   if (level === null) {
