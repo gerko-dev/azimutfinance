@@ -64,22 +64,32 @@ jobs:
           git status --short \
             data/umoa-emissions-realisees.csv \
             data/umoa-emissions-a-venir.csv \
-            data/umoa-emissions-planifiees.csv || true
+            data/umoa-emissions-planifiees.csv \
+            data/umoa-courbes-taux.csv || true
           echo ""
           echo "=== Diff summary ==="
           git diff --stat \
             data/umoa-emissions-realisees.csv \
             data/umoa-emissions-a-venir.csv \
-            data/umoa-emissions-planifiees.csv || true
+            data/umoa-emissions-planifiees.csv \
+            data/umoa-courbes-taux.csv || true
 
       - name: Commit & push if changed
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # data/umoa-courbes-taux.csv EST INDISPENSABLE ICI. L'etape
+          # precedente le reecrit a chaque passage. Omis du git add, il restait
+          # non indexe, et git pull --rebase refuse de tourner sur un arbre
+          # sale : le push echouait cinq fois et le job sortait en erreur APRES
+          # avoir commite. Plus aucune donnee publiee depuis le 6 septembre
+          # 2026, jour ou l'etape des courbes a ete ajoutee sans etre ajoutee
+          # au commit.
           git add \
             data/umoa-emissions-realisees.csv \
             data/umoa-emissions-a-venir.csv \
-            data/umoa-emissions-planifiees.csv
+            data/umoa-emissions-planifiees.csv \
+            data/umoa-courbes-taux.csv
           if git diff --staged --quiet; then
             echo "Aucun changement a commiter."
             exit 0
@@ -91,6 +101,10 @@ jobs:
             -m "Source : umoatitres.org, page emissions-professionnels-3."
           # Retry pour gerer les pushs concurrents avec d'autres workflows
           # (scrape-boc, scrape-sika...) sur main.
+          # Filet : si une etape future ecrit un fichier qu'on oublie
+          # d'indexer, le rebase echouerait a nouveau. On repart d'un arbre
+          # propre plutot que de rejouer cinq fois la meme erreur.
+          git stash --include-untracked --quiet || true
           for i in 1 2 3 4 5; do
             git pull --rebase origin main && git push && {
               echo "Push effectue avec succes (essai $i)."
