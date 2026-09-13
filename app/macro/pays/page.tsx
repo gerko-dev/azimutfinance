@@ -15,7 +15,7 @@ import {
   periodToWindow,
   type PeriodId,
 } from "@/components/macro/macroPeriod";
-import MacroTabNav from "@/components/macro/MacroTabNav";
+import MacroTabs from "@/components/macro/MacroTabs";
 import MacroTopExports from "@/components/macro/MacroTopExports";
 import MacroExplorer, {
   type ExplorerData,
@@ -521,222 +521,232 @@ export default async function Page({
         </div>
       </div>
 
-      <MacroTabNav />
-
-      <main className="max-w-7xl mx-auto px-4 md:px-6 py-6 space-y-8">
-        {/* =========================================================
-            BLOC 1 — INDICATEURS CLES (carte d'identite macro)
-        =========================================================== */}
-        <section id="overview" className="scroll-mt-24">
-          <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
-            <div>
-              <h2 className="text-base md:text-lg font-semibold">Indicateurs clés</h2>
-              <p className="text-[11px] md:text-xs text-slate-500 mt-0.5">
-                7 métriques canoniques d&apos;une page pays Article IV. Rang du pays sur les 8
-                États UEMOA et badge de respect des critères de convergence (inflation ≤ 3 %,
-                solde budgétaire ≥ −3 %, dette ≤ 70 %).
-              </p>
-            </div>
-            <span className="text-[11px] text-slate-400">Annuel · BCEAO</span>
-          </div>
-          <MacroKPIGrid kpis={kpis} />
-        </section>
-
-        {/* =========================================================
-            DEDUCTEUR DE CYCLE ECONOMIQUE
-        =========================================================== */}
-        <MacroCyclePanel
-          snapshot={cycleSnapshot}
-          peers={cyclePeers}
-          selected={cc}
-        />
-
-        {/* =========================================================
-            BLOC 2 — ECONOMIE REELLE
-        =========================================================== */}
-        <section id="reel" className="scroll-mt-24">
-          <h2 className="text-base md:text-lg font-semibold mb-3">Économie réelle</h2>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <ChartCard
-              title="Croissance & inflation"
-              subtitle="Variations annuelles, 16 dernières années."
-            >
-              <MacroChart
-                data={reel21Data}
-                series={reel21Series}
-                yLeftUnit="raw_pct"
-                zeroReference
-                height={300}
-              />
-            </ChartCard>
-            <ChartCard
-              title="Structure sectorielle du PIB"
-              subtitle="Poids des secteurs primaire, secondaire, tertiaire (% PIB)."
-            >
-              <MacroChart
-                data={reel22Data}
-                series={reel22Series}
-                yLeftUnit="raw_pct"
-                stacked
-                height={300}
-                smallLabels
-              />
-            </ChartCard>
-          </div>
-        </section>
-
-        {/* =========================================================
-            BLOC 3 — FINANCES PUBLIQUES
-        =========================================================== */}
-        <section id="fiscal" className="scroll-mt-24">
-          <h2 className="text-base md:text-lg font-semibold mb-3">Finances publiques</h2>
-          <div className="space-y-4">
-            <ChartCard
-              title="Recettes, dépenses et solde budgétaire"
-              subtitle="Recettes empilées en positif (fiscales + non fiscales + dons), dépenses empilées en négatif (courantes + capital). Solde global avec dons en % du PIB sur l'axe droit."
-            >
-              <MacroChart
-                data={fiscal31Data}
-                series={fiscal31Series}
-                yLeftUnit="MdsFCFA"
-                yRightUnit="raw_pct"
-                stacked
-                zeroReference
-                height={340}
-              />
-            </ChartCard>
-            <ChartCard
-              title="Trajectoire de la dette publique"
-              subtitle="Composition (bilatérale + multilatérale, FMI en sous-ensemble overlay) et ratio dette/PIB (axe droit). Seuil de convergence UEMOA : 70 %."
-            >
-              <MacroChart
-                data={fiscal32Data}
-                series={fiscal32Series}
-                yLeftUnit="MdsFCFA"
-                yRightUnit="raw_pct"
-                stacked
-                height={320}
-              />
-            </ChartCard>
-          </div>
-        </section>
-
-        {/* =========================================================
-            BLOC 4 — SECTEUR EXTERIEUR
-        =========================================================== */}
-        <section id="externe" className="scroll-mt-24">
-          <h2 className="text-base md:text-lg font-semibold mb-3">Secteur extérieur</h2>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <ChartCard
-              title="Balance commerciale & compte courant"
-              subtitle="Exports (positifs) et imports (négatifs) en milliards de FCFA, compte courant en % du PIB sur l'axe droit."
-            >
-              <MacroChart
-                data={ext41Data}
-                series={ext41Series}
-                yLeftUnit="MdsFCFA"
-                yRightUnit="raw_pct"
-                zeroReference
-                height={320}
-              />
-            </ChartCard>
-            <ChartCard
-              title="Top 5 produits d'exportation"
-              subtitle={`Concentration des exportations${
-                exportsTop.period ? ` à fin ${exportsTop.period}` : ""
-              }. Source : BCEAO.`}
-            >
-              <MacroTopExports
-                top={exportsTop.top}
-                others={exportsTop.others}
-                period={exportsTop.period}
-              />
-            </ChartCard>
-          </div>
-        </section>
-
-        {/* =========================================================
-            BLOC 5 — MONNAIE & FINANCE
-        =========================================================== */}
-        <section id="monetaire" className="scroll-mt-24">
-          <h2 className="text-base md:text-lg font-semibold mb-3">Monnaie & finance</h2>
-          <div className="space-y-4">
-            <ChartCard
-              title="Crédit à l'économie & masse monétaire (glissement annuel)"
-              subtitle="Taux de croissance YoY (%) de M2 et des créances sur les autres secteurs. Indicateur de transmission monétaire et de financement de l'économie."
-            >
-              <MacroChart
-                data={monet51Data}
-                series={monet51Series}
-                yLeftUnit="raw_pct"
-                zeroReference
-                height={300}
-                smallLabels
-              />
-            </ChartCard>
-
-            <div className="bg-white rounded-lg border border-slate-200 p-4">
-              <div className="mb-3">
-                <h3 className="text-sm font-semibold">Conditions de financement</h3>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  Dernier mois disponible · agrégat UMOA. Le franc CFA est arrimé à l&apos;euro
-                  (1 EUR = 655,957 FCFA), donc identique pour les 8 pays.
-                </p>
+      <MacroTabs
+        tabs={[
+          { id: "overview", label: "Indicateurs clés" },
+          { id: "cycle", label: "Cycle économique" },
+          { id: "reel", label: "Économie réelle" },
+          { id: "fiscal", label: "Finances publiques" },
+          { id: "externe", label: "Secteur extérieur" },
+          { id: "monetaire", label: "Monnaie & finance" },
+          { id: "comparateur", label: "Comparateur UEMOA" },
+          { id: "studio", label: "Studio d’analyse" },
+        ]}
+        panels={{
+          overview: (
+            <>
+            <section id="overview" className="scroll-mt-24">
+              <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
+                <div>
+                  <h2 className="text-base md:text-lg font-semibold">Indicateurs clés</h2>
+                  <p className="text-[11px] md:text-xs text-slate-500 mt-0.5">
+                    7 métriques canoniques d&apos;une page pays Article IV. Rang du pays sur les 8
+                    États UEMOA et badge de respect des critères de convergence (inflation ≤ 3 %,
+                    solde budgétaire ≥ −3 %, dette ≤ 70 %).
+                  </p>
+                </div>
+                <span className="text-[11px] text-slate-400">Annuel · BCEAO</span>
               </div>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                <FinancingCell
-                  label="Taux moyen crédits aux entreprises privées"
-                  value={lastTauxCredit ? fmtPctRaw(lastTauxCredit.value, 2) : "—"}
-                  period={lastTauxCredit?.label}
-                />
-                <FinancingCell
-                  label="Taux moyen rémunération des dépôts"
-                  value={lastTauxDepot ? fmtPctRaw(lastTauxDepot.value, 2) : "—"}
-                  period={lastTauxDepot?.label}
-                />
-                <FinancingCell
-                  label="Spread crédits − dépôts"
-                  value={
-                    spread !== null
-                      ? `${spread.toFixed(2).replace(".", ",")} pp`
-                      : "—"
-                  }
-                  period={lastTauxCredit?.label}
-                  highlight
-                />
-                <FinancingCell
-                  label="Taux interbancaire (toutes maturités)"
-                  value={lastInterbank ? fmtPctRaw(lastInterbank.value, 2) : "—"}
-                  period={lastInterbank?.label}
-                />
+              <MacroKPIGrid kpis={kpis} />
+            </section>
+            </>
+          ),
+          cycle: (
+            <>
+            <MacroCyclePanel
+              snapshot={cycleSnapshot}
+              peers={cyclePeers}
+              selected={cc}
+            />
+            </>
+          ),
+          reel: (
+            <>
+            <section id="reel" className="scroll-mt-24">
+              <h2 className="text-base md:text-lg font-semibold mb-3">Économie réelle</h2>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <ChartCard
+                  title="Croissance & inflation"
+                  subtitle="Variations annuelles, 16 dernières années."
+                >
+                  <MacroChart
+                    data={reel21Data}
+                    series={reel21Series}
+                    yLeftUnit="raw_pct"
+                    zeroReference
+                    height={300}
+                  />
+                </ChartCard>
+                <ChartCard
+                  title="Structure sectorielle du PIB"
+                  subtitle="Poids des secteurs primaire, secondaire, tertiaire (% PIB)."
+                >
+                  <MacroChart
+                    data={reel22Data}
+                    series={reel22Series}
+                    yLeftUnit="raw_pct"
+                    stacked
+                    height={300}
+                    smallLabels
+                  />
+                </ChartCard>
               </div>
-            </div>
-          </div>
-        </section>
+            </section>
+            </>
+          ),
+          fiscal: (
+            <>
+            <section id="fiscal" className="scroll-mt-24">
+              <h2 className="text-base md:text-lg font-semibold mb-3">Finances publiques</h2>
+              <div className="space-y-4">
+                <ChartCard
+                  title="Recettes, dépenses et solde budgétaire"
+                  subtitle="Recettes empilées en positif (fiscales + non fiscales + dons), dépenses empilées en négatif (courantes + capital). Solde global avec dons en % du PIB sur l'axe droit."
+                >
+                  <MacroChart
+                    data={fiscal31Data}
+                    series={fiscal31Series}
+                    yLeftUnit="MdsFCFA"
+                    yRightUnit="raw_pct"
+                    stacked
+                    zeroReference
+                    height={340}
+                  />
+                </ChartCard>
+                <ChartCard
+                  title="Trajectoire de la dette publique"
+                  subtitle="Composition (bilatérale + multilatérale, FMI en sous-ensemble overlay) et ratio dette/PIB (axe droit). Seuil de convergence UEMOA : 70 %."
+                >
+                  <MacroChart
+                    data={fiscal32Data}
+                    series={fiscal32Series}
+                    yLeftUnit="MdsFCFA"
+                    yRightUnit="raw_pct"
+                    stacked
+                    height={320}
+                  />
+                </ChartCard>
+              </div>
+            </section>
+            </>
+          ),
+          externe: (
+            <>
+            <section id="externe" className="scroll-mt-24">
+              <h2 className="text-base md:text-lg font-semibold mb-3">Secteur extérieur</h2>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <ChartCard
+                  title="Balance commerciale & compte courant"
+                  subtitle="Exports (positifs) et imports (négatifs) en milliards de FCFA, compte courant en % du PIB sur l'axe droit."
+                >
+                  <MacroChart
+                    data={ext41Data}
+                    series={ext41Series}
+                    yLeftUnit="MdsFCFA"
+                    yRightUnit="raw_pct"
+                    zeroReference
+                    height={320}
+                  />
+                </ChartCard>
+                <ChartCard
+                  title="Top 5 produits d'exportation"
+                  subtitle={`Concentration des exportations${
+                    exportsTop.period ? ` à fin ${exportsTop.period}` : ""
+                  }. Source : BCEAO.`}
+                >
+                  <MacroTopExports
+                    top={exportsTop.top}
+                    others={exportsTop.others}
+                    period={exportsTop.period}
+                  />
+                </ChartCard>
+              </div>
+            </section>
+            </>
+          ),
+          monetaire: (
+            <>
+            <section id="monetaire" className="scroll-mt-24">
+              <h2 className="text-base md:text-lg font-semibold mb-3">Monnaie & finance</h2>
+              <div className="space-y-4">
+                <ChartCard
+                  title="Crédit à l'économie & masse monétaire (glissement annuel)"
+                  subtitle="Taux de croissance YoY (%) de M2 et des créances sur les autres secteurs. Indicateur de transmission monétaire et de financement de l'économie."
+                >
+                  <MacroChart
+                    data={monet51Data}
+                    series={monet51Series}
+                    yLeftUnit="raw_pct"
+                    zeroReference
+                    height={300}
+                    smallLabels
+                  />
+                </ChartCard>
 
-        {/* =========================================================
-            COMPARATEUR
-        =========================================================== */}
-        <MacroComparator
-          data={comparatorPayload}
-          options={COMPARATOR_OPTIONS}
-          basePath="/macro/pays"
-          baseParams={baseParams}
-          highlight={cc}
-        />
-
-        {/* =========================================================
-            STUDIO
-        =========================================================== */}
-        <MacroExplorer
-          catalog={explorerCatalog}
-          data={explorerData}
-          basePath="/macro/pays"
-          baseParams={baseParams}
-          compare={xCompare}
-        />
-
-      </main>
+                <div className="bg-white rounded-lg border border-slate-200 p-4">
+                  <div className="mb-3">
+                    <h3 className="text-sm font-semibold">Conditions de financement</h3>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Dernier mois disponible · agrégat UMOA. Le franc CFA est arrimé à l&apos;euro
+                      (1 EUR = 655,957 FCFA), donc identique pour les 8 pays.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <FinancingCell
+                      label="Taux moyen crédits aux entreprises privées"
+                      value={lastTauxCredit ? fmtPctRaw(lastTauxCredit.value, 2) : "—"}
+                      period={lastTauxCredit?.label}
+                    />
+                    <FinancingCell
+                      label="Taux moyen rémunération des dépôts"
+                      value={lastTauxDepot ? fmtPctRaw(lastTauxDepot.value, 2) : "—"}
+                      period={lastTauxDepot?.label}
+                    />
+                    <FinancingCell
+                      label="Spread crédits − dépôts"
+                      value={
+                        spread !== null
+                          ? `${spread.toFixed(2).replace(".", ",")} pp`
+                          : "—"
+                      }
+                      period={lastTauxCredit?.label}
+                      highlight
+                    />
+                    <FinancingCell
+                      label="Taux interbancaire (toutes maturités)"
+                      value={lastInterbank ? fmtPctRaw(lastInterbank.value, 2) : "—"}
+                      period={lastInterbank?.label}
+                    />
+                  </div>
+                </div>
+              </div>
+            </section>
+            </>
+          ),
+          comparateur: (
+            <>
+            <MacroComparator
+              data={comparatorPayload}
+              options={COMPARATOR_OPTIONS}
+              basePath="/macro/pays"
+              baseParams={baseParams}
+              highlight={cc}
+            />
+            </>
+          ),
+          studio: (
+            <>
+            <MacroExplorer
+              catalog={explorerCatalog}
+              data={explorerData}
+              basePath="/macro/pays"
+              baseParams={baseParams}
+              compare={xCompare}
+            />
+            </>
+          ),
+        }}
+      />
     </div>
   );
 }
