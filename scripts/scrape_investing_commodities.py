@@ -47,10 +47,20 @@ COMMODITIES = [
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data"
 
-UA = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/130.0 Safari/537.36"
-)
+# PAS D'User-Agent CODE EN DUR ICI — c'est ce qui a casse la collecte.
+#
+# Le script annoncait "Chrome/130" dans l'en-tete pendant que curl_cffi
+# presentait l'empreinte TLS et HTTP/2 d'une autre version. Cloudflare compare
+# les deux, constate l'incoherence et repond 403 sur chaque produit. Le code
+# n'avait pas change : c'est Chrome qui a avance, jusqu'a ce que l'ecart entre
+# la version ecrite a la main et celle qu'imite la bibliotheque devienne
+# detectable. Un User-Agent fige dans un script qui usurpe une empreinte perime
+# tout seul.
+#
+# Verifie le 13/09/2026 : avec l'en-tete manuel, 403 ; sans lui, 200 et les
+# donnees arrivent. `impersonate` pose un User-Agent coherent avec l'empreinte
+# qu'il presente — le laisser faire est la seule facon de garder les deux
+# alignes dans le temps.
 
 
 def _fetch_window(instrument_id: int, referer_slug: str, start: date, end: date) -> list[dict]:
@@ -68,7 +78,6 @@ def _fetch_window(instrument_id: int, referer_slug: str, start: date, end: date)
     })
     url = f"https://api.investing.com/api/financialdata/historical/{instrument_id}?{qs}"
     headers = {
-        "User-Agent": UA,
         "Referer": f"https://fr.investing.com/commodities/{referer_slug}",
         "domain-id": "fr",
         "Accept": "application/json, text/plain, */*",
