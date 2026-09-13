@@ -24,7 +24,15 @@ type MenuItem = {
 type MenuSection = {
   label: string;
   items: MenuItem[];
+  /** Section encore en chantier : visible en `npm run dev`, jamais en ligne. */
+  devOnly?: boolean;
 };
+
+// `process.env.NODE_ENV` est remplace a la compilation par Next : la section
+// marquee devOnly n'est donc pas seulement masquee, elle est absente du bundle
+// de production. Les previews Vercel comptent comme de la production — elles
+// ne la montreront pas non plus.
+const IS_DEV = process.env.NODE_ENV !== "production";
 
 const menuSections: MenuSection[] = [
   {
@@ -73,6 +81,10 @@ const menuSections: MenuSection[] = [
     // Porte d'entree unique vers les outils, Pro compris : un visiteur ne
     // devinait pas que le screener vivait derriere le bouton « Espace Pro ».
     // Le badge dit le niveau d'acces, il ne cache pas l'existence de l'outil.
+    //
+    // EN CHANTIER — masquee en ligne le temps que la section soit finie.
+    // Pour la remettre en production : retirer `devOnly`.
+    devOnly: true,
     label: "Outils",
     items: [
       { label: "Comparateur de titres", href: "/outils/comparateur", badge: "Premium" },
@@ -256,18 +268,16 @@ export default function Header() {
     userRole === "premium" || userRole === "pro" || adminLevel !== null;
   // Toutes les sections sont visibles ; pour les invités on filtre les items
   // marqués `requiresAuth` (ex : Magazine digital, réservé membre+).
-  const visibleMenuSections = useMemo(
-    () =>
-      user
-        ? menuSections
-        : menuSections
-            .map((s) => ({
-              ...s,
-              items: s.items.filter((it) => !it.requiresAuth),
-            }))
-            .filter((s) => s.items.length > 0),
-    [user],
-  );
+  const visibleMenuSections = useMemo(() => {
+    const sections = menuSections.filter((s) => IS_DEV || !s.devOnly);
+    if (user) return sections;
+    return sections
+      .map((s) => ({
+        ...s,
+        items: s.items.filter((it) => !it.requiresAuth),
+      }))
+      .filter((s) => s.items.length > 0);
+  }, [user]);
   // CTA Premium : permanent pour qui n'a pas encore Premium — invites comme
   // Membres. L'invite est la premiere cible de l'offre ; le lui cacher jusqu'a
   // l'inscription revenait a ne la montrer qu'a ceux qui avaient deja franchi
