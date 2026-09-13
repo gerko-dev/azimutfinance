@@ -44,7 +44,7 @@ const menuSections: MenuSection[] = [
         href: "/marches/actions",
         children: [
           { label: "Actions cotées", href: "/marches/actions" },
-          { label: "Private equity", href: "/marches/private-equity" },
+          { label: "Private equity", href: "/marches/private-equity", badge: "Premium" },
         ],
       },
       {
