@@ -36,7 +36,7 @@ const NAV: NavSection[] = [
     items: [
       { label: "Screener actions", href: "/pros/screener" },
       { label: "Screener FCP", href: "/pros/screener-fcp" },
-      { label: "Simulateur YTM", href: "/pros/ytm" },
+      { label: "Simulateur YTM", href: "/outils/simulateur-ytm" },
       { label: "Comparateur titres", href: "/pros/comparateur", soon: true },
       { label: "Analyse risque", href: "/pros/risque", soon: true },
     ],

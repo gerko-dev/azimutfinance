@@ -167,7 +167,7 @@ export default function SovereignAuctionSimulator({
     return (
       <section className="bg-white rounded-lg border border-slate-200 p-6 md:p-8 text-center">
         <h2 className="text-lg md:text-xl font-semibold mb-2">
-          Repère de soumission
+          Simulateur d&apos;adjudication
         </h2>
         <p className="text-sm text-slate-600 max-w-2xl mx-auto">
           À quel prix soumissionner pour être retenu ? L&apos;outil reprend les
@@ -184,7 +184,7 @@ export default function SovereignAuctionSimulator({
       <div className="flex items-baseline justify-between flex-wrap gap-2 mb-4">
         <div>
           <h2 className="text-lg md:text-xl font-semibold">
-            Repère de soumission
+            Simulateur d&apos;adjudication
           </h2>
           <p className="text-xs md:text-sm text-slate-600 mt-1">
             À quel prix soumissionner pour être retenu.

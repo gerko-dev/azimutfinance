@@ -88,9 +88,22 @@ const nextConfig: NextConfig = {
   // Toutes ces routes ont ete deplacees dans la zone /pros lors de la refonte.
   async redirects() {
     return [
+      // Les deux simulateurs ont rejoint l'espace Outils : le YTM quitte le Pro
+      // Terminal, celui d'adjudication quitte la section souverains. Leurs
+      // anciennes URL sont indexees et liees depuis l'exterieur.
       {
         source: "/outils/ytm",
-        destination: "/pros/ytm",
+        destination: "/outils/simulateur-ytm",
+        permanent: true,
+      },
+      {
+        source: "/pros/ytm",
+        destination: "/outils/simulateur-ytm",
+        permanent: true,
+      },
+      {
+        source: "/marches/souverains-non-cotes/simulateur",
+        destination: "/outils/simulateur-adjudication",
         permanent: true,
       },
       // L'ancien /outils/screener pointait vers le Pro Terminal. Le screener

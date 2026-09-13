@@ -42,7 +42,7 @@ export default function PagePlaceholder({ title, description, badge }: Props) {
               ← Retour à l&apos;accueil
             </Link>
             <Link
-              href="/outils/ytm"
+              href="/outils/simulateur-ytm"
               className="inline-flex justify-center items-center px-5 py-2.5 text-sm bg-blue-700 text-white rounded-md hover:bg-blue-800"
             >
               Essayer nos outils Pro

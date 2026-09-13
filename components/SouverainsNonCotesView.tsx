@@ -62,6 +62,14 @@ type Props = {
   };
   upcoming: EmissionUMOAFuture[];
   planned: EmissionUMOAPlanned[];
+  /** Operations dont la date est passee sans resultats publies. */
+  enAttente: Array<{
+    country: string;
+    countryName: string;
+    instrument: string;
+    dateOperation: string;
+    amount: number;
+  }>;
   userRole: UserRole;
 };
 
@@ -79,6 +87,7 @@ export default function SouverainsNonCotesView({
   stats,
   upcoming,
   planned,
+  enAttente,
   userRole,
 }: Props) {
   const isPremium = userRole === "premium" || userRole === "pro";
@@ -388,9 +397,9 @@ export default function SouverainsNonCotesView({
               unlocked={isPremium}
             />
             <SovereignToolCard
-              href="/marches/souverains-non-cotes/simulateur"
+              href="/outils/simulateur-adjudication"
               accent="amber"
-              title="Repère de soumission"
+              title="Simulateur d'adjudication"
               description="À quel prix soumissionner pour être retenu."
               stat="Marginal et moyen pondéré"
               unlocked={isPremium}
@@ -401,7 +410,11 @@ export default function SouverainsNonCotesView({
         {/* CALENDRIER DES ADJUDICATIONS — le marche primaire a sa place sur la
             page principale : la carte « Calendrier obligataire » mene desormais
             a l'echeancier (coupons, amortissements, remboursements). */}
-        <SovereignCalendar upcoming={upcoming} planned={planned} />
+        <SovereignCalendar
+          upcoming={upcoming}
+          planned={planned}
+          enAttente={enAttente}
+        />
 
         {/* DERNIERES ADJUDICATIONS — memo : 10 lignes mais avec CountryFlag SVG, on évite les redraws */}
         <RecentAdjudicationsSection bonds={recentAdjudications} />

@@ -16,8 +16,8 @@ import { fetchUserRole } from "@/lib/auth/userRole";
 import { pageMetadata } from "@/lib/seo";
 
 export const metadata = pageMetadata({
-  title: "Repère de soumission aux adjudications — AzimutFinance",
-  path: "/marches/souverains-non-cotes/simulateur",
+  title: "Simulateur d'adjudication — AzimutFinance",
+  path: "/outils/simulateur-adjudication",
 });
 
 export const dynamic = "force-dynamic";
@@ -33,8 +33,8 @@ export default async function Page() {
         <Header />
         <Ticker />
         <BondsPaywallSection
-          breadcrumb="Repère de soumission"
-          title="Repère de soumission aux adjudications"
+          breadcrumb="Simulateur d'adjudication"
+          title="Simulateur d'adjudication"
           description="À quel prix soumissionner pour être retenu ? L'outil reprend les cinq dernières émissions comparables de l'émetteur et en déduit le prix à ne pas dépasser."
           features={[
             "Prix limite, déduit de la moyenne des taux marginaux",
@@ -98,10 +98,12 @@ export default async function Page() {
               Souverains UMOA-Titres
             </Link>
             <span className="mx-2 text-slate-500">›</span>
-            <span className="text-slate-200">Repère de soumission</span>
+            <span className="text-slate-200">
+              Simulateur d&apos;adjudication
+            </span>
           </div>
           <h1 className="text-2xl md:text-3xl font-semibold mb-2 text-white">
-            Repère de soumission aux adjudications
+            Simulateur d&apos;adjudication
           </h1>
           <p className="text-sm md:text-base text-slate-300 max-w-3xl">
             À quel prix soumissionner pour être retenu.

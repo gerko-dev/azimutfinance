@@ -233,7 +233,7 @@ export default async function ProDashboard() {
               <QuickLink href="/pros/actions" label="Actions BRVM" />
               <QuickLink href="/marches/obligations" label="Obligations" />
               <QuickLink href="/marches/fcp" label="FCP / OPCVM" />
-              <QuickLink href="/pros/ytm" label="Simulateur YTM" />
+              <QuickLink href="/outils/simulateur-ytm" label="Simulateur YTM" />
               <QuickLink href="/pros/screener" label="Screener" />
               <QuickLink href="/marche-monetaire" label="Taux BCEAO" />
             </div>

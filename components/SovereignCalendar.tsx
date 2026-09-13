@@ -30,14 +30,27 @@ function formatDate(date: string): string {
   });
 }
 
+export type SovereignPending = {
+  country: string;
+  countryName: string;
+  instrument: string;
+  dateOperation: string;
+  amount: number;
+};
+
 type SovereignCalendarProps = {
   upcoming: EmissionUMOAFuture[];
   planned: EmissionUMOAPlanned[];
+  /** Operations tenues dont les resultats ne sont pas encore publies.
+   *  Le tri par date se fait cote serveur : lire la date du jour dans ce
+   *  composant client ferait diverger l'hydratation. */
+  enAttente: SovereignPending[];
 };
 
 const SovereignCalendar = memo(function SovereignCalendar({
   upcoming,
   planned,
+  enAttente,
 }: SovereignCalendarProps) {
   const sortedUpcoming = useMemo(
     () =>
@@ -54,7 +67,12 @@ const SovereignCalendar = memo(function SovereignCalendar({
     [planned]
   );
 
-  if (sortedUpcoming.length === 0 && sortedPlanned.length === 0) return null;
+  if (
+    sortedUpcoming.length === 0 &&
+    sortedPlanned.length === 0 &&
+    enAttente.length === 0
+  )
+    return null;
 
   return (
     <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
@@ -66,6 +84,31 @@ const SovereignCalendar = memo(function SovereignCalendar({
           </p>
         </div>
       </div>
+
+      {enAttente.length > 0 && (
+        <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3">
+          <div className="text-sm font-medium text-amber-900">
+            {enAttente.length} adjudication{enAttente.length > 1 ? "s" : ""} tenue
+            {enAttente.length > 1 ? "s" : ""}, résultats non encore publiés
+          </div>
+          <ul className="mt-2 space-y-1 text-xs text-amber-900/90">
+            {enAttente.slice(0, 6).map((e, i) => (
+              <li key={`${e.country}-${e.dateOperation}-${i}`}>
+                <span className="tabular-nums">{formatDate(e.dateOperation)}</span>
+                {" · "}
+                {e.countryName}
+                {e.instrument ? ` · ${e.instrument}` : ""}
+                {e.amount ? ` · ${formatBigFCFA(e.amount)}` : ""}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-[11px] text-amber-800">
+            UMOA-Titres ne retire pas ces opérations de son calendrier tant que
+            les résultats ne sont pas diffusés. Elles ne sont donc plus à venir,
+            mais pas encore dans l&apos;historique des adjudications.
+          </p>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
         {/* À VENIR */}

@@ -88,12 +88,13 @@ const menuSections: MenuSection[] = [
       { label: "Mes alertes", href: "/outils/alertes", requiresAuth: true },
       {
         label: "Simulateur d'adjudication",
-        href: "/marches/souverains-non-cotes/simulateur",
+        href: "/outils/simulateur-adjudication",
+        badge: "Premium",
       },
       { label: "Screener actions", href: "/outils/screener-actions", badge: "Premium" },
       { label: "Screener obligations", href: "/outils/screener-obligations", badge: "Premium" },
       { label: "Screener FCP", href: "/outils/screener-fcp", badge: "Premium" },
-      { label: "Simulateur YTM", href: "/pros/ytm", badge: "Pro" },
+      { label: "Simulateur YTM", href: "/outils/simulateur-ytm", badge: "Premium" },
     ],
   },
   {
