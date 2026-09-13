@@ -27,32 +27,62 @@ const menuSections: MenuSection[] = [
   {
     label: "Marchés",
     items: [
-      { label: "Actions cotées", href: "/marches/actions" },
-      { label: "Obligations cotées", href: "/marches/obligations" },
-      { label: "Souverains non cotés", href: "/marches/souverains-non-cotes" },
+      { label: "Indices", href: "/marches/indices" },
       {
-        label: "FCP / OPCVM",
+        label: "Actions",
+        href: "/marches/actions",
+        children: [
+          { label: "Actions cotées", href: "/marches/actions" },
+          { label: "Private equity", href: "/marches/private-equity", badge: "Bientôt" },
+        ],
+      },
+      {
+        label: "Obligations",
+        href: "/marches/obligations",
+        children: [
+          { label: "Obligations cotées", href: "/marches/obligations" },
+          { label: "OAT / BAT souverains", href: "/marches/souverains-non-cotes" },
+        ],
+      },
+      {
+        label: "OPC",
         href: "/marches/fcp",
         children: [
           { label: "OPC", href: "/fcp/categories" },
           { label: "Sociétés de gestion", href: "/sgo" },
         ],
       },
+      { label: "Matières premières", href: "/macro/matieres-premieres" },
+      { label: "FX", href: "/macro/devises" },
     ],
   },
   {
-    label: "Marché monétaire",
+    label: "Macroéconomie",
     items: [
-      { label: "Taux BCEAO & UEMOA", href: "/marche-monetaire" },
+      { label: "Indicateurs", href: "/macro/pays" },
+      // Le marche monetaire n'est plus une section de premier niveau : ses deux
+      // pages sont de la macro, et la barre en comptait trop.
+      { label: "Taux UEMOA", href: "/marche-monetaire" },
       { label: "Récapitulatif MTP", href: "/marche-monetaire/mtp" },
     ],
   },
   {
-    label: "Macro",
+    // Porte d'entree unique vers les outils, Pro compris : un visiteur ne
+    // devinait pas que le screener vivait derriere le bouton « Espace Pro ».
+    // Le badge dit le niveau d'acces, il ne cache pas l'existence de l'outil.
+    label: "Outils",
     items: [
-      { label: "Indicateurs pays UEMOA", href: "/macro/pays" },
-      { label: "Matières premières", href: "/macro/matieres-premieres" },
-      { label: "Devises & FX", href: "/macro/devises" },
+      { label: "Comparateur de titres", href: "/outils/comparateur", badge: "Premium" },
+      { label: "Mon portefeuille", href: "/outils/portefeuille", badge: "Bientôt" },
+      { label: "Ma watchlist", href: "/outils/watchlist", requiresAuth: true },
+      { label: "Mes alertes", href: "/outils/alertes", requiresAuth: true },
+      {
+        label: "Simulateur d'adjudication",
+        href: "/marches/souverains-non-cotes/simulateur",
+      },
+      { label: "Screener actions", href: "/pros/screener", badge: "Pro" },
+      { label: "Screener FCP", href: "/pros/screener-fcp", badge: "Pro" },
+      { label: "Simulateur YTM", href: "/pros/ytm", badge: "Pro" },
     ],
   },
   {
