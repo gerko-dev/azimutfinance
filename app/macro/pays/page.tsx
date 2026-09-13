@@ -45,6 +45,8 @@ import { getCyclePeerPoints, inferCycle } from "@/lib/macroCycle";
 import { fmtMdsFCFA, fmtPctRaw } from "@/lib/macroFormat";
 import { pageMetadata, breadcrumbJsonLd } from "@/lib/seo";
 import JsonLd from "@/components/JsonLd";
+import { fetchUserRole } from "@/lib/auth/userRole";
+import MacroStudioGate from "@/components/macro/MacroStudioGate";
 
 export const metadata = pageMetadata({
   title: "Indicateurs pays UEMOA — AzimutFinance",
@@ -123,6 +125,12 @@ export default async function Page({
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
+  // Le Studio d'analyse donne acces au catalogue complet des 16 feuilles BCEAO
+  // — c'est l'outil, pas les pages de synthese, qui est reserve aux abonnes.
+  const userRole = await fetchUserRole();
+  const isMember = userRole !== null;
+  const isPremiumUser = userRole === "premium" || userRole === "pro";
+
   const sp = await searchParams;
   const get = (k: string): string | undefined =>
     typeof sp[k] === "string"
@@ -285,6 +293,112 @@ export default async function Page({
     { key: "m2", label: "M2 — masse monétaire (% YoY)", color: CHART.blue, type: "line" },
     { key: "cred", label: "Crédit aux autres secteurs (% YoY)", color: CHART.red, type: "line" },
   ];
+
+
+  // ---- 2.3 Inflation par fonction de consommation ---------------------------
+  // L'indice d'ensemble masque des dynamiques opposees : l'alimentation et le
+  // transport peuvent flamber quand l'enseignement et la communication reculent.
+  // Six fonctions suffisent — au-dela le graphique devient illisible, et ce sont
+  // celles qui pesent le plus dans le panier des menages de la zone.
+  const inflFonctions: Array<[string, string, string]> = [
+    ["alim", "Alimentation", CHART.red],
+    ["logement", "Logement", CHART.blue],
+    ["transport", "Transport", CHART.amber],
+    ["sante", "Santé", CHART.green],
+    ["enseignement", "Enseignement", CHART.navy],
+    ["communication", "Communication", CHART.purple],
+  ];
+  const inflFonctionsNoms: Record<string, string> = {
+    alim: "Taux d'inflation en glissement annuel de la fonction alimentation",
+    logement: "Taux d'inflation en glissement annuel de la fonction logement",
+    transport: "Taux d'inflation en glissement annuel de la fonction Transport",
+    sante: "Taux d'inflation en glissement annuel de la fonction Sante",
+    enseignement: "Taux d'inflation en glissement annuel de la fonction Enseignement",
+    communication: "Taux d'inflation en glissement annuel de la fonction Communication",
+  };
+  const reel23Data = rowsToChartData(
+    Object.fromEntries(
+      inflFonctions.map(([k]) => [
+        k,
+        lastN(getSeries(cc, "Inflation", inflFonctionsNoms[k]), winM),
+      ]),
+    ),
+  );
+  const reel23Series: ChartSeries[] = inflFonctions.map(([key, label, color]) => ({
+    key,
+    label,
+    color,
+    type: "line" as const,
+  }));
+
+  // ---- 3.3 Pression fiscale et couverture des depenses ----------------------
+  // Deux ratios que le bloc 3.1 ne donne pas : combien l'Etat preleve rapporte
+  // au PIB, et quelle part de ses depenses ses recettes propres couvrent. Le
+  // second se lit sans les dons — c'est la question de l'autonomie budgetaire.
+  const depensesTotales = getSeries(cc, "TOFE", "Depenses totales et prets nets (D1)");
+  const recettesHorsDons = getSeries(cc, "TOFE", ". Recettes totales hors dons (R2)");
+  const pressionFiscale = derivedRatio(recettesFiscales, pibNominal, 100);
+  const couverture = derivedRatio(recettesHorsDons, depensesTotales, 100);
+  const fiscal33Data = rowsToChartData({
+    pression: lastN(pressionFiscale, winY),
+    couverture: lastN(couverture, winY),
+  });
+  const fiscal33Series: ChartSeries[] = [
+    { key: "pression", label: "Pression fiscale (recettes fiscales / PIB, %)", color: CHART.blue, type: "line" },
+    { key: "couverture", label: "Couverture des dépenses hors dons (%)", color: CHART.amber, type: "line" },
+  ];
+
+  // ---- 4.3 Decomposition du compte courant ---------------------------------
+  // Le bloc 4.1 montre le solde ; celui-ci dit d'ou il vient. Un deficit porte
+  // par les biens ne se traite pas comme un deficit porte par les services.
+  const balBiens = getSeries(cc, "BP VI", "Balance des biens");
+  const balServices = getSeries(cc, "BP VI", "Balances des services");
+  const compteCourant = getSeries(cc, "BP VI", "Compte des transactions courantes (1+2+3)");
+  const ext43Data = rowsToChartData({
+    biens: lastN(balBiens, winY),
+    services: lastN(balServices, winY),
+    courant: lastN(compteCourant, winY),
+  });
+  const ext43Series: ChartSeries[] = [
+    { key: "biens", label: "Balance des biens", color: CHART.green, type: "bar" },
+    { key: "services", label: "Balance des services", color: CHART.amber, type: "bar" },
+    { key: "courant", label: "Compte des transactions courantes", color: CHART.navy, type: "line" },
+  ];
+
+  // ---- 5.3 Credit par branche d'activite ------------------------------------
+  // La feuille « Credit sectoriel » est la plus fournie du jeu (295 000 lignes)
+  // et n'etait atteignable que par le Studio. Elle dit a quoi sert vraiment le
+  // credit bancaire : ou va l'argent, branche par branche.
+  const creditBranches: Array<[string, string, string]> = [
+    ["agri", "Agriculture, sylviculture, pêche", CHART.green],
+    ["extract", "Industries extractives", CHART.navy],
+    ["manuf", "Industries manufacturières", CHART.blue],
+    ["btp", "Bâtiments et travaux publics", CHART.amber],
+    ["commerce", "Commerce, restaurants, hôtels", CHART.red],
+    ["transport", "Transports et communications", CHART.purple],
+  ];
+  const creditBranchesNoms: Record<string, string> = {
+    agri: "Credits a court terme accordes a la branche Agriculture Sylviculture et Peche declares a la Centrale des Risques",
+    extract: "Credits a court terme accordes a la branche Industries extractives declares a la Centrale des Risques",
+    manuf: "Credits a court terme accordes a la branche Industries manufacturieres declares a la Centrale des Risques",
+    btp: "Credits a court terme accordes a la branche Batiments-Travaux publics declares a la Centrale des Risques",
+    commerce: "Credits a court terme accordes a la branche Commerce de gros et detail, Restaurants et Hotels declares a la Centrale des Risques",
+    transport: "Credits a court terme accordes a la branche Transports, Entrepots et Communications declares a la Centrale des Risques",
+  };
+  const monet53Data = rowsToChartData(
+    Object.fromEntries(
+      creditBranches.map(([k]) => [
+        k,
+        lastN(getSeries(cc, "Crédit sectoriel", creditBranchesNoms[k]), winM),
+      ]),
+    ),
+  );
+  const monet53Series: ChartSeries[] = creditBranches.map(([key, label, color]) => ({
+    key,
+    label,
+    color,
+    type: "area" as const,
+  }));
 
   // 5.2 Conditions de financement (mini-tableau, agregat UMOA)
   const tauxCreditPrives = getSeries(
@@ -590,6 +704,18 @@ export default async function Page({
                     smallLabels
                   />
                 </ChartCard>
+                              <ChartCard
+                  title="Inflation par fonction de consommation"
+                  subtitle="Glissement annuel par poste du panier des ménages. L’indice d’ensemble masque des dynamiques opposées."
+                >
+                  <MacroChart
+                    data={reel23Data}
+                    series={reel23Series}
+                    yLeftUnit="raw_pct"
+                    zeroReference
+                    height={300}
+                  />
+                </ChartCard>
               </div>
             </section>
             </>
@@ -626,6 +752,17 @@ export default async function Page({
                     height={320}
                   />
                 </ChartCard>
+                              <ChartCard
+                  title="Pression fiscale et couverture des dépenses"
+                  subtitle="Recettes fiscales rapportées au PIB, et part des dépenses couverte par les recettes propres (hors dons)."
+                >
+                  <MacroChart
+                    data={fiscal33Data}
+                    series={fiscal33Series}
+                    yLeftUnit="raw_pct"
+                    height={300}
+                  />
+                </ChartCard>
               </div>
             </section>
             </>
@@ -660,6 +797,18 @@ export default async function Page({
                     period={exportsTop.period}
                   />
                 </ChartCard>
+                              <ChartCard
+                  title="Décomposition du compte courant"
+                  subtitle="Balance des biens et balance des services, en milliards de FCFA. Un déficit porté par les biens ne se traite pas comme un déficit porté par les services."
+                >
+                  <MacroChart
+                    data={ext43Data}
+                    series={ext43Series}
+                    yLeftUnit="MdsFCFA"
+                    zeroReference
+                    height={300}
+                  />
+                </ChartCard>
               </div>
             </section>
             </>
@@ -678,6 +827,20 @@ export default async function Page({
                     series={monet51Series}
                     yLeftUnit="raw_pct"
                     zeroReference
+                    height={300}
+                    smallLabels
+                  />
+                </ChartCard>
+
+                <ChartCard
+                  title="Crédit bancaire par branche d'activité"
+                  subtitle="Encours de crédits à court terme déclarés à la Centrale des Risques, en milliards de FCFA. Où va réellement l'argent des banques."
+                >
+                  <MacroChart
+                    data={monet53Data}
+                    series={monet53Series}
+                    yLeftUnit="MdsFCFA"
+                    stacked
                     height={300}
                     smallLabels
                   />
@@ -736,13 +899,17 @@ export default async function Page({
           ),
           studio: (
             <>
-            <MacroExplorer
-              catalog={explorerCatalog}
-              data={explorerData}
-              basePath="/macro/pays"
-              baseParams={baseParams}
-              compare={xCompare}
-            />
+            {isPremiumUser ? (
+              <MacroExplorer
+                catalog={explorerCatalog}
+                data={explorerData}
+                basePath="/macro/pays"
+                baseParams={baseParams}
+                compare={xCompare}
+              />
+            ) : (
+              <MacroStudioGate isMember={isMember} />
+            )}
             </>
           ),
         }}
