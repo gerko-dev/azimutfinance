@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 
 export type MacroTabDef = { id: string; label: string };
 
@@ -16,6 +16,20 @@ type Props = {
   defaultTab?: string;
 };
 
+function subscribeHash(cb: () => void): () => void {
+  window.addEventListener("hashchange", cb);
+  return () => window.removeEventListener("hashchange", cb);
+}
+
+function lireHash(): string {
+  return window.location.hash.replace("#", "");
+}
+
+/** Instantane serveur : aucun fragment n'existe avant le montage. */
+function lireHashServeur(): string {
+  return "";
+}
+
 /**
  * Onglets de la page Indicateurs.
  *
@@ -29,15 +43,23 @@ type Props = {
  * purement locaux perdraient.
  */
 export default function MacroTabs({ tabs, panels, defaultTab }: Props) {
-  const [active, setActive] = useState<string>(() => {
-    const premier = defaultTab ?? tabs[0]?.id ?? "";
-    if (typeof window === "undefined") return premier;
-    const frag = window.location.hash.replace("#", "");
-    return tabs.some((t) => t.id === frag) ? frag : premier;
-  });
+  // Le fragment d'URL est un etat qui vit HORS de React : le lire pendant le
+  // rendu initial faisait diverger serveur et client (le serveur rendait le
+  // premier onglet, le client celui du fragment), et le lire dans un effet
+  // declenchait un rendu en cascade. `useSyncExternalStore` est la forme
+  // prevue pour cela : elle a un instantane serveur distinct.
+  const hash = useSyncExternalStore(subscribeHash, lireHash, lireHashServeur);
+
+  // Choix explicite de l'utilisateur. Il prime sur le fragment : une fois qu'on
+  // a clique, l'onglet ne doit plus bouger.
+  const [choisi, setChoisi] = useState<string | null>(null);
+
+  const parDefaut = defaultTab ?? tabs[0]?.id ?? "";
+  const depuisHash = tabs.some((t) => t.id === hash) ? hash : "";
+  const active = choisi || depuisHash || parDefaut;
 
   function selectTab(id: string) {
-    setActive(id);
+    setChoisi(id);
     // replaceState plutot que location.hash : on met a jour l'URL sans
     // declencher le saut de defilement du navigateur vers une ancre.
     if (typeof window !== "undefined") {
