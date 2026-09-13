@@ -3,7 +3,8 @@ export type WatchlistTargetType =
   | "bond"
   | "index"
   | "currency"
-  | "commodity";
+  | "commodity"
+  | "fcp";
 
 export const TARGET_TYPE_LABEL: Record<WatchlistTargetType, string> = {
   stock: "Action BRVM",
@@ -11,6 +12,7 @@ export const TARGET_TYPE_LABEL: Record<WatchlistTargetType, string> = {
   index: "Indice",
   currency: "Devise",
   commodity: "Matière première",
+  fcp: "FCP / OPCVM",
 };
 
 export type Watchlist = {
@@ -47,7 +49,10 @@ export type WatchlistWithItems = Watchlist & { items: WatchlistItem[] };
  */
 export function formatTargetCode(t: WatchlistTargetType | string, code: string): string {
   if (!code || code === "*") return code;
-  if (t === "commodity") {
+  // FCP et matieres premieres partagent la convention du slug en minuscules :
+  // sans cette mise en forme, une watchlist afficherait
+  // « nsia-am-nsia-fonds-diversifie » quand target_label manque.
+  if (t === "commodity" || t === "fcp") {
     const spaced = code.replace(/-/g, " ");
     return spaced.charAt(0).toUpperCase() + spaced.slice(1);
   }
@@ -70,5 +75,7 @@ export function targetHref(t: WatchlistTargetType, code: string): string {
       return `/macro/devises/${c}`;
     case "commodity":
       return `/macro/matieres-premieres/${c}`;
+    case "fcp":
+      return `/fcp/${c}`;
   }
 }

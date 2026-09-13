@@ -33,13 +33,28 @@ export const ALERT_TYPE_DESCRIPTION: Record<AlertType, string> = {
     "Rappel libre (note + date) — ne se déclenche pas automatiquement, sert de pense-bête.",
 };
 
-export type AlertTargetType =
-  | "stock"
-  | "bond"
-  | "index"
-  | "currency"
-  | "commodity"
-  | "any";
+/**
+ * Types de cible acceptes par une alerte — SOURCE UNIQUE.
+ *
+ * Cette liste existait en trois exemplaires : ce type, une liste blanche dans
+ * `lib/alerts/actions.ts` et un `TARGET_TYPES` dans le formulaire. Ajouter les
+ * FCP a deux des trois a suffi a produire un « Type de cible invalide » sur une
+ * option pourtant proposee a l'utilisateur. Un seul tableau, dont le type est
+ * derive, empeche la prochaine divergence.
+ *
+ * `any` n'est valable que pour les alertes `news_mention`, avec le code `*`.
+ */
+export const ALERT_TARGET_TYPES = [
+  "stock",
+  "bond",
+  "index",
+  "currency",
+  "commodity",
+  "fcp",
+  "any",
+] as const;
+
+export type AlertTargetType = (typeof ALERT_TARGET_TYPES)[number];
 
 export type Direction = "above" | "below" | "either";
 

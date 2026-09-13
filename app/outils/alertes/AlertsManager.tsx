@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { Alert, AlertTriggerWithAlert, AlertType } from "@/lib/alerts/types";
+import { ALERT_TARGET_TYPES } from "@/lib/alerts/types";
 import {
   ALERT_TYPE_DESCRIPTION,
   ALERT_TYPE_LABEL,
@@ -17,13 +18,16 @@ import {
 } from "@/lib/alerts/actions";
 import type { TargetOptionsByType } from "@/lib/watchlists/targetOptions";
 
-const TARGET_TYPES = ["stock", "bond", "index", "currency", "commodity", "any"] as const;
+// Meme tableau que la validation serveur : la divergence entre les deux est
+// exactement ce qui produisait « Type de cible invalide ».
+const TARGET_TYPES = ALERT_TARGET_TYPES;
 const TARGET_TYPE_LABEL: Record<(typeof TARGET_TYPES)[number], string> = {
   stock: "Action",
   bond: "Obligation",
   index: "Indice",
   currency: "Devise",
   commodity: "Matière première",
+  fcp: "FCP / OPCVM",
   any: "Tout",
 };
 
@@ -331,14 +335,19 @@ function AlertForm({
     setTargetCode("");
   }
 
+  // Types dont le `target_code` est un slug en minuscules. Les autres sont des
+  // tickers ou des symboles, stockes en majuscules. Se tromper de casse ici
+  // fait echouer la correspondance avec la liste d'options, et l'utilisateur
+  // voit « Code introuvable » sur une valeur qu'il vient pourtant de choisir.
+  const SLUG_TYPES = new Set(["commodity", "fcp"]);
+
   function handleTargetCodeChange(raw: string) {
     const trimmed = raw.replace(/\s+/g, "");
-    // Commodity utilise des slugs minuscules ; le reste est en majuscules
-    if (targetType === "commodity") {
-      setTargetCode(trimmed.toLowerCase());
-    } else {
-      setTargetCode(trimmed.toUpperCase());
-    }
+    setTargetCode(
+      SLUG_TYPES.has(targetType)
+        ? trimmed.toLowerCase()
+        : trimmed.toUpperCase(),
+    );
   }
 
   function submit() {
@@ -453,7 +462,9 @@ function AlertForm({
                         ? "Ex: BRVMC"
                         : targetType === "currency"
                           ? "Ex: EUR/XOF"
-                          : "Ex: cacao"
+                          : targetType === "fcp"
+                            ? "Nom du fonds — commence à taper"
+                            : "Ex: cacao"
                 }
                 className={`w-full text-sm border rounded-md px-2 py-1.5 font-mono ${
                   showCodeError

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import AddToWatchlistButton from "@/components/watchlist/AddToWatchlistButton";
 import Link from "next/link";
 import {
   LineChart,
@@ -1091,6 +1092,18 @@ export default function FCPDetailView(props: Props) {
                   {fund.depositaire && ` · Dépositaire ${fund.depositaire}`}
                 </div>
               </div>
+            </div>
+            {/* La fiche est derriere le mur Premium : tout lecteur qui arrive
+                ici est connecte, d'ou `isAuthenticated` en dur. Le code stocke
+                est le slug du fonds, la meme cle que la validation serveur et
+                le cron d'alertes attendent. */}
+            <div className="shrink-0">
+              <AddToWatchlistButton
+                targetType="fcp"
+                targetCode={fund.id}
+                targetLabel={`${fund.nom} — ${fund.gestionnaire}`}
+                isAuthenticated={true}
+              />
             </div>
           </div>
 

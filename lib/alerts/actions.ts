@@ -5,6 +5,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getPremiumStatus } from "@/lib/auth/premium";
 import type { ActionResult } from "@/lib/admin/types";
 import type { AlertParams, AlertType } from "./types";
+import { ALERT_TARGET_TYPES } from "./types";
 import { validateAlertTarget } from "@/lib/watchlists/validate";
 
 function s(v: FormDataEntryValue | null): string {
@@ -135,6 +136,25 @@ function buildParams(
   }
 }
 
+/**
+ * Normalise un `target_code` selon son type.
+ *
+ * Les tickers et symboles (actions, obligations, indices, devises) sont
+ * stockes en majuscules. Les FCP, eux, sont identifies par le slug stable du
+ * fonds (`Fund.id`), qui est en minuscules : le mettre en majuscules donnerait
+ * un code qui ne correspond a rien dans le referentiel.
+ *
+ * `commodity` n'est volontairement pas traite ici. Ses slugs sont eux aussi en
+ * minuscules, mais les lignes deja enregistrees le sont en majuscules ; comme
+ * la contrainte d'unicite est sensible a la casse, basculer maintenant
+ * autoriserait un doublon « CACAO » / « cacao » dans une meme liste. Tous les
+ * chemins de lecture rabaissent la casse, donc l'existant fonctionne — c'est
+ * une dette assumee, pas un oubli.
+ */
+function normalizeTargetCode(targetType: string, code: string): string {
+  return targetType === "fcp" ? code.toLowerCase() : code.toUpperCase();
+}
+
 export async function upsertAlertAction(
   fd: FormData,
 ): Promise<ActionResult<{ id: string }>> {
@@ -146,17 +166,13 @@ export async function upsertAlertAction(
   const name = s(fd.get("name"));
   const alert_type = s(fd.get("alert_type")) as AlertType;
   const target_type = s(fd.get("target_type"));
-  const target_code = s(fd.get("target_code")).toUpperCase();
+  const target_code = normalizeTargetCode(target_type, s(fd.get("target_code")));
   const active = s(fd.get("active")) === "on";
 
   if (!name) return { ok: false, error: "Nom requis." };
   if (!ALL_TYPES.includes(alert_type))
     return { ok: false, error: "Type d'alerte invalide." };
-  if (
-    !["stock", "bond", "index", "currency", "commodity", "any"].includes(
-      target_type,
-    )
-  )
+  if (!(ALERT_TARGET_TYPES as readonly string[]).includes(target_type))
     return { ok: false, error: "Type de cible invalide." };
   if (!target_code)
     return { ok: false, error: "Code de cible requis (utilise * pour tout)." };

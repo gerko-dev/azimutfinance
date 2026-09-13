@@ -1,6 +1,7 @@
 import "server-only";
 
 import { loadAllActions, loadListedBonds } from "@/lib/dataLoader";
+import { loadFunds } from "@/lib/fcp";
 import type { WatchlistTargetType } from "./types";
 
 /**
@@ -119,6 +120,17 @@ export function validateTarget(
       }
       return { ok: true, label };
     }
+    case "fcp": {
+      // Le code est le slug stable du fonds (`Fund.id`), en minuscules. On le
+      // cherche tel quel plutot que par nom : un fonds peut etre renomme, son
+      // slug reste la cle que la watchlist a stockee.
+      const slug = code.toLowerCase();
+      const fund = loadFunds().find((f) => f.id === slug);
+      if (!fund) {
+        return { ok: false, error: `FCP « ${code} » inconnu.` };
+      }
+      return { ok: true, label: `${fund.nom} — ${fund.gestionnaire}` };
+    }
     case "commodity": {
       const lower = code.toLowerCase();
       const label = KNOWN_COMMODITIES[lower];
@@ -146,7 +158,8 @@ export function validateAlertTarget(
     targetType === "bond" ||
     targetType === "index" ||
     targetType === "currency" ||
-    targetType === "commodity"
+    targetType === "commodity" ||
+    targetType === "fcp"
   ) {
     return validateTarget(targetType, targetCode);
   }

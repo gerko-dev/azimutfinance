@@ -1,6 +1,7 @@
 import "server-only";
 
 import { loadAllActions, loadListedBonds } from "@/lib/dataLoader";
+import { loadFunds } from "@/lib/fcp";
 import type { WatchlistTargetType } from "./types";
 
 export type TargetOption = {
@@ -76,9 +77,20 @@ export function getTargetOptions(): TargetOptionsByType {
     }))
     .sort((a, b) => a.value.localeCompare(b.value));
 
+  // FCP : valeur = slug stable, libelle = nom + societe de gestion, car deux
+  // gestionnaires donnent souvent le meme nom a leurs fonds (« Fonds
+  // Diversifie ») et la liste serait illisible sans l'emetteur.
+  const funds: TargetOption[] = loadFunds()
+    .map((f) => ({
+      value: f.id,
+      label: `${f.nom} — ${f.gestionnaire}`,
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label, "fr"));
+
   return {
     stock: stocks,
     bond: bonds,
+    fcp: funds,
     index: KNOWN_INDICES.map(([value, label]) => ({ value, label })),
     currency: KNOWN_CURRENCIES.map(([value, label]) => ({ value, label })),
     commodity: KNOWN_COMMODITIES.map(([value, label]) => ({ value, label })),

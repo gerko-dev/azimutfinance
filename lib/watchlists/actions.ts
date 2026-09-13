@@ -18,6 +18,25 @@ async function requireUser() {
   return { supabase, user };
 }
 
+/**
+ * Normalise un `target_code` selon son type.
+ *
+ * Les tickers et symboles (actions, obligations, indices, devises) sont
+ * stockes en majuscules. Les FCP, eux, sont identifies par le slug stable du
+ * fonds (`Fund.id`), qui est en minuscules : le mettre en majuscules donnerait
+ * un code qui ne correspond a rien dans le referentiel.
+ *
+ * `commodity` n'est volontairement pas traite ici. Ses slugs sont eux aussi en
+ * minuscules, mais les lignes deja enregistrees le sont en majuscules ; comme
+ * la contrainte d'unicite est sensible a la casse, basculer maintenant
+ * autoriserait un doublon « CACAO » / « cacao » dans une meme liste. Tous les
+ * chemins de lecture rabaissent la casse, donc l'existant fonctionne — c'est
+ * une dette assumee, pas un oubli.
+ */
+function normalizeTargetCode(targetType: string, code: string): string {
+  return targetType === "fcp" ? code.toLowerCase() : code.toUpperCase();
+}
+
 export async function createWatchlistAction(
   fd: FormData,
 ): Promise<ActionResult<{ id: string }>> {
@@ -110,7 +129,7 @@ export async function addToWatchlistAction(
   const { error } = await supabase.from("watchlist_items").insert({
     watchlist_id: watchlistId,
     target_type: targetType,
-    target_code: targetCode.toUpperCase(),
+    target_code: normalizeTargetCode(targetType, targetCode),
     target_label: targetLabel ?? check.label,
   });
   if (error) {
@@ -211,7 +230,7 @@ export async function quickAddToDefaultWatchlistAction(
   const { error: insertErr } = await supabase.from("watchlist_items").insert({
     watchlist_id: listId,
     target_type: targetType,
-    target_code: targetCode.toUpperCase(),
+    target_code: normalizeTargetCode(targetType, targetCode),
     target_label: resolvedLabel,
   });
   if (insertErr) {

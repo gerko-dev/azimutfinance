@@ -1,6 +1,7 @@
 import "server-only";
 
 import { loadAllActions, loadListedBonds, loadPriceHistory } from "@/lib/dataLoader";
+import { loadFunds } from "@/lib/fcp";
 import type { WatchlistItem, WatchlistTargetType } from "./types";
 
 export type EnrichedItem = WatchlistItem & {
@@ -42,8 +43,12 @@ export function enrichWatchlistItems(items: WatchlistItem[]): EnrichedItem[] {
 
   const needsStocks = items.some((i) => i.target_type === "stock");
   const needsBonds = items.some((i) => i.target_type === "bond");
+  const needsFunds = items.some((i) => i.target_type === "fcp");
   const actions = needsStocks ? loadAllActions() : [];
   const bonds = needsBonds ? loadListedBonds() : [];
+  const fundsById = new Map(
+    (needsFunds ? loadFunds() : []).map((f) => [f.id, f]),
+  );
 
   const actionsByCode = new Map(
     actions.map((a) => [a.code.toUpperCase(), a]),
@@ -136,6 +141,42 @@ export function enrichWatchlistItems(items: WatchlistItem[]): EnrichedItem[] {
           unit: null,
           ytdPct: null,
           sublabel: `${b.issuerType} · ${b.country}`,
+          error: null,
+        },
+      };
+    }
+
+    if (t === "fcp") {
+      // Le slug est en minuscules : `code` a ete mis en majuscules plus haut
+      // pour les tickers, il faut donc repartir du brut.
+      const fund = fundsById.get(item.target_code.toLowerCase());
+      if (!fund) {
+        return {
+          ...item,
+          enriched: {
+            price: null,
+            unit: null,
+            ytdPct: null,
+            sublabel: null,
+            error: "FCP introuvable",
+          },
+        };
+      }
+      const vl = fund.latestVL;
+      // Pas d'YTD ici : une VL n'est pas publiee tous les jours — certaines le
+      // sont chaque semaine, d'autres chaque trimestre. Un « depuis le 1er
+      // janvier » calcule sur le premier point disponible comparerait des
+      // dates de reference differentes d'un fonds a l'autre, ce qui donnerait
+      // un classement faux. La date de releve est affichee a la place.
+      return {
+        ...item,
+        enriched: {
+          price: vl ? vl.vl : null,
+          unit: vl ? "FCFA" : null,
+          ytdPct: null,
+          sublabel: vl
+            ? `${fund.gestionnaire} · VL au ${vl.date}`
+            : fund.gestionnaire,
           error: null,
         },
       };

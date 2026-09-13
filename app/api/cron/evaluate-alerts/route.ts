@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { sendEmail, getAppUrl } from "@/lib/email/resend";
 import { loadAllActions, type ActionRow } from "@/lib/dataLoader";
+import { loadFunds, type Fund } from "@/lib/fcp";
 import type { Alert, AlertType } from "@/lib/alerts/types";
 import { describeAlert } from "@/lib/alerts/types";
 
@@ -91,6 +92,10 @@ export async function GET(req: Request) {
   const actionByCode = new Map<string, ActionRow>();
   for (const a of actions) actionByCode.set(a.code.toUpperCase(), a);
 
+  // FCP : indexes par slug stable, la cle que les alertes ont stockee.
+  const fundById = new Map<string, Fund>();
+  for (const f of loadFunds()) fundById.set(f.id, f);
+
   // 5. Évalue chaque alerte
   for (const a of alerts) {
     const profile = profileByUser.get(a.user_id);
@@ -108,7 +113,7 @@ export async function GET(req: Request) {
       }
     }
 
-    const evalResult = evaluateAlert(a, actionByCode);
+    const evalResult = evaluateAlert(a, actionByCode, fundById);
     if (!evalResult) continue;
     if (evalResult === "not_implemented") {
       summary.not_implemented++;
@@ -175,9 +180,28 @@ type EvalResult =
 function evaluateAlert(
   a: Alert,
   actionByCode: Map<string, ActionRow>,
+  fundById: Map<string, Fund>,
 ): EvalResult {
   const p = a.params as Record<string, unknown>;
   const type = a.alert_type as AlertType;
+
+  // Seuil de VL sur un FCP. Meme type d'alerte que pour une action — c'est un
+  // franchissement de prix — mais la valeur suivie est la derniere VL publiee,
+  // pas un cours de seance.
+  if (type === "price_threshold" && a.target_type === "fcp") {
+    const fund = fundById.get(a.target_code.toLowerCase());
+    const vl = fund?.latestVL;
+    if (!fund || !vl) return null;
+    const direction = p.direction as "above" | "below" | undefined;
+    const threshold = Number(p.price);
+    if (!Number.isFinite(threshold) || !direction) return null;
+    const hit = direction === "above" ? vl.vl >= threshold : vl.vl <= threshold;
+    if (!hit) return null;
+    return {
+      message: `${fund.nom} (${fund.gestionnaire}) ${describeAlert(a)} — VL ${vl.vl.toLocaleString("fr-FR")} FCFA au ${vl.date}`,
+      value: { vl: vl.vl, vlDate: vl.date, threshold, direction },
+    };
+  }
 
   if (type === "price_threshold") {
     if (a.target_type !== "stock") return null;
