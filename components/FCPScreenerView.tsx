@@ -59,12 +59,16 @@ const CATEGORY_COLORS: Record<string, string> = {
 const CADENCE_LABEL: Record<ScreenerCadence, string> = {
   quotidienne: "Quot.",
   hebdomadaire: "Hebdo",
+  bimensuelle: "Bimens.",
+  mensuelle: "Mens.",
   trimestrielle: "Trim.",
   "irrégulière": "Irrég.",
 };
 const ALL_CADENCES: ScreenerCadence[] = [
   "quotidienne",
   "hebdomadaire",
+  "bimensuelle",
+  "mensuelle",
   "trimestrielle",
   "irrégulière",
 ];
@@ -318,7 +322,11 @@ export default function FCPScreenerView(props: Props) {
       <p className="text-xs text-slate-500">
         Recherche libre dans les {rows.length} fonds publiés au{" "}
         {fmtDateFR(refQuarter)}. Combine catégorie, gestionnaire, AUM,
-        performance sur fenêtre choisie, cadence et ancienneté.
+        performance sur fenêtre choisie, périodicité de calcul de la VL et
+        ancienneté. La périodicité est celle <strong>déclarée</strong> par la
+        société de gestion ; un astérisque signale les fonds pour lesquels elle
+        n&apos;est pas publiée et où elle est déduite de l&apos;espacement réel
+        des VL.
       </p>
 
       {/* === FILTRES === */}
@@ -642,6 +650,14 @@ export default function FCPScreenerView(props: Props) {
                     </td>
                     <td className="px-3 py-2 text-xs text-slate-600 hidden sm:table-cell">
                       {CADENCE_LABEL[r.cadence]}
+                      {r.cadenceSource === "observee" && (
+                        <span
+                          className="ml-0.5 text-slate-400"
+                          title="Périodicité déduite de l'espacement réel des VL : la société de gestion ne la publie pas."
+                        >
+                          *
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-2 text-right text-xs text-slate-600 tabular-nums hidden md:table-cell">
                       {r.ageYears !== null ? r.ageYears.toFixed(1) + " ans" : "—"}

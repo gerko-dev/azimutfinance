@@ -114,6 +114,11 @@ export type Fund = {
    *  publie pas — jamais déduit de la catégorie, ce qui donnerait un chiffre
    *  d'apparence officielle sans l'être. */
   risque: NiveauRisque | null;
+  /** Periodicite de calcul de la VL DECLAREE par la societe de gestion
+   *  ("Quotidienne", "Hebdomadaire", "Mensuelle"). Null quand elle ne la
+   *  publie pas — jamais deduite ici, l'appelant decide quoi afficher a la
+   *  place. */
+  frequenceVL: string | null;
 };
 
 export type NiveauRisque = {
@@ -345,9 +350,27 @@ function loadBocSnapshots(): Map<string, BocSnapshot> {
  * Le fichier est facultatif — le site fonctionne sans, avec les seuls points
  * trimestriels.
  */
+/**
+ * Periodicite de calcul de la VL DECLAREE par la societe de gestion, la plus
+ * recente non vide pour chaque fonds.
+ *
+ * Elle vit dans data/fcp/vl-historique.csv (colonne `frequenceCalcul`) et
+ * n'etait pas exploitee. 85 fonds sur 134 portent plusieurs valeurs au fil du
+ * temps — un fonds peut changer de rythme, et les lignes anciennes sont
+ * souvent vides : c'est la derniere declaration qui fait foi.
+ */
+const _freqVLDeclaree = new Map<string, string>();
+const _freqVLDateVue = new Map<string, string>();
+
 function loadVLHistory(): Map<string, Array<{ date: string; vl: number }>> {
   const out = new Map<string, Array<{ date: string; vl: number }>>();
-  type Row = { gestionnaire: string; nomAumfcp: string; date: string; vl: string };
+  type Row = {
+    gestionnaire: string;
+    nomAumfcp: string;
+    date: string;
+    vl: string;
+    frequenceCalcul?: string;
+  };
   let rows: Row[];
   try {
     rows = parseCSV<Row>(VL_HISTORY_FILE, ";", "utf-8");
@@ -361,6 +384,14 @@ function loadVLHistory(): Map<string, Array<{ date: string; vl: number }>> {
     const vl = parseNumOrNull(r.vl);
     if (!gest || !nom || date.length !== 10 || vl === null || vl <= 0) continue;
     const key = `${gest}__${fundNameKey(nom)}`;
+    const freq = (r.frequenceCalcul || "").trim();
+    if (freq) {
+      const vue = _freqVLDateVue.get(key);
+      if (!vue || date > vue) {
+        _freqVLDeclaree.set(key, freq);
+        _freqVLDateVue.set(key, date);
+      }
+    }
     const liste = out.get(key);
     if (liste) liste.push({ date, vl });
     else out.set(key, [{ date, vl }]);
@@ -629,6 +660,7 @@ export function loadFunds(): Fund[] {
       firstObsDate: obs.length > 0 ? obs[0].date : null,
       bocSnapshot: bocSnap,
       risque: risques.get(groupKey) ?? null,
+      frequenceVL: _freqVLDeclaree.get(groupKey) ?? null,
     });
   }
 

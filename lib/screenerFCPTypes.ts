@@ -15,6 +15,8 @@ export type ScreenerPeriodKey =
 export type ScreenerCadence =
   | "quotidienne"
   | "hebdomadaire"
+  | "bimensuelle"
+  | "mensuelle"
   | "trimestrielle"
   | "irrégulière";
 
@@ -28,6 +30,9 @@ export type ScreenerRow = {
   latestVLDate: string;
   isStale: boolean;
   cadence: ScreenerCadence;
+  /** "declaree" quand la societe de gestion publie sa periodicite de calcul,
+   *  "observee" quand on la deduit de l'espacement reel des VL. */
+  cadenceSource: "declaree" | "observee" | null;
   ageYears: number | null;
   perf: Record<ScreenerPeriodKey, number | null>;
 };
