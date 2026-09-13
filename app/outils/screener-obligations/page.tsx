@@ -66,6 +66,7 @@ export default async function Page() {
           ratings={payload.ratings}
           amortizationTypes={payload.amortizationTypes}
           priceDate={payload.priceDate}
+          pricesFromFallback={payload.pricesFromFallback}
         />
       </main>
     </div>

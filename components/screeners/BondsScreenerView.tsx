@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import type { BondScreenerRow } from "@/lib/screeners/obligations";
+import type { BondScreenerRow, BondSegment } from "@/lib/screeners/obligations";
 
 type Props = {
   rows: BondScreenerRow[];
@@ -11,6 +11,7 @@ type Props = {
   ratings: string[];
   amortizationTypes: string[];
   priceDate: string;
+  pricesFromFallback: boolean;
 };
 
 type SortKey =
@@ -119,6 +120,7 @@ export default function BondsScreenerView({
   ratings,
   amortizationTypes,
   priceDate,
+  pricesFromFallback,
 }: Props) {
   const [q, setQ] = useState("");
   const [types, setTypes] = useState<Set<string>>(new Set());
@@ -131,6 +133,9 @@ export default function BondsScreenerView({
   const [matMax, setMatMax] = useState("");
   const [ytmMin, setYtmMin] = useState("");
   const [coteesSeules, setCoteesSeules] = useState(false);
+  // "" = les deux univers. Un investisseur qui cherche « du 6,5 % a 5 ans » ne
+  // veut pas choisir son univers avant de chercher.
+  const [segment, setSegment] = useState<BondSegment | "">("");
   const [vertesSeules, setVertesSeules] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("ytm");
   const [asc, setAsc] = useState(false);
@@ -159,13 +164,16 @@ export default function BondsScreenerView({
         const hay = `${r.code} ${r.name} ${r.issuer} ${r.isin}`.toLowerCase();
         if (!hay.includes(needle)) return false;
       }
+      if (segment && r.segment !== segment) return false;
       if (types.size && !types.has(r.issuerType)) return false;
       if (pays.size && !pays.has(r.country)) return false;
       if (notes.size && !notes.has(r.rating)) return false;
       if (amort.size && !amort.has(r.amortizationType)) return false;
       // Le coupon est stocke en decimal (0,0625) ; l'utilisateur saisit 6,25.
-      if (cMin !== null && r.couponRate * 100 < cMin) return false;
-      if (cMax !== null && r.couponRate * 100 > cMax) return false;
+      // Les BAT sont zero-coupon : `couponRate` est null et un filtre de
+      // coupon doit les exclure plutot que de les traiter comme du 0 %.
+      if (cMin !== null && (r.couponRate === null || r.couponRate * 100 < cMin)) return false;
+      if (cMax !== null && (r.couponRate === null || r.couponRate * 100 > cMax)) return false;
       if (mMin !== null && r.yearsToMaturity < mMin) return false;
       if (mMax !== null && r.yearsToMaturity > mMax) return false;
       if (yMin !== null && (r.ytm === null || r.ytm * 100 < yMin)) return false;
@@ -184,7 +192,7 @@ export default function BondsScreenerView({
       );
     });
   }, [
-    rows, q, types, pays, notes, amort,
+    rows, q, segment, types, pays, notes, amort,
     couponMin, couponMax, matMin, matMax, ytmMin,
     coteesSeules, vertesSeules, sortKey, asc,
   ]);
@@ -229,6 +237,7 @@ export default function BondsScreenerView({
     setYtmMin("");
     setCoteesSeules(false);
     setVertesSeules(false);
+    setSegment("");
     setPage(0);
   }
 
@@ -248,6 +257,18 @@ export default function BondsScreenerView({
             placeholder="Code, émetteur, ISIN…"
             className="flex-1 min-w-[220px] text-sm border border-slate-300 rounded-md px-3 py-2"
           />
+          <select
+            value={segment}
+            onChange={(e) => {
+              setSegment(e.target.value as BondSegment | "");
+              setPage(0);
+            }}
+            className="text-sm border border-slate-300 rounded-md px-3 py-2 bg-white"
+          >
+            <option value="">Cotées + souverains</option>
+            <option value="cotee">Obligations cotées BRVM</option>
+            <option value="souverain">Souverains UMOA-Titres (OAT / BAT)</option>
+          </select>
           <button
             onClick={reset}
             className="text-xs px-3 py-2 border border-slate-300 rounded-md hover:bg-slate-50"
@@ -391,7 +412,13 @@ export default function BondsScreenerView({
                       {r.country ? ` · ${r.country}` : ""}
                     </div>
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums">{fmtPct(r.couponRate)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {r.couponRate === null ? (
+                      <span className="text-slate-400 text-xs">zéro coupon</span>
+                    ) : (
+                      fmtPct(r.couponRate)
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-right tabular-nums text-slate-600">
                     {r.yearsToMaturity.toFixed(1).replace(".", ",")} ans
                   </td>
@@ -400,6 +427,11 @@ export default function BondsScreenerView({
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums font-medium">
                     {fmtPct(r.ytm)}
+                    {r.ytmSource === "adjudication" && (
+                      <div className="text-[9px] font-normal text-slate-400">
+                        adjudication
+                      </div>
+                    )}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums text-slate-500 text-xs">
                     {fmtNum(r.outstanding)}
@@ -433,7 +465,18 @@ export default function BondsScreenerView({
       )}
 
       <p className="text-xs text-slate-500 leading-relaxed">
-        Cours relevés le {priceDate} sur la cote BRVM. Le rendement à
+        {pricesFromFallback ? (
+          <>
+            <strong>Cote BRVM momentanément indisponible</strong> — les cours
+            affichés sont les derniers connus, relevés le {priceDate}.{" "}
+          </>
+        ) : (
+          <>Cours relevés le {priceDate} sur la cote BRVM. </>
+        )}
+        Deux univers cohabitent : les obligations cotées, dont le rendement est
+        un YTM calculé sur le dernier cours de marché, et les souverains
+        UMOA-Titres (OAT / BAT), qui n&apos;ont pas de marché secondaire — leur
+        rendement est celui de la dernière adjudication, signalé comme tel. Le rendement à
         l&apos;échéance n&apos;est calculé que pour les lignes ayant coté : une
         ligne sans transaction n&apos;affiche ni cours ni rendement plutôt
         qu&apos;un zéro qui remonterait en tête du classement. Les titres échus
