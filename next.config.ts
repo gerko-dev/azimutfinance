@@ -93,14 +93,13 @@ const nextConfig: NextConfig = {
         destination: "/pros/ytm",
         permanent: true,
       },
+      // L'ancien /outils/screener pointait vers le Pro Terminal. Le screener
+      // actions est revenu dans l'espace Outils, en acces Premium : la
+      // redirection doit suivre, sinon elle renverrait les liens indexes vers
+      // une page reservee aux comptes Pro.
       {
         source: "/outils/screener",
-        destination: "/pros/screener",
-        permanent: true,
-      },
-      {
-        source: "/outils/screener-fcp",
-        destination: "/pros/screener-fcp",
+        destination: "/outils/screener-actions",
         permanent: true,
       },
       {

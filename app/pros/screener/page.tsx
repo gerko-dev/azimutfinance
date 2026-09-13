@@ -1,41 +1,13 @@
 import ScreenerView from "@/components/ScreenerView";
 import ProPageHeader from "@/components/pros/ProPageHeader";
-import {
-  loadAllActionsEnriched,
-  buildRiskReturnDataset,
-  loadMultipleIndicesHistory,
-  loadAverageVolumes,
-} from "@/lib/dataLoader";
-import { computeAllQuadrants, computeReturnsMatrix } from "@/lib/stockStats";
-import { computeFundScreenerSnapshotsMulti } from "@/lib/fundamentalsCalc";
+import { buildActionsScreenerRows } from "@/lib/screeners/actions";
 
 export const metadata = {
   title: "Screener actions — Pro Terminal",
 };
 
 export default async function ScreenerPage() {
-  const actions = await loadAllActionsEnriched();
-  const riskReturn = buildRiskReturnDataset();
-  const quadrants = computeAllQuadrants(riskReturn.points);
-  const volMap = new Map(riskReturn.points.map((p) => [p.code, p.volatility]));
-  const fundMultiMap = computeFundScreenerSnapshotsMulti();
-  const avgVolume30 = loadAverageVolumes(30);
-
-  const histories = loadMultipleIndicesHistory(actions.map((a) => a.code));
-  const yearChangeMap = new Map<string, number | null>();
-  for (const a of actions) {
-    const m = computeReturnsMatrix(histories[a.code] ?? []);
-    yearChangeMap.set(a.code, m["1A"]);
-  }
-
-  const stocks = actions.map((a) => ({
-    ...a,
-    volatility: volMap.get(a.code) ?? null,
-    quadrant: quadrants.get(a.code) ?? null,
-    yearChange: yearChangeMap.get(a.code) ?? null,
-    avgVolume: avgVolume30.get(a.code) ?? null,
-    fundByWindow: fundMultiMap.get(a.code) ?? null,
-  }));
+  const stocks = await buildActionsScreenerRows();
 
   return (
     <div className="space-y-4">
