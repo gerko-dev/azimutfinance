@@ -55,14 +55,9 @@ const menuSections: MenuSection[] = [
           { label: "OAT/BAT", href: "/marches/souverains-non-cotes" },
         ],
       },
-      {
-        label: "OPC",
-        href: "/marches/fcp",
-        children: [
-          { label: "OPC", href: "/fcp/categories" },
-          { label: "Sociétés de gestion", href: "/sgo" },
-        ],
-      },
+      // Lien simple : la page OPC mene deja aux categories et aux societes de
+      // gestion, un flyout n'aurait fait que dupliquer ses propres liens.
+      { label: "OPC", href: "/marches/fcp" },
       { label: "Matières premières", href: "/macro/matieres-premieres" },
       { label: "FX", href: "/macro/devises" },
     ],
