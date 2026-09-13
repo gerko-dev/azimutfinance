@@ -58,8 +58,8 @@ const menuSections: MenuSection[] = [
       // Lien simple : la page OPC mene deja aux categories et aux societes de
       // gestion, un flyout n'aurait fait que dupliquer ses propres liens.
       { label: "OPC", href: "/marches/fcp" },
-      { label: "Matières premières", href: "/macro/matieres-premieres" },
-      { label: "FX", href: "/macro/devises" },
+      { label: "Matières premières", href: "/marches/matieres-premieres" },
+      { label: "FX", href: "/marches/devises" },
     ],
   },
   {

@@ -339,35 +339,35 @@ export default async function MemberHome({ user }: { user: User }) {
           />
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mt-5">
             <MacroCard
-              href="/macro/devises"
+              href="/marches/devises"
               label="USD / XOF"
               value={usdXof ? fmtNum(usdXof.last, 2) : "—"}
               delta={fmtPct(usdXof?.changeDayPct, 2)}
               up={(usdXof?.changeDayPct ?? 0) >= 0}
             />
             <MacroCard
-              href="/macro/devises"
+              href="/marches/devises"
               label="EUR / USD"
               value={eurUsd ? fmtNum(eurUsd.last, 4) : "—"}
               delta={fmtPct(eurUsd?.changeDayPct, 2)}
               up={(eurUsd?.changeDayPct ?? 0) >= 0}
             />
             <MacroCard
-              href="/macro/matieres-premieres/cacao"
+              href="/marches/matieres-premieres/cacao"
               label="Cacao · USD/t"
               value={cacao ? fmtNum(cacao.last, 0) : "—"}
               delta={fmtPct(cacao?.changeDayPct, 2)}
               up={(cacao?.changeDayPct ?? 0) >= 0}
             />
             <MacroCard
-              href="/macro/matieres-premieres/or"
+              href="/marches/matieres-premieres/or"
               label="Or · USD/oz"
               value={or ? fmtNum(or.last, 0) : "—"}
               delta={fmtPct(or?.changeDayPct, 2)}
               up={(or?.changeDayPct ?? 0) >= 0}
             />
             <MacroCard
-              href="/macro/matieres-premieres/brent"
+              href="/marches/matieres-premieres/brent"
               label="Brent · USD/bbl"
               value={brent ? fmtNum(brent.last, 1) : "—"}
               delta={fmtPct(brent?.changeDayPct, 2)}
@@ -470,8 +470,8 @@ export default async function MemberHome({ user }: { user: User }) {
             <ExploreTile href="/marches/fcp" icon="🧺" label="FCP / OPCVM" hint="Fonds & sociétés de gestion" />
             <ExploreTile href="/marche-monetaire" icon="🏦" label="Marché monétaire" hint="Taux BCEAO & UEMOA" />
             <ExploreTile href="/macro/pays" icon="🌍" label="Macro UEMOA" hint="PIB, inflation, indicateurs pays" />
-            <ExploreTile href="/macro/matieres-premieres" icon="🌾" label="Matières premières" hint="Cacao, or, pétrole…" />
-            <ExploreTile href="/macro/devises" icon="💱" label="Devises & FX" hint="FCFA face aux majors" />
+            <ExploreTile href="/marches/matieres-premieres" icon="🌾" label="Matières premières" hint="Cacao, or, pétrole…" />
+            <ExploreTile href="/marches/devises" icon="💱" label="Devises & FX" hint="FCFA face aux majors" />
             <ExploreTile href="/academie/glossaire" icon="📖" label="Glossaire" hint="65+ termes contextualisés" />
             <ExploreTile href="/academie/compte-titre" icon="💼" label="Suivi compte-titre" hint="Pilotez votre portefeuille réel" />
             <ExploreTile href="/communaute/forum" icon="💬" label="Forum investisseurs" hint="Échangez avec la communauté" />
@@ -650,9 +650,9 @@ function targetHref(type: string, code: string): string {
     case "index":
       return "/marches/indices";
     case "currency":
-      return "/macro/devises";
+      return "/marches/devises";
     case "commodity":
-      return "/macro/matieres-premieres";
+      return "/marches/matieres-premieres";
     default:
       return "/outils/watchlist";
   }

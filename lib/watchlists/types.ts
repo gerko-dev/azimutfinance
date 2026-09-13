@@ -72,9 +72,13 @@ export function targetHref(t: WatchlistTargetType, code: string): string {
     case "index":
       return `/marches/indices/${c}`;
     case "currency":
-      return `/macro/devises/${c}`;
+      // Le code stocke est « USD/XOF », le slug de la fiche est « USD_XOF » :
+      // majuscules et barre oblique remplacee. Sans cette conversion le lien
+      // pointait vers /marches/devises/usd/xof, un chemin imbrique qui n'existe
+      // pas — toutes les devises d'une watchlist menaient a un 404.
+      return `/marches/devises/${code.toUpperCase().replace("/", "_")}`;
     case "commodity":
-      return `/macro/matieres-premieres/${c}`;
+      return `/marches/matieres-premieres/${c}`;
     case "fcp":
       return `/fcp/${c}`;
   }

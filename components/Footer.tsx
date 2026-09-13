@@ -76,8 +76,8 @@ export default function Footer() {
           {/* Macro & Outils */}
           <Column title="Macro &amp; outils">
             <Item href="/macro/pays">Indicateurs pays UEMOA</Item>
-            <Item href="/macro/matieres-premieres">Matières premières</Item>
-            <Item href="/macro/devises">Devises &amp; FX</Item>
+            <Item href="/marches/matieres-premieres">Matières premières</Item>
+            <Item href="/marches/devises">Devises &amp; FX</Item>
           </Column>
 
           {/* Académie */}

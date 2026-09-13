@@ -150,7 +150,7 @@ export default async function ProDashboard() {
   const inflationDelta = getDelta("4_Inflation_pays_UEMOA", "IPC glissement annuel", "UEMOA");
   const eurFcfa = getLatest("7_Change_EUR", "EUR/FCFA", "EUR/FCFA");
   // USD/XOF n'est pas dans le PDF BCEAO -> on prend le scrape Investing
-  // (meme source que /macro/devises et la home).
+  // (meme source que /marches/devises et la home).
   const usdXofStats = computeFxStats("USD_XOF");
 
   // ─── Calendrier (memes sources que /marches/obligations/calendrier) ──

@@ -21,7 +21,7 @@ export const metadata = pageMetadata({
   title: "Devises & FX — AzimutFinance",
   description:
     "Cours, performances et analyses des 13 paires FX clés pour la zone UEMOA : USD/XOF, EUR/USD, DXY, NGN/XOF, GBP/XOF, JPY/XOF, ZAR/XOF, CAD/XOF, AED/XOF, TRY/XOF, BRL/XOF, USD/CNY. Indice de force du FCFA, comparateur, corrélations et cross-rates synthétiques.",
-  path: "/macro/devises",
+  path: "/marches/devises",
 });
 
 export const dynamic = "force-dynamic";
@@ -403,7 +403,7 @@ export default async function Page() {
                           {stat.volatility1Y === null ? "—" : `${stat.volatility1Y.toFixed(0)} %`}
                         </span>
                         <span className="text-slate-300">·</span>
-                        <Link href={`/macro/devises/${meta.slug}`}
+                        <Link href={`/marches/devises/${meta.slug}`}
                           className="text-blue-700 hover:underline font-medium">
                           Détail →
                         </Link>
@@ -495,7 +495,7 @@ function FxCard({
 
   return (
     <Link
-      href={`/macro/devises/${slug}`}
+      href={`/marches/devises/${slug}`}
       className="block border border-slate-200 rounded-lg p-3 bg-white hover:shadow-sm hover:border-slate-300 transition"
     >
       <div className="flex items-baseline justify-between gap-2">

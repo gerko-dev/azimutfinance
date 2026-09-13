@@ -9,8 +9,8 @@
 //   - loadListedBonds()      : obligations cotees      -> /pros/obligation/<isin>
 //   - loadUmoaEmissions()    : souverains non cotes    -> /marches/souverains-non-cotes?isin=<isin>
 //   - loadFunds()            : OPCVM / FCP             -> /fcp/<id>
-//   - FX_PAIRS               : paires de change        -> /macro/devises/<slug>
-//   - COMMODITIES            : matieres premieres      -> /macro/matieres-premieres/<slug>
+//   - FX_PAIRS               : paires de change        -> /marches/devises/<slug>
+//   - COMMODITIES            : matieres premieres      -> /marches/matieres-premieres/<slug>
 //   - liste statique UEMOA   : etats                   -> /macro/pays
 //
 // SERVER-ONLY (lit le filesystem via les loaders CSV). Ne pas importer depuis
@@ -208,7 +208,7 @@ function buildIndex(): ProSearchResult[] {
       kind: "fx",
       label: `${fx.pair} — ${fx.name}`,
       sublabel: `${fx.base} / ${fx.quote}`,
-      href: `/macro/devises/${encodeURIComponent(slug)}`,
+      href: `/marches/devises/${encodeURIComponent(slug)}`,
       haystack: normalizeForSearch(
         [slug, fx.pair, fx.name, fx.base, fx.quote, fx.category].join(" "),
       ),
@@ -228,7 +228,7 @@ function buildIndex(): ProSearchResult[] {
       kind: "commodity",
       label: c.name,
       sublabel: `${c.unit} · ${c.exchange}`,
-      href: `/macro/matieres-premieres/${encodeURIComponent(c.slug)}`,
+      href: `/marches/matieres-premieres/${encodeURIComponent(c.slug)}`,
       haystack: normalizeForSearch(
         [c.slug, c.name, c.category, c.exchange, c.unit].join(" "),
       ),

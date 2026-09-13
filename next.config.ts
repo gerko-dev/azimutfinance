@@ -118,6 +118,30 @@ const nextConfig: NextConfig = {
         destination: "/gestion-portefeuille/:path*",
         permanent: true,
       },
+      // Devises et matieres premieres etaient sous /macro : elles relevent des
+      // marches, pas de la macroeconomie, et le menu les y a placees. Les
+      // anciennes URL sont indexees — redirection permanente, sous-chemins
+      // compris (fiches par paire et par produit).
+      {
+        source: "/macro/devises",
+        destination: "/marches/devises",
+        permanent: true,
+      },
+      {
+        source: "/macro/devises/:path*",
+        destination: "/marches/devises/:path*",
+        permanent: true,
+      },
+      {
+        source: "/macro/matieres-premieres",
+        destination: "/marches/matieres-premieres",
+        permanent: true,
+      },
+      {
+        source: "/macro/matieres-premieres/:path*",
+        destination: "/marches/matieres-premieres/:path*",
+        permanent: true,
+      },
     ];
   },
 };

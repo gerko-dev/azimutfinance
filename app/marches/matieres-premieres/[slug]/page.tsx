@@ -109,7 +109,7 @@ export default async function CommodityPage({
           <div className="text-xs text-slate-500 mb-4 flex items-center gap-1.5 flex-wrap">
             <Link href="/" className="hover:text-slate-700">Accueil</Link>
             <span>›</span>
-            <Link href="/macro/matieres-premieres" className="hover:text-slate-700">
+            <Link href="/marches/matieres-premieres" className="hover:text-slate-700">
               Matières premières
             </Link>
             <span>›</span>
@@ -202,7 +202,7 @@ export default async function CommodityPage({
           <div className="text-xs text-slate-400 mb-2 flex items-center gap-1.5 flex-wrap">
             <Link href="/" className="hover:text-white">Accueil</Link>
             <span>›</span>
-            <Link href="/macro/matieres-premieres" className="hover:text-white">Matières premières</Link>
+            <Link href="/marches/matieres-premieres" className="hover:text-white">Matières premières</Link>
             <span>›</span>
             <span className="text-slate-200">{meta.name}</span>
           </div>
@@ -597,7 +597,7 @@ export default async function CommodityPage({
               return (
                 <Link
                   key={c.slug}
-                  href={`/macro/matieres-premieres/${c.slug}`}
+                  href={`/marches/matieres-premieres/${c.slug}`}
                   className="block border border-slate-200 rounded-lg p-2.5 bg-white hover:border-slate-300 hover:shadow-sm transition"
                 >
                   <div className="flex items-center justify-between">
@@ -623,7 +623,7 @@ export default async function CommodityPage({
               );
             })}
             <Link
-              href="/macro/matieres-premieres"
+              href="/marches/matieres-premieres"
               className="block text-center text-[11px] text-slate-600 hover:text-slate-900 px-2 py-2 border border-dashed border-slate-200 rounded-lg"
             >
               ← Tableau de bord

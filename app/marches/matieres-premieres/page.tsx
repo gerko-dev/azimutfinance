@@ -28,7 +28,7 @@ export const metadata = pageMetadata({
   title: "Matières premières — AzimutFinance",
   description:
     "Cours, performances et impact sur la BRVM des 8 matières premières structurantes pour l'UEMOA : cacao, café, brent, WTI, or, huile de palme, sucre, caoutchouc. Comparateur, corrélations et indice de pression macro.",
-  path: "/macro/matieres-premieres",
+  path: "/marches/matieres-premieres",
 });
 
 export const dynamic = "force-dynamic";
@@ -446,7 +446,7 @@ function CommodityCard({
 
   return (
     <Link
-      href={`/macro/matieres-premieres/${slug}`}
+      href={`/marches/matieres-premieres/${slug}`}
       className="block border border-slate-200 rounded-lg p-3 bg-white hover:shadow-sm hover:border-slate-300 transition"
     >
       <div className="flex items-baseline justify-between gap-2">

@@ -131,7 +131,7 @@ export default async function SourcesPage() {
             scope="Banque centrale UEMOA"
             usage="Taux directeurs, agrégats monétaires (M1/M2/M3), inflation IHPC, balance des paiements, statistiques pays, bulletin mensuel de statistiques."
             ingestion="PDF mensuel (data/marche-monetaire/Bul_stat.pdf) importé depuis /admin/data et parsé via lib/tauxPdfParser.ts. Source unique, sans fallback."
-            pages="/marche-monetaire, /macro/pays, /macro/devises (peg EUR/XOF)"
+            pages="/marche-monetaire, /macro/pays, /marches/devises (peg EUR/XOF)"
           />
           <OfficialCard
             name="UMOA-Titres"

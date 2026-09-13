@@ -29,8 +29,8 @@ const STATIC_ROUTES: { path: string; priority: number; freq: Freq }[] = [
   { path: "/marche-monetaire", priority: 0.7, freq: "weekly" },
   { path: "/marche-monetaire/mtp", priority: 0.6, freq: "weekly" },
   { path: "/macro/pays", priority: 0.7, freq: "weekly" },
-  { path: "/macro/matieres-premieres", priority: 0.6, freq: "weekly" },
-  { path: "/macro/devises", priority: 0.6, freq: "weekly" },
+  { path: "/marches/matieres-premieres", priority: 0.6, freq: "weekly" },
+  { path: "/marches/devises", priority: 0.6, freq: "weekly" },
   // /outils/ytm, /outils/screener, /outils/screener-fcp : redirigent
   // desormais vers /pros/* — retires du sitemap pour ne pas envoyer
   // Googlebot sur des 3xx (cf. GSC "Page avec redirection").

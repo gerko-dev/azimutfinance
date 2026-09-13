@@ -315,7 +315,7 @@ export default async function Home() {
                 Autres instruments cotés importants
               </div>
               <Link
-                href="/macro/matieres-premieres"
+                href="/marches/matieres-premieres"
                 className="text-[11px] text-slate-300 hover:text-white inline-flex items-center gap-1"
               >
                 Toutes les matières premières
@@ -324,7 +324,7 @@ export default async function Home() {
             </div>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 md:gap-3">
               <BrvmCard
-                href="/macro/devises"
+                href="/marches/devises"
                 kicker="DEVISE · JOUR"
                 title="USD / XOF"
                 value={usdXof ? fmtNum(usdXof.last, 2) : "—"}
@@ -332,7 +332,7 @@ export default async function Home() {
                 positive={(usdXof?.changeDayPct ?? 0) >= 0}
               />
               <BrvmCard
-                href="/macro/devises"
+                href="/marches/devises"
                 kicker="DEVISE · JOUR"
                 title="EUR / USD"
                 value={eurUsd ? fmtNum(eurUsd.last, 4) : "—"}
@@ -340,7 +340,7 @@ export default async function Home() {
                 positive={(eurUsd?.changeDayPct ?? 0) >= 0}
               />
               <BrvmCard
-                href="/macro/matieres-premieres/cacao"
+                href="/marches/matieres-premieres/cacao"
                 kicker="AGRICOLE · JOUR"
                 title="Cacao USD/t"
                 value={cacao ? fmtNum(cacao.last, 0) : "—"}
@@ -348,7 +348,7 @@ export default async function Home() {
                 positive={(cacao?.changeDayPct ?? 0) >= 0}
               />
               <BrvmCard
-                href="/macro/matieres-premieres/or"
+                href="/marches/matieres-premieres/or"
                 kicker="MÉTAL · JOUR"
                 title="Or USD/oz"
                 value={or ? fmtNum(or.last, 0) : "—"}
@@ -356,7 +356,7 @@ export default async function Home() {
                 positive={(or?.changeDayPct ?? 0) >= 0}
               />
               <BrvmCard
-                href="/macro/matieres-premieres/brent"
+                href="/marches/matieres-premieres/brent"
                 kicker="ÉNERGIE · JOUR"
                 title="Brent USD/bbl"
                 value={brent ? fmtNum(brent.last, 1) : "—"}

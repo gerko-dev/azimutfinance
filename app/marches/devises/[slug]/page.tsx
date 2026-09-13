@@ -99,7 +99,7 @@ export default async function FxPairPage({
           <div className="text-xs text-slate-500 mb-4 flex items-center gap-1.5 flex-wrap">
             <Link href="/" className="hover:text-slate-700">Accueil</Link>
             <span>›</span>
-            <Link href="/macro/devises" className="hover:text-slate-700">Devises</Link>
+            <Link href="/marches/devises" className="hover:text-slate-700">Devises</Link>
             <span>›</span>
             <span className="text-slate-700">{meta.pair}</span>
           </div>
@@ -180,7 +180,7 @@ export default async function FxPairPage({
           <div className="text-xs text-slate-400 mb-2 flex items-center gap-1.5 flex-wrap">
             <Link href="/" className="hover:text-white">Accueil</Link>
             <span>›</span>
-            <Link href="/macro/devises" className="hover:text-white">Devises &amp; FX</Link>
+            <Link href="/marches/devises" className="hover:text-white">Devises &amp; FX</Link>
             <span>›</span>
             <span className="text-slate-200">{meta.pair}</span>
           </div>
@@ -411,7 +411,7 @@ export default async function FxPairPage({
               return (
                 <Link
                   key={p.slug}
-                  href={`/macro/devises/${p.slug}`}
+                  href={`/marches/devises/${p.slug}`}
                   className="block border border-slate-200 rounded-lg p-2.5 bg-white hover:border-slate-300 hover:shadow-sm transition"
                 >
                   <div className="flex items-center justify-between">
@@ -432,7 +432,7 @@ export default async function FxPairPage({
                 </Link>
               );
             })}
-            <Link href="/macro/devises"
+            <Link href="/marches/devises"
               className="block text-center text-[11px] text-slate-600 hover:text-slate-900 px-2 py-2 border border-dashed border-slate-200 rounded-lg">
               ← Tableau de bord
             </Link>
