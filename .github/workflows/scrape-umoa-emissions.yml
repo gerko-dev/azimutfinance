@@ -61,35 +61,27 @@ jobs:
       - name: Show diff stats
         run: |
           echo "=== Files modified ==="
-          git status --short \
-            data/umoa-emissions-realisees.csv \
-            data/umoa-emissions-a-venir.csv \
-            data/umoa-emissions-planifiees.csv \
-            data/umoa-courbes-taux.csv || true
+          git status --short || true
           echo ""
           echo "=== Diff summary ==="
-          git diff --stat \
-            data/umoa-emissions-realisees.csv \
-            data/umoa-emissions-a-venir.csv \
-            data/umoa-emissions-planifiees.csv \
-            data/umoa-courbes-taux.csv || true
+          git diff --stat || true
 
       - name: Commit & push if changed
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # data/umoa-courbes-taux.csv EST INDISPENSABLE ICI. L'etape
-          # precedente le reecrit a chaque passage. Omis du git add, il restait
-          # non indexe, et git pull --rebase refuse de tourner sur un arbre
-          # sale : le push echouait cinq fois et le job sortait en erreur APRES
-          # avoir commite. Plus aucune donnee publiee depuis le 6 septembre
-          # 2026, jour ou l'etape des courbes a ete ajoutee sans etre ajoutee
-          # au commit.
-          git add \
-            data/umoa-emissions-realisees.csv \
-            data/umoa-emissions-a-venir.csv \
-            data/umoa-emissions-planifiees.csv \
-            data/umoa-courbes-taux.csv
+          # `git add -A data/` plutot qu'une liste explicite : c'est
+          # precisement une liste explicite qui a casse la collecte pendant
+          # une semaine. L'etape des courbes, ajoutee le 6 septembre, ecrivait
+          # data/umoa-courbes-taux.csv sans qu'il y figure ; le fichier restait
+          # non indexe et `git pull --rebase` refuse de tourner sur un arbre
+          # sale. Le job commitait, echouait cinq fois au push, puis sortait en
+          # erreur — le commit mourait avec le runner.
+          #
+          # Toute sortie future des scripts est desormais prise, connue ou non.
+          # Le runner part d'un checkout propre : rien d'autre ne peut trainer
+          # sous data/.
+          git add -A data/
           if git diff --staged --quiet; then
             echo "Aucun changement a commiter."
             exit 0
@@ -104,6 +96,9 @@ jobs:
           # Filet : si une etape future ecrit un fichier qu'on oublie
           # d'indexer, le rebase echouerait a nouveau. On repart d'un arbre
           # propre plutot que de rejouer cinq fois la meme erreur.
+          # Si quelque chose reste sale malgre tout, on veut le NOM du fichier
+          # dans le log plutot que cinq fois le meme message de rebase.
+          echo '=== Arbre avant push ===' && git status --short || true
           git stash --include-untracked --quiet || true
           for i in 1 2 3 4 5; do
             git pull --rebase origin main && git push && {
