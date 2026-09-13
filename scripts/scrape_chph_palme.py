@@ -165,6 +165,43 @@ REGIME_PRICE_RE = re.compile(
 )
 
 
+# Registre des PDF qui ne sont PAS des avis de prix.
+#
+# Le site publie, dans les memes rubriques, des appels a manifestation
+# d'interet, des prorogations de delai et des agrements d'acheteurs. Le
+# scraper telecharge tous les PDF des articles : la plupart ne contiennent
+# donc ni periode ni prix, et c est normal.
+#
+# Sans ce registre ils etaient re-ocerises a chaque execution — l OCR est
+# cher — et comptes comme des echecs, ce qui faisait sortir le job en erreur
+# alors qu il avait fait son travail. `pdfs_done` ne peut pas les retenir : il
+# se reconstruit depuis la colonne source_pdf du CSV, or ces PDF ne
+# produisent aucune ligne.
+NON_AVIS_FILE = PDF_DIR / "non-avis.txt"
+
+
+def load_non_avis() -> set[str]:
+    if not NON_AVIS_FILE.exists():
+        return set()
+    return {
+        l.strip()
+        for l in NON_AVIS_FILE.read_text(encoding="utf-8").splitlines()
+        if l.strip() and not l.startswith("#")
+    }
+
+
+def save_non_avis(noms: set[str]) -> None:
+    NON_AVIS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    entete = (
+        "# PDF identifies comme n etant pas des avis de prix : ni periode ni\n"
+        "# montant detecte. Ils ne sont plus re-ocerises a chaque passage.\n"
+        "# Supprimer une ligne force une nouvelle tentative.\n"
+    )
+    NON_AVIS_FILE.write_text(
+        entete + "\n".join(sorted(noms)) + "\n", encoding="utf-8"
+    )
+
+
 def ocr_pdf(path: Path) -> str:
     """Renvoie le texte OCR concaténé de toutes les pages d'un PDF."""
     if not OCR_AVAILABLE:
@@ -333,16 +370,19 @@ def main() -> int:
     # OCR + extraction
     print("OCR + extraction des prix :")
     rows, pdfs_done = load_csv()
+    non_avis = load_non_avis()
+    non_avis_avant = set(non_avis)
     print(f"  {len(rows)} lignes deja en CSV, {len(pdfs_done)} PDFs deja traites")
 
     pdfs_to_process = sorted(p for p in PDF_DIR.glob("*.pdf"))
     new_lines = 0
     updated_lines = 0
     failures = 0
+    ignores = 0
 
     for pdf_path in pdfs_to_process:
         fname = pdf_path.name
-        if not args.force and fname in pdfs_done:
+        if not args.force and (fname in pdfs_done or fname in non_avis):
             continue
 
         print(f"  OCR {fname}...")
@@ -354,8 +394,23 @@ def main() -> int:
 
         period = parse_period(text)
         if period is None:
-            print(f"    ! periode non detectee")
-            failures += 1
+            # Ni periode ni montant : ce PDF n est pas un avis de prix.
+            # C est le cas normal des appels d offres et des agrements.
+            # On l enregistre pour ne plus le relire, et ce n est PAS un
+            # echec.
+            aucun_prix = (
+                parse_price(text, HUILE_PRICE_RE) is None
+                and parse_price(text, REGIME_PRICE_RE) is None
+            )
+            if aucun_prix:
+                print("    - ignore (pas un avis de prix)")
+                non_avis.add(fname)
+                ignores += 1
+            else:
+                # Des montants sans periode : la, c est bien un avis
+                # qu on ne sait pas dater. Il merite un signalement.
+                print("    ! montants trouves mais periode non detectee")
+                failures += 1
             continue
         year, months = period
 
@@ -387,6 +442,11 @@ def main() -> int:
         print(f"\nCSV mis a jour : {new_lines} nouvelle(s), {updated_lines} maj")
     else:
         print("\nCSV deja a jour.")
+
+    if non_avis != non_avis_avant:
+        save_non_avis(non_avis)
+    if ignores:
+        print(f"\n{ignores} PDF(s) ignores : ni periode ni montant.")
 
     if failures:
         print(f"\n! {failures} PDF(s) non extraits (verifier manuellement)")
