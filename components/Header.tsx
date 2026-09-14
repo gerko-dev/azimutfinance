@@ -11,109 +11,8 @@ import MessagerieIconBadge from "@/components/messagerie/MessagerieIconBadge";
 import NotificationsBell from "@/components/notifications/NotificationsBell";
 import HeartbeatPinger from "@/components/HeartbeatPinger";
 import PremiumDiscountBadge from "@/components/premium/PremiumDiscountBadge";
-
-type MenuItem = {
-  label: string;
-  href: string;
-  badge?: "Premium" | "Pro" | "Bientôt";
-  children?: MenuItem[];
-  /** Item masqué tant que l'utilisateur n'est pas connecté (membre+). */
-  requiresAuth?: boolean;
-};
-
-type MenuSection = {
-  label: string;
-  items: MenuItem[];
-  /** Section encore en chantier : visible en `npm run dev`, jamais en ligne. */
-  devOnly?: boolean;
-};
-
-// `process.env.NODE_ENV` est remplace a la compilation par Next : la section
-// marquee devOnly n'est donc pas seulement masquee, elle est absente du bundle
-// de production. Les previews Vercel comptent comme de la production — elles
-// ne la montreront pas non plus.
-const IS_DEV = process.env.NODE_ENV !== "production";
-
-const menuSections: MenuSection[] = [
-  {
-    label: "Marchés",
-    items: [
-      { label: "Indices", href: "/marches/indices" },
-      {
-        label: "Actions",
-        href: "/marches/actions",
-        children: [
-          { label: "Actions cotées", href: "/marches/actions" },
-          { label: "Private equity", href: "/marches/private-equity", badge: "Premium" },
-        ],
-      },
-      {
-        label: "Obligations",
-        href: "/marches/obligations",
-        children: [
-          { label: "Obligations cotées", href: "/marches/obligations" },
-          { label: "OAT/BAT", href: "/marches/souverains-non-cotes" },
-        ],
-      },
-      // Lien simple : la page OPC mene deja aux categories et aux societes de
-      // gestion, un flyout n'aurait fait que dupliquer ses propres liens.
-      { label: "OPC", href: "/marches/fcp" },
-      { label: "Matières premières", href: "/marches/matieres-premieres" },
-      { label: "FX", href: "/marches/devises" },
-    ],
-  },
-  {
-    label: "Macroéconomie",
-    items: [
-      { label: "Indicateurs", href: "/macro/pays" },
-      // Le marche monetaire n'est plus une section de premier niveau : ses deux
-      // pages sont de la macro, et la barre en comptait trop.
-      { label: "Taux UEMOA", href: "/marche-monetaire" },
-      { label: "Récapitulatif MTP", href: "/marche-monetaire/mtp" },
-    ],
-  },
-  {
-    // Porte d'entree unique vers les outils, Pro compris : un visiteur ne
-    // devinait pas que le screener vivait derriere le bouton « Espace Pro ».
-    // Le badge dit le niveau d'acces, il ne cache pas l'existence de l'outil.
-    //
-    // EN CHANTIER — masquee en ligne le temps que la section soit finie.
-    // Pour la remettre en production : retirer `devOnly`.
-    devOnly: true,
-    label: "Outils",
-    items: [
-      { label: "Comparateur de titres", href: "/outils/comparateur", badge: "Premium" },
-      { label: "Mon portefeuille", href: "/outils/portefeuille", requiresAuth: true },
-      { label: "Ma watchlist", href: "/outils/watchlist", requiresAuth: true },
-      { label: "Mes alertes", href: "/outils/alertes", requiresAuth: true },
-      {
-        label: "Simulateur d'adjudication",
-        href: "/outils/simulateur-adjudication",
-        badge: "Premium",
-      },
-      { label: "Screener actions", href: "/outils/screener-actions", badge: "Premium" },
-      { label: "Screener obligations", href: "/outils/screener-obligations", badge: "Premium" },
-      { label: "Screener FCP", href: "/outils/screener-fcp", badge: "Premium" },
-      { label: "Simulateur YTM", href: "/outils/simulateur-ytm", badge: "Premium" },
-    ],
-  },
-  {
-    label: "Académie",
-    items: [
-      { label: "Catalogue formations", href: "/academie/formations" },
-      { label: "Glossaire financier", href: "/academie/glossaire" },
-      { label: "Ligue Azimut", href: "/academie/simulateur" },
-    ],
-  },
-  {
-    label: "Communauté",
-    items: [
-      { label: "Forum investisseurs", href: "/communaute/forum" },
-      { label: "Magazine digital", href: "/academie/magazine", requiresAuth: true },
-      { label: "Newsletter", href: "/communaute/newsletter" },
-    ],
-  },
-];
+// Arborescence partagee avec le pied de page : cf. lib/navigation.ts.
+import { sectionsVisibles, type MenuSection } from "@/lib/navigation";
 
 // Un lien est « actif » s'il est la page courante ou l'un de ses parents.
 // La comparaison passe par le separateur pour que /marches/actions ne se laisse
@@ -264,16 +163,7 @@ export default function Header() {
     userRole === "premium" || userRole === "pro" || adminLevel !== null;
   // Toutes les sections sont visibles ; pour les invités on filtre les items
   // marqués `requiresAuth` (ex : Magazine digital, réservé membre+).
-  const visibleMenuSections = useMemo(() => {
-    const sections = menuSections.filter((s) => IS_DEV || !s.devOnly);
-    if (user) return sections;
-    return sections
-      .map((s) => ({
-        ...s,
-        items: s.items.filter((it) => !it.requiresAuth),
-      }))
-      .filter((s) => s.items.length > 0);
-  }, [user]);
+  const visibleMenuSections = useMemo(() => sectionsVisibles(!!user), [user]);
   // CTA Premium : permanent pour qui n'a pas encore Premium — invites comme
   // Membres. L'invite est la premiere cible de l'offre ; le lui cacher jusqu'a
   // l'inscription revenait a ne la montrer qu'a ceux qui avaient deja franchi

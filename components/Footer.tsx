@@ -5,6 +5,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import CookiePreferencesTrigger from "@/components/CookiePreferencesTrigger";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+// Meme arborescence que le menu, a la source : cf. lib/navigation.ts.
+import { liensAplatis, sectionsVisibles } from "@/lib/navigation";
 
 export default function Footer() {
   const pathname = usePathname();
@@ -34,12 +36,17 @@ export default function Footer() {
   // Early-return APRES tous les useX pour respecter les Rules of Hooks.
   if (pathname?.startsWith("/pros")) return null;
 
+  // Les colonnes du pied de page SONT les sections du menu, filtrees par les
+  // memes regles : une section en chantier reste invisible en ligne, un lien
+  // reserve aux membres ne s'affiche pas pour un visiteur.
+  const sections = sectionsVisibles(isAuthenticated);
+
   return (
     <footer className="bg-slate-900 text-slate-300 mt-12">
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-10 md:py-14">
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-8">
-          {/* Brand block */}
-          <div className="col-span-2 md:col-span-2">
+        <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-10 lg:gap-14">
+          {/* Bloc marque */}
+          <div>
             <Link href="/" className="text-lg font-semibold tracking-tight">
               <span className="text-blue-400">Azimut</span>
               <span className="text-white">Finance</span>
@@ -61,49 +68,28 @@ export default function Footer() {
             </div>
           </div>
 
-          {/* Marchés */}
-          <Column title="Marchés">
-            <Item href="/marches/actions">Actions cotées</Item>
-            <Item href="/marches/obligations">Obligations cotées</Item>
-            <Item href="/marches/souverains-non-cotes">Souverains non cotés</Item>
-            <Item href="/marches/fcp">FCP / OPCVM</Item>
-            <Item href="/fcp/categories">OPC par catégorie</Item>
-            <Item href="/sgo">Sociétés de gestion</Item>
-            <Item href="/marche-monetaire">Marché monétaire</Item>
-            <Item href="/marche-monetaire/mtp">Récapitulatif MTP</Item>
-          </Column>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-8">
+            {sections.map((section) => (
+              <Column key={section.label} title={section.label}>
+                {liensAplatis(section).map((item) => (
+                  <Item key={`${item.href}-${item.label}`} href={item.href}>
+                    {item.label}
+                  </Item>
+                ))}
+              </Column>
+            ))}
 
-          {/* Macro & Outils */}
-          <Column title="Macro &amp; outils">
-            <Item href="/macro/pays">Indicateurs pays UEMOA</Item>
-            <Item href="/marches/matieres-premieres">Matières premières</Item>
-            <Item href="/marches/devises">Devises &amp; FX</Item>
-          </Column>
-
-          {/* Académie */}
-          <Column title="Académie">
-            <Item href="/academie/formations">Catalogue formations</Item>
-            <Item href="/academie/glossaire">Glossaire financier</Item>
-            <Item href="/outils/portefeuille">Mon portefeuille</Item>
-            <Item href="/academie/simulateur">Ligue Azimut</Item>
-            <Item
-              href="/academie/magazine"
-              requiresAuth
-              isAuthenticated={isAuthenticated}
-            >
-              Magazine digital
-            </Item>
-          </Column>
-
-          {/* Communauté & compte */}
-          <Column title="Communauté &amp; compte">
-            <Item href="/communaute/newsletter">Newsletter</Item>
-            <Item href="/communaute/forum">Forum investisseurs</Item>
-            <Item href="/compte">Mon compte</Item>
-            <Item href="/messagerie">Messagerie</Item>
-            <Item href="/premium">Passer à Premium</Item>
-            <Item href="/demande-demo-pro">Demander une démo Pro</Item>
-          </Column>
+            {/* Seule colonne absente du menu : le compte n'est pas une rubrique
+                editoriale, il vit dans l'avatar en haut a droite. Un pied de
+                page reste pourtant l'endroit ou l'on va chercher « ou est ma
+                facture ». */}
+            <Column title="Compte">
+              <Item href="/compte">Mon compte</Item>
+              <Item href="/messagerie">Messagerie</Item>
+              <Item href="/premium">Passer à Premium</Item>
+              <Item href="/demande-demo-pro">Demander une démo Pro</Item>
+            </Column>
+          </div>
         </div>
 
         <div className="mt-10 pt-6 border-t border-slate-800 flex flex-wrap items-center justify-between gap-4 text-xs text-slate-400">
@@ -148,16 +134,10 @@ function Column({
 function Item({
   href,
   children,
-  requiresAuth = false,
-  isAuthenticated = false,
 }: {
   href: string;
   children: React.ReactNode;
-  /** Lien masque tant que l'utilisateur n'est pas connecte (membre+). */
-  requiresAuth?: boolean;
-  isAuthenticated?: boolean;
 }) {
-  if (requiresAuth && !isAuthenticated) return null;
   return (
     <li>
       <Link href={href} className="text-slate-400 hover:text-white transition">
