@@ -11,6 +11,7 @@ import { getBrvmIndicesSnapshot } from "@/lib/brvm/liveIndices";
 import { getBrvmSnapshot } from "@/lib/brvm/liveQuotes";
 import LivePriceBadge from "@/components/LivePriceBadge";
 import HeroArtwork from "@/components/home/HeroArtwork";
+import FormationsSpotlight from "@/components/home/FormationsSpotlight";
 import {
   listPublishedArticles,
   listPublishedIssues,
@@ -130,7 +131,8 @@ export default async function Home() {
   const stocks = loadStocks();
   const stocksCount = stocks.length;
 
-  const catalog = getCatalogStats(await listPublishedFormations());
+  const formations = await listPublishedFormations();
+  const catalog = getCatalogStats(formations);
 
   const [magazineArticles, magazineIssues] = await Promise.all([
     listPublishedArticles(),
@@ -233,6 +235,33 @@ export default async function Home() {
                 Découvrir Premium
               </Link>
             </div>
+            {/* Troisieme porte d'entree, en texte et non en bouton : ajouter un
+                bouton diluerait les deux appels a l'action qui precedent, mais
+                les formations meritent d'exister des le premier ecran — et le
+                mot « gratuite » est ce qui fait cliquer. */}
+            {catalog.total > 0 && (
+              <Link
+                href="/academie/formations"
+                className="group inline-flex items-center gap-2.5 mt-5 text-sm text-slate-300 hover:text-white transition"
+              >
+                <span className="text-[10px] uppercase tracking-wider font-semibold bg-purple-500/20 text-purple-200 border border-purple-400/30 px-2 py-0.5 rounded">
+                  Se former
+                </span>
+                <span>
+                  {catalog.total} formation{catalog.total > 1 ? "s" : ""} sur les
+                  marchés UEMOA
+                  {catalog.freeCount > 0
+                    ? `, dont ${catalog.freeCount} gratuite${catalog.freeCount > 1 ? "s" : ""}`
+                    : ""}
+                  <span
+                    aria-hidden
+                    className="ml-1.5 inline-block transition group-hover:translate-x-0.5"
+                  >
+                    →
+                  </span>
+                </span>
+              </Link>
+            )}
           </div>
 
           <HeroArtwork />
@@ -612,13 +641,20 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* Académie + Magazine spotlight */}
-      <section className="bg-slate-50 border-y border-slate-200">
+      {/* Formations — mises en avant, sur leur propre fond */}
+      <section className="bg-gradient-to-b from-purple-50/60 to-white border-y border-purple-100">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 py-14 md:py-20">
+          <FormationsSpotlight formations={formations} variante="invite" />
+        </div>
+      </section>
+
+      {/* Magazine + glossaire */}
+      <section className="bg-slate-50 border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-14 md:py-20">
           <SectionHeader
-            kicker="Apprendre"
-            title="L'Académie qui parle vraiment de l'UEMOA"
-            description="Des contenus pédagogiques contextualisés sur la BRVM, les obligations souveraines, la BCEAO et les FCP. Formations gratuites pour démarrer, parcours certifiant pour aller loin."
+            kicker="Lire"
+            title="Le magazine qui parle vraiment de l'UEMOA"
+            description="Des analyses contextualisées sur la BRVM, les obligations souveraines, la BCEAO et les FCP — et un glossaire pour ne jamais rester bloqué sur un terme."
           />
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mt-10 md:mt-12">
@@ -657,20 +693,6 @@ export default async function Home() {
 
             {/* Mini menu */}
             <div className="space-y-4">
-              <Link
-                href="/academie/formations"
-                className="group block bg-white border border-slate-200 hover:border-slate-300 hover:shadow-md rounded-xl p-5 transition"
-              >
-                <div className="text-[10px] uppercase tracking-wide font-semibold text-purple-700">
-                  Formations
-                </div>
-                <div className="text-base font-bold text-slate-900 mt-1 group-hover:text-blue-700 transition">
-                  {catalog.total} formations · {catalog.freeCount} gratuites
-                </div>
-                <div className="text-[11px] text-slate-500 mt-1">
-                  Du débutant à la certification niveau 1
-                </div>
-              </Link>
               <Link
                 href="/academie/glossaire"
                 className="group block bg-white border border-slate-200 hover:border-slate-300 hover:shadow-md rounded-xl p-5 transition"

@@ -19,7 +19,7 @@ import { getBrvmSnapshot } from "@/lib/brvm/liveQuotes";
 import { computeCommodityStats } from "@/lib/commodities";
 import { computeFxStats } from "@/lib/fx";
 import { listPublishedArticles, listPublishedIssues } from "@/lib/magazine/queries";
-import { getCatalogStats } from "@/lib/formations";
+import FormationsSpotlight from "@/components/home/FormationsSpotlight";
 import { listPublishedFormations } from "@/lib/formations/queries";
 import { listMyWatchlists, getMyWatchlist } from "@/lib/watchlists/queries";
 import { enrichWatchlistItems, type EnrichedItem } from "@/lib/watchlists/enrich";
@@ -158,7 +158,6 @@ export default async function MemberHome({ user }: { user: User }) {
     .filter((a) => a.slug !== featuredArticle?.slug)
     .slice(0, 3);
   const latestIssue = issues[0] ?? null;
-  const catalog = getCatalogStats(formations);
 
   const hour = new Date().getUTCHours(); // UEMOA = UTC+0
   const greeting = hour >= 5 && hour < 18 ? "Bonjour" : "Bonsoir";
@@ -376,11 +375,16 @@ export default async function MemberHome({ user }: { user: User }) {
           </div>
         </section>
 
-        {/* ===================== Lire & apprendre ===================== */}
+        {/* ===================== Se former ===================== */}
+        <section>
+          <FormationsSpotlight formations={formations} variante="membre" />
+        </section>
+
+        {/* ===================== Lire ===================== */}
         <section>
           <SectionHeader
-            kicker="Lire & apprendre"
-            title="Le magazine et l'académie"
+            kicker="Lire"
+            title="Le magazine"
             href="/academie/magazine"
             hrefLabel="Tout le magazine"
           />
@@ -438,21 +442,6 @@ export default async function MemberHome({ user }: { user: User }) {
                   </div>
                 </Link>
               ))}
-              <Link
-                href="/academie/formations"
-                className="group block bg-gradient-to-br from-purple-50 to-white border border-purple-200 hover:border-purple-300 rounded-xl p-4 transition"
-              >
-                <div className="text-[10px] uppercase tracking-wide font-semibold text-purple-700">
-                  Académie
-                </div>
-                <div className="text-sm font-semibold text-slate-900 mt-1 group-hover:text-purple-700 transition">
-                  {catalog.total} formation{catalog.total > 1 ? "s" : ""} ·{" "}
-                  {catalog.freeCount} gratuite{catalog.freeCount > 1 ? "s" : ""}
-                </div>
-                <div className="text-[11px] text-slate-500 mt-1">
-                  Montez en compétence sur les marchés UEMOA →
-                </div>
-              </Link>
             </div>
           </div>
         </section>
