@@ -44,7 +44,10 @@ export default function Footer() {
   return (
     <footer className="bg-slate-900 text-slate-300 mt-12">
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-10 md:py-14">
-        <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-10 lg:gap-14">
+        {/* Six colonnes de liens depuis l'ouverture d'Outils : la marque cede
+            de la largeur, et les colonnes ne s'alignent sur une seule ligne
+            qu'a partir de xl. En dessous, trois par ligne restent lisibles. */}
+        <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-10 lg:gap-12">
           {/* Bloc marque */}
           <div>
             <Link href="/" className="text-lg font-semibold tracking-tight">
@@ -68,7 +71,7 @@ export default function Footer() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-8">
+          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-x-6 gap-y-8">
             {sections.map((section) => (
               <Column key={section.label} title={section.label}>
                 {liensAplatis(section).map((item) => (

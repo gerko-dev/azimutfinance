@@ -73,11 +73,8 @@ export const menuSections: MenuSection[] = [
   {
     // Porte d'entree unique vers les outils, Pro compris : un visiteur ne
     // devinait pas que le screener vivait derriere le bouton « Espace Pro ».
-    // Le badge dit le niveau d'acces, il ne cache pas l'existence de l'outil.
-    //
-    // EN CHANTIER — masquee en ligne le temps que la section soit finie.
-    // Pour la remettre en production : retirer `devOnly`.
-    devOnly: true,
+    // Le badge dit le niveau d'acces, il ne cache pas l'existence de l'outil —
+    // un visiteur doit voir ce qu'il rate avant de pouvoir le vouloir.
     label: "Outils",
     items: [
       { label: "Comparateur de titres", href: "/outils/comparateur", badge: "Premium" },
