@@ -227,7 +227,17 @@ function loadRaw(): TauxRow[] {
  * Si le PDF est absent, no-op : loadRaw renverra un tableau vide.
  */
 export async function preloadTauxData(): Promise<void> {
-  if (!existsSync(PDF_PATH)) return;
+  if (!existsSync(PDF_PATH)) {
+    // Silence coupable : sans ce journal, un bulletin absent du bundle
+    // serverless donnait une page qui s'affiche normalement et ne montre
+    // rien — aucune erreur, aucune trace, rien a chercher. Le chemin est
+    // imprime parce que c'est precisement lui qui differe entre la machine de
+    // developpement et la fonction deployee.
+    console.error(
+      `[tauxLoader] bulletin BCEAO introuvable : ${PDF_PATH} — toutes les series de taux seront vides`,
+    );
+    return;
+  }
   const mtime = statSync(PDF_PATH).mtimeMs;
   if (_cache !== null && mtime === _cachePdfMtimeMs) return;
   try {

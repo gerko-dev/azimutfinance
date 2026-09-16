@@ -48,7 +48,18 @@ const nextConfig: NextConfig = {
   // brvm.org sends only the leaf cert; without this intermediate the live
   // scraper fails with UNABLE_TO_VERIFY_LEAF_SIGNATURE.
   outputFileTracingIncludes: {
-    "/*": ["./certs/**/*"],
+    // Le bulletin statistique BCEAO est lu au RUNTIME par lib/tauxLoader, via
+    // join(process.cwd(), "data", ...). Le traceur de fichiers suit mal un
+    // chemin compose a partir de process.cwd() : le PDF peut rester hors du
+    // bundle serverless alors qu'il est bien versionne. La page « Taux UEMOA »
+    // s'affiche alors normalement et entierement vide, puisque le chargeur
+    // renvoie un tableau vide quand la source manque.
+    //
+    // Sur "/*" et non sur les seules routes concernees : le bulletin alimente
+    // aussi le taux sans risque du MEDAF (onglets Analyse et Portefeuille
+    // optimal), l'espace Pro et une route d'API. 665 Ko sur chaque fonction
+    // coutent moins cher qu'une liste de routes qu'on oubliera de tenir a jour.
+    "/*": ["./certs/**/*", "./data/marche-monetaire/**"],
     // @sparticuz/chromium stocke le binaire Chromium (brotli) dans bin/ ;
     // ces fichiers ne sont pas "importés" donc le tracer ne les inclut pas
     // seul. On les force pour la route de génération PDF sur Vercel.
