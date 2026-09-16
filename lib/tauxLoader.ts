@@ -7,7 +7,7 @@
 // Le cache est invalidé par la mtime du PDF — il suffit de remplacer le fichier
 // pour que la page se mette à jour au prochain rendu.
 
-import { statSync, existsSync } from "fs";
+import { statSync, existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { parseBceaoBulletinPdf, type ParsedBulletin } from "./tauxPdfParser";
 import type {
@@ -241,7 +241,20 @@ export async function preloadTauxData(): Promise<void> {
   const mtime = statSync(PDF_PATH).mtimeMs;
   if (_cache !== null && mtime === _cachePdfMtimeMs) return;
   try {
-    const bulletin = await parseBceaoBulletinPdf(PDF_PATH);
+    // La lecture se fait ICI, et d'un seul geste : readFileSync applique a un
+    // join compose sur place. C'est la forme que le traceur de fichiers de Next
+    // reconnait, et la seule qui fasse embarquer le bulletin dans la fonction
+    // deployee — lib/macroLoader lit macro.csv de la meme facon, et cette
+    // page-la n'a jamais manque de donnees en production.
+    //
+    // Passer PDF_PATH au parseur, comme avant, laissait le chemin traverser une
+    // frontiere de module puis deux appels avant d'etre lu : le traceur ne
+    // pouvait plus le suivre, le PDF restait hors du bundle, et la page
+    // n'affichait aucune serie en ligne.
+    const octets = new Uint8Array(
+      readFileSync(join(process.cwd(), "data", "marche-monetaire", "Bul_stat.pdf")),
+    );
+    const bulletin = await parseBceaoBulletinPdf(octets);
     _cache = rowsFromBulletin(bulletin);
     _cachePdfMtimeMs = mtime;
     _bulletinLabel = bulletin.bulletinLabel;

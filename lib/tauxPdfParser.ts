@@ -120,9 +120,10 @@ function cellsByColumn(items: PdfItem[], anchors: number[], tol = 25): string[] 
   return out.map((s) => s.trim());
 }
 
-async function loadPdfPages(pdfPath: string): Promise<PdfPage[]> {
+async function loadPdfPages(source: string | Uint8Array): Promise<PdfPage[]> {
   const pdfjsLib = await getPdfJs();
-  const data = new Uint8Array(readFileSync(pdfPath));
+  const data =
+    typeof source === "string" ? new Uint8Array(readFileSync(source)) : source;
   const pdf = await pdfjsLib.getDocument({ data, disableFontFace: true, useSystemFonts: false }).promise;
   const pages: PdfPage[] = [];
   for (let p = 1; p <= pdf.numPages; p++) {
@@ -1182,9 +1183,26 @@ function parse_13(pages: PdfPage[], bulletinLatest: string, source: string): Par
 // Main parse entrypoint
 // ---------------------------------------------------------------------------
 
-export async function parseBceaoBulletinPdf(pdfPath?: string): Promise<ParsedBulletin> {
-  const finalPath = pdfPath ?? join(process.cwd(), "data", "marche-monetaire", "Bul_stat.pdf");
-  const pages = await loadPdfPages(finalPath);
+/**
+ * Accepte les OCTETS du bulletin, et non plus seulement son chemin.
+ *
+ * POURQUOI CE DETOUR. Le traceur de fichiers de Next n'embarque une ressource
+ * dans la fonction serverless que s'il voit la lecture : un readFileSync dont
+ * l'argument est construit sur place. Ici le chemin traversait une frontiere de
+ * module puis deux appels avant d'etre lu — introuvable pour lui. Le bulletin
+ * restait donc hors du bundle, et la page ne montrait aucune serie en ligne
+ * alors qu'elle en montrait 373 Ko en local.
+ *
+ * L'appelant lit desormais les octets lui-meme, du meme geste que
+ * lib/macroLoader pour macro.csv — un motif dont la production prouve qu'il est
+ * suivi. Le parametre « chemin » reste accepte pour les scripts hors Next.
+ */
+export async function parseBceaoBulletinPdf(
+  source?: string | Uint8Array,
+): Promise<ParsedBulletin> {
+  const finalSource =
+    source ?? join(process.cwd(), "data", "marche-monetaire", "Bul_stat.pdf");
+  const pages = await loadPdfPages(finalSource);
   const bulletinLabel = detectBulletinLabel(pages);
   const sourceLabel = `BCEAO - Bulletin mensuel des statistiques - ${bulletinLabel || "Inconnu"}`;
   const bulletinLatest = bulletinMonthKey(bulletinLabel);
