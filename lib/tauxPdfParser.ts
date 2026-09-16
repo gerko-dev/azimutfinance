@@ -12,6 +12,19 @@ let pdfjsModule: any = null;
 async function getPdfJs() {
   if (!pdfjsModule) {
     pdfjsModule = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    // LE WORKER EST IMPORTE EXPLICITEMENT, et ce n'est pas superflu.
+    //
+    // En Node, pdfjs n'a pas de vrai worker : il rapatrie pdf.worker.mjs dans
+    // le fil principal en le resolvant PAR CHEMIN RELATIF a pdf.mjs. Personne
+    // n'« importe » donc ce fichier, et le traceur de Next ne l'embarque pas
+    // dans la fonction deployee. Resultat en production : « Setting up fake
+    // worker failed », le parsing echouait, et la page n'affichait aucune serie
+    // alors qu'elle en rendait 373 Ko en local, ou node_modules est complet.
+    //
+    // Un import au specificateur litteral, lui, est une dependance que le
+    // traceur voit. Le module est alors depose a cote de pdf.mjs et la
+    // resolution relative de pdfjs retombe sur ses pieds.
+    await import("pdfjs-dist/legacy/build/pdf.worker.mjs");
   }
   return pdfjsModule;
 }

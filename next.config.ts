@@ -63,7 +63,18 @@ const nextConfig: NextConfig = {
     // qui designe des FICHIERS, la seule que le traceur retienne — celle du
     // certificat juste au-dessus, qui fonctionne. Une premiere tentative en
     // « /** » n'avait rien embarque du tout.
-    "/*": ["./certs/**/*", "./data/marche-monetaire/**/*"],
+    // pdfjs-dist est marque `serverExternalPackages` : il est charge depuis
+    // node_modules au runtime, et seuls les fichiers que le traceur a vus s'y
+    // trouvent. Le worker n'etant jamais importe — pdfjs le resout par chemin
+    // relatif — il manquait, d'ou « Setting up fake worker failed » en
+    // production. L'import explicite ajoute dans lib/tauxPdfParser devrait
+    // suffire ; cette inclusion est la ceinture de la bretelle, le sujet ayant
+    // deja coute trois deploiements.
+    "/*": [
+      "./certs/**/*",
+      "./data/marche-monetaire/**/*",
+      "./node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
+    ],
     // @sparticuz/chromium stocke le binaire Chromium (brotli) dans bin/ ;
     // ces fichiers ne sont pas "importés" donc le tracer ne les inclut pas
     // seul. On les force pour la route de génération PDF sur Vercel.
