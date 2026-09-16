@@ -264,32 +264,55 @@ export default function AllocationPanel({
             valeur={aDesCibles ? pct(tableau.sommeCibles) : "—"}
             alerte={aDesCibles && Math.abs(tableau.sommeCibles - 1) > 0.0001}
           />
+          {/* La trésorerie à investir ne se saisit QUE sur l'axe des classes
+              d'actif. C'est là qu'elle se décide : le comité arrête d'abord
+              combien va aux actions, aux obligations, aux OPC, et cette
+              répartition dimensionne ensuite chaque sous-axe — un sous-axe
+              alloue l'intérieur de sa poche, il n'a pas à redire combien
+              d'argent frais entre dans le fonds. La laisser modifiable partout
+              invitait à saisir deux montants contradictoires selon l'onglet
+              ouvert. */}
           <div>
             <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1">
               Trésorerie à investir
             </label>
-            <div className="flex gap-1.5">
-              <input
-                value={tresorerie}
-                onChange={(e) => onTresorerie(e.target.value)}
-                inputMode="decimal"
-                className="w-full px-2 py-1.5 rounded border border-slate-600 bg-slate-900 text-slate-100 text-sm"
-              />
-              <button
-                type="button"
-                disabled={enCours}
-                onClick={() =>
-                  recharger(Number(tresorerie.replace(/\s/g, "").replace(",", ".")) || 0)
-                }
-                className="px-2.5 rounded border border-slate-600 text-slate-300 text-xs hover:bg-slate-700 transition disabled:opacity-40"
-              >
-                Appliquer
-              </button>
-            </div>
-            <p className="text-[10px] text-slate-500 mt-1">
-              S&apos;ajoute à l&apos;actif net pour les valeurs cibles, et finance
-              les achats proposés dans « Opérations à réaliser ».
-            </p>
+            {axe === "classe" ? (
+              <>
+                <div className="flex gap-1.5">
+                  <input
+                    value={tresorerie}
+                    onChange={(e) => onTresorerie(e.target.value)}
+                    inputMode="decimal"
+                    className="w-full px-2 py-1.5 rounded border border-slate-600 bg-slate-900 text-slate-100 text-sm"
+                  />
+                  <button
+                    type="button"
+                    disabled={enCours}
+                    onClick={() =>
+                      recharger(Number(tresorerie.replace(/\s/g, "").replace(",", ".")) || 0)
+                    }
+                    className="px-2.5 rounded border border-slate-600 text-slate-300 text-xs hover:bg-slate-700 transition disabled:opacity-40"
+                  >
+                    Appliquer
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  S&apos;ajoute à l&apos;actif net pour les valeurs cibles, et
+                  irrigue les autres axes au prorata des cibles arrêtées ici.
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="px-2 py-1.5 rounded border border-slate-700 bg-slate-900/60 text-slate-300 text-sm tabular-nums">
+                  {montant(tableau.tresorerieAInvestir)}
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Se saisit dans l&apos;allocation{" "}
+                  <span className="text-slate-400">par classe d&apos;actif</span>.
+                  Cet axe en reçoit la part correspondant à la cible de sa classe.
+                </p>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -478,7 +501,13 @@ export default function AllocationPanel({
                     ) : (
                       <span className="text-slate-200">{l.libelle}</span>
                     )}
-                    {!l.detenu && (
+                    {/* « Non détenu » qualifie un poste de l'univers de marché
+                        que le fonds n'a pas en portefeuille. La liquidité n'est
+                        pas de cette nature : c'est le solde du fonds, qui existe
+                        toujours — un fonds sans espèces en a zéro, il ne « ne
+                        détient pas » de la trésorerie. Le badge y était un
+                        contresens. */}
+                    {!l.detenu && l.bucket !== "tresorerie" && (
                       <span
                         title="Poste de l'univers de marché non détenu par le fonds"
                         className="ml-2 text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-700/70 text-slate-400"

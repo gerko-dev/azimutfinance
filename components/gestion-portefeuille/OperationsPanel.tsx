@@ -38,13 +38,12 @@ export default function OperationsPanel({
   fundId,
   initialPlan,
   tresorerie,
-  onTresorerie,
 }: {
   fundId: string;
   initialPlan: PlanOperations;
-  /** Portée par le parent, partagée avec l'onglet Allocation validée. */
+  /** Portée par le parent, arrêtée dans l'allocation par classe d'actif. Ce
+   *  panneau la consomme sans la modifier : elle se décide en un seul endroit. */
   tresorerie: string;
-  onTresorerie: (v: string) => void;
 }) {
   const [vue, setVue] = useState<(typeof VUES)[number]>("Actions");
   const [plan, setPlan] = useState(initialPlan);
@@ -105,28 +104,35 @@ export default function OperationsPanel({
             >
               Trésorerie à investir
             </label>
+            {/* En lecture seule : la trésorerie à investir se decide une fois,
+                dans l'allocation validée par classe d'actif. Deux champs
+                modifiables pour un meme montant, c'est deux montants
+                contradictoires selon l'onglet ouvert. */}
             <div className="flex gap-1.5">
-              <input
+              <div
                 id="ops-tresorerie"
-                value={tresorerie}
-                onChange={(e) => onTresorerie(e.target.value)}
-                inputMode="decimal"
-                className="w-44 px-2 py-1.5 rounded border border-slate-600 bg-slate-900 text-slate-100 text-sm"
-              />
-              <button
-                type="button"
-                disabled={enCours}
-                onClick={appliquer}
-                className="px-2.5 rounded border border-slate-600 text-slate-300 text-xs hover:bg-slate-700 transition disabled:opacity-40"
+                className="w-44 px-2 py-1.5 rounded border border-slate-700 bg-slate-900/60 text-slate-300 text-sm tabular-nums"
               >
-                {enCours ? "Calcul…" : "Appliquer"}
-              </button>
+                {fmt0.format(tresorerieNum)}
+              </div>
+              {tresorerieAppliquee !== tresorerieNum && (
+                <button
+                  type="button"
+                  disabled={enCours}
+                  onClick={appliquer}
+                  className="px-2.5 rounded border border-amber-600/60 text-amber-300 text-xs hover:bg-amber-900/30 transition disabled:opacity-40"
+                >
+                  {enCours ? "Calcul…" : "Recalculer"}
+                </button>
+              )}
             </div>
           </div>
           <p className="text-[11px] text-slate-500 pb-2 max-w-md">
-            {tresorerieAppliquee > 0
-              ? `Plan calculé avec ${fmt0.format(tresorerieAppliquee)} FCFA de trésorerie à placer.`
-              : "Le plan ci-dessous arbitre à actif net constant. Saisissez un montant et appliquez pour que les achats proposés le consomment."}
+            {tresorerieAppliquee !== tresorerieNum
+              ? `Le plan affiché repose sur ${fmt0.format(tresorerieAppliquee)} FCFA — recalculez pour tenir compte du montant arrêté.`
+              : tresorerieAppliquee > 0
+                ? `Plan calculé avec ${fmt0.format(tresorerieAppliquee)} FCFA de trésorerie à placer. Montant arrêté dans l'allocation par classe d'actif.`
+                : "Le plan ci-dessous arbitre à actif net constant. Saisissez la trésorerie à investir dans l'allocation validée par classe d'actif pour que les achats proposés la consomment."}
           </p>
         </div>
 

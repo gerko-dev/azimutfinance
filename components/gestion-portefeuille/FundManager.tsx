@@ -234,7 +234,6 @@ export default function FundManager({
                 fundId={fund.id}
                 initialPlan={initialOperations}
                 tresorerie={tresorerie}
-                onTresorerie={setTresorerie}
               />
             ) : (
               <div className="bg-slate-800/40 border border-slate-700 rounded-lg p-8 text-center text-sm text-slate-500">
