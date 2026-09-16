@@ -212,10 +212,17 @@ export default function FormationsSpotlight({
         </Link>
       </div>
 
+      {/* La grille suit le NOMBRE de fiches, elle ne l'impose pas. A trois
+          colonnes fixes, un catalogue d'une seule formation laisserait les deux
+          tiers de la section vides — l'inverse de l'effet recherche. */}
       <div
-        className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5 ${
-          invite ? "mt-10 md:mt-12" : "mt-5"
-        }`}
+        className={`grid gap-4 md:gap-5 ${
+          fiches.length >= 3
+            ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+            : fiches.length === 2
+              ? "grid-cols-1 sm:grid-cols-2"
+              : "grid-cols-1 max-w-md"
+        } ${invite ? "mt-10 md:mt-12" : "mt-5"}`}
       >
         {fiches.map((f) => (
           <FicheFormation key={f.slug} formation={f} />

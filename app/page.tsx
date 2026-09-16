@@ -248,11 +248,16 @@ export default async function Home() {
                   Se former
                 </span>
                 <span>
-                  {catalog.total} formation{catalog.total > 1 ? "s" : ""} sur les
-                  marchés UEMOA
-                  {catalog.freeCount > 0
-                    ? `, dont ${catalog.freeCount} gratuite${catalog.freeCount > 1 ? "s" : ""}`
-                    : ""}
+                  {/* « 1 formation, dont 1 gratuite » se lit comme un begaiement.
+                      Quand le catalogue tient en une ligne, on la qualifie
+                      directement au lieu de la compter deux fois. */}
+                  {catalog.total === 1
+                    ? `1 formation${catalog.freeCount === 1 ? " gratuite" : ""} sur les marchés UEMOA`
+                    : `${catalog.total} formations sur les marchés UEMOA${
+                        catalog.freeCount > 0
+                          ? `, dont ${catalog.freeCount} gratuite${catalog.freeCount > 1 ? "s" : ""}`
+                          : ""
+                      }`}
                   <span
                     aria-hidden
                     className="ml-1.5 inline-block transition group-hover:translate-x-0.5"
