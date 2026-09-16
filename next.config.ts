@@ -59,7 +59,11 @@ const nextConfig: NextConfig = {
     // aussi le taux sans risque du MEDAF (onglets Analyse et Portefeuille
     // optimal), l'espace Pro et une route d'API. 665 Ko sur chaque fonction
     // coutent moins cher qu'une liste de routes qu'on oubliera de tenir a jour.
-    "/*": ["./certs/**/*", "./data/marche-monetaire/**"],
+    // Le motif se termine par « /**/* » et non par « /** » : c'est la forme
+    // qui designe des FICHIERS, la seule que le traceur retienne — celle du
+    // certificat juste au-dessus, qui fonctionne. Une premiere tentative en
+    // « /** » n'avait rien embarque du tout.
+    "/*": ["./certs/**/*", "./data/marche-monetaire/**/*"],
     // @sparticuz/chromium stocke le binaire Chromium (brotli) dans bin/ ;
     // ces fichiers ne sont pas "importés" donc le tracer ne les inclut pas
     // seul. On les force pour la route de génération PDF sur Vercel.

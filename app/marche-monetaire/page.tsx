@@ -113,7 +113,47 @@ export default async function MarcheMonetairePage() {
   // Reparse le PDF BCEAO si sa mtime a changé, puis amorce le cache mémoire
   // utilisé par tous les getters synchrones ci-dessous.
   await preloadTauxData();
-  loadTauxRaw();
+
+  // GARDE-FOU. Tout ce qui suit tient pour acquis que le bulletin BCEAO a ete
+  // lu : une douzaine d'acces y sont ecrits avec un « ! » qui affirme le
+  // contraire de la realite, puisque getSeries rend null sur un cache vide. Le
+  // premier d'entre eux levait une TypeError et la page repondait 500 —
+  // exactement ce qui se produisait en production, ou la source n'arrivait pas
+  // jusqu'a la fonction.
+  //
+  // Une source indisponible n'est pas une raison de refuser la page : on rend
+  // le meme cadre avec un message, et le journal du chargeur dit laquelle des
+  // deux causes — fichier absent ou parsing en echec — s'est produite.
+  if (loadTauxRaw().length === 0) {
+    return (
+      <div className="min-h-screen bg-slate-50">
+        <Header />
+        <Ticker />
+        <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-b border-slate-800">
+          <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10">
+            <div className="text-xs md:text-sm text-slate-400 mb-2">
+              Accueil › Taux BCEAO &amp; UEMOA
+            </div>
+            <h1 className="text-2xl md:text-3xl font-semibold mb-2 text-white">
+              Taux BCEAO &amp; UEMOA
+            </h1>
+          </div>
+        </div>
+        <main className="max-w-7xl mx-auto px-4 md:px-6 py-10">
+          <div className="bg-white border border-amber-300 rounded-lg px-5 py-6">
+            <h2 className="text-base font-semibold text-slate-900">
+              Séries temporairement indisponibles
+            </h2>
+            <p className="text-sm text-slate-600 mt-2 leading-relaxed max-w-2xl">
+              Le bulletin statistique de la BCEAO n&apos;a pas pu être lu. Les
+              taux directeurs, le marché interbancaire et les conditions de
+              banque reviendront dès la prochaine publication traitée.
+            </p>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   // ---- KPIs ----
   const pension = getSeries("1_Taux_directeurs_BCEAO", "Taux minimum appels offres", "UEMOA")!;
