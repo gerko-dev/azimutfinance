@@ -76,3 +76,6 @@ __pycache__/
 /data/historique_sika/*.rar
 /_tmp_*.mjs
 /_test_*
+
+# Diagnostic temporaire (route app/api/_debug) - ne pas versionner
+convergence-debug.json

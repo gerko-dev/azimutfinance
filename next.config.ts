@@ -75,6 +75,13 @@ const nextConfig: NextConfig = {
       "./data/marche-monetaire/**/*",
       "./node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
     ],
+    // Modele du classeur de propositions courtier, ouvert au RUNTIME par
+    // app/gestion-portefeuille/propositions-export.ts via join(process.cwd(),
+    // ...). Meme piege que le bulletin BCEAO ci-dessus : le traceur suit mal un
+    // chemin compose depuis process.cwd(), et sans le modele l'export echoue en
+    // production alors qu'il fonctionne en local. Restreint a la route qui le
+    // lit, le fichier ne pesant que sur celle-la.
+    "/api/gestion-portefeuille/propositions": ["./template_propositions.xlsx"],
     // @sparticuz/chromium stocke le binaire Chromium (brotli) dans bin/ ;
     // ces fichiers ne sont pas "importés" donc le tracer ne les inclut pas
     // seul. On les force pour la route de génération PDF sur Vercel.
