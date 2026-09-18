@@ -200,6 +200,36 @@ def normalize_number(s: str) -> str:
         return t
 
 
+PRIX_MIN = 1_000.0
+PRIX_MAX = 20_000.0
+
+
+def normalize_prix(s: str) -> str:
+    """
+    Ramene un prix d'adjudication a la convention UMOA : POUR 10 000 F de nominal.
+
+    Le site n'est pas constant. Deux anomalies observees :
+      - des seances publiees en POURCENTAGE DU PAIR (96,01 pour 9 601 F) ;
+      - le prix marginal d'un BAT renseigne avec le TAUX marginal (6,50), le bon
+        n'ayant pas de prix.
+
+    Regles : [50 ; 150] -> pourcentage du pair, x100. Tout ce qui reste hors de
+    la fourchette plausible d'un prix est vide : on ne devine pas l'unite d'un
+    9,0 ou d'un 6,5, et un prix absent se gere, un prix faux non.
+    """
+    if not s:
+        return ""
+    try:
+        n = float(s)
+    except ValueError:
+        return s  # "multiple" et autres textes semantiques : inchanges
+    if 50.0 <= n <= 150.0:
+        n *= 100.0
+    if not (PRIX_MIN <= n <= PRIX_MAX):
+        return ""
+    return f"{n:.4f}"
+
+
 def split_emetteur(td: Tag) -> tuple[str, str]:
     """
     Extrait pays + titre ES depuis un <td class="tb-emetteur-contenu">.
@@ -282,6 +312,11 @@ def parse_table(table: Tag, table_id: str) -> list[dict[str, str]]:
         ):
             if num_col in record:
                 record[num_col] = normalize_number(record[num_col])
+        # Les deux colonnes de prix passent ensuite par la remise a l'echelle
+        # "pour 10 000 F" (cf. normalize_prix).
+        for prix_col in ("prixMarginal", "prixMoyenPondere"):
+            if prix_col in record:
+                record[prix_col] = normalize_prix(record[prix_col])
         # tauxInteret peut valoir "multiple", un sentinel "--", ou un nombre.
         # On normalise les nombres pour la coherence (virgule -> point), mais
         # on conserve "multiple" tel quel (texte semantique).

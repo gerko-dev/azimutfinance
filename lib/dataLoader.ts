@@ -825,6 +825,28 @@ export function loadUmoaEmissions(): import("./listedBondsTypes").EmissionUMOA[]
     return n / 100;
   };
 
+  // Les prix d'adjudication sont publies POUR 10 000 F de nominal. UMOA-Titres
+  // n'est pas constant : certaines seances (fin juin / debut juillet 2026, tous
+  // Etats confondus) sont publiees en POURCENTAGE DU PAIR (96,01 au lieu de
+  // 9 601), et le champ "prix marginal" d'un BAT contient parfois le TAUX
+  // marginal, le bon n'ayant pas de prix. Non corrige, un seul 96,01 glisse dans
+  // une moyenne de prix marginaux et la divise par pres de deux.
+  //
+  // Deux regles, volontairement prudentes :
+  //  - une valeur dans [50 ; 150] est un pourcentage du pair -> x100 ;
+  //  - toute valeur restant hors de la fourchette plausible d'un prix est tenue
+  //    pour ABSENTE. On ne devine pas l'unite d'un 9,0 ou d'un 6,5 : les
+  //    consommateurs savent deja ignorer un prix manquant, ils ne savent pas
+  //    detecter un prix faux.
+  const PRIX_MIN = 1_000;
+  const PRIX_MAX = 20_000;
+  const prixAdjudication = (s: string): number | null => {
+    const n = parseNumOrNull(s);
+    if (n === null) return null;
+    const v = n >= 50 && n <= 150 ? n * 100 : n;
+    return v >= PRIX_MIN && v <= PRIX_MAX ? v : null;
+  };
+
   const rows = parseCSV<Row>("umoa-emissions-realisees.csv", ";");
 
   _emissionsCache = rows
@@ -874,9 +896,9 @@ export function loadUmoaEmissions(): import("./listedBondsTypes").EmissionUMOA[]
         graceYears: parseNum(r.differeAnnee),
         couponRate: pctToDecimal(r.tauxInteret),
         amortizationType,
-        marginalPrice: parseNumOrNull(r.prixMarginal),
+        marginalPrice: prixAdjudication(r.prixMarginal),
         marginalYield: pctToDecimal(r.tauxMarginalPct),
-        weightedAvgPrice: parseNumOrNull(r.prixMoyenPondere),
+        weightedAvgPrice: prixAdjudication(r.prixMoyenPondere),
         weightedAvgRate: pctToDecimal(r.tauxMoyenPonderePct),
         precisions: r.precisions?.trim() || "",
         countryName,
