@@ -74,14 +74,14 @@ function normName(s: string): string {
 // Pastille de statut selon la reconnaissance.
 function MatchBadge({ kind }: { kind: MatchKind }) {
   const cls: Record<MatchKind, string> = {
-    stock: "bg-emerald-500/15 text-emerald-300",
-    "listed-bond": "bg-emerald-500/15 text-emerald-300",
-    sovereign: "bg-emerald-500/15 text-emerald-300",
-    fund: "bg-emerald-500/15 text-emerald-300",
-    custom: "bg-blue-500/15 text-blue-300",
-    dat: "bg-violet-500/15 text-violet-300",
-    cash: "bg-slate-600/40 text-slate-300",
-    unmatched: "bg-amber-500/15 text-amber-300",
+    stock: "bg-emerald-50 text-emerald-700",
+    "listed-bond": "bg-emerald-50 text-emerald-700",
+    sovereign: "bg-emerald-50 text-emerald-700",
+    fund: "bg-emerald-50 text-emerald-700",
+    custom: "bg-blue-50 text-blue-700",
+    dat: "bg-violet-50 text-violet-700",
+    cash: "bg-slate-200 text-slate-600",
+    unmatched: "bg-amber-50 text-amber-700",
   };
   return (
     <span className={`text-[10px] px-1.5 py-0.5 rounded whitespace-nowrap ${cls[kind]}`}>
@@ -91,7 +91,7 @@ function MatchBadge({ kind }: { kind: MatchKind }) {
 }
 
 const inputCls =
-  "px-3 py-2 text-sm bg-slate-900 border border-slate-700 rounded-md text-white placeholder-slate-600 focus:outline-none focus:border-blue-500";
+  "px-3 py-2 text-sm bg-white border border-slate-200 rounded-md text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500";
 
 // Rendu d'un champ (attribut) piloté par le schéma du type de titre.
 function AttrField({
@@ -310,8 +310,8 @@ function CustomSecurityForm({
   };
 
   return (
-    <div className="mt-2 p-3 border border-blue-500/30 bg-blue-500/5 rounded-md">
-      <div className="text-[11px] font-semibold text-blue-200 mb-2">
+    <div className="mt-2 p-3 border border-blue-200 bg-blue-50 rounded-md">
+      <div className="text-[11px] font-semibold text-blue-800 mb-2">
         {isLink ? "Lier" : "Créer le titre"} « {initial.code} »
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
@@ -472,7 +472,7 @@ function CustomSecurityForm({
         )}
       </div>
       {isCote && (
-        <p className="text-[11px] text-slate-400 mt-2">
+        <p className="text-[11px] text-slate-500 mt-2">
           Un titre coté doit correspondre à un code ou un ISIN du référentiel du site.
         </p>
       )}
@@ -481,7 +481,7 @@ function CustomSecurityForm({
           référentiel du site et s'y mettent à jour toutes seules — les recopier
           en dur figerait un coupon ou un encours qui bouge. */}
       {sourceLiee && refLiee && (
-        <div className="mt-3 p-3 border border-slate-700 bg-slate-900/40 rounded-md">
+        <div className="mt-3 p-3 border border-slate-200 bg-slate-50 rounded-md">
           <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">
             Caractéristiques héritées du site
           </div>
@@ -494,7 +494,7 @@ function CustomSecurityForm({
                 .map((def) => (
                   <div key={def.key}>
                     <div className="text-[10px] text-slate-600">{def.label}</div>
-                    <div className="text-[12px] text-slate-300">
+                    <div className="text-[12px] text-slate-600">
                       {caracteristiques[def.key]}
                       {def.unit ? ` ${def.unit}` : ""}
                     </div>
@@ -502,7 +502,7 @@ function CustomSecurityForm({
                 ))}
             </div>
           ) : (
-            <p className="text-[11px] text-amber-300">
+            <p className="text-[11px] text-amber-700">
               Référence introuvable au référentiel du site ({sourceLiee} · {refLiee}). La liaison
               est cassée : re-saisissez le code ou l&apos;ISIN.
             </p>
@@ -510,19 +510,19 @@ function CustomSecurityForm({
         </div>
       )}
       {refMatch ? (
-        <div className="mt-3 p-3 border border-emerald-500/40 bg-emerald-500/5 rounded-md">
-          <div className="text-[12px] text-emerald-200">
+        <div className="mt-3 p-3 border border-emerald-300 bg-emerald-50 rounded-md">
+          <div className="text-[12px] text-emerald-800">
             L&apos;{refMatch.matchedOn === "isin" ? "ISIN" : "code"} saisi correspond déjà à un
             titre du référentiel :
           </div>
-          <div className="mt-1 text-sm text-slate-100">
+          <div className="mt-1 text-sm text-slate-900">
             <span className="font-medium">{refMatch.label}</span>{" "}
-            <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300">
+            <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">
               {MATCH_LABELS[refMatch.kind]}
             </span>{" "}
-            <span className="font-mono text-[11px] text-slate-400">{refMatch.id}</span>
+            <span className="font-mono text-[11px] text-slate-500">{refMatch.id}</span>
           </div>
-          <div className="text-[11px] text-slate-400 mt-1">
+          <div className="text-[11px] text-slate-500 mt-1">
             Veux-tu lier cette ligne au titre existant (recommandé) plutôt que créer un doublon ?
           </div>
           <div className="flex items-center gap-2 mt-3 flex-wrap">
@@ -530,7 +530,7 @@ function CustomSecurityForm({
               type="button"
               onClick={() => onLinked(refMatch)}
               disabled={pending}
-              className="px-3 py-1.5 text-sm font-medium rounded-md border border-emerald-500/50 bg-emerald-600/15 text-emerald-300 hover:bg-emerald-600/25 transition disabled:opacity-50"
+              className="px-3 py-1.5 text-sm font-medium rounded-md border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition disabled:opacity-50"
             >
               Lier au titre du référentiel
             </button>
@@ -538,7 +538,7 @@ function CustomSecurityForm({
               type="button"
               onClick={doCreate}
               disabled={pending}
-              className="px-3 py-1.5 text-sm rounded-md border border-slate-600 text-slate-300 hover:bg-slate-800 transition disabled:opacity-50"
+              className="px-3 py-1.5 text-sm rounded-md border border-slate-300 text-slate-600 hover:bg-slate-100 transition disabled:opacity-50"
             >
               {pending ? "Création…" : "Créer un titre personnalisé quand même"}
             </button>
@@ -546,12 +546,12 @@ function CustomSecurityForm({
               type="button"
               onClick={() => setRefMatch(null)}
               disabled={pending}
-              className="px-3 py-1.5 text-sm rounded-md text-slate-400 hover:text-slate-200 transition"
+              className="px-3 py-1.5 text-sm rounded-md text-slate-500 hover:text-slate-900 transition"
             >
               Retour
             </button>
           </div>
-          {error && <span className="text-[12px] text-red-400 block mt-2">{error}</span>}
+          {error && <span className="text-[12px] text-red-600 block mt-2">{error}</span>}
         </div>
       ) : (
         <div className="flex items-center gap-3 mt-3">
@@ -559,7 +559,7 @@ function CustomSecurityForm({
             type="button"
             onClick={submit}
             disabled={pending}
-            className="px-3 py-1.5 text-sm font-medium rounded-md border border-blue-500/50 bg-blue-600/15 text-blue-300 hover:bg-blue-600/25 transition disabled:opacity-50"
+            className="px-3 py-1.5 text-sm font-medium rounded-md border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 transition disabled:opacity-50"
           >
             {pending
               ? isLink
@@ -575,11 +575,11 @@ function CustomSecurityForm({
             type="button"
             onClick={onCancel}
             disabled={pending}
-            className="px-3 py-1.5 text-sm rounded-md border border-slate-600 text-slate-300 hover:bg-slate-800 transition"
+            className="px-3 py-1.5 text-sm rounded-md border border-slate-300 text-slate-600 hover:bg-slate-100 transition"
           >
             Annuler
           </button>
-          {error && <span className="text-[12px] text-red-400">{error}</span>}
+          {error && <span className="text-[12px] text-red-600">{error}</span>}
         </div>
       )}
     </div>
@@ -648,10 +648,10 @@ function PositionRowView({
   const href = hrefForMatch(row.matchKind, row.matchId);
   return (
     <>
-      <tr className="border-b border-slate-800/60 last:border-0">
+      <tr className="border-b border-slate-200 last:border-0">
         <td className="px-3 py-2">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-mono text-[12px] text-slate-200">{row.rawCode || "—"}</span>
+            <span className="font-mono text-[12px] text-slate-800">{row.rawCode || "—"}</span>
             {row.matchIsin && (
               <span
                 className="font-mono text-[10px] text-slate-500"
@@ -672,7 +672,7 @@ function PositionRowView({
           {row.matchLabel && row.matchLabel !== row.rawLabel && (
             <div className="text-[10px] text-slate-600 mt-0.5">
               {href ? (
-                <Link href={href} className="text-blue-400/70 hover:text-blue-300" target="_blank">
+                <Link href={href} className="text-blue-600 hover:text-blue-800" target="_blank">
                   {row.matchLabel} ↗
                 </Link>
               ) : (
@@ -682,12 +682,12 @@ function PositionRowView({
           )}
           {customForm}
         </td>
-        <td className="px-3 py-2 text-right font-mono text-slate-300">{fmt(row.quantity, 0)}</td>
-        <td className="px-3 py-2 text-right font-mono text-slate-400">{fmt(row.pru, 2)}</td>
-        <td className="px-3 py-2 text-right font-mono text-slate-400">{fmt(row.cost, 0)}</td>
-        <td className="px-3 py-2 text-right font-mono text-slate-400">{fmt(row.price, 2)}</td>
-        <td className="px-3 py-2 text-right font-mono text-slate-400">{fmt(row.accruedInterest, 0)}</td>
-        <td className="px-3 py-2 text-right font-mono text-slate-200">{fmt(row.valuation, 0)}</td>
+        <td className="px-3 py-2 text-right font-mono text-slate-600">{fmt(row.quantity, 0)}</td>
+        <td className="px-3 py-2 text-right font-mono text-slate-500">{fmt(row.pru, 2)}</td>
+        <td className="px-3 py-2 text-right font-mono text-slate-500">{fmt(row.cost, 0)}</td>
+        <td className="px-3 py-2 text-right font-mono text-slate-500">{fmt(row.price, 2)}</td>
+        <td className="px-3 py-2 text-right font-mono text-slate-500">{fmt(row.accruedInterest, 0)}</td>
+        <td className="px-3 py-2 text-right font-mono text-slate-800">{fmt(row.valuation, 0)}</td>
         <td className="px-3 py-2 text-right">{resolveButton}</td>
       </tr>
     </>
@@ -704,17 +704,17 @@ function SectionTable({
   subtotal: number;
 }) {
   return (
-    <div className="border border-slate-800 rounded-md overflow-hidden">
-      <div className="flex items-center justify-between px-3 py-2 bg-slate-900/60 border-b border-slate-800">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-300">
+    <div className="border border-slate-200 rounded-md overflow-hidden">
+      <div className="flex items-center justify-between px-3 py-2 bg-slate-50 border-b border-slate-200">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-600">
           {SECTION_LABELS[section]}
         </span>
-        <span className="text-[11px] font-mono text-slate-400">{fmt(subtotal, 0)}</span>
+        <span className="text-[11px] font-mono text-slate-500">{fmt(subtotal, 0)}</span>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
-            <tr className="text-[10px] text-slate-500 border-b border-slate-800">
+            <tr className="text-[10px] text-slate-500 border-b border-slate-200">
               <th className="px-3 py-1.5 text-left font-medium">Titre</th>
               <th className="px-3 py-1.5 text-right font-medium">Quantité</th>
               <th className="px-3 py-1.5 text-right font-medium">PRU</th>
@@ -926,8 +926,8 @@ export default function PortfolioPanel({
   return (
     <div className="space-y-5">
       {/* Barre d'import */}
-      <section className="bg-slate-800/40 border border-slate-700 rounded-lg p-4">
-        <h3 className="text-sm font-semibold text-slate-200 mb-1">Importer un inventaire</h3>
+      <section className="bg-white border border-slate-200 rounded-lg p-4">
+        <h3 className="text-sm font-semibold text-slate-800 mb-1">Importer un inventaire</h3>
         <p className="text-[11px] text-slate-500 mb-3">
           Dépose le fichier Excel de l&apos;inventaire du fonds (format NSIA : Code/Symbole, Titre,
           Quantité, PRU, Prix de revient, Cours, Intérêts courus, Valorisation). Les titres reconnus
@@ -941,7 +941,7 @@ export default function PortfolioPanel({
             <select
               value={slot}
               onChange={(e) => setSlot(e.target.value as PortfolioSlot)}
-              className="px-3 py-2 text-sm bg-slate-900 border border-slate-700 rounded-md text-white focus:outline-none focus:border-blue-500"
+              className="px-3 py-2 text-sm bg-white border border-slate-200 rounded-md text-slate-900 focus:outline-none focus:border-blue-500"
             >
               {SLOT_ORDER.map((sl) => (
                 <option key={sl} value={sl}>
@@ -959,28 +959,28 @@ export default function PortfolioPanel({
               type="date"
               value={asOfDate}
               onChange={(e) => setAsOfDate(e.target.value)}
-              className="px-3 py-2 text-sm bg-slate-900 border border-slate-700 rounded-md text-white focus:outline-none focus:border-blue-500"
+              className="px-3 py-2 text-sm bg-white border border-slate-200 rounded-md text-slate-900 focus:outline-none focus:border-blue-500"
             />
           </label>
           <input
             ref={fileRef}
             type="file"
             accept=".xlsx,.xlsm"
-            className="text-[12px] text-slate-400 file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border-0 file:bg-slate-700 file:text-slate-200 file:text-sm hover:file:bg-slate-600"
+            className="text-[12px] text-slate-500 file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border-0 file:bg-slate-100 file:text-slate-700 file:text-sm hover:file:bg-slate-200"
           />
           <button
             type="button"
             onClick={handleImport}
             disabled={importing}
-            className="px-4 py-2 text-sm font-medium rounded-md border border-blue-500/50 bg-blue-600/15 text-blue-300 hover:bg-blue-600/25 transition disabled:opacity-50"
+            className="px-4 py-2 text-sm font-medium rounded-md border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 transition disabled:opacity-50"
           >
             {importing ? "Analyse…" : "Analyser le fichier"}
           </button>
-          {error && <span className="text-[12px] text-red-400 self-center">{error}</span>}
-          {info && <span className="text-[12px] text-emerald-400 self-center">✓ {info}</span>}
+          {error && <span className="text-[12px] text-red-600 self-center">{error}</span>}
+          {info && <span className="text-[12px] text-emerald-600 self-center">✓ {info}</span>}
         </div>
         {bySlot.has(slot) && (
-          <p className="text-[11px] text-amber-400/90 mt-2">
+          <p className="text-[11px] text-amber-600 mt-2">
             ⚠️ Un « {SLOT_LABELS[slot]} » existe déjà (au {bySlot.get(slot)!.asOfDate}) : il sera
             remplacé à l&apos;enregistrement.
           </p>
@@ -989,21 +989,21 @@ export default function PortfolioPanel({
 
       {/* Aperçu de l'import (non enregistré) */}
       {parsed && (
-        <section className="bg-slate-800/40 border border-slate-700 rounded-lg p-4 space-y-4">
+        <section className="bg-white border border-slate-200 rounded-lg p-4 space-y-4">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div>
-              <h3 className="text-sm font-semibold text-slate-200">
+              <h3 className="text-sm font-semibold text-slate-800">
                 Aperçu — {parsed.label}
               </h3>
               <p className="text-[11px] text-slate-500 mt-0.5">
                 {positions.length} lignes · {matchedCount} reconnues · {cashCount} trésorerie ·{" "}
-                <span className={unmatchedCount > 0 ? "text-amber-400" : ""}>
+                <span className={unmatchedCount > 0 ? "text-amber-600" : ""}>
                   {unmatchedCount} à créer
                 </span>{" "}
                 · Total {fmt(parsed.totalValuation, 0)}
               </p>
-              <p className="text-[11px] text-slate-400 mt-0.5">
-                Enregistrement : <strong className="text-slate-300">{SLOT_LABELS[slot]}</strong> au{" "}
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Enregistrement : <strong className="text-slate-600">{SLOT_LABELS[slot]}</strong> au{" "}
                 {asOfDate}
               </p>
             </div>
@@ -1014,7 +1014,7 @@ export default function PortfolioPanel({
                   setParsed(null);
                   setPositions([]);
                 }}
-                className="px-3 py-1.5 text-sm rounded-md border border-slate-600 text-slate-300 hover:bg-slate-800 transition"
+                className="px-3 py-1.5 text-sm rounded-md border border-slate-300 text-slate-600 hover:bg-slate-100 transition"
               >
                 Annuler
               </button>
@@ -1022,7 +1022,7 @@ export default function PortfolioPanel({
                 type="button"
                 onClick={handleSave}
                 disabled={savingPortfolio}
-                className="px-4 py-2 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-500 transition disabled:opacity-50"
+                className="px-4 py-2 text-sm font-medium rounded-md bg-blue-600 text-slate-900 hover:bg-blue-700 transition disabled:opacity-50"
                 title={unmatchedCount > 0 ? "Des lignes ne sont pas reconnues (elles seront enregistrées comme non reconnues)" : undefined}
               >
                 {savingPortfolio ? "Enregistrement…" : "Enregistrer le portefeuille"}
@@ -1038,7 +1038,7 @@ export default function PortfolioPanel({
               {parsed.avertissements.map((a) => (
                 <p
                   key={a}
-                  className="text-[11px] text-amber-300 bg-amber-950/40 border border-amber-800/60 rounded px-3 py-2"
+                  className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2"
                 >
                   {a}
                 </p>
@@ -1047,7 +1047,7 @@ export default function PortfolioPanel({
           )}
 
           {unmatchedCount > 0 && (
-            <p className="text-[11px] text-amber-400/90 bg-amber-500/5 border border-amber-500/20 rounded px-3 py-2">
+            <p className="text-[11px] text-amber-600 bg-amber-50 border border-amber-200 rounded px-3 py-2">
               {unmatchedCount} ligne(s) au code non reconnu. Clique sur « Créer le titre » pour les
               rattacher, ou enregistre tel quel.
             </p>
@@ -1070,8 +1070,8 @@ export default function PortfolioPanel({
                         onClick={() => setResolvingIndex(resolvingIndex === i ? null : i)}
                         className={`text-[11px] transition whitespace-nowrap ${
                           p.matchKind === "unmatched"
-                            ? "text-amber-300 hover:text-amber-200"
-                            : "text-slate-400 hover:text-slate-200"
+                            ? "text-amber-700 hover:text-amber-800"
+                            : "text-slate-500 hover:text-slate-900"
                         }`}
                       >
                         {resolvingIndex === i
@@ -1113,7 +1113,7 @@ export default function PortfolioPanel({
               onClick={handleReclassify}
               disabled={reclassing}
               title="Re-classer les inventaires selon l'état actuel du référentiel"
-              className="px-3 py-1.5 text-sm rounded-md border border-slate-600 text-slate-300 hover:bg-slate-800 transition disabled:opacity-50"
+              className="px-3 py-1.5 text-sm rounded-md border border-slate-300 text-slate-600 hover:bg-slate-100 transition disabled:opacity-50"
             >
               {reclassing ? "Actualisation…" : "↻ Actualiser le classement"}
             </button>
@@ -1123,13 +1123,13 @@ export default function PortfolioPanel({
           {(info || error) && (
             <p
               className={`text-[11px] leading-relaxed ${
-                error ? "text-red-400" : "text-emerald-400"
+                error ? "text-red-600" : "text-emerald-600"
               }`}
             >
               {error ? error : `✓ ${info}`}
             </p>
           )}
-          <div className="flex gap-1 border-b border-slate-800 overflow-x-auto">
+          <div className="flex gap-1 border-b border-slate-200 overflow-x-auto">
             {SLOT_ORDER.map((sl) => {
               const snap = bySlot.get(sl);
               const active = sl === viewSlot;
@@ -1141,9 +1141,9 @@ export default function PortfolioPanel({
                   onClick={() => snap && setViewSlot(sl)}
                   className={`px-3 py-2 text-sm whitespace-nowrap border-b-2 -mb-px transition ${
                     active
-                      ? "border-blue-400 text-white"
+                      ? "border-blue-500 text-slate-900"
                       : snap
-                        ? "border-transparent text-slate-400 hover:text-slate-200"
+                        ? "border-transparent text-slate-500 hover:text-slate-900"
                         : "border-transparent text-slate-600 cursor-not-allowed"
                   }`}
                 >
@@ -1180,7 +1180,7 @@ export default function PortfolioPanel({
 
       {/* État vide */}
       {!parsed && initialPortfolios.length === 0 && (
-        <section className="bg-slate-800/40 border border-slate-700 rounded-lg p-8 text-center text-sm text-slate-500">
+        <section className="bg-white border border-slate-200 rounded-lg p-8 text-center text-sm text-slate-500">
           Aucun inventaire pour ce fonds. Choisis le type (début / intermédiaire / fin), la date, puis
           importe un fichier.
         </section>

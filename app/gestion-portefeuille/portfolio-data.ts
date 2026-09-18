@@ -158,27 +158,36 @@ export async function loadFundPortfolios(fundId: string): Promise<PortfolioSnaps
   // porte le nom affiché de chaque ligne rattachée.
   const customParId = new Map((await loadCustomSecurities()).map((c) => [c.id, c]));
 
-  const result: PortfolioSnapshot[] = [];
-  for (const slot of ["debut", "intermediaire", "fin"] as PortfolioSlot[]) {
-    const snap = bySlot.get(slot);
-    if (!snap) continue;
-    const { data: rows } = await supabase
-      .from("fund_portfolio_positions")
-      .select(POSITION_COLS)
-      .eq("snapshot_id", snap.id)
-      .order("valuation", { ascending: false });
-    result.push({
-      id: snap.id,
-      fundId: snap.fund_id,
-      slot,
-      asOfDate: snap.as_of_date,
-      label: snap.label ?? "",
-      totalValuation: Number(snap.total_valuation) || 0,
-      createdAt: snap.created_at,
-      positions: ((rows ?? []) as PositionRow[]).map((r) =>
-        rowToSavedPosition(r, customParId),
-      ),
-    });
-  }
-  return result;
+  // Les trois inventaires se chargent DE FRONT. En file d'attente — un `for`
+  // avec un `await` a l'interieur — chaque aller-retour attendait le precedent
+  // pour interroger une table differente par un identifiant different : trois
+  // latences payees l'une apres l'autre sans qu'aucune ne depende de la
+  // suivante. Sur l'ecran d'allocation, ou changer d'axe recharge tout, cela se
+  // voyait a chaque clic.
+  const presents = (["debut", "intermediaire", "fin"] as PortfolioSlot[])
+    .map((slot) => ({ slot, snap: bySlot.get(slot) }))
+    .filter((x): x is { slot: PortfolioSlot; snap: SnapshotRow } => !!x.snap);
+
+  const lignesParSlot = await Promise.all(
+    presents.map(({ snap }) =>
+      supabase
+        .from("fund_portfolio_positions")
+        .select(POSITION_COLS)
+        .eq("snapshot_id", snap.id)
+        .order("valuation", { ascending: false }),
+    ),
+  );
+
+  return presents.map(({ slot, snap }, i) => ({
+    id: snap.id,
+    fundId: snap.fund_id,
+    slot,
+    asOfDate: snap.as_of_date,
+    label: snap.label ?? "",
+    totalValuation: Number(snap.total_valuation) || 0,
+    createdAt: snap.created_at,
+    positions: ((lignesParSlot[i].data ?? []) as PositionRow[]).map((r) =>
+      rowToSavedPosition(r, customParId),
+    ),
+  }));
 }

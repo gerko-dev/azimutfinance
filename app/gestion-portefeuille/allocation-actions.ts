@@ -12,12 +12,8 @@ import { loadStocks } from "@/lib/dataLoader";
 import type { ActionResult } from "@/lib/admin/types";
 
 import { estNiveau1, MSG_NIVEAU1 } from "./guard";
-import { chargerCibles, construireTableauAllocation } from "./allocation-data";
-import {
-  controlerGroupes,
-  type AxeAllocation,
-  type TableauAllocation,
-} from "./allocation-types";
+import { construireTableauAllocation } from "./allocation-data";
+import type { AxeAllocation, TableauAllocation } from "./allocation-types";
 
 type Guard =
   | { ok: true; userId: string; supabase: Awaited<ReturnType<typeof createSupabaseServerClient>> }
@@ -114,47 +110,39 @@ export async function enregistrerCiblesAction(
     };
   }
 
-  // ── Conformité avec l'axe de niveau supérieur ──────────────────────────
+  // ── Propagation vers l'axe sectoriel ───────────────────────────────────
   //
-  // Une allocation par titre qui ne respecte pas l'allocation sectorielle
-  // arrêtée par le comité produit deux décisions contradictoires dans le même
-  // classeur. On refuse, en nommant les secteurs en cause : un message
-  // générique obligerait le gérant à refaire l'addition lui-même.
+  // Le titre est l'axe le plus fin : une allocation par valeur DÉTERMINE
+  // l'allocation sectorielle, qui n'en est que la somme. Refuser
+  // l'enregistrement parce que les deux ne coïncidaient pas obligeait à saisir
+  // deux fois la même décision, dans le bon ordre, et à refaire l'addition à la
+  // main — sept secteurs en écart suffisaient à bloquer toute validation.
+  //
+  // On recalcule donc le secteur À PARTIR des titres, et on l'enregistre dans
+  // la foulée. Les deux axes ne peuvent plus se contredire, parce que l'un
+  // découle de l'autre.
+  //
+  // Le sens inverse reste libre : allouer par secteur n'impose rien aux titres,
+  // puisqu'une même enveloppe sectorielle se répartit d'une infinité de façons.
+  let ciblesSecteurDeduites: SaisieCible[] | null = null;
   if (dimension === "action_titre" && retenues.length > 0) {
-    const ciblesSecteur = await chargerCibles(fundId, "action_secteur");
-    if (ciblesSecteur.length > 0) {
-      const parSecteur: Record<string, number> = {};
-      for (const c of ciblesSecteur) parSecteur[c.bucket] = c.cible;
-
-      // loadStocks() est mémoïsé ; loadAllActions() ne l'est pas et recalcule
-      // les ratios des 47 valeurs à chaque appel, pour un secteur qui ne bouge
-      // jamais.
-      const secteurDuTitre = new Map(
-        loadStocks().map((s) => [
-          (s.code || "").trim().toUpperCase(),
-          (s.sector || "Non classé").trim(),
-        ]),
-      );
-      const ecarts = controlerGroupes(retenues, secteurDuTitre, parSecteur).filter(
-        (c) => !c.conforme,
-      );
-
-      if (ecarts.length > 0) {
-        const detail = ecarts
-          .map((e) => {
-            const somme = (e.sommeTitres * 100).toFixed(2).replace(".", ",");
-            const cible = ((e.cibleGroupe ?? 0) * 100).toFixed(2).replace(".", ",");
-            const signe = (e.ecart ?? 0) > 0 ? "dépassement" : "manque";
-            const delta = (Math.abs(e.ecart ?? 0) * 100).toFixed(2).replace(".", ",");
-            return `${e.groupe} : ${somme} % alloués pour une cible de ${cible} % (${signe} de ${delta} pt)`;
-          })
-          .join(" ; ");
-        return {
-          ok: false,
-          error: `Les allocations par titre ne respectent pas l'allocation sectorielle — ${detail}. Corrige les titres, ou ajuste d'abord l'axe « Actions — par secteur ».`,
-        };
-      }
+    // loadStocks() est mémoïsé ; loadAllActions() ne l'est pas et recalcule
+    // les ratios des 47 valeurs à chaque appel, pour un secteur qui ne bouge
+    // jamais.
+    const secteurDuTitre = new Map(
+      loadStocks().map((s) => [
+        (s.code || "").trim().toUpperCase(),
+        (s.sector || "Non classé").trim(),
+      ]),
+    );
+    const parSecteur = new Map<string, number>();
+    for (const c of retenues) {
+      const secteur = secteurDuTitre.get(c.bucket.trim().toUpperCase()) ?? "Non classé";
+      parSecteur.set(secteur, (parSecteur.get(secteur) ?? 0) + c.cible);
     }
+    ciblesSecteurDeduites = [...parSecteur.entries()]
+      .filter(([, cible]) => cible > 0)
+      .map(([bucket, cible]) => ({ bucket, cible }));
   }
 
   // Remplacement de l'axe entier : une cible retiree du formulaire doit
@@ -179,6 +167,33 @@ export async function enregistrerCiblesAction(
       })),
     );
     if (error) return { ok: false, error: error.message };
+  }
+
+  // L'axe sectoriel est réécrit APRÈS les titres, et de la même façon :
+  // remplacement complet, pour qu'un secteur vidé de ses titres disparaisse au
+  // lieu de subsister avec son ancienne cible.
+  if (ciblesSecteurDeduites) {
+    const { error: errSuppSecteur } = await g.supabase
+      .from("fund_allocation_targets")
+      .delete()
+      .eq("fund_id", fundId)
+      .eq("dimension", "action_secteur");
+    if (errSuppSecteur) return { ok: false, error: errSuppSecteur.message };
+
+    if (ciblesSecteurDeduites.length > 0) {
+      const { error } = await g.supabase.from("fund_allocation_targets").insert(
+        ciblesSecteurDeduites.map((c) => ({
+          owner_id: g.userId,
+          fund_id: fundId,
+          dimension: "action_secteur",
+          bucket: c.bucket,
+          cible: c.cible,
+          decide_le: options.decideLe || null,
+          note: "Déduite de l'allocation par titre.",
+        })),
+      );
+      if (error) return { ok: false, error: error.message };
+    }
   }
 
   revalidatePath(`/gestion-portefeuille/fonds/${fundId}`);

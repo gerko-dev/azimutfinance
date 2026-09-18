@@ -164,9 +164,9 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="bg-slate-800/40 border border-slate-700 rounded-lg">
-      <div className="px-4 py-3 border-b border-slate-700">
-        <h3 className="text-sm font-semibold text-slate-200">{title}</h3>
+    <section className="bg-white border border-slate-200 rounded-lg">
+      <div className="px-4 py-3 border-b border-slate-200">
+        <h3 className="text-sm font-semibold text-slate-800">{title}</h3>
         {description && <p className="text-[11px] text-slate-500 mt-0.5">{description}</p>}
       </div>
       <div className="p-4">{children}</div>
@@ -204,7 +204,7 @@ function FieldGroup({
 }) {
   return (
     <div className="mb-5 last:mb-0">
-      <div className="flex items-center justify-between gap-2 mb-2.5 pb-1 border-b border-slate-800">
+      <div className="flex items-center justify-between gap-2 mb-2.5 pb-1 border-b border-slate-200">
         <span className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">
           {title}
         </span>
@@ -216,7 +216,7 @@ function FieldGroup({
 }
 
 const inputCls =
-  "px-3 py-2 text-sm bg-slate-900 border border-slate-700 rounded-md text-white placeholder-slate-600 focus:outline-none focus:border-blue-500";
+  "px-3 py-2 text-sm bg-white border border-slate-200 rounded-md text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500";
 
 // Petit champ de seuil (min/max) avec suffixe d'unité (%, ans) — utilisé dans
 // les tableaux de ratios.
@@ -237,7 +237,7 @@ function SeuilInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder="—"
-        className="w-16 px-2 py-1 text-xs text-right bg-slate-900 border border-slate-700 rounded text-white placeholder-slate-600 focus:outline-none focus:border-blue-500"
+        className="w-16 px-2 py-1 text-xs text-right bg-white border border-slate-200 rounded text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500"
       />
       <span className="text-[10px] text-slate-500 w-6 text-left">{unite}</span>
     </span>
@@ -315,10 +315,10 @@ function BenchmarkCombobox({
         className={`${inputCls} w-full`}
       />
       {open && filtered.length > 0 && (
-        <div className="absolute z-30 mt-1 left-0 right-0 max-h-52 overflow-y-auto rounded-md border border-slate-700 bg-slate-900 shadow-xl pro-scrollbar">
+        <div className="absolute z-30 mt-1 left-0 right-0 max-h-52 overflow-y-auto rounded-md border border-slate-200 bg-white shadow-xl pro-scrollbar">
           {groups.map((g) => (
             <div key={g.name}>
-              <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-slate-500 bg-slate-900 sticky top-0">
+              <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-slate-500 bg-white sticky top-0">
                 {g.name}
               </div>
               {g.items.map((o) => (
@@ -327,9 +327,9 @@ function BenchmarkCombobox({
                   type="button"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => pick(o.value)}
-                  className="w-full text-left px-3 py-1.5 hover:bg-slate-800 transition flex items-center justify-between gap-2"
+                  className="w-full text-left px-3 py-1.5 hover:bg-slate-100 transition flex items-center justify-between gap-2"
                 >
-                  <span className="font-mono text-[13px] text-slate-200 shrink-0">{o.value}</span>
+                  <span className="font-mono text-[13px] text-slate-800 shrink-0">{o.value}</span>
                   <span className="text-[11px] text-slate-500 truncate">{o.label}</span>
                 </button>
               ))}
@@ -554,7 +554,7 @@ export default function SettingsForm({
   return (
     <div className="space-y-4">
       {/* Sous-onglets du hub Paramètres */}
-      <div className="border-b border-slate-800 flex gap-1 overflow-x-auto">
+      <div className="border-b border-slate-200 flex gap-1 overflow-x-auto">
         {TABS.map(([key, label]) => (
           <button
             key={key}
@@ -562,8 +562,8 @@ export default function SettingsForm({
             onClick={() => setTab(key)}
             className={`px-3 py-2 text-sm whitespace-nowrap border-b-2 -mb-px transition ${
               tab === key
-                ? "border-blue-400 text-white"
-                : "border-transparent text-slate-400 hover:text-slate-200"
+                ? "border-blue-500 text-slate-900"
+                : "border-transparent text-slate-500 hover:text-slate-900"
             }`}
           >
             {label}
@@ -625,14 +625,14 @@ export default function SettingsForm({
             <button
               type="submit"
               disabled={savingProfile}
-              className="px-4 py-2 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-500 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-2 text-sm font-medium rounded-md bg-blue-600 text-slate-900 hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {savingProfile ? "Enregistrement…" : "Enregistrer la SGO"}
             </button>
             {saved && (
-              <span className="text-[12px] text-emerald-400">✓ Société de gestion enregistrée.</span>
+              <span className="text-[12px] text-emerald-600">✓ Société de gestion enregistrée.</span>
             )}
-            {profileError && <span className="text-[12px] text-red-400">{profileError}</span>}
+            {profileError && <span className="text-[12px] text-red-600">{profileError}</span>}
           </div>
         </form>
       )}
@@ -647,7 +647,7 @@ export default function SettingsForm({
           <button
             type="button"
             onClick={startCreate}
-            className="px-3 py-1.5 text-sm font-medium rounded-md border border-blue-500/50 bg-blue-600/15 text-blue-300 hover:bg-blue-600/25 transition"
+            className="px-3 py-1.5 text-sm font-medium rounded-md border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 transition"
           >
             + Créer un fonds
           </button>
@@ -655,10 +655,10 @@ export default function SettingsForm({
 
         {/* Récapitulatif des fonds créés */}
         {funds.length > 0 ? (
-          <div className="overflow-x-auto mb-4 border border-slate-700 rounded-md">
+          <div className="overflow-x-auto mb-4 border border-slate-200 rounded-md">
             <table className="w-full text-xs">
               <thead>
-                <tr className="text-[11px] text-slate-500 border-b border-slate-700 bg-slate-900/60">
+                <tr className="text-[11px] text-slate-500 border-b border-slate-200 bg-slate-50">
                   <th className="px-3 py-2 text-left font-medium">Fonds</th>
                   <th className="px-3 py-2 text-left font-medium">Catégorie</th>
                   <th className="px-3 py-2 text-left font-medium">Type</th>
@@ -671,8 +671,8 @@ export default function SettingsForm({
               </thead>
               <tbody>
                 {funds.map((f) => (
-                  <tr key={f.id} className="border-b border-slate-800 last:border-0">
-                    <td className="px-3 py-2 text-slate-200">
+                  <tr key={f.id} className="border-b border-slate-200 last:border-0">
+                    <td className="px-3 py-2 text-slate-800">
                       {f.nom}
                       {f.abreviation && (
                         <span className="ml-1.5 text-[10px] font-mono text-slate-500">
@@ -680,26 +680,26 @@ export default function SettingsForm({
                         </span>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-slate-400">{f.categorie}</td>
-                    <td className="px-3 py-2 text-slate-400">{f.type}</td>
-                    <td className="px-3 py-2 text-right font-mono text-slate-300">
+                    <td className="px-3 py-2 text-slate-500">{f.categorie}</td>
+                    <td className="px-3 py-2 text-slate-500">{f.type}</td>
+                    <td className="px-3 py-2 text-right font-mono text-slate-600">
                       {f.vlInitiale ? f.vlInitiale : "—"}
                     </td>
-                    <td className="px-3 py-2 text-slate-400">{f.devise}</td>
-                    <td className="px-3 py-2 text-slate-400">{formatBenchmark(f.benchmark)}</td>
-                    <td className="px-3 py-2 text-slate-400">{f.objectifPerf || "—"}</td>
+                    <td className="px-3 py-2 text-slate-500">{f.devise}</td>
+                    <td className="px-3 py-2 text-slate-500">{formatBenchmark(f.benchmark)}</td>
+                    <td className="px-3 py-2 text-slate-500">{f.objectifPerf || "—"}</td>
                     <td className="px-3 py-2 text-right whitespace-nowrap">
                       <button
                         type="button"
                         onClick={() => startEdit(f)}
-                        className="text-[11px] text-blue-300 hover:text-blue-200 transition mr-3"
+                        className="text-[11px] text-blue-700 hover:text-blue-900 transition mr-3"
                       >
                         Modifier
                       </button>
                       <button
                         type="button"
                         onClick={() => removeFund(f.id)}
-                        className="text-[11px] text-red-400 hover:text-red-300 transition"
+                        className="text-[11px] text-red-600 hover:text-red-800 transition"
                       >
                         Supprimer
                       </button>
@@ -715,16 +715,16 @@ export default function SettingsForm({
 
         {/* Formulaire de création / modification (affiché à la demande) */}
         {formOpen && (
-        <div className="border-t border-slate-800 pt-4">
+        <div className="border-t border-slate-200 pt-4">
           <div className="flex items-center justify-between gap-3 mb-4">
-            <h4 className="text-sm font-semibold text-slate-200">
+            <h4 className="text-sm font-semibold text-slate-800">
               {editingId ? "Modifier le fonds" : "Nouveau fonds"}
             </h4>
             {editingId && (
               <button
                 type="button"
                 onClick={cancelEdit}
-                className="text-[11px] text-slate-400 hover:text-slate-200 transition"
+                className="text-[11px] text-slate-500 hover:text-slate-900 transition"
               >
                 Annuler la modification
               </button>
@@ -825,7 +825,7 @@ export default function SettingsForm({
             right={
               <span
                 className={`text-[11px] font-mono ${
-                  benchBalanced ? "text-slate-500" : "text-amber-400"
+                  benchBalanced ? "text-slate-500" : "text-amber-600"
                 }`}
               >
                 Total : {benchTotal.toFixed(2).replace(/\.?0+$/, "").replace(".", ",")} %
@@ -878,7 +878,7 @@ export default function SettingsForm({
                   onClick={() => removeBenchmarkComponent(i)}
                   aria-label="Retirer la composante"
                   title="Retirer la composante"
-                  className="shrink-0 px-2.5 py-2 text-slate-500 hover:text-red-400 transition"
+                  className="shrink-0 px-2.5 py-2 text-slate-500 hover:text-red-700 transition"
                 >
                   ✕
                 </button>
@@ -890,7 +890,7 @@ export default function SettingsForm({
               <button
                 type="button"
                 onClick={addBenchmarkComponent}
-                className="text-[12px] text-blue-300 hover:text-blue-200 transition"
+                className="text-[12px] text-blue-700 hover:text-blue-900 transition"
               >
                 + Ajouter une composante
               </button>
@@ -916,15 +916,15 @@ export default function SettingsForm({
             </p>
             <div className="space-y-4">
               {regGroups.map((grp) => (
-                <div key={grp.name} className="border border-slate-800 rounded-md overflow-hidden">
-                  <div className="flex items-center justify-between px-3 py-2 bg-slate-900/60 border-b border-slate-800">
-                    <span className="text-[11px] font-semibold text-slate-300">{grp.name}</span>
+                <div key={grp.name} className="border border-slate-200 rounded-md overflow-hidden">
+                  <div className="flex items-center justify-between px-3 py-2 bg-slate-50 border-b border-slate-200">
+                    <span className="text-[11px] font-semibold text-slate-600">{grp.name}</span>
                     <span className="text-[10px] text-slate-500">{grp.items.length}</span>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs">
                       <thead>
-                        <tr className="text-[10px] text-slate-500 border-b border-slate-800">
+                        <tr className="text-[10px] text-slate-500 border-b border-slate-200">
                           <th className="px-3 py-1.5 text-left font-medium">Libellé</th>
                           <th className="px-3 py-1.5 text-left font-medium">Métrique</th>
                           <th className="px-3 py-1.5 text-left font-medium">% de</th>
@@ -935,8 +935,8 @@ export default function SettingsForm({
                       </thead>
                       <tbody>
                         {grp.items.map(({ r, i }) => (
-                          <tr key={i} className="border-b border-slate-800/60 last:border-0 align-top">
-                            <td className="px-3 py-2 text-slate-300 max-w-[18rem]">{r.libelle}</td>
+                          <tr key={i} className="border-b border-slate-200 last:border-0 align-top">
+                            <td className="px-3 py-2 text-slate-600 max-w-[18rem]">{r.libelle}</td>
                             <td className="px-3 py-2 text-slate-500">{r.metrique || "—"}</td>
                             <td className="px-3 py-2 text-slate-500">{r.base || "—"}</td>
                             <td className="px-2 py-2 text-right">
@@ -984,10 +984,10 @@ export default function SettingsForm({
               Limites d&apos;allocation propres au fonds (prospectus / mandat), en
               <strong> % de l&apos;actif net</strong>. Laissez vide si la classe n&apos;est pas encadrée.
             </p>
-            <div className="border border-slate-800 rounded-md overflow-x-auto">
+            <div className="border border-slate-200 rounded-md overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="text-[10px] text-slate-500 border-b border-slate-800">
+                  <tr className="text-[10px] text-slate-500 border-b border-slate-200">
                     <th className="px-3 py-1.5 text-left font-medium">Classe d&apos;actif</th>
                     <th className="px-2 py-1.5 text-right font-medium">Seuil min</th>
                     <th className="px-2 py-1.5 text-right font-medium">Seuil max</th>
@@ -995,8 +995,8 @@ export default function SettingsForm({
                 </thead>
                 <tbody>
                   {ctrRatios.map(({ r, i }) => (
-                    <tr key={i} className="border-b border-slate-800/60 last:border-0">
-                      <td className="px-3 py-2 text-slate-300">{r.metrique}</td>
+                    <tr key={i} className="border-b border-slate-200 last:border-0">
+                      <td className="px-3 py-2 text-slate-600">{r.metrique}</td>
                       <td className="px-2 py-2 text-right">
                         <SeuilInput
                           value={r.seuilMin}
@@ -1023,7 +1023,7 @@ export default function SettingsForm({
               type="button"
               onClick={addFund}
               disabled={pending}
-              className="px-4 py-2 text-sm font-medium rounded-md border border-blue-500/50 bg-blue-600/15 text-blue-300 hover:bg-blue-600/25 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-2 text-sm font-medium rounded-md border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {pending
                 ? "Enregistrement…"
@@ -1031,7 +1031,7 @@ export default function SettingsForm({
                   ? "Enregistrer les modifications"
                   : "+ Créer le fonds"}
             </button>
-            {fundError && <span className="text-[12px] text-red-400">{fundError}</span>}
+            {fundError && <span className="text-[12px] text-red-600">{fundError}</span>}
           </div>
         </div>
         )}
@@ -1048,7 +1048,7 @@ export default function SettingsForm({
               label="Devise de référence (SGO)"
               hint="Définie dans l'onglet Société de gestion."
             >
-              <div className={`${inputCls} bg-slate-900/40 text-slate-300`}>{s.baseCurrency}</div>
+              <div className={`${inputCls} bg-slate-50 text-slate-600`}>{s.baseCurrency}</div>
             </Field>
           </div>
           <p className="text-[11px] text-slate-500 mt-3">

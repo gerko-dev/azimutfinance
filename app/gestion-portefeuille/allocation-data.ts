@@ -483,7 +483,25 @@ export async function construireTableauAllocation(
   axe: AxeAllocation = "classe",
   tresorerieAInvestir = 0,
 ): Promise<TableauAllocation> {
-  const snapshots = [...(await loadFundPortfolios(fundId))].sort((a, b) =>
+  const classeParente = CLASSE_DE_L_AXE[axe];
+  // Axe de niveau supérieur : les allocations par titre doivent se conformer
+  // aux allocations sectorielles arrêtées par ailleurs.
+  const axeGroupe: AxeAllocation | null = axe === "action_titre" ? "action_secteur" : null;
+
+  // TOUT DE FRONT. L'inventaire et les trois jeux de cibles ne dépendent pas
+  // les uns des autres : les enchaîner faisait payer quatre latences réseau
+  // bout à bout à chaque changement d'axe, alors qu'une seule suffit. C'est ce
+  // qui rendait le passage d'un sous-menu à l'autre si lent — l'écran
+  // rechargeait l'inventaire complet du fonds, que l'axe ne change pourtant
+  // jamais.
+  const [snapshotsBruts, cibles, ciblesAxeGroupe, ciblesClasse] = await Promise.all([
+    loadFundPortfolios(fundId),
+    chargerCibles(fundId, axe),
+    axeGroupe ? chargerCibles(fundId, axeGroupe) : Promise.resolve([]),
+    classeParente !== null ? chargerCibles(fundId, "classe") : Promise.resolve([]),
+  ]);
+
+  const snapshots = [...snapshotsBruts].sort((a, b) =>
     a.asOfDate.localeCompare(b.asOfDate),
   );
   const actuel = snapshots[snapshots.length - 1] ?? null;
@@ -491,30 +509,18 @@ export async function construireTableauAllocation(
   const dateRef = actuel?.asOfDate ?? new Date().toISOString().slice(0, 10);
 
   const refs = construireRefs();
-  const cibles = await chargerCibles(fundId, axe);
   const parBucket = new Map(cibles.map((c) => [c.bucket, c]));
-  const classeParente = CLASSE_DE_L_AXE[axe];
 
-  // Axe de niveau supérieur : les allocations par titre doivent se conformer
-  // aux allocations sectorielles arrêtées par ailleurs.
-  const axeGroupe: AxeAllocation | null = axe === "action_titre" ? "action_secteur" : null;
   const ciblesGroupe: Record<string, number> = {};
-  if (axeGroupe) {
-    for (const c of await chargerCibles(fundId, axeGroupe)) {
-      ciblesGroupe[c.bucket] = c.cible;
-    }
-  }
+  for (const c of ciblesAxeGroupe) ciblesGroupe[c.bucket] = c.cible;
 
   // Cible de la classe parente : elle dimensionne la poche sur les sous-axes.
   // Sans elle, une décision prise au niveau des classes ne descendrait jamais
   // jusqu'aux titres.
-  let cibleClasseParente: number | null = null;
-  if (classeParente !== null) {
-    const c = (await chargerCibles(fundId, "classe")).find(
-      (x) => x.bucket === classeParente,
-    );
-    cibleClasseParente = c?.cible ?? null;
-  }
+  const cibleClasseParente: number | null =
+    classeParente === null
+      ? null
+      : (ciblesClasse.find((x) => x.bucket === classeParente)?.cible ?? null);
 
   const avertissements: string[] = [];
   if (!actuel) {

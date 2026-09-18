@@ -14,7 +14,7 @@ import type { NavPoint } from "@/app/gestion-portefeuille/nav-types";
 
 const EMPTY_ROW: NavPointInput = { date: "", vl: "", parts: "", actifNet: "", actifBrut: "" };
 const navInput =
-  "w-full px-2 py-1 text-xs bg-slate-900 border border-slate-700 rounded text-white focus:outline-none focus:border-blue-500";
+  "w-full px-2 py-1 text-xs bg-white border border-slate-200 rounded text-slate-900 focus:outline-none focus:border-blue-500";
 
 function fmt(n: number | null | undefined, decimals = 0): string {
   if (n == null || !Number.isFinite(n)) return "—";
@@ -132,8 +132,8 @@ export default function NavPanel({
   return (
     <div className="space-y-5">
       {/* Import */}
-      <section className="bg-slate-800/40 border border-slate-700 rounded-lg p-4">
-        <h3 className="text-sm font-semibold text-slate-200 mb-1">
+      <section className="bg-white border border-slate-200 rounded-lg p-4">
+        <h3 className="text-sm font-semibold text-slate-800 mb-1">
           Importer l&apos;historique de valeur liquidative
         </h3>
         <p className="text-[11px] text-slate-500 mb-3">
@@ -146,18 +146,18 @@ export default function NavPanel({
             ref={fileRef}
             type="file"
             accept=".xlsx,.xlsm"
-            className="text-[12px] text-slate-400 file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border-0 file:bg-slate-700 file:text-slate-200 file:text-sm hover:file:bg-slate-600"
+            className="text-[12px] text-slate-500 file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border-0 file:bg-slate-100 file:text-slate-700 file:text-sm hover:file:bg-slate-200"
           />
           <button
             type="button"
             onClick={handleImport}
             disabled={importing}
-            className="px-4 py-2 text-sm font-medium rounded-md border border-blue-500/50 bg-blue-600/15 text-blue-300 hover:bg-blue-600/25 transition disabled:opacity-50"
+            className="px-4 py-2 text-sm font-medium rounded-md border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 transition disabled:opacity-50"
           >
             {importing ? "Import…" : "Importer"}
           </button>
-          {error && <span className="text-[12px] text-red-400">{error}</span>}
-          {info && <span className="text-[12px] text-emerald-400">✓ {info}</span>}
+          {error && <span className="text-[12px] text-red-600">{error}</span>}
+          {info && <span className="text-[12px] text-emerald-600">✓ {info}</span>}
         </div>
       </section>
 
@@ -177,9 +177,9 @@ export default function NavPanel({
           </section>
 
           {/* Graphique */}
-          <section className="bg-slate-800/40 border border-slate-700 rounded-lg p-4">
+          <section className="bg-white border border-slate-200 rounded-lg p-4">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-600">
                 Évolution ({history.length} points)
               </h3>
               <div className="flex gap-1">
@@ -190,8 +190,8 @@ export default function NavPanel({
                     onClick={() => setMetric(m)}
                     className={`px-2.5 py-1 text-[11px] rounded-md transition ${
                       metric === m
-                        ? "bg-blue-600/20 text-blue-300 border border-blue-500/40"
-                        : "text-slate-400 hover:text-slate-200 border border-transparent"
+                        ? "bg-blue-50 text-blue-700 border border-blue-300"
+                        : "text-slate-500 hover:text-slate-900 border border-transparent"
                     }`}
                   >
                     {m === "vl" ? "Valeur liquidative" : "Actif net"}
@@ -251,24 +251,24 @@ export default function NavPanel({
       )}
 
       {/* Tableau des points : ajout / modification / suppression manuels */}
-      <section className="bg-slate-800/40 border border-slate-700 rounded-lg overflow-hidden">
-        <div className="px-4 py-2.5 border-b border-slate-700 flex items-center justify-between gap-3">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+      <section className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+        <div className="px-4 py-2.5 border-b border-slate-200 flex items-center justify-between gap-3">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-600">
             {history.length > 0 ? "Derniers points" : "Valeurs liquidatives"}
           </h3>
           <button
             type="button"
             onClick={openAdd}
-            className="px-2.5 py-1 text-[11px] rounded-md border border-blue-500/50 bg-blue-600/15 text-blue-300 hover:bg-blue-600/25 transition"
+            className="px-2.5 py-1 text-[11px] rounded-md border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 transition"
           >
             + Ajouter une ligne
           </button>
         </div>
-        {rowError && <p className="px-4 py-2 text-[12px] text-red-400">{rowError}</p>}
+        {rowError && <p className="px-4 py-2 text-[12px] text-red-600">{rowError}</p>}
         <div className="overflow-x-auto max-h-96">
           <table className="w-full text-xs">
-            <thead className="sticky top-0 bg-slate-900/80">
-              <tr className="text-[10px] text-slate-500 border-b border-slate-800">
+            <thead className="sticky top-0 bg-slate-50">
+              <tr className="text-[10px] text-slate-500 border-b border-slate-200">
                 <th className="px-3 py-1.5 text-left font-medium">Date</th>
                 <th className="px-3 py-1.5 text-right font-medium">VL</th>
                 <th className="px-3 py-1.5 text-right font-medium">Nombre de parts</th>
@@ -306,17 +306,17 @@ export default function NavPanel({
                     pending={savingRow}
                   />
                 ) : (
-                  <tr key={p.date} className="border-b border-slate-800/60 last:border-0">
-                    <td className="px-3 py-2 text-slate-300">{p.date}</td>
-                    <td className="px-3 py-2 text-right font-mono text-slate-200">{fmt(p.vl, 2)}</td>
-                    <td className="px-3 py-2 text-right font-mono text-slate-400">{fmt(p.parts, 2)}</td>
-                    <td className="px-3 py-2 text-right font-mono text-slate-300">{fmt(p.actifNet, 0)}</td>
-                    <td className="px-3 py-2 text-right font-mono text-slate-400">{fmt(p.actifBrut, 0)}</td>
+                  <tr key={p.date} className="border-b border-slate-200 last:border-0">
+                    <td className="px-3 py-2 text-slate-600">{p.date}</td>
+                    <td className="px-3 py-2 text-right font-mono text-slate-800">{fmt(p.vl, 2)}</td>
+                    <td className="px-3 py-2 text-right font-mono text-slate-500">{fmt(p.parts, 2)}</td>
+                    <td className="px-3 py-2 text-right font-mono text-slate-600">{fmt(p.actifNet, 0)}</td>
+                    <td className="px-3 py-2 text-right font-mono text-slate-500">{fmt(p.actifBrut, 0)}</td>
                     <td className="px-3 py-2 text-right whitespace-nowrap">
                       <button
                         type="button"
                         onClick={() => openEdit(p)}
-                        className="text-[11px] text-blue-300 hover:text-blue-200 transition mr-3"
+                        className="text-[11px] text-blue-700 hover:text-blue-900 transition mr-3"
                       >
                         Modifier
                       </button>
@@ -324,7 +324,7 @@ export default function NavPanel({
                         type="button"
                         onClick={() => deleteRow(p.date)}
                         disabled={savingRow}
-                        className="text-[11px] text-red-400 hover:text-red-300 transition disabled:opacity-50"
+                        className="text-[11px] text-red-600 hover:text-red-800 transition disabled:opacity-50"
                       >
                         Supprimer
                       </button>
@@ -363,12 +363,12 @@ function NavEditRow({
 }) {
   const set = (k: keyof NavPointInput, v: string) => setForm({ ...form, [k]: v });
   return (
-    <tr className="border-b border-slate-800 bg-blue-500/5">
+    <tr className="border-b border-slate-200 bg-blue-50">
       <td className="px-3 py-1.5">
         {dateEditable ? (
           <input type="date" value={form.date} onChange={(e) => set("date", e.target.value)} className={navInput} />
         ) : (
-          <span className="text-slate-300">{form.date}</span>
+          <span className="text-slate-600">{form.date}</span>
         )}
       </td>
       <td className="px-2 py-1.5">
@@ -388,7 +388,7 @@ function NavEditRow({
           type="button"
           onClick={onSave}
           disabled={pending}
-          className="text-[11px] text-emerald-300 hover:text-emerald-200 transition mr-3 disabled:opacity-50"
+          className="text-[11px] text-emerald-700 hover:text-emerald-800 transition mr-3 disabled:opacity-50"
         >
           {pending ? "…" : "Enregistrer"}
         </button>
@@ -396,7 +396,7 @@ function NavEditRow({
           type="button"
           onClick={onCancel}
           disabled={pending}
-          className="text-[11px] text-slate-400 hover:text-slate-200 transition"
+          className="text-[11px] text-slate-500 hover:text-slate-900 transition"
         >
           Annuler
         </button>
@@ -416,9 +416,9 @@ function Fact({
   sub?: string;
   tone?: "up" | "down";
 }) {
-  const color = tone === "up" ? "text-emerald-400" : tone === "down" ? "text-red-400" : "text-slate-200";
+  const color = tone === "up" ? "text-emerald-600" : tone === "down" ? "text-red-600" : "text-slate-800";
   return (
-    <div className="bg-slate-900/50 border border-slate-700 rounded-md px-3 py-2">
+    <div className="bg-slate-50 border border-slate-200 rounded-md px-3 py-2">
       <div className="text-[10px] uppercase tracking-wider text-slate-500">{label}</div>
       <div className={`text-sm font-mono mt-0.5 ${color}`}>{value}</div>
       {sub && <div className="text-[10px] text-slate-600 mt-0.5">{sub}</div>}

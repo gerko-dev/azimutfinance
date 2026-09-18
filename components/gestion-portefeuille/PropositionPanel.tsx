@@ -9,8 +9,18 @@ import { useState, useTransition } from "react";
 
 import { chargerPropositionAction } from "@/app/gestion-portefeuille/proposition-actions";
 import {
+  LIBELLE_METHODE,
+  METHODES,
+  type MethodeCible,
+} from "@/app/gestion-portefeuille/anticipation-types";
+import {
+  EXPLICATION_OPTIMISATION,
+  LIBELLE_OPTIMISATION,
+  METHODES_OPTIMISATION,
   SEMAINES_PAR_AN,
+  type MethodeOptimisation,
   type LigneProposition,
+  type Origine,
   type TableauProposition,
 } from "@/app/gestion-portefeuille/proposition-types";
 
@@ -39,8 +49,6 @@ const dateFr = (iso: string | null) => {
  *  deux — un taux sans risque annuel face à un rendement de marché
  *  hebdomadaire — produit une prime de marché négative et inverse tout le
  *  classement. La conversion se fait donc ici, une fois. */
-const annuelVersHebdo = (pctAnnuel: number) =>
-  Math.pow(1 + pctAnnuel / 100, 1 / SEMAINES_PAR_AN) - 1;
 const hebdoVersAnnuel = (taux: number) =>
   (Math.pow(1 + taux, SEMAINES_PAR_AN) - 1) * 100;
 
@@ -49,25 +57,28 @@ const versNombre = (s: string) =>
 
 export default function PropositionPanel({
   fundId,
+  tresorerie,
   initial,
 }: {
   fundId: string;
   initial: TableauProposition;
+  /** Arrêtée dans l'allocation validée par classe d'actif : elle entre dans
+   *  l'actif net sur lequel la cible de la poche actions s'applique. */
+  tresorerie: string;
 }) {
   const [tableau, setTableau] = useState(initial);
   const [erreur, setErreur] = useState<string | null>(null);
   const [enCours, start] = useTransition();
 
-  const [montant, setMontant] = useState(String(Math.round(initial.parametres.montant)));
-  const [sansRisque, setSansRisque] = useState(
-    fmt2.format(hebdoVersAnnuel(initial.parametres.tauxSansRisque)),
-  );
-  const [marche, setMarche] = useState(
-    fmt2.format(hebdoVersAnnuel(initial.parametres.rendementMarche)),
-  );
-  const [partMax, setPartMax] = useState(fmt2.format(initial.parametres.partMax * 100));
+  // Quatre hypotheses sur cinq ne se saisissent plus : elles sont DEDUITES, et
+  // se lisent dans `tableau.parametres`. Les garder dans un etat local aurait
+  // laisse l'ecran afficher une valeur que le calcul n'utilise pas.
   const [objectif, setObjectif] = useState(
     fmt2.format(initial.parametres.rentabiliteMinimale * 100),
+  );
+  const [methode, setMethode] = useState<MethodeOptimisation>(initial.parametres.methode);
+  const [valorisation, setValorisation] = useState<MethodeCible>(
+    initial.parametres.methodeValorisation,
   );
 
   const [recherche, setRecherche] = useState("");
@@ -76,13 +87,15 @@ export default function PropositionPanel({
 
   const recalculer = () =>
     start(async () => {
-      const r = await chargerPropositionAction(fundId, {
-        montant: versNombre(montant),
-        tauxSansRisque: annuelVersHebdo(versNombre(sansRisque)),
-        rendementMarche: annuelVersHebdo(versNombre(marche)),
-        partMax: versNombre(partMax) / 100,
-        rentabiliteMinimale: versNombre(objectif) / 100,
-      });
+      const r = await chargerPropositionAction(
+        fundId,
+        {
+          rentabiliteMinimale: versNombre(objectif) / 100,
+          methode,
+          methodeValorisation: valorisation,
+        },
+        versNombre(tresorerie),
+      );
       if (r.ok) {
         setTableau(r.data);
         setErreur(null);
@@ -109,9 +122,9 @@ export default function PropositionPanel({
   return (
     <div className="space-y-4">
       {/* Paramètres */}
-      <div className="bg-slate-800/40 border border-slate-700 rounded-lg p-4">
-        <h3 className="text-sm font-semibold text-white">Proposition d&apos;allocation</h3>
-        <p className="text-xs text-slate-400 mt-1 max-w-4xl">
+      <div className="bg-white border border-slate-200 rounded-lg p-4">
+        <h3 className="text-sm font-semibold text-slate-900">Proposition d&apos;allocation</h3>
+        <p className="text-xs text-slate-500 mt-1 max-w-4xl">
           Optimisation moyenne-variance de la poche actions : le modèle cherche la
           combinaison qui maximise la rentabilité espérée par unité de risque, sans
           qu&apos;aucune ligne dépasse le plafond fixé. Rendements attendus par le MEDAF,
@@ -120,16 +133,71 @@ export default function PropositionPanel({
         </p>
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mt-3">
-          <Champ
+          <Lecture
             label="Montant à investir"
-            suffixe="FCFA"
-            value={montant}
-            onChange={setMontant}
+            valeur={`${fmt0.format(Math.round(tableau.parametres.montant))} FCFA`}
+            origine={tableau.origines.montant}
           />
-          <Champ label="Taux sans risque" suffixe="% / an" value={sansRisque} onChange={setSansRisque} />
-          <Champ label="Rendement du marché" suffixe="% / an" value={marche} onChange={setMarche} />
-          <Champ label="Part maximale par action" suffixe="%" value={partMax} onChange={setPartMax} />
+          <Lecture
+            label="Taux sans risque"
+            valeur={`${fmt2.format(hebdoVersAnnuel(tableau.parametres.tauxSansRisque))} % / an`}
+            origine={tableau.origines.tauxSansRisque}
+          />
+          <Lecture
+            label="Rendement du marché"
+            valeur={`${fmt2.format(hebdoVersAnnuel(tableau.parametres.rendementMarche))} % / an`}
+            origine={tableau.origines.rendementMarche}
+          />
+          <Lecture
+            label="Part maximale par action"
+            valeur={`${fmt2.format(tableau.parametres.partMax * 100)} %`}
+            origine={tableau.origines.partMax}
+          />
           <Champ label="Rentabilité minimale" suffixe="% / an" value={objectif} onChange={setObjectif} />
+        </div>
+
+        {/* Choix du modèle. Placé au-dessus des hypothèses : il décide de ce
+            que signifient les rendements attendus, donc de tout le reste. */}
+        <div className="flex flex-wrap items-end gap-3 mt-3 pt-3 border-t border-slate-200">
+          <label className="flex flex-col gap-1">
+            <span className="text-[10px] uppercase tracking-wider text-slate-500">
+              Rendements attendus
+            </span>
+            <select
+              value={methode}
+              onChange={(e) => setMethode(e.target.value as MethodeOptimisation)}
+              className="px-2 py-1.5 rounded border border-slate-300 bg-white text-slate-900 text-sm"
+            >
+              {METHODES_OPTIMISATION.map((m) => (
+                <option key={m} value={m}>
+                  {LIBELLE_OPTIMISATION[m]}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {methode !== "medaf" && (
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] uppercase tracking-wider text-slate-500">
+                Méthode de valorisation
+              </span>
+              <select
+                value={valorisation}
+                onChange={(e) => setValorisation(e.target.value as MethodeCible)}
+                className="px-2 py-1.5 rounded border border-slate-300 bg-white text-slate-900 text-sm"
+              >
+                {METHODES.map((m) => (
+                  <option key={m} value={m}>
+                    {LIBELLE_METHODE[m]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          <p className="text-[11px] text-slate-500 pb-1.5 max-w-xl leading-relaxed">
+            {EXPLICATION_OPTIMISATION[methode]}
+          </p>
         </div>
 
         <div className="flex items-center gap-3 mt-3">
@@ -137,17 +205,19 @@ export default function PropositionPanel({
             type="button"
             onClick={recalculer}
             disabled={enCours}
-            className="px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-500 text-white text-xs transition disabled:opacity-40"
+            className="px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-700 text-slate-900 text-xs transition disabled:opacity-40"
           >
             {enCours ? "Optimisation…" : "Recalculer"}
           </button>
           <span className="text-[11px] text-slate-500">
-            Les taux se saisissent en base annuelle ; le modèle travaille en semaines.
+            Seule la rentabilité minimale se saisit : les quatre autres hypothèses
+            viennent de l&apos;allocation validée, de la BCEAO, du BRVM Composite et
+            des paramètres du fonds. Elles se corrigent à leur source.
           </span>
         </div>
 
         {erreur && (
-          <p className="text-xs text-rose-300 bg-rose-950/40 border border-rose-800/60 rounded px-3 py-2 mt-3">
+          <p className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded px-3 py-2 mt-3">
             {erreur}
           </p>
         )}
@@ -182,7 +252,7 @@ export default function PropositionPanel({
           {tableau.avertissements.map((a) => (
             <p
               key={a}
-              className="text-xs text-amber-300 bg-amber-950/40 border border-amber-800/60 rounded px-3 py-2"
+              className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2"
             >
               {a}
             </p>
@@ -223,7 +293,7 @@ export default function PropositionPanel({
             value={recherche}
             onChange={(e) => setRecherche(e.target.value)}
             placeholder="Code ou nom"
-            className="px-2.5 py-1.5 rounded border border-slate-600 bg-slate-900 text-slate-100 text-xs w-44"
+            className="px-2.5 py-1.5 rounded border border-slate-300 bg-white text-slate-900 text-xs w-44"
           />
         </div>
         <div>
@@ -237,7 +307,7 @@ export default function PropositionPanel({
             id="prop-secteur"
             value={secteur}
             onChange={(e) => setSecteur(e.target.value)}
-            className="px-2.5 py-1.5 rounded border border-slate-600 bg-slate-900 text-slate-100 text-xs w-56"
+            className="px-2.5 py-1.5 rounded border border-slate-300 bg-white text-slate-900 text-xs w-56"
           >
             <option value="">Tous les secteurs</option>
             {secteurs.map((s) => (
@@ -247,7 +317,7 @@ export default function PropositionPanel({
             ))}
           </select>
         </div>
-        <label className="flex items-center gap-2 text-[11px] text-slate-400 pb-1.5">
+        <label className="flex items-center gap-2 text-[11px] text-slate-500 pb-1.5">
           <input
             type="checkbox"
             checked={retenuesSeules}
@@ -262,11 +332,11 @@ export default function PropositionPanel({
       </div>
 
       {/* Tableau */}
-      <div className="bg-slate-800/40 border border-slate-700 rounded-lg overflow-hidden">
+      <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
-              <tr className="text-[10px] text-slate-500 border-b border-slate-700">
+              <tr className="text-[10px] text-slate-500 border-b border-slate-200">
                 <th className="px-3 py-2 text-left font-medium">Symbole</th>
                 <th className="px-3 py-2 text-left font-medium">Titre</th>
                 <th className="px-3 py-2 text-left font-medium">Secteur</th>
@@ -312,37 +382,37 @@ function Ligne({ l }: { l: LigneProposition }) {
   const retenue = l.part > 0.0001;
   return (
     <tr
-      className={`border-b border-slate-800/60 last:border-0 ${
+      className={`border-b border-slate-200 last:border-0 ${
         retenue ? "" : "opacity-50"
       }`}
     >
-      <td className="px-3 py-2 font-mono text-slate-200">{l.code}</td>
-      <td className="px-3 py-2 text-slate-300">{l.libelle}</td>
+      <td className="px-3 py-2 font-mono text-slate-800">{l.code}</td>
+      <td className="px-3 py-2 text-slate-600">{l.libelle}</td>
       <td className="px-3 py-2 text-slate-500 text-[11px]">{l.secteur}</td>
-      <td className="px-3 py-2 text-right tabular-nums text-slate-400">{nb2(l.beta)}</td>
-      <td className="px-3 py-2 text-right tabular-nums text-slate-400">
+      <td className="px-3 py-2 text-right tabular-nums text-slate-500">{nb2(l.beta)}</td>
+      <td className="px-3 py-2 text-right tabular-nums text-slate-500">
         {pct(l.rendementAttendu)}
       </td>
-      <td className="px-3 py-2 text-right tabular-nums text-slate-400">{pct(l.volatilite)}</td>
+      <td className="px-3 py-2 text-right tabular-nums text-slate-500">{pct(l.volatilite)}</td>
       <td
         className={`px-3 py-2 text-right tabular-nums ${
-          retenue ? "text-blue-300 font-medium" : "text-slate-600"
+          retenue ? "text-blue-700 font-medium" : "text-slate-600"
         }`}
       >
         {pct(l.part)}
       </td>
-      <td className="px-3 py-2 text-right tabular-nums text-slate-400">{montantFr(l.cours)}</td>
-      <td className="px-3 py-2 text-right tabular-nums text-slate-200">{montantFr(l.montant)}</td>
-      <td className="px-3 py-2 text-right tabular-nums text-slate-300">{montantFr(l.nombre)}</td>
+      <td className="px-3 py-2 text-right tabular-nums text-slate-500">{montantFr(l.cours)}</td>
+      <td className="px-3 py-2 text-right tabular-nums text-slate-800">{montantFr(l.montant)}</td>
+      <td className="px-3 py-2 text-right tabular-nums text-slate-600">{montantFr(l.nombre)}</td>
       <td className="px-3 py-2 text-right tabular-nums text-slate-500">
         {montantFr(l.nombreDetenu)}
       </td>
       <td
         className={`px-3 py-2 text-right tabular-nums font-medium ${
           l.ecartNombre > 0
-            ? "text-emerald-400"
+            ? "text-emerald-600"
             : l.ecartNombre < 0
-              ? "text-rose-400"
+              ? "text-rose-600"
               : "text-slate-600"
         }`}
         title={`${pctSigne(l.ecartMontant / (l.valorisationDetenue || l.montant || 1))} en montant`}
@@ -350,6 +420,48 @@ function Ligne({ l }: { l: LigneProposition }) {
         {l.ecartNombre === 0 ? "—" : `${l.ecartNombre > 0 ? "+" : ""}${fmt0.format(l.ecartNombre)}`}
       </td>
     </tr>
+  );
+}
+
+/**
+ * Hypothèse déduite : la valeur, et d'où elle vient.
+ *
+ * Grisée et non saisissable. La provenance n'est pas décorative — sans elle, un
+ * montant qui tombe du ciel invite à le corriger ici, ce qui est précisément ce
+ * qu'on cherche à empêcher : il se corrige à sa source, sinon deux écrans
+ * finissent par ne plus dire la même chose.
+ */
+function Lecture({
+  label,
+  valeur,
+  origine,
+}: {
+  label: string;
+  valeur: string;
+  origine: Origine;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-[10px] uppercase tracking-wider text-slate-500">{label}</span>
+      <div
+        className={`px-2 py-1.5 rounded border text-sm tabular-nums ${
+          origine.manquante
+            ? "border-amber-300 bg-amber-50 text-amber-800"
+            : "border-slate-200 bg-slate-50 text-slate-700"
+        }`}
+        title={origine.detail ? `${origine.source} — ${origine.detail}` : origine.source}
+      >
+        {valeur}
+      </div>
+      <span
+        className={`text-[10px] leading-tight ${
+          origine.manquante ? "text-amber-700" : "text-slate-400"
+        }`}
+      >
+        {origine.source}
+        {origine.detail ? ` · ${origine.detail}` : ""}
+      </span>
+    </div>
   );
 }
 
@@ -372,7 +484,7 @@ function Champ({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           inputMode="decimal"
-          className="w-full px-2 py-1.5 rounded border border-slate-600 bg-slate-900 text-slate-100 text-sm tabular-nums"
+          className="w-full px-2 py-1.5 rounded border border-slate-300 bg-white text-slate-900 text-sm tabular-nums"
         />
         <span className="text-[10px] text-slate-500 whitespace-nowrap">{suffixe}</span>
       </div>
@@ -390,9 +502,9 @@ function Tuile({
   detail?: string;
 }) {
   return (
-    <div className="bg-slate-900/50 border border-slate-700 rounded-md px-3 py-2">
+    <div className="bg-slate-50 border border-slate-200 rounded-md px-3 py-2">
       <div className="text-[10px] uppercase tracking-wider text-slate-500">{libelle}</div>
-      <div className="text-sm text-slate-200 mt-0.5 tabular-nums">{valeur}</div>
+      <div className="text-sm text-slate-800 mt-0.5 tabular-nums">{valeur}</div>
       {detail && <div className="text-[10px] text-slate-500 mt-0.5">{detail}</div>}
     </div>
   );

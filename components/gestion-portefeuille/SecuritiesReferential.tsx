@@ -36,7 +36,7 @@ const KIND_LABEL: Record<string, string> = Object.fromEntries(
 );
 
 const inputCls =
-  "px-3 py-2 text-sm bg-slate-900 border border-slate-700 rounded-md text-white placeholder-slate-600 focus:outline-none focus:border-blue-500";
+  "px-3 py-2 text-sm bg-white border border-slate-200 rounded-md text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500";
 
 // Champ dynamique piloté par le schéma (identique au formulaire d'import).
 function AttrField({
@@ -375,8 +375,8 @@ function EditPanel({
   };
 
   return (
-    <div ref={rootRef} className="mb-4 p-3 border border-blue-500/30 bg-blue-500/5 rounded-md scroll-mt-24">
-      <div className="text-[11px] font-semibold text-blue-200 mb-2">
+    <div ref={rootRef} className="mb-4 p-3 border border-blue-200 bg-blue-50 rounded-md scroll-mt-24">
+      <div className="text-[11px] font-semibold text-blue-800 mb-2">
         {security ? `Modifier « ${security.code} »` : "Nouveau titre au référentiel"}
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
@@ -435,14 +435,14 @@ function EditPanel({
               />
             </label>
             {cotedInfo ? (
-              <div className="md:col-span-2 lg:col-span-3 text-[12px] text-emerald-300 bg-emerald-500/5 border border-emerald-500/20 rounded px-3 py-2">
+              <div className="md:col-span-2 lg:col-span-3 text-[12px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-3 py-2">
                 ✓ Titre reconnu : <strong>{cotedInfo.label}</strong>{" "}
-                <span className="font-mono text-[11px] text-slate-400">{cotedInfo.id}</span> — les
+                <span className="font-mono text-[11px] text-slate-500">{cotedInfo.id}</span> — les
                 caractéristiques du site sont reprises ci-dessous.
               </div>
             ) : (
               (code.trim() || (attrs.isin ?? "").trim()) && (
-                <div className="md:col-span-2 lg:col-span-3 text-[11px] text-amber-400/90">
+                <div className="md:col-span-2 lg:col-span-3 text-[11px] text-amber-600">
                   Recherche dans le référentiel… (vérifie le code / ISIN si rien ne remonte)
                 </div>
               )
@@ -571,7 +571,7 @@ function EditPanel({
               ? "Chargement des caractéristiques du référentiel du site en cours"
               : undefined
           }
-          className="px-3 py-1.5 text-sm font-medium rounded-md border border-blue-500/50 bg-blue-600/15 text-blue-300 hover:bg-blue-600/25 transition disabled:opacity-50"
+          className="px-3 py-1.5 text-sm font-medium rounded-md border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 transition disabled:opacity-50"
         >
           {pending
             ? "Enregistrement…"
@@ -585,7 +585,7 @@ function EditPanel({
           type="button"
           onClick={onCancel}
           disabled={pending}
-          className="px-3 py-1.5 text-sm rounded-md border border-slate-600 text-slate-300 hover:bg-slate-800 transition"
+          className="px-3 py-1.5 text-sm rounded-md border border-slate-300 text-slate-600 hover:bg-slate-100 transition"
         >
           Annuler
         </button>
@@ -597,7 +597,7 @@ function EditPanel({
             title={`Compléter depuis le site sans écraser la saisie : ${manquantsCourants
               .map((m) => libelleChamp(kind, m.key))
               .join(", ")}`}
-            className="px-3 py-1.5 text-sm rounded-md border border-amber-500/50 bg-amber-600/10 text-amber-300 hover:bg-amber-600/20 transition"
+            className="px-3 py-1.5 text-sm rounded-md border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 transition"
           >
             Resynchroniser ({manquantsCourants.length})
           </button>
@@ -608,14 +608,14 @@ function EditPanel({
             onClick={restoreDefaults}
             disabled={pending}
             title="Rétablir les caractéristiques connues du référentiel du site — écrase la saisie"
-            className="px-3 py-1.5 text-sm rounded-md border border-slate-600 text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition"
+            className="px-3 py-1.5 text-sm rounded-md border border-slate-300 text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition"
           >
             Paramètres d&apos;origine
           </button>
         )}
-        {error && <span className="text-[12px] text-red-400">{error}</span>}
+        {error && <span className="text-[12px] text-red-600">{error}</span>}
         {referenceIntrouvable && !error && (
-          <span className="text-[12px] text-amber-400">
+          <span className="text-[12px] text-amber-600">
             Référence du site introuvable pour ce titre — les caractéristiques ne
             peuvent pas être reprises automatiquement, saisis-les ci-dessus.
           </span>
@@ -706,10 +706,10 @@ export default function SecuritiesReferential({ fundId }: { fundId: string }) {
     });
 
   return (
-    <section className="bg-slate-800/40 border border-slate-700 rounded-lg">
-      <div className="px-4 py-3 border-b border-slate-700 flex items-start justify-between gap-3">
+    <section className="bg-white border border-slate-200 rounded-lg">
+      <div className="px-4 py-3 border-b border-slate-200 flex items-start justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold text-slate-200">Référentiel titres</h3>
+          <h3 className="text-sm font-semibold text-slate-800">Référentiel titres</h3>
           <p className="text-[11px] text-slate-500 mt-0.5">
             Titres de ce fonds, alimentés par ses imports d&apos;inventaire et les ajouts manuels.
             Les caractéristiques sont partagées entre fonds ; le retrait n&apos;affecte que ce fonds.
@@ -717,12 +717,12 @@ export default function SecuritiesReferential({ fundId }: { fundId: string }) {
           {items !== null && items.length > 0 && (
             <p className="text-[11px] mt-1">
               {incomplets.length === 0 ? (
-                <span className="text-emerald-400">
+                <span className="text-emerald-600">
                   {items.length} titre(s) — tous les champs exploités par le module sont
                   renseignés.
                 </span>
               ) : (
-                <span className="text-amber-400">
+                <span className="text-amber-600">
                   {incomplets.length} titre(s) sur {items.length} à compléter — des axes
                   d&apos;allocation ne peuvent pas les classer.
                 </span>
@@ -737,7 +737,7 @@ export default function SecuritiesReferential({ fundId }: { fundId: string }) {
               onClick={lancerResync}
               disabled={resyncEnCours}
               title="Complète les champs vides de tous les titres liés depuis le référentiel du site. Ne touche à aucune valeur déjà saisie."
-              className="px-3 py-1.5 text-sm font-medium rounded-md border border-amber-500/50 bg-amber-600/10 text-amber-300 hover:bg-amber-600/20 transition disabled:opacity-50"
+              className="px-3 py-1.5 text-sm font-medium rounded-md border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 transition disabled:opacity-50"
             >
               {resyncEnCours ? "Resynchronisation…" : "Resynchroniser le référentiel"}
             </button>
@@ -748,33 +748,33 @@ export default function SecuritiesReferential({ fundId }: { fundId: string }) {
               setCreating(true);
               setEditingId(null);
             }}
-            className="px-3 py-1.5 text-sm font-medium rounded-md border border-blue-500/50 bg-blue-600/15 text-blue-300 hover:bg-blue-600/25 transition"
+            className="px-3 py-1.5 text-sm font-medium rounded-md border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 transition"
           >
             + Ajouter un titre
           </button>
         </div>
       </div>
       <div className="p-4">
-        {error && <p className="mb-3 text-[12px] text-red-400">{error}</p>}
+        {error && <p className="mb-3 text-[12px] text-red-600">{error}</p>}
 
         {bilan && (
-          <div className="mb-3 rounded-md border border-slate-700 bg-slate-900/50 p-3 text-[11px] space-y-1.5">
+          <div className="mb-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-[11px] space-y-1.5">
             <div className="flex items-center justify-between gap-3">
-              <span className="text-slate-300 font-medium">
+              <span className="text-slate-600 font-medium">
                 Resynchronisation — {bilan.examines} titre(s) examiné(s), {bilan.lies} lié(s)
-                au site, <span className="text-emerald-400">{bilan.misAJour} complété(s)</span>
+                au site, <span className="text-emerald-600">{bilan.misAJour} complété(s)</span>
               </span>
               <button
                 type="button"
                 onClick={() => setBilan(null)}
-                className="text-slate-500 hover:text-slate-300 transition"
+                className="text-slate-500 hover:text-slate-700 transition"
               >
                 Fermer
               </button>
             </div>
 
             {bilan.details.length > 0 && (
-              <p className="text-slate-400">
+              <p className="text-slate-500">
                 {bilan.details
                   .map((d) => `${d.code} (${d.champs.length} champ${d.champs.length > 1 ? "s" : ""})`)
                   .join(" · ")}
@@ -782,7 +782,7 @@ export default function SecuritiesReferential({ fundId }: { fundId: string }) {
             )}
 
             {bilan.liensInvalidesRetires.length > 0 && (
-              <p className="text-slate-400">
+              <p className="text-slate-500">
                 Faux liens retirés sur {bilan.liensInvalidesRetires.join(", ")} — dépôts à
                 terme et comptes de trésorerie n&apos;ont pas de référence de marché ; ils
                 étaient marqués « lié » par un import antérieur.
@@ -790,14 +790,14 @@ export default function SecuritiesReferential({ fundId }: { fundId: string }) {
             )}
 
             {bilan.referencesIntrouvables.length > 0 && (
-              <p className="text-rose-300">
+              <p className="text-rose-700">
                 Référence du site introuvable pour {bilan.referencesIntrouvables.join(", ")} —
                 le lien pointe vers un titre qui n&apos;existe plus ou dont le code a changé.
               </p>
             )}
 
             {bilan.restentIncomplets.length > 0 && (
-              <p className="text-amber-300">
+              <p className="text-amber-700">
                 Restent à saisir à la main :{" "}
                 {bilan.restentIncomplets
                   .map((r) => `${r.code} (${r.champs.length})`)
@@ -812,7 +812,7 @@ export default function SecuritiesReferential({ fundId }: { fundId: string }) {
                 l'atteindra par son nom. On le signale sans rien supprimer —
                 fusionner deux titres est une décision de gestion. */}
             {bilan.nomsEnDoublon.length > 0 && (
-              <div className="text-amber-300">
+              <div className="text-amber-700">
                 <p>
                   {bilan.nomsEnDoublon.length} nom(s) en doublon : seul le premier titre de
                   chaque groupe est reconnu au rapprochement par nom, les autres sont
@@ -820,8 +820,8 @@ export default function SecuritiesReferential({ fundId }: { fundId: string }) {
                 </p>
                 <ul className="mt-1 space-y-0.5">
                   {bilan.nomsEnDoublon.slice(0, 12).map((d) => (
-                    <li key={d.nom} className="text-[11px] text-amber-400/80">
-                      <span className="text-slate-400">« {d.nom} »</span> — {d.codes.join(", ")}
+                    <li key={d.nom} className="text-[11px] text-amber-600">
+                      <span className="text-slate-500">« {d.nom} »</span> — {d.codes.join(", ")}
                     </li>
                   ))}
                   {bilan.nomsEnDoublon.length > 12 && (
@@ -838,7 +838,7 @@ export default function SecuritiesReferential({ fundId }: { fundId: string }) {
               bilan.referencesIntrouvables.length === 0 &&
               bilan.nomsEnDoublon.length === 0 &&
               bilan.restentIncomplets.length === 0 && (
-                <p className="text-emerald-400">Rien à compléter : le référentiel est à jour.</p>
+                <p className="text-emerald-600">Rien à compléter : le référentiel est à jour.</p>
               )}
           </div>
         )}
@@ -870,10 +870,10 @@ export default function SecuritiesReferential({ fundId }: { fundId: string }) {
             d&apos;un import, ou via « + Ajouter un titre ».
           </p>
         ) : (
-          <div className="overflow-x-auto border border-slate-700 rounded-md">
+          <div className="overflow-x-auto border border-slate-200 rounded-md">
             <table className="w-full text-xs">
               <thead>
-                <tr className="text-[11px] text-slate-500 border-b border-slate-700 bg-slate-900/60">
+                <tr className="text-[11px] text-slate-500 border-b border-slate-200 bg-slate-50">
                   <th className="px-3 py-2 text-left font-medium">Code</th>
                   <th className="px-3 py-2 text-left font-medium">Nom</th>
                   <th className="px-3 py-2 text-left font-medium">Type</th>
@@ -889,20 +889,20 @@ export default function SecuritiesReferential({ fundId }: { fundId: string }) {
                   const manquants = champsManquants(sc.kind, sc.attributes);
                   const lie = estLieAuSite(sc.attributes);
                   return (
-                  <tr key={sc.id} className="border-b border-slate-800 last:border-0">
-                    <td className="px-3 py-2 font-mono text-slate-200">{sc.code}</td>
-                    <td className="px-3 py-2 text-slate-300">{sc.name}</td>
-                    <td className="px-3 py-2 text-slate-400">{KIND_LABEL[sc.kind] ?? sc.kind}</td>
+                  <tr key={sc.id} className="border-b border-slate-200 last:border-0">
+                    <td className="px-3 py-2 font-mono text-slate-800">{sc.code}</td>
+                    <td className="px-3 py-2 text-slate-600">{sc.name}</td>
+                    <td className="px-3 py-2 text-slate-500">{KIND_LABEL[sc.kind] ?? sc.kind}</td>
                     <td className="px-3 py-2 font-mono text-slate-500">{sc.isin || "—"}</td>
-                    <td className="px-3 py-2 text-slate-400">{sc.currency}</td>
+                    <td className="px-3 py-2 text-slate-500">{sc.currency}</td>
                     <td className="px-3 py-2">
                       {/* Un titre lié hérite des paramètres du référentiel de
                           marché ; un titre local ne tient que de la saisie. */}
                       <span
                         className={`text-[10px] px-1.5 py-0.5 rounded whitespace-nowrap ${
                           lie
-                            ? "bg-emerald-500/15 text-emerald-300"
-                            : "bg-slate-600/40 text-slate-300"
+                            ? "bg-emerald-50 text-emerald-700"
+                            : "bg-slate-200 text-slate-600"
                         }`}
                       >
                         {lie ? "Lié au site" : "Titre local"}
@@ -910,13 +910,13 @@ export default function SecuritiesReferential({ fundId }: { fundId: string }) {
                     </td>
                     <td className="px-3 py-2">
                       {manquants.length === 0 ? (
-                        <span className="text-emerald-400/80 text-[11px]">complet</span>
+                        <span className="text-emerald-600 text-[11px]">complet</span>
                       ) : (
                         <span
                           title={manquants
                             .map((m) => `${libelleChamp(sc.kind, m.key)} — ${m.motif}`)
                             .join("\n")}
-                          className="text-[11px] text-amber-400 cursor-help"
+                          className="text-[11px] text-amber-600 cursor-help"
                         >
                           {manquants
                             .map((m) => libelleChamp(sc.kind, m.key))
@@ -933,7 +933,7 @@ export default function SecuritiesReferential({ fundId }: { fundId: string }) {
                           setCreating(false);
                           setEditingId(sc.id);
                         }}
-                        className="text-[11px] text-blue-300 hover:text-blue-200 transition mr-3"
+                        className="text-[11px] text-blue-700 hover:text-blue-900 transition mr-3"
                       >
                         Modifier
                       </button>
@@ -941,7 +941,7 @@ export default function SecuritiesReferential({ fundId }: { fundId: string }) {
                         type="button"
                         onClick={() => remove(sc.id)}
                         title="Retirer ce titre du référentiel de ce fonds"
-                        className="text-[11px] text-red-400 hover:text-red-300 transition"
+                        className="text-[11px] text-red-600 hover:text-red-800 transition"
                       >
                         Retirer
                       </button>

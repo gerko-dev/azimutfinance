@@ -15,6 +15,12 @@ import {
   chargerAllocationAction,
   enregistrerCiblesAction,
 } from "@/app/gestion-portefeuille/allocation-actions";
+import { chargerPropositionAction } from "@/app/gestion-portefeuille/proposition-actions";
+import {
+  LIBELLE_OPTIMISATION,
+  METHODES_OPTIMISATION,
+  type MethodeOptimisation,
+} from "@/app/gestion-portefeuille/proposition-types";
 import {
   AXES,
   controlerGroupes,
@@ -37,10 +43,10 @@ const montantSigne = (v: number | null) =>
 
 const couleur = (v: number | null) =>
   v === null || Math.abs(v) < 1e-9
-    ? "text-slate-400"
+    ? "text-slate-500"
     : v > 0
-      ? "text-emerald-400"
-      : "text-rose-400";
+      ? "text-emerald-600"
+      : "text-rose-600";
 
 const dateFr = (iso: string | null) => {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? "");
@@ -89,8 +95,68 @@ export default function AllocationPanel({
         setTableau(r.data);
         setAxe(a);
         setEdition(false);
+        setConfirmationSecteur(false);
+        // Changer d'axe, c'est changer de tableau : une proposition chargee sur
+        // les titres n'a aucun sens en face des classes d'actif.
+        setSource("personnalisee");
         setMessage(null);
       } else setMessage({ type: "erreur", texte: r.error });
+    });
+
+  /**
+   * Source des cibles en cours d'edition.
+   *
+   * « Allocation personnalisee » designe ce qui est ENREGISTRE : c'est la
+   * decision du comite, et elle ne bouge que par un enregistrement. Choisir une
+   * proposition ne l'ecrase pas — elle remplit le formulaire, qu'on peut
+   * ensuite retoucher. C'est l'enregistrement, et lui seul, qui fait d'une
+   * proposition retouchee la nouvelle allocation personnalisee.
+   */
+  const [source, setSource] = useState<"personnalisee" | MethodeOptimisation>(
+    "personnalisee",
+  );
+  /**
+   * Confirmation avant d'ecraser une allocation sectorielle arretee ailleurs.
+   *
+   * L'enregistrement des titres recalcule l'axe sectoriel : c'est voulu, mais
+   * cela efface une decision qui a pu etre prise en comite. On le demande une
+   * fois, en montrant ce qui change — un ecrasement silencieux d'une decision
+   * n'est pas la meme chose qu'un recalcul de commodite.
+   */
+  const [confirmationSecteur, setConfirmationSecteur] = useState(false);
+
+  /** Les propositions portent sur la poche actions, valeur par valeur. */
+  const axeProposable = axe === "action_titre";
+
+  const remplirDepuisProposition = (m: MethodeOptimisation) =>
+    start(async () => {
+      const r = await chargerPropositionAction(
+        fundId,
+        { methode: m, methodeValorisation: "mix" },
+        tresorerieNum(),
+      );
+      if (!r.ok) {
+        setMessage({ type: "erreur", texte: r.error });
+        return;
+      }
+      // Toutes les lignes de l'axe sont remises a plat, puis les poids proposes
+      // y sont reportes : sans cette remise a zero, une valeur presente dans
+      // l'allocation enregistree mais absente de la proposition garderait son
+      // ancienne cible et la somme depasserait cent.
+      const init: Record<string, string> = {};
+      for (const l of tableau.lignes) init[l.bucket] = "";
+      for (const ligne of r.data.lignes) {
+        if (ligne.part > 0.00005) {
+          init[ligne.code] = fmt2.format(ligne.part * 100);
+        }
+      }
+      setSaisies(init);
+      setSource(m);
+      setEdition(true);
+      setMessage({
+        type: "ok",
+        texte: `Proposition « ${LIBELLE_OPTIMISATION[m]} » chargée. Ajustez si besoin, puis enregistrez pour en faire votre allocation personnalisée.`,
+      });
     });
 
   const ouvrirEdition = () => {
@@ -100,6 +166,7 @@ export default function AllocationPanel({
         l.allocationValidee === null ? "" : fmt2.format(l.allocationValidee * 100);
     }
     setSaisies(init);
+    setSource("personnalisee");
     setMessage(null);
     setEdition(true);
   };
@@ -116,7 +183,12 @@ export default function AllocationPanel({
       else setMessage({ type: "erreur", texte: r.error });
     });
 
-  const enregistrer = () =>
+  const enregistrer = () => {
+    if (axe === "action_titre" && nonConformes.length > 0 && !confirmationSecteur) {
+      setConfirmationSecteur(true);
+      return;
+    }
+    setConfirmationSecteur(false);
     start(async () => {
       const cibles = Object.entries(saisies)
         .map(([bucket, v]) => ({ bucket, cible: versDecimal(v) }))
@@ -130,8 +202,16 @@ export default function AllocationPanel({
       const t = await chargerAllocationAction(fundId, axe, tresorerieNum());
       if (t.ok) setTableau(t.data);
       setEdition(false);
-      setMessage({ type: "ok", texte: "Allocation validée enregistrée." });
+      setSource("personnalisee");
+      setMessage({
+        type: "ok",
+        texte:
+          source === "personnalisee"
+            ? "Allocation validée enregistrée."
+            : `Proposition « ${LIBELLE_OPTIMISATION[source]} » enregistrée : c'est désormais votre allocation personnalisée.`,
+      });
     });
+  };
 
   // Contrôle de conformité avec l'axe supérieur, recalculé à chaque frappe :
   // le gérant voit l'écart se résorber au lieu de le découvrir au refus.
@@ -195,11 +275,11 @@ export default function AllocationPanel({
   return (
     <div className="space-y-4">
       {/* Bandeau de contexte */}
-      <div className="bg-slate-800/40 border border-slate-700 rounded-lg p-4">
+      <div className="bg-white border border-slate-200 rounded-lg p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h3 className="text-sm font-semibold text-white">Allocation validée</h3>
-            <p className="text-xs text-slate-400 mt-1 max-w-2xl">
+            <h3 className="text-sm font-semibold text-slate-900">Allocation validée</h3>
+            <p className="text-xs text-slate-500 mt-1 max-w-2xl">
               La cible arrêtée en comité, confrontée au portefeuille réel. L&apos;écart
               produit l&apos;opération à réaliser et son montant.{" "}
               {tableau.classeParente
@@ -207,15 +287,44 @@ export default function AllocationPanel({
                 : "Les allocations se lisent en part de l'actif net."}
             </p>
           </div>
-          {!edition && (
-            <button
-              type="button"
-              onClick={ouvrirEdition}
-              className="px-3 py-1.5 rounded-md bg-blue-500 text-white text-xs font-semibold hover:bg-blue-400 transition"
-            >
-              {aDesCibles ? "Modifier les cibles" : "Saisir les cibles"}
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {/* Choix de la source, sur le seul axe ou une proposition existe.
+                L'allocation personnalisee est toujours en tete : c'est l'etat
+                enregistre, celui vers lequel on revient. */}
+            {axeProposable && (
+              <label className="flex items-center gap-1.5">
+                <span className="text-[10px] uppercase tracking-wider text-slate-500">
+                  Source
+                </span>
+                <select
+                  value={source}
+                  disabled={enCours}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v === "personnalisee") ouvrirEdition();
+                    else remplirDepuisProposition(v as MethodeOptimisation);
+                  }}
+                  className="px-2 py-1.5 rounded border border-slate-300 bg-white text-slate-900 text-xs disabled:opacity-50"
+                >
+                  <option value="personnalisee">Allocation personnalisée</option>
+                  {METHODES_OPTIMISATION.map((m) => (
+                    <option key={m} value={m}>
+                      Proposition · {LIBELLE_OPTIMISATION[m]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {!edition && (
+              <button
+                type="button"
+                onClick={ouvrirEdition}
+                className="px-3 py-1.5 rounded-md bg-blue-500 text-slate-900 text-xs font-semibold hover:bg-blue-700 transition"
+              >
+                {aDesCibles ? "Modifier les cibles" : "Saisir les cibles"}
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Axes d'allocation */}
@@ -230,8 +339,8 @@ export default function AllocationPanel({
                 onClick={() => changerAxe(a)}
                 className={`px-2.5 py-1 rounded text-[11px] font-medium transition disabled:opacity-50 ${
                   actif
-                    ? "bg-blue-500/20 text-blue-300 border border-blue-500/40"
-                    : "text-slate-400 border border-slate-700 hover:text-slate-200 hover:border-slate-600"
+                    ? "bg-blue-50 text-blue-700 border border-blue-300"
+                    : "text-slate-500 border border-slate-200 hover:text-slate-900 hover:border-slate-400"
                 }`}
               >
                 {LIBELLE_AXE[a]}
@@ -283,7 +392,7 @@ export default function AllocationPanel({
                     value={tresorerie}
                     onChange={(e) => onTresorerie(e.target.value)}
                     inputMode="decimal"
-                    className="w-full px-2 py-1.5 rounded border border-slate-600 bg-slate-900 text-slate-100 text-sm"
+                    className="w-full px-2 py-1.5 rounded border border-slate-300 bg-white text-slate-900 text-sm"
                   />
                   <button
                     type="button"
@@ -291,7 +400,7 @@ export default function AllocationPanel({
                     onClick={() =>
                       recharger(Number(tresorerie.replace(/\s/g, "").replace(",", ".")) || 0)
                     }
-                    className="px-2.5 rounded border border-slate-600 text-slate-300 text-xs hover:bg-slate-700 transition disabled:opacity-40"
+                    className="px-2.5 rounded border border-slate-300 text-slate-600 text-xs hover:bg-slate-100 transition disabled:opacity-40"
                   >
                     Appliquer
                   </button>
@@ -303,12 +412,12 @@ export default function AllocationPanel({
               </>
             ) : (
               <>
-                <div className="px-2 py-1.5 rounded border border-slate-700 bg-slate-900/60 text-slate-300 text-sm tabular-nums">
+                <div className="px-2 py-1.5 rounded border border-slate-200 bg-slate-50 text-slate-600 text-sm tabular-nums">
                   {montant(tableau.tresorerieAInvestir)}
                 </div>
                 <p className="text-[10px] text-slate-500 mt-1">
                   Se saisit dans l&apos;allocation{" "}
-                  <span className="text-slate-400">par classe d&apos;actif</span>.
+                  <span className="text-slate-500">par classe d&apos;actif</span>.
                   Cet axe en reçoit la part correspondant à la cible de sa classe.
                 </p>
               </>
@@ -322,7 +431,7 @@ export default function AllocationPanel({
           {tableau.avertissements.map((a) => (
             <p
               key={a}
-              className="text-xs text-amber-300 bg-amber-950/40 border border-amber-800/60 rounded px-3 py-2"
+              className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2"
             >
               {a}
             </p>
@@ -335,8 +444,8 @@ export default function AllocationPanel({
           aria-live="polite"
           className={`text-xs rounded px-3 py-2 border ${
             message.type === "ok"
-              ? "text-emerald-300 bg-emerald-950/40 border-emerald-800/60"
-              : "text-rose-300 bg-rose-950/40 border-rose-800/60"
+              ? "text-emerald-700 bg-emerald-50 border-emerald-200"
+              : "text-rose-700 bg-rose-50 border-rose-200"
           }`}
         >
           {message.texte}
@@ -345,14 +454,14 @@ export default function AllocationPanel({
 
       {/* Conformité avec l'allocation sectorielle */}
       {controles.length > 0 && (
-        <div className="bg-slate-800/40 border border-slate-700 rounded-lg overflow-hidden">
-          <div className="px-4 py-2.5 border-b border-slate-700 flex items-center justify-between gap-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+        <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-slate-200 flex items-center justify-between gap-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-600">
               Conformité à l&apos;allocation sectorielle
             </h3>
             <span
               className={`text-[11px] font-semibold ${
-                nonConformes.length === 0 ? "text-emerald-400" : "text-rose-400"
+                nonConformes.length === 0 ? "text-emerald-600" : "text-rose-600"
               }`}
             >
               {nonConformes.length === 0
@@ -362,7 +471,7 @@ export default function AllocationPanel({
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
-              <thead className="bg-slate-900/60 text-slate-400">
+              <thead className="bg-slate-50 text-slate-500">
                 <tr>
                   <th className="text-left px-3 py-2 font-medium">Secteur</th>
                   <th className="text-right px-3 py-2 font-medium">Somme des titres</th>
@@ -371,14 +480,14 @@ export default function AllocationPanel({
                   <th className="text-left px-3 py-2 font-medium">Verdict</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-700/60">
+              <tbody className="divide-y divide-slate-200">
                 {controles.map((c) => (
                   <tr key={c.groupe}>
-                    <td className="px-3 py-1.5 text-slate-300">{c.groupe}</td>
-                    <td className="px-3 py-1.5 text-right tabular-nums text-slate-200">
+                    <td className="px-3 py-1.5 text-slate-600">{c.groupe}</td>
+                    <td className="px-3 py-1.5 text-right tabular-nums text-slate-800">
                       {pct(c.sommeTitres)}
                     </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums text-slate-200">
+                    <td className="px-3 py-1.5 text-right tabular-nums text-slate-800">
                       {c.cibleGroupe === null ? "—" : pct(c.cibleGroupe)}
                     </td>
                     <td
@@ -386,8 +495,8 @@ export default function AllocationPanel({
                         c.ecart === null
                           ? "text-slate-500"
                           : Math.abs(c.ecart) <= TOLERANCE_ALLOCATION
-                            ? "text-emerald-400"
-                            : "text-rose-400"
+                            ? "text-emerald-600"
+                            : "text-rose-600"
                       }`}
                     >
                       {c.ecart === null
@@ -400,9 +509,9 @@ export default function AllocationPanel({
                           secteur non alloué — la somme des titres n&apos;est pas contrainte
                         </span>
                       ) : c.conforme ? (
-                        <span className="text-emerald-400">conforme</span>
+                        <span className="text-emerald-600">conforme</span>
                       ) : (
-                        <span className="text-rose-400">
+                        <span className="text-rose-600">
                           {(c.ecart ?? 0) > 0 ? "dépassement" : "manque"} à corriger
                         </span>
                       )}
@@ -416,16 +525,16 @@ export default function AllocationPanel({
       )}
 
       {/* Tableau */}
-      <div className="bg-slate-800/40 border border-slate-700 rounded-lg overflow-hidden">
+      <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
         {masquees > 0 && !edition && (
-          <div className="px-3 py-2 border-b border-slate-700 flex items-center justify-between gap-3">
+          <div className="px-3 py-2 border-b border-slate-200 flex items-center justify-between gap-3">
             <span className="text-[11px] text-slate-500">
               {masquees} poste(s) de l&apos;univers masqué(s) : ni cible ni position.
             </span>
             <button
               type="button"
               onClick={() => setFiltrer((f) => !f)}
-              className="text-[11px] text-blue-300 hover:text-blue-200 transition"
+              className="text-[11px] text-blue-700 hover:text-blue-900 transition"
             >
               {filtrer ? "Afficher tout l'univers" : "Masquer les postes vides"}
             </button>
@@ -433,7 +542,7 @@ export default function AllocationPanel({
         )}
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
-            <thead className="bg-slate-900/60 text-slate-400">
+            <thead className="bg-slate-50 text-slate-500">
               <tr>
                 <th className="text-left px-3 py-2.5 font-medium">
                   {LIBELLE_AXE[tableau.dimension]}
@@ -466,7 +575,7 @@ export default function AllocationPanel({
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-700/60">
+            <tbody className="divide-y divide-slate-200">
               {groupes.map((g) => (
                 <Fragment key={g.cle ?? "__tout__"}>
                   {g.cle !== null && (
@@ -480,7 +589,7 @@ export default function AllocationPanel({
                   {g.lignes.map((l) => (
                 <Fragment key={l.bucket}>
                 <tr
-                  className={`hover:bg-slate-800/40 ${l.detenu ? "" : "opacity-70"}`}
+                  className={`hover:bg-slate-50 ${l.detenu ? "" : "opacity-70"}`}
                 >
                   <td className="px-3 py-2">
                     {l.positions.length > 0 ? (
@@ -488,7 +597,7 @@ export default function AllocationPanel({
                         type="button"
                         onClick={() => setDeplie(deplie === l.bucket ? null : l.bucket)}
                         title={`Voir les ${l.positions.length} ligne(s) de ce poste`}
-                        className="text-slate-200 hover:text-white transition text-left"
+                        className="text-slate-800 hover:text-slate-900 transition text-left"
                       >
                         <span className="text-slate-500 mr-1.5 inline-block w-2">
                           {deplie === l.bucket ? "▾" : "▸"}
@@ -499,7 +608,7 @@ export default function AllocationPanel({
                         </span>
                       </button>
                     ) : (
-                      <span className="text-slate-200">{l.libelle}</span>
+                      <span className="text-slate-800">{l.libelle}</span>
                     )}
                     {/* « Non détenu » qualifie un poste de l'univers de marché
                         que le fonds n'a pas en portefeuille. La liquidité n'est
@@ -510,7 +619,7 @@ export default function AllocationPanel({
                     {!l.detenu && l.bucket !== "tresorerie" && (
                       <span
                         title="Poste de l'univers de marché non détenu par le fonds"
-                        className="ml-2 text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-700/70 text-slate-400"
+                        className="ml-2 text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 text-slate-500"
                       >
                         non détenu
                       </span>
@@ -519,16 +628,16 @@ export default function AllocationPanel({
                       <span className="block text-[10px] text-slate-500">{l.detail}</span>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums text-slate-400">
+                  <td className="px-3 py-2 text-right tabular-nums text-slate-500">
                     {montant(l.valeurPrecedente)}
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums text-slate-400">
+                  <td className="px-3 py-2 text-right tabular-nums text-slate-500">
                     {pct(l.allocationPrecedente)}
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums text-slate-200">
+                  <td className="px-3 py-2 text-right tabular-nums text-slate-800">
                     {montant(l.valeurActuelle)}
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums text-slate-200">
+                  <td className="px-3 py-2 text-right tabular-nums text-slate-800">
                     {pct(l.allocationActuelle)}
                   </td>
                   {tableau.classeParente && (
@@ -545,10 +654,10 @@ export default function AllocationPanel({
                         }
                         placeholder="—"
                         inputMode="decimal"
-                        className="w-20 px-1.5 py-1 rounded border border-slate-600 bg-slate-900 text-slate-100 text-right text-xs"
+                        className="w-20 px-1.5 py-1 rounded border border-slate-300 bg-white text-slate-900 text-right text-xs"
                       />
                     ) : (
-                      <span className="text-white font-semibold">
+                      <span className="text-slate-900 font-semibold">
                         {pct(l.allocationValidee)}
                       </span>
                     )}
@@ -557,7 +666,7 @@ export default function AllocationPanel({
                     {l.tro === null ? "—" : pct(l.tro)}
                   </td>
                   <td className={`px-3 py-2 ${couleur(l.ecart)}`}>{l.operation ?? "—"}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-slate-300">
+                  <td className="px-3 py-2 text-right tabular-nums text-slate-600">
                     {montant(l.valeurCible)}
                   </td>
                   <td
@@ -567,7 +676,7 @@ export default function AllocationPanel({
                   </td>
                 </tr>
                 {deplie === l.bucket && (
-                  <tr className="bg-slate-900/50">
+                  <tr className="bg-slate-50">
                     <td colSpan={nbColonnes} className="px-3 py-2">
                       <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1.5">
                         {l.positions.length} ligne(s) d&apos;inventaire sous ce poste
@@ -579,12 +688,12 @@ export default function AllocationPanel({
                             className="flex items-baseline justify-between gap-4 text-[11px]"
                           >
                             <span>
-                              <span className="font-mono text-slate-300">{p.code}</span>
+                              <span className="font-mono text-slate-600">{p.code}</span>
                               {p.libelle && (
                                 <span className="text-slate-500 ml-2">{p.libelle}</span>
                               )}
                             </span>
-                            <span className="tabular-nums text-slate-300 shrink-0">
+                            <span className="tabular-nums text-slate-600 shrink-0">
                               {montant(p.valorisation)}
                             </span>
                           </li>
@@ -598,7 +707,7 @@ export default function AllocationPanel({
                 </Fragment>
               ))}
             </tbody>
-            <tfoot className="bg-slate-900/60 text-slate-300 font-semibold">
+            <tfoot className="bg-slate-50 text-slate-600 font-semibold">
               <tr>
                 <td className="px-3 py-2">Total</td>
                 <td className="px-3 py-2 text-right tabular-nums">
@@ -622,8 +731,8 @@ export default function AllocationPanel({
                   className={`px-3 py-2 text-right tabular-nums ${
                     edition
                       ? Math.abs(sommeSaisie - 1) > 0.001
-                        ? "text-rose-400"
-                        : "text-emerald-400"
+                        ? "text-rose-600"
+                        : "text-emerald-600"
                       : ""
                   }`}
                 >
@@ -649,14 +758,17 @@ export default function AllocationPanel({
         </div>
 
         {edition && (
-          <div className="px-3 py-3 border-t border-slate-700 flex flex-wrap items-center gap-3">
+          <div className="px-3 py-3 border-t border-slate-200 flex flex-wrap items-center gap-3">
             <button
               type="button"
-              disabled={
-                enCours || Math.abs(sommeSaisie - 1) > 0.001 || nonConformes.length > 0
-              }
+              // Seule la somme reste bloquante : une allocation qui ne boucle
+              // pas fausse toutes les valeurs cibles. L'écart sectoriel, lui,
+              // ne bloque plus — l'enregistrement recalcule l'axe « par
+              // secteur » à partir des titres, si bien que les deux ne peuvent
+              // plus se contredire.
+              disabled={enCours || Math.abs(sommeSaisie - 1) > 0.001}
               onClick={enregistrer}
-              className="px-3 py-1.5 rounded-md bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-500 transition disabled:opacity-40 disabled:cursor-not-allowed"
+              className="px-3 py-1.5 rounded-md bg-emerald-600 text-slate-900 text-xs font-semibold hover:bg-emerald-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {enCours ? "Enregistrement…" : "Enregistrer l'allocation"}
             </button>
@@ -664,28 +776,61 @@ export default function AllocationPanel({
               type="button"
               onClick={() => {
                 setEdition(false);
+                setSource("personnalisee");
+                setConfirmationSecteur(false);
                 setMessage(null);
               }}
-              className="px-3 py-1.5 rounded-md border border-slate-600 text-slate-300 text-xs hover:bg-slate-700 transition"
+              className="px-3 py-1.5 rounded-md border border-slate-300 text-slate-600 text-xs hover:bg-slate-100 transition"
             >
               Annuler
             </button>
             <span
               className={`text-xs ${
-                Math.abs(sommeSaisie - 1) > 0.001 ? "text-rose-400" : "text-emerald-400"
+                Math.abs(sommeSaisie - 1) > 0.001 ? "text-rose-600" : "text-emerald-600"
               }`}
             >
               Somme : {pct(sommeSaisie)}
               {Math.abs(sommeSaisie - 1) > 0.001 &&
                 " — l'enregistrement exige 100 %, sinon toutes les valeurs cibles seraient fausses."}
             </span>
-            {nonConformes.length > 0 && (
-              <span className="text-xs text-rose-400">
-                {nonConformes.length} secteur(s) en écart avec l&apos;allocation
-                sectorielle : {nonConformes.map((c) => c.groupe).join(", ")}.
-                L&apos;enregistrement est bloqué tant que les deux axes se
-                contredisent.
+            {axe === "action_titre" && nonConformes.length > 0 && !confirmationSecteur && (
+              <span className="text-xs text-slate-500">
+                L&apos;allocation sectorielle sera recalculée depuis ces titres :{" "}
+                {nonConformes.map((c) => c.groupe).join(", ")}.
               </span>
+            )}
+
+            {confirmationSecteur && (
+              <div className="w-full bg-amber-50 border border-amber-300 rounded px-3 py-2.5">
+                <p className="text-xs text-amber-800 font-medium">
+                  L&apos;allocation sectorielle enregistrée va être remplacée par
+                  la somme des titres.
+                </p>
+                <ul className="mt-1.5 text-[11px] text-amber-800 space-y-0.5">
+                  {nonConformes.map((c) => (
+                    <li key={c.groupe} className="tabular-nums">
+                      {c.groupe} : {pct(c.cibleGroupe)} → {pct(c.sommeTitres)}
+                    </li>
+                  ))}
+                </ul>
+                <div className="flex gap-2 mt-2.5">
+                  <button
+                    type="button"
+                    onClick={enregistrer}
+                    disabled={enCours}
+                    className="px-3 py-1.5 rounded-md bg-amber-600 text-white text-xs font-semibold hover:bg-amber-700 transition disabled:opacity-40"
+                  >
+                    Remplacer et enregistrer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmationSecteur(false)}
+                    className="px-3 py-1.5 rounded-md border border-amber-300 text-amber-800 text-xs hover:bg-amber-100 transition"
+                  >
+                    Revenir à la saisie
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         )}
@@ -695,9 +840,9 @@ export default function AllocationPanel({
       {/* Détail des lignes non rattachées : un montant agrégé ne dit pas quoi
           corriger, la liste et le motif si. */}
       {tableau.nonRapprochees.length > 0 && (
-        <div className="bg-slate-800/40 border border-amber-800/50 rounded-lg overflow-hidden">
-          <div className="px-4 py-2.5 border-b border-slate-700">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-amber-300">
+        <div className="bg-white border border-amber-200 rounded-lg overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-slate-200">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-amber-700">
               Lignes non rattachées à cet axe — {tableau.nonRapprochees.length}
             </h3>
             <p className="text-[11px] text-slate-500 mt-0.5">
@@ -708,7 +853,7 @@ export default function AllocationPanel({
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
-              <thead className="bg-slate-900/60 text-slate-400">
+              <thead className="bg-slate-50 text-slate-500">
                 <tr>
                   <th className="text-left px-3 py-2 font-medium">Code</th>
                   <th className="text-left px-3 py-2 font-medium">Libellé</th>
@@ -717,20 +862,20 @@ export default function AllocationPanel({
                   <th className="text-left px-3 py-2 font-medium">Ce qui manque</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-700/60">
+              <tbody className="divide-y divide-slate-200">
                 {tableau.nonRapprochees.map((l, i) => (
-                  <tr key={`${l.code}-${i}`} className="hover:bg-slate-800/40">
-                    <td className="px-3 py-1.5 font-mono text-slate-200">{l.code}</td>
-                    <td className="px-3 py-1.5 text-slate-400">{l.libelle || "—"}</td>
-                    <td className="px-3 py-1.5 text-right tabular-nums text-slate-200">
+                  <tr key={`${l.code}-${i}`} className="hover:bg-slate-50">
+                    <td className="px-3 py-1.5 font-mono text-slate-800">{l.code}</td>
+                    <td className="px-3 py-1.5 text-slate-500">{l.libelle || "—"}</td>
+                    <td className="px-3 py-1.5 text-right tabular-nums text-slate-800">
                       {montant(l.valorisation)}
                     </td>
                     <td className="px-3 py-1.5">
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-700/70 text-slate-300">
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
                         {l.matchKind}
                       </span>
                     </td>
-                    <td className="px-3 py-1.5 text-amber-400/90">{l.motif}</td>
+                    <td className="px-3 py-1.5 text-amber-600">{l.motif}</td>
                   </tr>
                 ))}
               </tbody>
@@ -740,10 +885,10 @@ export default function AllocationPanel({
       )}
 
       <p className="text-[11px] text-slate-500 leading-relaxed">
-        <span className="text-slate-400">Valeur cible</span> = allocation validée ×
-        (actif net + trésorerie à investir). <span className="text-slate-400">Montant à
+        <span className="text-slate-500">Valeur cible</span> = allocation validée ×
+        (actif net + trésorerie à investir). <span className="text-slate-500">Montant à
         réaliser</span> = valeur cible − valeur actuelle.{" "}
-        <span className="text-slate-400">TRO</span> (taux de réalisation des opérations) =
+        <span className="text-slate-500">TRO</span> (taux de réalisation des opérations) =
         (valeur actuelle − valeur précédente) ÷ (valeur cible − valeur précédente) : la
         part du chemin déjà parcourue depuis l&apos;inventaire précédent. Il reste vide
         quand la cible coïncide avec le point de départ — il n&apos;y avait rien à
@@ -776,29 +921,29 @@ function GroupeSecteur({
 }) {
   const enEcart = controle !== null && controle.cibleGroupe !== null && !controle.conforme;
   return (
-    <tr className={enEcart ? "bg-rose-950/30" : "bg-slate-900/40"}>
+    <tr className={enEcart ? "bg-rose-50" : "bg-slate-50"}>
       <td colSpan={nbColonnes} className="px-3 py-1.5">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-300">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-600">
             {secteur}
           </span>
           <span className="text-[10px] text-slate-500">{nbTitres} valeur(s)</span>
           {controle && (
             <>
-              <span className="text-[11px] text-slate-400">
+              <span className="text-[11px] text-slate-500">
                 Somme des titres{" "}
-                <b className="text-slate-200 tabular-nums">{pct(controle.sommeTitres)}</b>
+                <b className="text-slate-800 tabular-nums">{pct(controle.sommeTitres)}</b>
               </span>
-              <span className="text-[11px] text-slate-400">
+              <span className="text-[11px] text-slate-500">
                 Allocation secteur{" "}
-                <b className="text-slate-200 tabular-nums">
+                <b className="text-slate-800 tabular-nums">
                   {controle.cibleGroupe === null ? "non allouée" : pct(controle.cibleGroupe)}
                 </b>
               </span>
               {controle.cibleGroupe !== null && (
                 <span
                   className={`text-[11px] font-semibold tabular-nums ${
-                    controle.conforme ? "text-emerald-400" : "text-rose-400"
+                    controle.conforme ? "text-emerald-600" : "text-rose-600"
                   }`}
                 >
                   {controle.conforme
@@ -826,10 +971,10 @@ function Tuile({
   alerte?: boolean;
 }) {
   return (
-    <div className="bg-slate-900/50 border border-slate-700 rounded-md px-3 py-2">
+    <div className="bg-slate-50 border border-slate-200 rounded-md px-3 py-2">
       <div className="text-[10px] uppercase tracking-wider text-slate-500">{libelle}</div>
       <div
-        className={`text-sm mt-0.5 tabular-nums ${alerte ? "text-amber-400 font-semibold" : "text-slate-200"}`}
+        className={`text-sm mt-0.5 tabular-nums ${alerte ? "text-amber-600 font-semibold" : "text-slate-800"}`}
       >
         {valeur}
       </div>

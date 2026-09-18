@@ -46,7 +46,7 @@ function daysBetween(a: string, b: string): number {
 type VLPoint = NavPoint & { vl: number };
 
 const inputCls =
-  "px-2 py-1 text-xs bg-slate-900 border border-slate-700 rounded text-white focus:outline-none focus:border-blue-500";
+  "px-2 py-1 text-xs bg-white border border-slate-200 rounded text-slate-900 focus:outline-none focus:border-blue-500";
 
 // Tableau de rééquilibrage : allocation validée saisie → valeur cible + TRO.
 function RebalancingTable({
@@ -87,13 +87,13 @@ function RebalancingTable({
   const alloc = (v: number, t: number) => (t > 0 ? (v / t) * 100 : 0);
 
   return (
-    <section className="bg-slate-800/40 border border-slate-700 rounded-lg overflow-x-auto">
-      <div className="px-3 py-2 border-b border-slate-700">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-300">{title}</h3>
+    <section className="bg-white border border-slate-200 rounded-lg overflow-x-auto">
+      <div className="px-3 py-2 border-b border-slate-200">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-600">{title}</h3>
       </div>
       <table className="w-full text-[11px]">
         <thead>
-          <tr className="text-[9px] uppercase tracking-wide text-slate-500 border-b border-slate-700 bg-slate-900/60">
+          <tr className="text-[9px] uppercase tracking-wide text-slate-500 border-b border-slate-200 bg-slate-50">
             <th className="px-2 py-2 text-left font-medium">Actifs</th>
             <th className="px-2 py-2 text-right font-medium">Valeur précédente</th>
             <th className="px-2 py-2 text-right font-medium">Alloc. précédente</th>
@@ -108,18 +108,18 @@ function RebalancingTable({
           {rows.map((r, i) => {
             const t = tro(i);
             return (
-              <tr key={r.classe} className="border-b border-slate-800/60">
-                <td className="px-2 py-2 text-left text-slate-300">{r.classe}</td>
-                <td className="px-2 py-2 text-right font-mono text-slate-300">
+              <tr key={r.classe} className="border-b border-slate-200">
+                <td className="px-2 py-2 text-left text-slate-600">{r.classe}</td>
+                <td className="px-2 py-2 text-right font-mono text-slate-600">
                   {fmt(r.valeurPrecedente, 0)}
                 </td>
-                <td className="px-2 py-2 text-right font-mono text-slate-400">
+                <td className="px-2 py-2 text-right font-mono text-slate-500">
                   {fmt(alloc(r.valeurPrecedente, totalPrecedente))} %
                 </td>
-                <td className="px-2 py-2 text-right font-mono text-slate-200">
+                <td className="px-2 py-2 text-right font-mono text-slate-800">
                   {fmt(r.valeurActuelle, 0)}
                 </td>
-                <td className="px-2 py-2 text-right font-mono text-slate-400">
+                <td className="px-2 py-2 text-right font-mono text-slate-500">
                   {fmt(alloc(r.valeurActuelle, totalActuelle))} %
                 </td>
                 <td className="px-2 py-2 text-right">
@@ -132,10 +132,10 @@ function RebalancingTable({
                     <span className="text-slate-500">%</span>
                   </span>
                 </td>
-                <td className="px-2 py-2 text-right font-mono text-slate-200">{fmt(cible(i), 0)}</td>
+                <td className="px-2 py-2 text-right font-mono text-slate-800">{fmt(cible(i), 0)}</td>
                 <td
                   className={`px-2 py-2 text-right font-mono ${
-                    t == null ? "text-slate-500" : t >= 0 ? "text-emerald-400" : "text-red-400"
+                    t == null ? "text-slate-500" : t >= 0 ? "text-emerald-600" : "text-red-600"
                   }`}
                 >
                   {t == null ? "—" : `${fmt(t)} %`}
@@ -143,17 +143,17 @@ function RebalancingTable({
               </tr>
             );
           })}
-          <tr className="border-t border-slate-700 bg-slate-900/40 font-semibold">
-            <td className="px-2 py-2 text-left text-slate-200">TOTAL</td>
-            <td className="px-2 py-2 text-right font-mono text-slate-200">{fmt(totalPrecedente, 0)}</td>
-            <td className="px-2 py-2 text-right font-mono text-slate-400">100,00 %</td>
-            <td className="px-2 py-2 text-right font-mono text-slate-200">{fmt(totalActuelle, 0)}</td>
-            <td className="px-2 py-2 text-right font-mono text-slate-400">100,00 %</td>
-            <td className="px-2 py-2 text-right font-mono text-slate-300">{fmt(totalValide)} %</td>
-            <td className="px-2 py-2 text-right font-mono text-slate-200">{fmt(totalCible, 0)}</td>
+          <tr className="border-t border-slate-200 bg-slate-50 font-semibold">
+            <td className="px-2 py-2 text-left text-slate-800">TOTAL</td>
+            <td className="px-2 py-2 text-right font-mono text-slate-800">{fmt(totalPrecedente, 0)}</td>
+            <td className="px-2 py-2 text-right font-mono text-slate-500">100,00 %</td>
+            <td className="px-2 py-2 text-right font-mono text-slate-800">{fmt(totalActuelle, 0)}</td>
+            <td className="px-2 py-2 text-right font-mono text-slate-500">100,00 %</td>
+            <td className="px-2 py-2 text-right font-mono text-slate-600">{fmt(totalValide)} %</td>
+            <td className="px-2 py-2 text-right font-mono text-slate-800">{fmt(totalCible, 0)}</td>
             <td
               className={`px-2 py-2 text-right font-mono ${
-                troTotal == null ? "text-slate-500" : troTotal >= 0 ? "text-emerald-400" : "text-red-400"
+                troTotal == null ? "text-slate-500" : troTotal >= 0 ? "text-emerald-600" : "text-red-600"
               }`}
             >
               {troTotal == null ? "—" : `${fmt(troTotal)} %`}
@@ -204,13 +204,13 @@ function AllocationProposalTable({
   const totalMontant = rows.reduce((s, r) => s + (cible(r) - r.valeurActuelle), 0);
 
   return (
-    <section className="bg-slate-800/40 border border-slate-700 rounded-lg overflow-x-auto">
-      <div className="px-3 py-2 border-b border-slate-700">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-300">{title}</h3>
+    <section className="bg-white border border-slate-200 rounded-lg overflow-x-auto">
+      <div className="px-3 py-2 border-b border-slate-200">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-600">{title}</h3>
       </div>
       <table className="w-full text-[11px]">
         <thead>
-          <tr className="text-[9px] uppercase tracking-wide text-slate-500 border-b border-slate-700 bg-slate-900/60">
+          <tr className="text-[9px] uppercase tracking-wide text-slate-500 border-b border-slate-200 bg-slate-50">
             <th className="px-2 py-2 text-left font-medium">{firstCol}</th>
             <th className="px-2 py-2 text-right font-medium">Valeur actuelle</th>
             <th className="px-2 py-2 text-right font-medium">Alloc. actuelle</th>
@@ -223,14 +223,14 @@ function AllocationProposalTable({
           {rows.map((r) => {
             const montant = cible(r) - r.valeurActuelle;
             return (
-              <tr key={r.classe} className="border-b border-slate-800/60">
-                <td className="px-2 py-2 text-left text-slate-300">
+              <tr key={r.classe} className="border-b border-slate-200">
+                <td className="px-2 py-2 text-left text-slate-600">
                   {PROPOSAL_LABELS[r.classe] ?? r.classe}
                 </td>
-                <td className="px-2 py-2 text-right font-mono text-slate-200">
+                <td className="px-2 py-2 text-right font-mono text-slate-800">
                   {fmt(r.valeurActuelle, 0)}
                 </td>
-                <td className="px-2 py-2 text-right font-mono text-slate-400">
+                <td className="px-2 py-2 text-right font-mono text-slate-500">
                   {fmt(totalActuelle > 0 ? (r.valeurActuelle / totalActuelle) * 100 : 0)} %
                 </td>
                 <td className="px-2 py-2 text-right">
@@ -243,10 +243,10 @@ function AllocationProposalTable({
                     <span className="text-slate-500">%</span>
                   </span>
                 </td>
-                <td className="px-2 py-2 text-right font-mono text-slate-200">{fmt(cible(r), 0)}</td>
+                <td className="px-2 py-2 text-right font-mono text-slate-800">{fmt(cible(r), 0)}</td>
                 <td
                   className={`px-2 py-2 text-right font-mono ${
-                    montant >= 0 ? "text-emerald-400" : "text-red-400"
+                    montant >= 0 ? "text-emerald-600" : "text-red-600"
                   }`}
                 >
                   {fmt(montant, 0)}
@@ -254,13 +254,13 @@ function AllocationProposalTable({
               </tr>
             );
           })}
-          <tr className="border-t border-slate-700 bg-slate-900/40 font-semibold">
-            <td className="px-2 py-2 text-left text-slate-200">TOTAL</td>
-            <td className="px-2 py-2 text-right font-mono text-slate-200">{fmt(totalActuelle, 0)}</td>
-            <td className="px-2 py-2 text-right font-mono text-slate-400">100,00 %</td>
-            <td className="px-2 py-2 text-right font-mono text-slate-300">{fmt(totalValide)} %</td>
-            <td className="px-2 py-2 text-right font-mono text-slate-200">{fmt(totalCible, 0)}</td>
-            <td className="px-2 py-2 text-right font-mono text-slate-200">{fmt(totalMontant, 0)}</td>
+          <tr className="border-t border-slate-200 bg-slate-50 font-semibold">
+            <td className="px-2 py-2 text-left text-slate-800">TOTAL</td>
+            <td className="px-2 py-2 text-right font-mono text-slate-800">{fmt(totalActuelle, 0)}</td>
+            <td className="px-2 py-2 text-right font-mono text-slate-500">100,00 %</td>
+            <td className="px-2 py-2 text-right font-mono text-slate-600">{fmt(totalValide)} %</td>
+            <td className="px-2 py-2 text-right font-mono text-slate-800">{fmt(totalCible, 0)}</td>
+            <td className="px-2 py-2 text-right font-mono text-slate-800">{fmt(totalMontant, 0)}</td>
           </tr>
         </tbody>
       </table>
@@ -286,13 +286,13 @@ function BondTopFlopTable({
 }) {
   if (rows.length === 0) return null;
   return (
-    <section className="bg-slate-800/40 border border-slate-700 rounded-lg overflow-x-auto">
-      <div className="px-3 py-2 border-b border-slate-700">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-300">{title}</h3>
+    <section className="bg-white border border-slate-200 rounded-lg overflow-x-auto">
+      <div className="px-3 py-2 border-b border-slate-200">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-600">{title}</h3>
       </div>
       <table className="w-full text-[11px]">
         <thead>
-          <tr className="text-[9px] uppercase tracking-wide text-slate-500 border-b border-slate-700 bg-slate-900/60">
+          <tr className="text-[9px] uppercase tracking-wide text-slate-500 border-b border-slate-200 bg-slate-50">
             <th className="px-2 py-2 text-left font-medium">Titres</th>
             <th className="px-2 py-2 text-right font-medium">Poids</th>
             <th className="px-2 py-2 text-right font-medium">% Var. cours</th>
@@ -303,28 +303,28 @@ function BondTopFlopTable({
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.nom} className="border-b border-slate-800/60">
-              <td className="px-2 py-2 text-left text-slate-300">{r.nom}</td>
-              <td className="px-2 py-2 text-right font-mono text-slate-300">{fmt(r.poids)} %</td>
+            <tr key={r.nom} className="border-b border-slate-200">
+              <td className="px-2 py-2 text-left text-slate-600">{r.nom}</td>
+              <td className="px-2 py-2 text-right font-mono text-slate-600">{fmt(r.poids)} %</td>
               <td
                 className={`px-2 py-2 text-right font-mono ${
-                  r.varPct == null ? "text-slate-300" : r.varPct >= 0 ? "text-emerald-400" : "text-red-400"
+                  r.varPct == null ? "text-slate-600" : r.varPct >= 0 ? "text-emerald-600" : "text-red-600"
                 }`}
               >
                 {pct(r.varPct)}
               </td>
-              <td className="px-2 py-2 text-right font-mono text-slate-200">{fmt(r.varMontant, 0)}</td>
-              <td className="px-2 py-2 text-right font-mono text-slate-400">{fmt(r.decote, 0)}</td>
-              <td className="px-2 py-2 text-right font-mono text-slate-200">{fmt(r.pmv, 0)}</td>
+              <td className="px-2 py-2 text-right font-mono text-slate-800">{fmt(r.varMontant, 0)}</td>
+              <td className="px-2 py-2 text-right font-mono text-slate-500">{fmt(r.decote, 0)}</td>
+              <td className="px-2 py-2 text-right font-mono text-slate-800">{fmt(r.pmv, 0)}</td>
             </tr>
           ))}
-          <tr className="border-t border-slate-700 bg-slate-900/40 font-semibold">
-            <td className="px-2 py-2 text-left text-slate-200">TOTAL</td>
+          <tr className="border-t border-slate-200 bg-slate-50 font-semibold">
+            <td className="px-2 py-2 text-left text-slate-800">TOTAL</td>
             <td className="px-2 py-2"></td>
             <td className="px-2 py-2"></td>
-            <td className="px-2 py-2 text-right font-mono text-slate-200">{fmt(totals.varMontant, 0)}</td>
-            <td className="px-2 py-2 text-right font-mono text-slate-300">{fmt(totals.decote, 0)}</td>
-            <td className="px-2 py-2 text-right font-mono text-slate-200">{fmt(totals.pmv, 0)}</td>
+            <td className="px-2 py-2 text-right font-mono text-slate-800">{fmt(totals.varMontant, 0)}</td>
+            <td className="px-2 py-2 text-right font-mono text-slate-600">{fmt(totals.decote, 0)}</td>
+            <td className="px-2 py-2 text-right font-mono text-slate-800">{fmt(totals.pmv, 0)}</td>
           </tr>
         </tbody>
       </table>
@@ -352,13 +352,13 @@ function TopFlopTable({
 }) {
   if (rows.length === 0) return null;
   return (
-    <section className="bg-slate-800/40 border border-slate-700 rounded-lg overflow-x-auto">
-      <div className="px-3 py-2 border-b border-slate-700">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-300">{title}</h3>
+    <section className="bg-white border border-slate-200 rounded-lg overflow-x-auto">
+      <div className="px-3 py-2 border-b border-slate-200">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-600">{title}</h3>
       </div>
       <table className="w-full text-[11px]">
         <thead>
-          <tr className="text-[9px] uppercase tracking-wide text-slate-500 border-b border-slate-700 bg-slate-900/60">
+          <tr className="text-[9px] uppercase tracking-wide text-slate-500 border-b border-slate-200 bg-slate-50">
             <th className="px-2 py-2 text-left font-medium">Sociétés</th>
             <th className="px-2 py-2 text-right font-medium">Poids</th>
             <th className="px-2 py-2 text-right font-medium">% Var. cours</th>
@@ -368,25 +368,25 @@ function TopFlopTable({
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.nom} className="border-b border-slate-800/60">
-              <td className="px-2 py-2 text-left text-slate-300">{r.nom}</td>
-              <td className="px-2 py-2 text-right font-mono text-slate-300">{fmt(r.poids)} %</td>
+            <tr key={r.nom} className="border-b border-slate-200">
+              <td className="px-2 py-2 text-left text-slate-600">{r.nom}</td>
+              <td className="px-2 py-2 text-right font-mono text-slate-600">{fmt(r.poids)} %</td>
               <td
                 className={`px-2 py-2 text-right font-mono ${
-                  r.varPct == null ? "text-slate-300" : r.varPct >= 0 ? "text-emerald-400" : "text-red-400"
+                  r.varPct == null ? "text-slate-600" : r.varPct >= 0 ? "text-emerald-600" : "text-red-600"
                 }`}
               >
                 {pct(r.varPct)}
               </td>
-              <td className="px-2 py-2 text-right font-mono text-slate-200">{fmt(r.varMontant, 0)}</td>
-              <td className="px-2 py-2 text-right font-mono text-slate-400">{pct(r.contribution)}</td>
+              <td className="px-2 py-2 text-right font-mono text-slate-800">{fmt(r.varMontant, 0)}</td>
+              <td className="px-2 py-2 text-right font-mono text-slate-500">{pct(r.contribution)}</td>
             </tr>
           ))}
-          <tr className="border-t border-slate-700 bg-slate-900/40 font-semibold">
-            <td className="px-2 py-2 text-left text-slate-200">TOTAL</td>
+          <tr className="border-t border-slate-200 bg-slate-50 font-semibold">
+            <td className="px-2 py-2 text-left text-slate-800">TOTAL</td>
             <td className="px-2 py-2"></td>
             <td className="px-2 py-2"></td>
-            <td className="px-2 py-2 text-right font-mono text-slate-200">{fmt(total, 0)}</td>
+            <td className="px-2 py-2 text-right font-mono text-slate-800">{fmt(total, 0)}</td>
             <td className="px-2 py-2"></td>
           </tr>
         </tbody>
@@ -804,7 +804,7 @@ export default function PerformancePanel({
 
   if (!bounds || !metrics) {
     return (
-      <section className="bg-slate-800/40 border border-slate-700 rounded-lg p-8 text-center text-sm text-slate-500">
+      <section className="bg-white border border-slate-200 rounded-lg p-8 text-center text-sm text-slate-500">
         Analyse indisponible : importe l&apos;historique de valeur liquidative (onglet « Valeur
         liquidative ») pour calculer la performance.
       </section>
@@ -813,17 +813,17 @@ export default function PerformancePanel({
 
   const m = metrics;
   const tone = (n: number | null | undefined) =>
-    n == null ? "text-slate-300" : n >= 0 ? "text-emerald-400" : "text-red-400";
+    n == null ? "text-slate-600" : n >= 0 ? "text-emerald-600" : "text-red-600";
 
   return (
     <div className="space-y-5">
       {/* Paramètres */}
-      <section className="bg-slate-800/40 border border-slate-700 rounded-lg p-4">
+      <section className="bg-white border border-slate-200 rounded-lg p-4">
         <div className="flex items-center justify-end mb-2 h-4">
           <span
             className={`text-[10px] ${
               saveState === "saved"
-                ? "text-emerald-400"
+                ? "text-emerald-600"
                 : saveState === "saving"
                   ? "text-slate-500"
                   : "text-transparent"
@@ -870,7 +870,7 @@ export default function PerformancePanel({
           performance − benchmark.
         </p>
         {bench && bench.unresolved.length > 0 && (
-          <p className="text-[10px] text-amber-400/90 mt-1">
+          <p className="text-[10px] text-amber-600 mt-1">
             Composantes sans série historique (exclues, poids renormalisés) :{" "}
             {bench.unresolved.join(", ")}
             {bench.coverageYtd < 1 ? ` — couverture ${Math.round(bench.coverageYtd * 100)} %` : ""}
@@ -879,10 +879,10 @@ export default function PerformancePanel({
       </section>
 
       {/* Tableau de performance */}
-      <section className="bg-slate-800/40 border border-slate-700 rounded-lg overflow-x-auto">
+      <section className="bg-white border border-slate-200 rounded-lg overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
-            <tr className="text-[10px] uppercase tracking-wider text-slate-500 border-b border-slate-700 bg-slate-900/60">
+            <tr className="text-[10px] uppercase tracking-wider text-slate-500 border-b border-slate-200 bg-slate-50">
               <th className="px-3 py-2 text-left font-medium"></th>
               <th className="px-3 py-2 text-right font-medium">{m.dateVlDebut}</th>
               <th className="px-3 py-2 text-right font-medium">{m.dateVlFin}</th>
@@ -891,48 +891,48 @@ export default function PerformancePanel({
             </tr>
           </thead>
           <tbody>
-            <tr className="border-b border-slate-800">
-              <td className="px-3 py-2 text-slate-300 font-medium">Valeur liquidative</td>
-              <td className="px-3 py-2 text-right font-mono text-slate-200">{fmt(m.vlDebut)}</td>
-              <td className="px-3 py-2 text-right font-mono text-slate-200">{fmt(m.vlFin)}</td>
+            <tr className="border-b border-slate-200">
+              <td className="px-3 py-2 text-slate-600 font-medium">Valeur liquidative</td>
+              <td className="px-3 py-2 text-right font-mono text-slate-800">{fmt(m.vlDebut)}</td>
+              <td className="px-3 py-2 text-right font-mono text-slate-800">{fmt(m.vlFin)}</td>
               <td className={`px-3 py-2 text-right font-mono ${tone(m.perfPeriode)}`}>{pct(m.perfPeriode)}</td>
               <td className={`px-3 py-2 text-right font-mono ${tone(m.perfYtd)}`}>{pct(m.perfYtd)}</td>
             </tr>
-            <tr className="border-b border-slate-800">
-              <td className="px-3 py-2 text-slate-300 font-medium">Benchmark</td>
+            <tr className="border-b border-slate-200">
+              <td className="px-3 py-2 text-slate-600 font-medium">Benchmark</td>
               <td className="px-3 py-2"></td>
               <td className="px-3 py-2"></td>
               <td className={`px-3 py-2 text-right font-mono ${tone(m.benchPeriode)}`}>{pct(m.benchPeriode)}</td>
               <td className={`px-3 py-2 text-right font-mono ${tone(m.benchYtd)}`}>{pct(m.benchYtd)}</td>
             </tr>
-            <tr className="border-b border-slate-800">
-              <td className="px-3 py-2 text-slate-300 font-medium">Alpha</td>
+            <tr className="border-b border-slate-200">
+              <td className="px-3 py-2 text-slate-600 font-medium">Alpha</td>
               <td className="px-3 py-2"></td>
               <td className="px-3 py-2"></td>
               <td className={`px-3 py-2 text-right font-mono ${tone(m.alphaPeriode)}`}>{pct(m.alphaPeriode)}</td>
               <td className={`px-3 py-2 text-right font-mono ${tone(m.alphaYtd)}`}>{pct(m.alphaYtd)}</td>
             </tr>
-            <tr className="border-b border-slate-800">
-              <td className="px-3 py-2 text-slate-300 font-medium">Volatilité</td>
+            <tr className="border-b border-slate-200">
+              <td className="px-3 py-2 text-slate-600 font-medium">Volatilité</td>
               <td className="px-3 py-2"></td>
               <td className="px-3 py-2"></td>
-              <td className="px-3 py-2 text-right font-mono text-slate-300">{pct(m.volPeriode)}</td>
-              <td className="px-3 py-2 text-right font-mono text-slate-300">{pct(m.volYtd)}</td>
+              <td className="px-3 py-2 text-right font-mono text-slate-600">{pct(m.volPeriode)}</td>
+              <td className="px-3 py-2 text-right font-mono text-slate-600">{pct(m.volYtd)}</td>
             </tr>
             <tr>
-              <td className="px-3 py-2 text-slate-300 font-medium">Ratio de Sharpe</td>
+              <td className="px-3 py-2 text-slate-600 font-medium">Ratio de Sharpe</td>
               <td className="px-3 py-2"></td>
               <td className="px-3 py-2"></td>
-              <td className="px-3 py-2 text-right font-mono text-slate-300">{fmt(m.sharpePeriode)}</td>
-              <td className="px-3 py-2 text-right font-mono text-slate-300">{fmt(m.sharpeYtd)}</td>
+              <td className="px-3 py-2 text-right font-mono text-slate-600">{fmt(m.sharpePeriode)}</td>
+              <td className="px-3 py-2 text-right font-mono text-slate-600">{fmt(m.sharpeYtd)}</td>
             </tr>
           </tbody>
         </table>
       </section>
 
       {/* Import de la balance générale (performance comptable par classe) */}
-      <section className="bg-slate-800/40 border border-slate-700 rounded-lg p-4">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">
+      <section className="bg-white border border-slate-200 rounded-lg p-4">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
           Balance générale (attribution comptable)
         </h3>
         <p className="text-[11px] text-slate-500 mb-3">
@@ -949,26 +949,26 @@ export default function PerformancePanel({
             ref={balFileRef}
             type="file"
             accept=".xlsx,.xlsm"
-            className="text-[12px] text-slate-400 file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border-0 file:bg-slate-700 file:text-slate-200 file:text-sm hover:file:bg-slate-600"
+            className="text-[12px] text-slate-500 file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border-0 file:bg-slate-100 file:text-slate-700 file:text-sm hover:file:bg-slate-200"
           />
           <button
             type="button"
             onClick={importBalance}
             disabled={balImporting}
-            className="px-4 py-2 text-sm font-medium rounded-md border border-blue-500/50 bg-blue-600/15 text-blue-300 hover:bg-blue-600/25 transition disabled:opacity-50"
+            className="px-4 py-2 text-sm font-medium rounded-md border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 transition disabled:opacity-50"
           >
             {balImporting ? "Import…" : "Importer la balance"}
           </button>
-          {balErr && <span className="text-[12px] text-red-400 self-center">{balErr}</span>}
-          {balMsg && <span className="text-[12px] text-emerald-400 self-center">✓ {balMsg}</span>}
+          {balErr && <span className="text-[12px] text-red-600 self-center">{balErr}</span>}
+          {balMsg && <span className="text-[12px] text-emerald-600 self-center">✓ {balMsg}</span>}
         </div>
       </section>
 
       {/* Attribution par classe d'actif */}
       {attr && attr.length > 0 && (
-        <section className="bg-slate-800/40 border border-slate-700 rounded-lg overflow-x-auto">
-          <div className="px-3 py-2 border-b border-slate-700 flex items-center justify-between gap-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+        <section className="bg-white border border-slate-200 rounded-lg overflow-x-auto">
+          <div className="px-3 py-2 border-b border-slate-200 flex items-center justify-between gap-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-600">
               Attribution par classe d&apos;actif
             </h3>
             {attrMeta && (
@@ -980,7 +980,7 @@ export default function PerformancePanel({
           </div>
           <table className="w-full text-xs">
             <thead>
-              <tr className="text-[10px] uppercase tracking-wider text-slate-500 border-b border-slate-700 bg-slate-900/60">
+              <tr className="text-[10px] uppercase tracking-wider text-slate-500 border-b border-slate-200 bg-slate-50">
                 <th className="px-3 py-2 text-left font-medium">Actifs</th>
                 <th className="px-3 py-2 text-right font-medium">Poids</th>
                 <th className="px-3 py-2 text-right font-medium">Performance</th>
@@ -990,9 +990,9 @@ export default function PerformancePanel({
             </thead>
             <tbody>
               {attr.map((r) => (
-                <tr key={r.classe} className="border-b border-slate-800/60 last:border-0">
-                  <td className="px-3 py-2 text-slate-300 font-medium">{r.classe}</td>
-                  <td className="px-3 py-2 text-right font-mono text-slate-300">{fmt(r.poids)} %</td>
+                <tr key={r.classe} className="border-b border-slate-200 last:border-0">
+                  <td className="px-3 py-2 text-slate-600 font-medium">{r.classe}</td>
+                  <td className="px-3 py-2 text-right font-mono text-slate-600">{fmt(r.poids)} %</td>
                   <td className={`px-3 py-2 text-right font-mono ${tone(r.performance)}`}>{pct(r.performance)}</td>
                   <td className={`px-3 py-2 text-right font-mono ${tone(r.benchmark)}`}>{pct(r.benchmark)}</td>
                   <td className={`px-3 py-2 text-right font-mono ${tone(r.alpha)}`}>{pct(r.alpha)}</td>
@@ -1119,15 +1119,15 @@ export default function PerformancePanel({
 
       {/* OPCVM détenus : perf du FCP vs moyenne de sa catégorie */}
       {opcvmRows && opcvmRows.length > 0 && (
-        <section className="bg-slate-800/40 border border-slate-700 rounded-lg overflow-x-auto">
-          <div className="px-3 py-2 border-b border-slate-700">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+        <section className="bg-white border border-slate-200 rounded-lg overflow-x-auto">
+          <div className="px-3 py-2 border-b border-slate-200">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-600">
               OPCVM détenus — performance vs catégorie
             </h3>
           </div>
           <table className="w-full text-[11px]">
             <thead>
-              <tr className="text-[9px] uppercase tracking-wide text-slate-500 border-b border-slate-700 bg-slate-900/60">
+              <tr className="text-[9px] uppercase tracking-wide text-slate-500 border-b border-slate-200 bg-slate-50">
                 <th className="px-2 py-2 text-left font-medium">FCP</th>
                 <th className="px-2 py-2 text-right font-medium">Performance fonds</th>
                 <th className="px-2 py-2 text-right font-medium">Performance benchmark</th>
@@ -1136,16 +1136,16 @@ export default function PerformancePanel({
             </thead>
             <tbody>
               {opcvmRows.map((r) => (
-                <tr key={`${r.nom}|${r.categorie}`} className="border-b border-slate-800/60">
-                  <td className="px-2 py-2 text-left text-slate-300">
+                <tr key={`${r.nom}|${r.categorie}`} className="border-b border-slate-200">
+                  <td className="px-2 py-2 text-left text-slate-600">
                     {r.nom}
                     {r.categorie ? <span className="text-slate-500"> ({r.categorie})</span> : null}
                   </td>
-                  <td className="px-2 py-2 text-right font-mono text-slate-200">{pct(r.perfFonds)}</td>
-                  <td className="px-2 py-2 text-right font-mono text-slate-300">{pct(r.perfBenchmark)}</td>
+                  <td className="px-2 py-2 text-right font-mono text-slate-800">{pct(r.perfFonds)}</td>
+                  <td className="px-2 py-2 text-right font-mono text-slate-600">{pct(r.perfBenchmark)}</td>
                   <td
                     className={`px-2 py-2 text-right font-mono ${
-                      r.alpha == null ? "text-slate-300" : r.alpha >= 0 ? "text-emerald-400" : "text-red-400"
+                      r.alpha == null ? "text-slate-600" : r.alpha >= 0 ? "text-emerald-600" : "text-red-600"
                     }`}
                   >
                     {pct(r.alpha)}
@@ -1163,15 +1163,15 @@ export default function PerformancePanel({
 
       {/* DAT détenus : performance vs benchmark (repris de l'attribution DAT) */}
       {datRows && datRows.length > 0 && (
-        <section className="bg-slate-800/40 border border-slate-700 rounded-lg overflow-x-auto">
-          <div className="px-3 py-2 border-b border-slate-700">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+        <section className="bg-white border border-slate-200 rounded-lg overflow-x-auto">
+          <div className="px-3 py-2 border-b border-slate-200">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-600">
               Dépôts à terme — performance vs benchmark
             </h3>
           </div>
           <table className="w-full text-[11px]">
             <thead>
-              <tr className="text-[9px] uppercase tracking-wide text-slate-500 border-b border-slate-700 bg-slate-900/60">
+              <tr className="text-[9px] uppercase tracking-wide text-slate-500 border-b border-slate-200 bg-slate-50">
                 <th className="px-2 py-2 text-left font-medium">DAT</th>
                 <th className="px-2 py-2 text-right font-medium">Performance</th>
                 <th className="px-2 py-2 text-right font-medium">Performance benchmark</th>
@@ -1180,13 +1180,13 @@ export default function PerformancePanel({
             </thead>
             <tbody>
               {datRows.map((r) => (
-                <tr key={r.nom} className="border-b border-slate-800/60">
-                  <td className="px-2 py-2 text-left text-slate-300">{r.nom}</td>
-                  <td className="px-2 py-2 text-right font-mono text-slate-200">{pct(r.performance)}</td>
-                  <td className="px-2 py-2 text-right font-mono text-slate-300">{pct(r.benchmark)}</td>
+                <tr key={r.nom} className="border-b border-slate-200">
+                  <td className="px-2 py-2 text-left text-slate-600">{r.nom}</td>
+                  <td className="px-2 py-2 text-right font-mono text-slate-800">{pct(r.performance)}</td>
+                  <td className="px-2 py-2 text-right font-mono text-slate-600">{pct(r.benchmark)}</td>
                   <td
                     className={`px-2 py-2 text-right font-mono ${
-                      r.alpha == null ? "text-slate-300" : r.alpha >= 0 ? "text-emerald-400" : "text-red-400"
+                      r.alpha == null ? "text-slate-600" : r.alpha >= 0 ? "text-emerald-600" : "text-red-600"
                     }`}
                   >
                     {pct(r.alpha)}
@@ -1290,18 +1290,18 @@ function SectorSelectionTable({
   const th = "px-2 py-2 text-right font-medium";
   const td = "px-2 py-2 text-right font-mono";
   const cTone = (n: number | null) =>
-    n == null ? "text-slate-300" : n >= 0 ? "text-emerald-400" : "text-red-400";
+    n == null ? "text-slate-600" : n >= 0 ? "text-emerald-600" : "text-red-600";
 
   return (
-    <section className="bg-slate-800/40 border border-slate-700 rounded-lg overflow-x-auto">
-      <div className="px-3 py-2 border-b border-slate-700">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+    <section className="bg-white border border-slate-200 rounded-lg overflow-x-auto">
+      <div className="px-3 py-2 border-b border-slate-200">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-600">
           Effet de sélection sectorielle — Actions
         </h3>
       </div>
       <table className="w-full text-[11px]">
         <thead>
-          <tr className="text-[9px] uppercase tracking-wide text-slate-500 border-b border-slate-700 bg-slate-900/60">
+          <tr className="text-[9px] uppercase tracking-wide text-slate-500 border-b border-slate-200 bg-slate-50">
             <th className="px-2 py-2 text-left font-medium">Secteurs</th>
             <th className={th}>Fonds</th>
             <th className={th}>BRVM</th>
@@ -1315,12 +1315,12 @@ function SectorSelectionTable({
         </thead>
         <tbody>
           {data.map(({ r, diff, effet, effetBe, pmv }) => (
-            <tr key={r.secteur} className="border-b border-slate-800/60">
-              <td className="px-2 py-2 text-left text-slate-300 font-medium">{r.secteur}</td>
+            <tr key={r.secteur} className="border-b border-slate-200">
+              <td className="px-2 py-2 text-left text-slate-600 font-medium">{r.secteur}</td>
               <td className={`${td} ${cTone(r.rpSector)}`}>{pct(r.rpSector)}</td>
               <td className={`${td} ${cTone(r.rbSector)}`}>{pct(r.rbSector)}</td>
               <td className={`${td} ${cTone(diff)}`}>{pct(diff)}</td>
-              <td className={`${td} text-slate-400`}>{fmt(r.wb)} %</td>
+              <td className={`${td} text-slate-500`}>{fmt(r.wb)} %</td>
               <td className={`${td} ${cTone(effet)}`}>{pct(effet)}</td>
               <td className="px-2 py-1.5 text-right">
                 <div className="relative inline-block w-20">
@@ -1329,24 +1329,24 @@ function SectorSelectionTable({
                     value={secBe[r.secteur] ?? ""}
                     onChange={(e) => setSecBe((prev) => ({ ...prev, [r.secteur]: e.target.value }))}
                     placeholder="0"
-                    className="w-full px-2 py-1 text-[11px] text-right bg-slate-900 border border-slate-700 rounded text-white focus:outline-none focus:border-blue-500"
+                    className="w-full px-2 py-1 text-[11px] text-right bg-white border border-slate-200 rounded text-slate-900 focus:outline-none focus:border-blue-500"
                   />
                 </div>
               </td>
               <td className={`${td} ${cTone(effetBe)}`}>{pct(effetBe)}</td>
-              <td className={`${td} text-slate-300`}>{fmt(pmv, 0)}</td>
+              <td className={`${td} text-slate-600`}>{fmt(pmv, 0)}</td>
             </tr>
           ))}
-          <tr className="border-t border-slate-700 bg-slate-900/40 font-semibold">
-            <td className="px-2 py-2 text-left text-slate-200">TOTAL</td>
+          <tr className="border-t border-slate-200 bg-slate-50 font-semibold">
+            <td className="px-2 py-2 text-left text-slate-800">TOTAL</td>
             <td className={td}></td>
             <td className={td}></td>
             <td className={td}></td>
-            <td className={`${td} text-slate-300`}>{fmt(sum((x) => x.r.wb))} %</td>
+            <td className={`${td} text-slate-600`}>{fmt(sum((x) => x.r.wb))} %</td>
             <td className={`${td} ${cTone(sum((x) => x.effet))}`}>{pct(sum((x) => x.effet))}</td>
             <td className={td}></td>
             <td className={`${td} ${cTone(sum((x) => x.effetBe))}`}>{pct(sum((x) => x.effetBe))}</td>
-            <td className={`${td} text-slate-200`}>{fmt(sum((x) => x.pmv), 0)}</td>
+            <td className={`${td} text-slate-800`}>{fmt(sum((x) => x.pmv), 0)}</td>
           </tr>
         </tbody>
       </table>
@@ -1390,18 +1390,18 @@ function SectorAllocationTable({
   const th = "px-2 py-2 text-right font-medium";
   const td = "px-2 py-2 text-right font-mono";
   const cTone = (n: number | null) =>
-    n == null ? "text-slate-300" : n >= 0 ? "text-emerald-400" : "text-red-400";
+    n == null ? "text-slate-600" : n >= 0 ? "text-emerald-600" : "text-red-600";
 
   return (
-    <section className="bg-slate-800/40 border border-slate-700 rounded-lg overflow-x-auto">
-      <div className="px-3 py-2 border-b border-slate-700">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+    <section className="bg-white border border-slate-200 rounded-lg overflow-x-auto">
+      <div className="px-3 py-2 border-b border-slate-200">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-600">
           Effet d&apos;allocation sectorielle — Actions
         </h3>
       </div>
       <table className="w-full text-[11px]">
         <thead>
-          <tr className="text-[9px] uppercase tracking-wide text-slate-500 border-b border-slate-700 bg-slate-900/60">
+          <tr className="text-[9px] uppercase tracking-wide text-slate-500 border-b border-slate-200 bg-slate-50">
             <th className="px-2 py-2 text-left font-medium">Secteurs</th>
             <th className={th}>Valo. (MFCFA)</th>
             <th className={th}>Fonds</th>
@@ -1415,11 +1415,11 @@ function SectorAllocationTable({
         </thead>
         <tbody>
           {data.map(({ r, diffPerf, diffPoids, effet, effetSim }) => (
-            <tr key={r.secteur} className="border-b border-slate-800/60">
-              <td className="px-2 py-2 text-left text-slate-300 font-medium">{r.secteur}</td>
-              <td className={`${td} text-slate-300`}>{fmt(r.valuation / 1_000_000, 0)}</td>
-              <td className={`${td} text-slate-300`}>{fmt(r.wp)} %</td>
-              <td className={`${td} text-slate-400`}>{fmt(r.wb)} %</td>
+            <tr key={r.secteur} className="border-b border-slate-200">
+              <td className="px-2 py-2 text-left text-slate-600 font-medium">{r.secteur}</td>
+              <td className={`${td} text-slate-600`}>{fmt(r.valuation / 1_000_000, 0)}</td>
+              <td className={`${td} text-slate-600`}>{fmt(r.wp)} %</td>
+              <td className={`${td} text-slate-500`}>{fmt(r.wb)} %</td>
               <td className={`${td} ${cTone(diffPoids)}`}>{fmt(diffPoids)} %</td>
               <td className={`${td} ${cTone(diffPerf)}`}>{pct(diffPerf)}</td>
               <td className={`${td} ${cTone(effet)}`}>{pct(effet)}</td>
@@ -1430,22 +1430,22 @@ function SectorAllocationTable({
                     value={secW[r.secteur] ?? ""}
                     onChange={(e) => setSecW((prev) => ({ ...prev, [r.secteur]: e.target.value }))}
                     placeholder={fmt(r.wb)}
-                    className="w-full px-2 py-1 text-[11px] text-right bg-slate-900 border border-slate-700 rounded text-white focus:outline-none focus:border-blue-500"
+                    className="w-full px-2 py-1 text-[11px] text-right bg-white border border-slate-200 rounded text-slate-900 focus:outline-none focus:border-blue-500"
                   />
                 </div>
               </td>
               <td className={`${td} ${cTone(effetSim)}`}>{pct(effetSim)}</td>
             </tr>
           ))}
-          <tr className="border-t border-slate-700 bg-slate-900/40 font-semibold">
-            <td className="px-2 py-2 text-left text-slate-200">TOTAL</td>
-            <td className={`${td} text-slate-200`}>{fmt(totVal / 1_000_000, 0)}</td>
-            <td className={`${td} text-slate-200`}>{fmt(sum((x) => x.r.wp))} %</td>
-            <td className={`${td} text-slate-300`}>{fmt(sum((x) => x.r.wb))} %</td>
+          <tr className="border-t border-slate-200 bg-slate-50 font-semibold">
+            <td className="px-2 py-2 text-left text-slate-800">TOTAL</td>
+            <td className={`${td} text-slate-800`}>{fmt(totVal / 1_000_000, 0)}</td>
+            <td className={`${td} text-slate-800`}>{fmt(sum((x) => x.r.wp))} %</td>
+            <td className={`${td} text-slate-600`}>{fmt(sum((x) => x.r.wb))} %</td>
             <td className={td}></td>
             <td className={td}></td>
             <td className={`${td} ${cTone(sum((x) => x.effet))}`}>{pct(sum((x) => x.effet))}</td>
-            <td className={`${td} text-slate-200`}>
+            <td className={`${td} text-slate-800`}>
               {fmt(sum((x) => parse(secW[x.r.secteur] ?? String(x.r.wb))))} %
             </td>
             <td className={`${td} ${cTone(sum((x) => x.effetSim))}`}>{pct(sum((x) => x.effetSim))}</td>
@@ -1501,18 +1501,18 @@ function RecapTable({
   ];
   const td = "px-3 py-2 text-right font-mono";
   const cTone = (n: number | null) =>
-    n == null ? "text-slate-300" : n >= 0 ? "text-emerald-400" : "text-red-400";
+    n == null ? "text-slate-600" : n >= 0 ? "text-emerald-600" : "text-red-600";
 
   return (
-    <section className="bg-slate-800/40 border border-slate-700 rounded-lg overflow-x-auto">
-      <div className="px-3 py-2 border-b border-slate-700">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+    <section className="bg-white border border-slate-200 rounded-lg overflow-x-auto">
+      <div className="px-3 py-2 border-b border-slate-200">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-600">
           Récapitulatif de l&apos;analyse de performance
         </h3>
       </div>
       <table className="w-full text-xs max-w-lg">
         <thead>
-          <tr className="text-[9px] uppercase tracking-wide text-slate-500 border-b border-slate-700 bg-slate-900/60">
+          <tr className="text-[9px] uppercase tracking-wide text-slate-500 border-b border-slate-200 bg-slate-50">
             <th className="px-3 py-2 text-left font-medium"></th>
             <th className={td}>Valeur</th>
             <th className={td}>Contribution</th>
@@ -1522,11 +1522,11 @@ function RecapTable({
           {lignes.map((l, i) => (
             <tr
               key={l.label}
-              className={`border-b border-slate-800/60 ${l.label === "Alpha" ? "bg-slate-900/40 font-semibold" : ""}`}
+              className={`border-b border-slate-200 ${l.label === "Alpha" ? "bg-slate-50 font-semibold" : ""}`}
             >
-              <td className="px-3 py-2 text-left text-slate-300 font-medium">{l.label}</td>
+              <td className="px-3 py-2 text-left text-slate-600 font-medium">{l.label}</td>
               <td className={`${td} ${cTone(l.valeur)}`}>{pct(l.valeur)}</td>
-              <td className={`${td} text-slate-400`}>{i === 3 ? "100,00 %" : pct(contrib(l.valeur))}</td>
+              <td className={`${td} text-slate-500`}>{i === 3 ? "100,00 %" : pct(contrib(l.valeur))}</td>
             </tr>
           ))}
         </tbody>
@@ -1576,18 +1576,18 @@ function SelectionEffectTable({
   const th = "px-2 py-2 text-right font-medium";
   const td = "px-2 py-2 text-right font-mono";
   const cTone = (n: number | null) =>
-    n == null ? "text-slate-300" : n >= 0 ? "text-emerald-400" : "text-red-400";
+    n == null ? "text-slate-600" : n >= 0 ? "text-emerald-600" : "text-red-600";
 
   return (
-    <section className="bg-slate-800/40 border border-slate-700 rounded-lg overflow-x-auto">
-      <div className="px-3 py-2 border-b border-slate-700">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+    <section className="bg-white border border-slate-200 rounded-lg overflow-x-auto">
+      <div className="px-3 py-2 border-b border-slate-200">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-600">
           Effet de sélection d&apos;actif
         </h3>
       </div>
       <table className="w-full text-[11px]">
         <thead>
-          <tr className="text-[9px] uppercase tracking-wide text-slate-500 border-b border-slate-700 bg-slate-900/60">
+          <tr className="text-[9px] uppercase tracking-wide text-slate-500 border-b border-slate-200 bg-slate-50">
             <th className="px-2 py-2 text-left font-medium">Secteurs</th>
             <th className={th}>Perf. fonds</th>
             <th className={th}>Benchmark</th>
@@ -1601,12 +1601,12 @@ function SelectionEffectTable({
         </thead>
         <tbody>
           {rows.map(({ r, wb, diff, effet, effetBe, pmv }) => (
-            <tr key={r.classe} className="border-b border-slate-800/60">
-              <td className="px-2 py-2 text-left text-slate-300 font-medium">{r.classe}</td>
+            <tr key={r.classe} className="border-b border-slate-200">
+              <td className="px-2 py-2 text-left text-slate-600 font-medium">{r.classe}</td>
               <td className={`${td} ${cTone(r.performance)}`}>{pct(r.performance)}</td>
               <td className={`${td} ${cTone(r.benchmark)}`}>{pct(r.benchmark)}</td>
               <td className={`${td} ${cTone(diff)}`}>{pct(diff)}</td>
-              <td className={`${td} text-slate-400`}>{fmt(wb)} %</td>
+              <td className={`${td} text-slate-500`}>{fmt(wb)} %</td>
               <td className={`${td} ${cTone(effet)}`}>{pct(effet)}</td>
               <td className="px-2 py-1.5 text-right">
                 <div className="relative inline-block w-20">
@@ -1615,24 +1615,24 @@ function SelectionEffectTable({
                     value={beDiff[r.classe] ?? ""}
                     onChange={(e) => setBeDiff((prev) => ({ ...prev, [r.classe]: e.target.value }))}
                     placeholder="0"
-                    className="w-full px-2 py-1 text-[11px] text-right bg-slate-900 border border-slate-700 rounded text-white focus:outline-none focus:border-blue-500"
+                    className="w-full px-2 py-1 text-[11px] text-right bg-white border border-slate-200 rounded text-slate-900 focus:outline-none focus:border-blue-500"
                   />
                 </div>
               </td>
               <td className={`${td} ${cTone(effetBe)}`}>{pct(effetBe)}</td>
-              <td className={`${td} text-slate-300`}>{fmt(pmv, 0)}</td>
+              <td className={`${td} text-slate-600`}>{fmt(pmv, 0)}</td>
             </tr>
           ))}
-          <tr className="border-t border-slate-700 bg-slate-900/40 font-semibold">
-            <td className="px-2 py-2 text-left text-slate-200">TOTAL</td>
+          <tr className="border-t border-slate-200 bg-slate-50 font-semibold">
+            <td className="px-2 py-2 text-left text-slate-800">TOTAL</td>
             <td className={td}></td>
             <td className={td}></td>
             <td className={td}></td>
-            <td className={`${td} text-slate-300`}>{fmt(sum((x) => x.wb))} %</td>
+            <td className={`${td} text-slate-600`}>{fmt(sum((x) => x.wb))} %</td>
             <td className={`${td} ${cTone(sum((x) => x.effet))}`}>{pct(sum((x) => x.effet))}</td>
             <td className={td}></td>
             <td className={`${td} ${cTone(sum((x) => x.effetBe))}`}>{pct(sum((x) => x.effetBe))}</td>
-            <td className={`${td} text-slate-200`}>{fmt(sum((x) => x.pmv), 0)}</td>
+            <td className={`${td} text-slate-800`}>{fmt(sum((x) => x.pmv), 0)}</td>
           </tr>
         </tbody>
       </table>
@@ -1679,18 +1679,18 @@ function AllocationEffectTable({
   const th = "px-2 py-2 text-right font-medium";
   const td = "px-2 py-2 text-right font-mono";
   const cTone = (n: number | null) =>
-    n == null ? "text-slate-300" : n >= 0 ? "text-emerald-400" : "text-red-400";
+    n == null ? "text-slate-600" : n >= 0 ? "text-emerald-600" : "text-red-600";
 
   return (
-    <section className="bg-slate-800/40 border border-slate-700 rounded-lg overflow-x-auto">
-      <div className="px-3 py-2 border-b border-slate-700">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+    <section className="bg-white border border-slate-200 rounded-lg overflow-x-auto">
+      <div className="px-3 py-2 border-b border-slate-200">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-600">
           Effet d&apos;allocation d&apos;actif
         </h3>
       </div>
       <table className="w-full text-[11px]">
         <thead>
-          <tr className="text-[9px] uppercase tracking-wide text-slate-500 border-b border-slate-700 bg-slate-900/60">
+          <tr className="text-[9px] uppercase tracking-wide text-slate-500 border-b border-slate-200 bg-slate-50">
             <th className="px-2 py-2 text-left font-medium">Actifs</th>
             <th className={th}>Valo. (MFCFA)</th>
             <th className={th}>Alloc. actuelle</th>
@@ -1705,13 +1705,13 @@ function AllocationEffectTable({
         </thead>
         <tbody>
           {rows.map(({ a, diffPerf, diffPoids, effet, effetSim }) => (
-            <tr key={a.classe} className="border-b border-slate-800/60">
-              <td className="px-2 py-2 text-left text-slate-300 font-medium">{a.classe}</td>
-              <td className={`${td} text-slate-300`}>{fmt(a.valuation / 1_000_000, 0)}</td>
-              <td className={`${td} text-slate-300`}>{fmt(a.poids)} %</td>
+            <tr key={a.classe} className="border-b border-slate-200">
+              <td className="px-2 py-2 text-left text-slate-600 font-medium">{a.classe}</td>
+              <td className={`${td} text-slate-600`}>{fmt(a.valuation / 1_000_000, 0)}</td>
+              <td className={`${td} text-slate-600`}>{fmt(a.poids)} %</td>
               <td className={`${td} ${cTone(a.rbClass)}`}>{pct(a.rbClass)}</td>
               <td className={`${td} ${cTone(diffPerf)}`}>{pct(diffPerf)}</td>
-              <td className={`${td} text-slate-400`}>{fmt(a.wb)} %</td>
+              <td className={`${td} text-slate-500`}>{fmt(a.wb)} %</td>
               <td className={`${td} ${cTone(diffPoids)}`}>{fmt(diffPoids)} %</td>
               <td className={`${td} ${cTone(effet)}`}>{pct(effet)}</td>
               <td className="px-2 py-1.5 text-right">
@@ -1720,23 +1720,23 @@ function AllocationEffectTable({
                     inputMode="decimal"
                     value={objW[a.classe] ?? String(a.wb)}
                     onChange={(e) => setObjW((prev) => ({ ...prev, [a.classe]: e.target.value }))}
-                    className="w-full px-2 py-1 text-[11px] text-right bg-slate-900 border border-slate-700 rounded text-white focus:outline-none focus:border-blue-500"
+                    className="w-full px-2 py-1 text-[11px] text-right bg-white border border-slate-200 rounded text-slate-900 focus:outline-none focus:border-blue-500"
                   />
                 </div>
               </td>
               <td className={`${td} ${cTone(effetSim)}`}>{pct(effetSim)}</td>
             </tr>
           ))}
-          <tr className="border-t border-slate-700 bg-slate-900/40 font-semibold">
-            <td className="px-2 py-2 text-left text-slate-200">TOTAL</td>
-            <td className={`${td} text-slate-200`}>{fmt(totVal / 1_000_000, 0)}</td>
-            <td className={`${td} text-slate-200`}>{fmt(sum((r) => r.a.poids))} %</td>
+          <tr className="border-t border-slate-200 bg-slate-50 font-semibold">
+            <td className="px-2 py-2 text-left text-slate-800">TOTAL</td>
+            <td className={`${td} text-slate-800`}>{fmt(totVal / 1_000_000, 0)}</td>
+            <td className={`${td} text-slate-800`}>{fmt(sum((r) => r.a.poids))} %</td>
             <td className={td}></td>
             <td className={td}></td>
-            <td className={`${td} text-slate-300`}>{fmt(sum((r) => r.a.wb))} %</td>
+            <td className={`${td} text-slate-600`}>{fmt(sum((r) => r.a.wb))} %</td>
             <td className={`${td} ${cTone(sum((r) => r.diffPoids))}`}>{fmt(sum((r) => r.diffPoids))} %</td>
             <td className={`${td} ${cTone(sum((r) => r.effet))}`}>{pct(sum((r) => r.effet))}</td>
-            <td className={`${td} text-slate-200`}>{fmt(sum((r) => r.wObj))} %</td>
+            <td className={`${td} text-slate-800`}>{fmt(sum((r) => r.wObj))} %</td>
             <td className={`${td} ${cTone(sum((r) => r.effetSim))}`}>{pct(sum((r) => r.effetSim))}</td>
           </tr>
         </tbody>

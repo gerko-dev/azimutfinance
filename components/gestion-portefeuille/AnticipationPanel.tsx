@@ -42,10 +42,10 @@ const couleur = (v: number | null) =>
   v === null || !Number.isFinite(v)
     ? "text-slate-500"
     : v > 0.05
-      ? "text-emerald-400"
+      ? "text-emerald-600"
       : v < -0.05
-        ? "text-rose-400"
-        : "text-slate-300";
+        ? "text-rose-600"
+        : "text-slate-600";
 
 const dateFr = (iso: string | null) => {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? "");
@@ -262,13 +262,13 @@ export default function AnticipationPanel({
   return (
     <div className="space-y-4">
       {/* En-tête */}
-      <div className="bg-slate-800/40 border border-slate-700 rounded-lg p-4">
+      <div className="bg-white border border-slate-200 rounded-lg p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h3 className="text-sm font-semibold text-white">
+            <h3 className="text-sm font-semibold text-slate-900">
               Analyse et anticipations de cours
             </h3>
-            <p className="text-xs text-slate-400 mt-1 max-w-3xl">
+            <p className="text-xs text-slate-500 mt-1 max-w-3xl">
               Six méthodes appliquées à chaque valeur de la cote, détenue ou non —
               anticiper sert d&apos;abord à décider d&apos;entrer sur un titre
               qu&apos;on n&apos;a pas. Cours arrêtés au {dateFr(tableau.dateReference)}.
@@ -290,7 +290,7 @@ export default function AnticipationPanel({
               value={recherche}
               onChange={(e) => setRecherche(e.target.value)}
               placeholder="Code ou nom"
-              className="px-2.5 py-1.5 rounded border border-slate-600 bg-slate-900 text-slate-100 text-xs w-44"
+              className="px-2.5 py-1.5 rounded border border-slate-300 bg-white text-slate-900 text-xs w-44"
             />
           </div>
           <div>
@@ -304,7 +304,7 @@ export default function AnticipationPanel({
               id="anticip-secteur"
               value={secteur}
               onChange={(e) => setSecteur(e.target.value)}
-              className="px-2.5 py-1.5 rounded border border-slate-600 bg-slate-900 text-slate-100 text-xs w-56"
+              className="px-2.5 py-1.5 rounded border border-slate-300 bg-white text-slate-900 text-xs w-56"
             >
               <option value="">Tous les secteurs</option>
               {secteurs.map((s) => (
@@ -314,7 +314,7 @@ export default function AnticipationPanel({
               ))}
             </select>
           </div>
-          <label className="flex items-center gap-2 text-[11px] text-slate-400 pb-1.5">
+          <label className="flex items-center gap-2 text-[11px] text-slate-500 pb-1.5">
             <input
               type="checkbox"
               checked={detenusSeuls}
@@ -323,7 +323,7 @@ export default function AnticipationPanel({
             />
             Lignes détenues
           </label>
-          <label className="flex items-center gap-2 text-[11px] text-slate-400 pb-1.5">
+          <label className="flex items-center gap-2 text-[11px] text-slate-500 pb-1.5">
             <input
               type="checkbox"
               checked={chiffrablesSeules}
@@ -341,7 +341,7 @@ export default function AnticipationPanel({
                 setDetenusSeuls(false);
                 setChiffrablesSeules(false);
               }}
-              className="text-[11px] text-blue-300 hover:text-blue-200 transition pb-1.5"
+              className="text-[11px] text-blue-700 hover:text-blue-900 transition pb-1.5"
             >
               Réinitialiser
             </button>
@@ -364,8 +364,8 @@ export default function AnticipationPanel({
                 onClick={() => setMethode(m)}
                 className={`px-3 py-1.5 rounded text-[11px] font-medium transition ${
                   m === methode
-                    ? "bg-blue-500/20 text-blue-300 border border-blue-500/40"
-                    : "text-slate-400 border border-slate-700 hover:text-slate-200 hover:border-slate-600"
+                    ? "bg-blue-50 text-blue-700 border border-blue-300"
+                    : "text-slate-500 border border-slate-200 hover:text-slate-900 hover:border-slate-400"
                 }`}
               >
                 {LIBELLE_METHODE[m]}
@@ -412,7 +412,7 @@ export default function AnticipationPanel({
           {tableau.avertissements.map((a) => (
             <p
               key={a}
-              className="text-xs text-amber-300 bg-amber-950/40 border border-amber-800/60 rounded px-3 py-2"
+              className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2"
             >
               {a}
             </p>
@@ -421,9 +421,9 @@ export default function AnticipationPanel({
       )}
 
       {/* Tableau propre à la méthode retenue */}
-      <div className="bg-slate-800/40 border border-slate-700 rounded-lg overflow-hidden">
-        <div className="px-4 py-2.5 border-b border-slate-700">
-          <h4 className="text-xs font-semibold uppercase tracking-wider text-blue-300">
+      <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+        <div className="px-4 py-2.5 border-b border-slate-200">
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-blue-700">
             {LIBELLE_METHODE[methode]}
           </h4>
           <p className="text-[11px] text-slate-500 mt-0.5">
@@ -438,7 +438,7 @@ export default function AnticipationPanel({
         )}
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
-            <thead className="bg-slate-900/60 text-slate-400">
+            <thead className="bg-slate-50 text-slate-500">
               <tr>
                 <th className="text-left px-3 py-2.5 font-medium">Titre</th>
                 <th className="text-left px-3 py-2.5 font-medium">Secteur</th>
@@ -453,21 +453,21 @@ export default function AnticipationPanel({
                     )}
                   </th>
                 ))}
-                <th className="text-right px-3 py-2.5 font-medium text-blue-300 bg-blue-500/10">
+                <th className="text-right px-3 py-2.5 font-medium text-blue-700 bg-blue-50">
                   Cours cible
                 </th>
-                <th className="text-right px-3 py-2.5 font-medium text-blue-300 bg-blue-500/10">
+                <th className="text-right px-3 py-2.5 font-medium text-blue-700 bg-blue-50">
                   Potentiel
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-700/60">
+            <tbody className="divide-y divide-slate-200">
               {triees.map((t) => {
                 const retenue = t.cibles[methode];
                 return (
                   <tr
                     key={t.code}
-                    className={`hover:bg-slate-800/40 ${t.detenu ? "" : "opacity-70"}`}
+                    className={`hover:bg-slate-50 ${t.detenu ? "" : "opacity-70"}`}
                   >
                     <td className="px-3 py-2">
                       <button
@@ -478,10 +478,10 @@ export default function AnticipationPanel({
                         <span className="text-slate-500 mr-1.5 inline-block w-2">
                           {detail === t.code ? "▾" : "▸"}
                         </span>
-                        <span className="font-mono text-slate-200">{t.code}</span>
+                        <span className="font-mono text-slate-800">{t.code}</span>
                         <span className="text-slate-500 ml-2">{t.libelle}</span>
                         {t.detenu && (
-                          <span className="ml-2 text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-300">
+                          <span className="ml-2 text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-blue-50 text-blue-700">
                             détenu
                           </span>
                         )}
@@ -502,14 +502,14 @@ export default function AnticipationPanel({
                         }
                         className={`text-left transition ${
                           secteur === t.secteur
-                            ? "text-blue-300"
-                            : "text-slate-400 hover:text-slate-200"
+                            ? "text-blue-700"
+                            : "text-slate-500 hover:text-slate-900"
                         }`}
                       >
                         {t.secteur}
                       </button>
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-slate-200">
+                    <td className="px-3 py-2 text-right tabular-nums text-slate-800">
                       {montant(t.cours)}
                     </td>
                     {colonnes.map((c) => {
@@ -518,7 +518,7 @@ export default function AnticipationPanel({
                         <td
                           key={c.titre}
                           className={`px-3 py-2 text-right tabular-nums ${
-                            c.signe ? couleur(s) : "text-slate-400"
+                            c.signe ? couleur(s) : "text-slate-500"
                           }`}
                         >
                           {c.valeur(t)}
@@ -527,7 +527,7 @@ export default function AnticipationPanel({
                     })}
                     <td
                       title={retenue.reserve ?? undefined}
-                      className="px-3 py-2 text-right tabular-nums bg-blue-500/10 text-white font-semibold"
+                      className="px-3 py-2 text-right tabular-nums bg-blue-50 text-slate-900 font-semibold"
                     >
                       {retenue.cible === null ? (
                         <span className="text-slate-600 font-normal">n.a.</span>
@@ -536,7 +536,7 @@ export default function AnticipationPanel({
                       )}
                     </td>
                     <td
-                      className={`px-3 py-2 text-right tabular-nums bg-blue-500/10 font-semibold ${couleur(retenue.potentiel)}`}
+                      className={`px-3 py-2 text-right tabular-nums bg-blue-50 font-semibold ${couleur(retenue.potentiel)}`}
                     >
                       {pctSigne(retenue.potentiel)}
                     </td>
@@ -545,7 +545,7 @@ export default function AnticipationPanel({
               })}
               {triees.map((t) =>
                 detail === t.code ? (
-                  <tr key={`${t.code}-detail`} className="bg-slate-900/50">
+                  <tr key={`${t.code}-detail`} className="bg-slate-50">
                     <td colSpan={colonnes.length + 5} className="px-3 py-3">
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2 text-[11px]">
                         <Fait libelle="BPA publié" valeur={montant(t.bpa)} />
@@ -574,8 +574,8 @@ export default function AnticipationPanel({
                       {METHODES.some((m) => t.cibles[m].reserve) && (
                         <ul className="mt-2 space-y-0.5">
                           {METHODES.filter((m) => t.cibles[m].reserve).map((m) => (
-                            <li key={m} className="text-[10px] text-amber-400/80">
-                              <span className="text-slate-400">{LIBELLE_METHODE[m]}</span>{" "}
+                            <li key={m} className="text-[10px] text-amber-600">
+                              <span className="text-slate-500">{LIBELLE_METHODE[m]}</span>{" "}
                               — {t.cibles[m].reserve}
                             </li>
                           ))}
@@ -615,14 +615,14 @@ function BandeauProjection({ p }: { p: ProjectionFonds }) {
     <div
       className={`rounded-lg border p-4 ${
         atteint === null
-          ? "bg-slate-800/40 border-slate-700"
+          ? "bg-white border-slate-200"
           : atteint
-            ? "bg-emerald-950/30 border-emerald-800/60"
-            : "bg-amber-950/30 border-amber-800/60"
+            ? "bg-emerald-50 border-emerald-200"
+            : "bg-amber-50 border-amber-200"
       }`}
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+        <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-600">
           Projection du fonds au 31 décembre
         </h4>
         <span className="text-[11px] text-slate-500">
@@ -674,7 +674,7 @@ function BandeauProjection({ p }: { p: ProjectionFonds }) {
       </div>
 
       {p.avertissement && (
-        <p className="text-[11px] text-amber-300 mt-2">{p.avertissement}</p>
+        <p className="text-[11px] text-amber-700 mt-2">{p.avertissement}</p>
       )}
     </div>
   );
@@ -692,7 +692,7 @@ function Fait({
   return (
     <div>
       <div className="text-[10px] uppercase tracking-wider text-slate-600">{libelle}</div>
-      <div className="text-slate-300 tabular-nums">{valeur}</div>
+      <div className="text-slate-600 tabular-nums">{valeur}</div>
       {detail && <div className="text-[10px] text-slate-600">{detail}</div>}
     </div>
   );
@@ -708,9 +708,9 @@ function Tuile({
   detail?: string;
 }) {
   return (
-    <div className="bg-slate-900/50 border border-slate-700 rounded-md px-3 py-2">
+    <div className="bg-slate-50 border border-slate-200 rounded-md px-3 py-2">
       <div className="text-[10px] uppercase tracking-wider text-slate-500">{libelle}</div>
-      <div className="text-sm text-slate-200 mt-0.5 tabular-nums">{valeur}</div>
+      <div className="text-sm text-slate-800 mt-0.5 tabular-nums">{valeur}</div>
       {detail && <div className="text-[10px] text-slate-500 mt-0.5">{detail}</div>}
     </div>
   );

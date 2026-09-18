@@ -51,7 +51,7 @@ export default async function FundManagePage({
     construireTableauAllocation(id, "classe"),
     construirePlanOperations(id),
     construireAnticipations(id, fund.objectifPerf),
-    construireProposition(id),
+    construireProposition(id, {}, { ratios: fund.ratios }),
   ]);
 
   return (

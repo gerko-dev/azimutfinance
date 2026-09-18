@@ -13,10 +13,27 @@ import "server-only";
 // tendent artificiellement vers zéro et les volatilités sont sous-estimées.
 // Le pas hebdomadaire laisse le temps à une transaction de se produire.
 
-import { loadIndexHistory, loadPriceHistory, loadStocks } from "@/lib/dataLoader";
+import {
+  loadAllActionsEnriched,
+  loadIndexHistory,
+  loadPriceHistory,
+} from "@/lib/dataLoader";
 
 import { loadCustomSecurities, loadFundPortfolios } from "./portfolio-data";
 import type { CustomSecurity, SavedPosition } from "./portfolio-types";
+import type { TableauAnticipation } from "./anticipation-types";
+import type { OriginesProposition } from "./proposition-types";
+import {
+  annuelVersHebdo,
+  partMaxDuFonds,
+  plafondCumule,
+  plafondsParLigne,
+  poidsIndiciels,
+  SEUIL_LIGNE_CUMULEE,
+  pocheActionsCible,
+  rendementMoyenComposite,
+  tauxDirecteurBceao,
+} from "./proposition-hypotheses";
 import {
   PARAMETRES_DEFAUT,
   quantileNormal,
@@ -136,14 +153,18 @@ function covariance(a: number[], b: number[]): number {
  * qui « rattrape » les dépassements après coup produit des poids qui ne
  * somment plus à 1.
  */
-function projeter(v: number[], plafond: number): number[] {
+function projeter(v: number[], plafonds: number[]): number[] {
   const n = v.length;
   if (n === 0) return [];
-  // Faisabilité : sans assez de lignes, le plafond interdit d'atteindre 100 %.
-  if (n * plafond < 1) return v.map(() => 1 / n);
+  // Faisabilité : si la somme des plafonds n'atteint pas 100 %, aucune
+  // allocation admissible n'existe. Le plafond n'est plus unique depuis que la
+  // dérogation de l'Art. 41.3 relève celui des titres à forte pondération
+  // indicielle : c'est bien leur SOMME qu'il faut tester, pas n x plafond.
+  const capacite = plafonds.reduce((s, p) => s + p, 0);
+  if (capacite < 1) return plafonds.slice();
 
   const somme = (theta: number) =>
-    v.reduce((s, x) => s + Math.min(plafond, Math.max(0, x - theta)), 0);
+    v.reduce((s, x, i) => s + Math.min(plafonds[i], Math.max(0, x - theta)), 0);
 
   let bas = Math.min(...v) - 1;
   let haut = Math.max(...v);
@@ -153,7 +174,7 @@ function projeter(v: number[], plafond: number): number[] {
     else haut = mid;
   }
   const theta = (bas + haut) / 2;
-  return v.map((x) => Math.min(plafond, Math.max(0, x - theta)));
+  return v.map((x, i) => Math.min(plafonds[i], Math.max(0, x - theta)));
 }
 
 /**
@@ -167,13 +188,13 @@ function optimiser(
   mu: number[],
   sigma: number[][],
   rf: number,
-  plafond: number,
+  plafonds: number[],
 ): number[] {
   const n = mu.length;
   if (n === 0) return [];
   let w = projeter(
     mu.map(() => 1 / n),
-    plafond,
+    plafonds,
   );
 
   const produit = (m: number[][], x: number[]) =>
@@ -197,7 +218,7 @@ function optimiser(
     const pas = (0.5 * ecart) / (1 + k / 40);
     w = projeter(
       w.map((x, i) => x + pas * grad[i]),
-      plafond,
+      plafonds,
     );
   }
   return meilleur;
@@ -214,16 +235,49 @@ function identifiantsDe(
     .filter((x) => x !== "");
 }
 
+const LIBELLE_HYPOTHESE: Record<keyof OriginesProposition, string> = {
+  montant: "Montant à investir",
+  tauxSansRisque: "Taux sans risque",
+  rendementMarche: "Rendement du marché",
+  partMax: "Part maximale par action",
+};
+
+const fmtPctCourt = (v: number | null) =>
+  v === null ? "—" : `${(v * 100).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} %`;
+
 export async function construireProposition(
   fundId: string,
   parametres: Partial<ParametresProposition> = {},
+  contexte: {
+    ratios?: Parameters<typeof partMaxDuFonds>[0];
+    tresorerieAInvestir?: number;
+    /** Cours cibles, pour les méthodes qui s'en servent. */
+    anticipations?: TableauAnticipation | null;
+  } = {},
 ): Promise<TableauProposition> {
   const avertissements: string[] = [];
 
-  const [snapshots, customs] = await Promise.all([
+  // Les quatre hypotheses deduites partent DE FRONT avec l'inventaire : aucune
+  // ne depend d'une autre, et les enchainer ferait payer quatre latences.
+  // COURS LIVE, et non la colonne `price` de titres.csv.
+  //
+  // Cette colonne n'est plus rafraichie : les quarante-sept titres s'en
+  // ecartent, parfois du simple au double — ETIT y vaut 29 contre 71 a la
+  // derniere cloture. Le commentaire de lib/dataLoader l'ecrit d'ailleurs en
+  // toutes lettres : « price / changePercent / volume : derniere cloture de
+  // l'historique Sika — JAMAIS les colonnes de titres.csv ». Avec un cours
+  // deux fois trop bas, `montant / cours` proposait deux fois trop d'actions,
+  // et la comparaison aux positions detenues — valorisees, elles, au cours
+  // reel — mettait face a face deux echelles differentes.
+  const [snapshots, customs, tauxBceao, poche, actions] = await Promise.all([
     loadFundPortfolios(fundId),
     loadCustomSecurities(),
+    tauxDirecteurBceao(),
+    pocheActionsCible(fundId, contexte.tresorerieAInvestir ?? 0),
+    loadAllActionsEnriched(),
   ]);
+  const marche = rendementMoyenComposite();
+  const plafond = partMaxDuFonds(contexte.ratios);
   const actuel =
     [...snapshots].sort((a, b) => a.asOfDate.localeCompare(b.asOfDate)).pop() ?? null;
   const dateReference = actuel?.asOfDate ?? null;
@@ -232,11 +286,11 @@ export async function construireProposition(
   // ── Détention actuelle, par symbole ─────────────────────────────────────
   const detenuParCode = new Map<string, { quantite: number; valorisation: number }>();
   const codesConnus = new Map<string, string>();
-  for (const s of loadStocks()) {
-    const code = (s.code || "").trim().toUpperCase();
+  for (const a of actions) {
+    const code = (a.code || "").trim().toUpperCase();
     if (!code) continue;
     codesConnus.set(code, code);
-    const isin = (s.isin || "").trim().toUpperCase();
+    const isin = (a.isin || "").trim().toUpperCase();
     if (isin && isin !== "0") codesConnus.set(isin, code);
   }
   for (const p of actuel?.positions ?? []) {
@@ -281,9 +335,9 @@ export async function construireProposition(
    *  une valeur absente de la proposition sans explication passe pour un
    *  rejet du modèle alors qu'elle n'a jamais été examinée. */
   const ecartees: string[] = [];
-  for (const s of loadStocks()) {
-    const code = (s.code || "").trim().toUpperCase();
-    const cours = num(s.price);
+  for (const a of actions) {
+    const code = (a.code || "").trim().toUpperCase();
+    const cours = a.price;
     if (!code || !(cours > 0)) continue;
     const hebdo = serieHebdomadaire(loadPriceHistory(code));
     const rendements = rendementsSurGrille(hebdo, semainesIndice);
@@ -293,8 +347,8 @@ export async function construireProposition(
     }
     candidats.push({
       code,
-      libelle: (s.name || code).trim(),
-      secteur: (s.sector || "Non classé").trim(),
+      libelle: (a.name || code).trim(),
+      secteur: (a.sector || "Non classé").trim(),
       cours,
       rendements,
     });
@@ -315,13 +369,69 @@ export async function construireProposition(
   for (const c of candidats) c.rendements = c.rendements.slice(-periodes);
 
   const varianceMarche = covariance(rm, rm);
+
+  // ── Hypothèses : déduites d'abord, saisies ensuite ──────────────────────
+  //
+  // `parametres` ne peut plus porter que la rentabilité minimale : les quatre
+  // autres valeurs sont écrasées par leur source. Le paramètre reste accepté
+  // pour les scripts et les tests, mais l'écran ne l'envoie plus.
+  const origines: OriginesProposition = {
+    montant:
+      poche.montant !== null
+        ? {
+            source: "allocation validée par classe d'actif",
+            detail: `poche actions cible ${fmtPctCourt(poche.cible)}`,
+          }
+        : {
+            source: "allocation validée par classe d'actif",
+            detail: "aucune cible arrêtée pour la classe Actions",
+            manquante: true,
+          },
+    tauxSansRisque:
+      tauxBceao !== null
+        ? { source: "BCEAO", detail: "taux minimum des appels d'offres" }
+        : { source: "BCEAO", detail: "bulletin indisponible", manquante: true },
+    rendementMarche:
+      marche !== null
+        ? {
+            source: "BRVM Composite",
+            detail: `moyenne de ${marche.annees.length} exercices (${marche.annees[0].annee}–${marche.annees[marche.annees.length - 1].annee})`,
+          }
+        : {
+            source: "BRVM Composite",
+            detail: "historique insuffisant",
+            manquante: true,
+          },
+    partMax:
+      plafond.part !== null
+        ? { source: "paramètres du fonds", detail: plafond.libelle ?? "" }
+        : {
+            source: "paramètres du fonds",
+            detail: "aucun ratio de division des risques saisi",
+            manquante: true,
+          },
+  };
+
   const p: ParametresProposition = {
     ...PARAMETRES_DEFAUT,
-    // Le rendement du marché est ESTIMÉ par défaut, pas supposé.
-    rendementMarche: moyenne(rm),
-    montant: valorisationActuelle,
+    // Faute de source, on retombe sur l'estimation historique plutôt que sur
+    // rien : le modèle a besoin d'un rendement de marché pour exister.
+    rendementMarche:
+      marche !== null ? annuelVersHebdo(marche.moyenne) : moyenne(rm),
+    tauxSansRisque:
+      tauxBceao !== null ? annuelVersHebdo(tauxBceao) : PARAMETRES_DEFAUT.tauxSansRisque,
+    partMax: plafond.part ?? PARAMETRES_DEFAUT.partMax,
+    montant: poche.montant ?? valorisationActuelle,
     ...parametres,
   };
+
+  for (const [cle, o] of Object.entries(origines)) {
+    if (o.manquante) {
+      avertissements.push(
+        `${LIBELLE_HYPOTHESE[cle as keyof OriginesProposition]} : ${o.detail}. Valeur de repli appliquée.`,
+      );
+    }
+  }
 
   if (candidats.length === 0 || periodes < OBSERVATIONS_MIN) {
     avertissements.push(
@@ -329,6 +439,7 @@ export async function construireProposition(
     );
     return {
       parametres: p,
+      origines,
       lignes: [],
       rentabiliteEsperee: 0,
       betaPortefeuille: 0,
@@ -349,7 +460,59 @@ export async function construireProposition(
   // MEDAF : le rendement attendu ne vient PAS du rendement passé du titre —
   // trop bruité sur une quarantaine de points — mais de sa sensibilité au
   // marché. C'est la seule grandeur qu'on estime avec un peu de confiance.
-  const mu = betas.map((b) => p.tauxSansRisque + b * (p.rendementMarche - p.tauxSansRisque));
+  const muMedaf = betas.map(
+    (b) => p.tauxSansRisque + b * (p.rendementMarche - p.tauxSansRisque),
+  );
+
+  // ── Rendements attendus selon la méthode retenue ────────────────────────
+  //
+  // Seul μ change d'une méthode à l'autre. La covariance, les plafonds et
+  // l'optimisateur sont identiques : deux méthodes qui divergeraient aussi sur
+  // le risque ne seraient plus comparables, et l'écart entre leurs allocations
+  // ne dirait plus d'où il vient.
+  //
+  // UN POTENTIEL N'EST PAS UN RENDEMENT HEBDOMADAIRE. Une cible dit « ce titre
+  // vaut 30 % de plus », sans dire quand. On pose l'horizon à UN AN et on
+  // ramène le potentiel à la semaine en composé — l'hypothèse est forte, elle
+  // est écrite ici plutôt que cachée dans un facteur.
+  const potentielsAnnuels = new Map<string, number>();
+  for (const t of contexte.anticipations?.titres ?? []) {
+    const c = t.cibles?.[p.methodeValorisation];
+    if (c && c.potentiel !== null && Number.isFinite(c.potentiel) && c.potentiel > -0.99) {
+      potentielsAnnuels.set(t.code.toUpperCase(), c.potentiel);
+    }
+  }
+  let sansCible = 0;
+  const muCibles = candidats.map((c, i) => {
+    const pot = potentielsAnnuels.get(c.code.toUpperCase());
+    if (pot === undefined) {
+      // Sans cible exploitable, on retombe sur le MEDAF plutôt que sur zéro :
+      // un rendement nul imposé ferait fuir l'optimisateur de la valeur, ce qui
+      // est une opinion, alors qu'on n'en a justement aucune.
+      sansCible++;
+      return muMedaf[i];
+    }
+    return Math.pow(1 + pot, 1 / SEMAINES_PAR_AN) - 1;
+  });
+
+  const mu =
+    p.methode === "medaf"
+      ? muMedaf
+      : p.methode === "cibles"
+        ? muCibles
+        : muMedaf.map((m, i) => (m + muCibles[i]) / 2);
+
+  if (p.methode !== "medaf") {
+    if (potentielsAnnuels.size === 0) {
+      avertissements.push(
+        `Aucun cours cible disponible pour la méthode « ${p.methodeValorisation} » : l'optimisation retombe entièrement sur le MEDAF.`,
+      );
+    } else if (sansCible > 0) {
+      avertissements.push(
+        `${sansCible} valeur(s) sans cours cible exploitable : leur rendement attendu reste celui du MEDAF.`,
+      );
+    }
+  }
 
   const n = candidats.length;
   const sigma: number[][] = Array.from({ length: n }, () => new Array(n).fill(0));
@@ -386,8 +549,45 @@ export async function construireProposition(
     );
   }
 
+  // ── Plafonds ligne par ligne, dérogation comprise ───────────────────────
+  //
+  // L'Art. 41.1 a plafonne toute signature, mais l'Art. 41.3 relève ce plafond
+  // pour un titre pesant plus de 10 % de l'indice. Appliquer le seul plafond
+  // général proposait une allocation PLUS contrainte que ce que le règlement
+  // autorise — et interdisait de détenir les trois plus grosses capitalisations
+  // de la cote à hauteur de leur poids réel.
+  const { plafonds: plafondsLignes } = plafondsParLigne(
+    candidats.map((c) => c.code),
+    contexte.ratios,
+    poidsIndiciels(),
+  );
+  const plafondsVecteur = plafondsLignes.map((l) =>
+    l.derogation ? l.plafond : p.partMax,
+  );
+  // La dérogation de l'Art. 41.3 s'applique toujours — elle n'est simplement
+  // plus annoncée : un bandeau qui répète à chaque calcul une règle constante
+  // finit par masquer les avertissements qui, eux, appellent une décision.
+
   // ── Optimisation ────────────────────────────────────────────────────────
-  const poids = optimiser(mu, sigma, p.tauxSansRisque, p.partMax);
+  const poids = optimiser(mu, sigma, p.tauxSansRisque, plafondsVecteur);
+
+  // Second volet de l'Art. 41.3 : le cumul des lignes dépassant 15 % est lui
+  // aussi borné. Cette contrainte porte sur une SOMME, pas sur une ligne : elle
+  // ne se projette pas comme un plafond individuel, et l'optimisateur ne peut
+  // pas la respecter par construction. On la vérifie donc après coup et on le
+  // dit — un contrôle explicite vaut mieux qu'une contrainte silencieusement
+  // ignorée.
+  const seuilCumul = plafondCumule(contexte.ratios);
+  if (seuilCumul !== null) {
+    const cumul = poids
+      .filter((w) => w > SEUIL_LIGNE_CUMULEE)
+      .reduce((s, w) => s + w, 0);
+    if (cumul > seuilCumul + 1e-9) {
+      avertissements.push(
+        `Cumul des lignes supérieures à ${(SEUIL_LIGNE_CUMULEE * 100).toFixed(0)} % : ${(cumul * 100).toFixed(1)} % contre un plafond de ${(seuilCumul * 100).toFixed(0)} % (Art. 41.3). La proposition dépasse cette limite — elle est à corriger avant validation.`,
+      );
+    }
+  }
 
   const rentabiliteEsperee = poids.reduce((s, w, i) => s + w * mu[i], 0);
   const betaPortefeuille = poids.reduce((s, w, i) => s + w * betas[i], 0);
@@ -453,22 +653,17 @@ export async function construireProposition(
       "Aucun inventaire : la colonne de recommandation compare à une détention nulle, donc tout apparaît en achat.",
     );
   }
-  if (ecartees.length > 0) {
-    avertissements.push(
-      `${ecartees.length} valeur(s) écartée(s), faute de ${OBSERVATIONS_MIN} semaines de cotation : ${ecartees.slice(0, 8).join(", ")}${ecartees.length > 8 ? "…" : ""}. Elles ne sont pas rejetées par le modèle — elles n'ont pas pu être estimées.`,
-    );
-  }
-  // Un rendement hebdomadaire moyen composé sur 52 semaines s'emballe vite :
-  // une année de marché haussier suffit à produire un chiffre annualisé qui
-  // n'engage personne. On le dit plutôt que de le laisser impressionner.
-  if (rentabiliteAnnualisee > 0.35) {
-    avertissements.push(
-      `Rentabilité annualisée de ${(rentabiliteAnnualisee * 100).toFixed(0)} % : c'est la moyenne hebdomadaire de la fenêtre d'estimation composée sur un an, pas une prévision. Une phase de marché exceptionnelle la gonfle mécaniquement — ajustez « Rendement du marché » sur une hypothèse tenable.`,
-    );
-  }
+  // Les valeurs écartées faute d'historique ne sont plus signalées : la liste
+  // ne bouge qu'au rythme des introductions en bourse, et rien ne peut être
+  // fait de cette information.
+  //
+  // L'avertissement sur la rentabilité annualisée disparaît aussi. Il invitait
+  // à « ajuster le rendement du marché » — un conseil devenu caduc depuis que
+  // cette hypothèse est déduite du BRVM Composite et n'est plus saisissable.
 
   return {
     parametres: p,
+    origines,
     lignes,
     rentabiliteEsperee,
     betaPortefeuille,
