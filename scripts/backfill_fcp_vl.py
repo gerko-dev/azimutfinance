@@ -9,7 +9,7 @@ Sortie  : data/fcp/vl-historique.csv
 
 Pourquoi ce script existe. `scrape_brvm_boc.py` ecrit data/fcp.csv, mais c'est
 un INSTANTANE : une ligne par fonds, ecrasee chaque jour. Aucun historique n'en
-sort. Or la derniere page du BOC porte, pour chaque fonds, DEUX valeurs datees —
+sort. Or la fin du BOC porte, pour chaque fonds, DEUX valeurs datees —
 la VL precedente et la VL du jour, chacune avec sa date de calcul. En relisant
 les bulletins archives, on reconstitue donc une serie, et non un point.
 
@@ -501,7 +501,7 @@ def main() -> int:
             en_attente.append(cible.isoformat())
 
             try:
-                # DERNIERE page, en mode layout : le tableau FCP aligne
+                # DERNIERES pages, en mode layout : le tableau FCP aligne
                 # Dépositaire, OPCVM et Catégorie a des positions de colonne fixes,
                 # que l'extraction de texte brute aplatit. Avec extract_text(), le
                 # parseur ne reconnait aucune ligne et rend zero fonds.

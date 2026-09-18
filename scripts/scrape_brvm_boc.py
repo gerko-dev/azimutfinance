@@ -5,7 +5,8 @@ Scrape le Bulletin Officiel de la Cote (BOC) de la BRVM pour capter :
      "OBLIGATIONS CLASSIQUES").
   2) La synthese journaliere du marche obligataire en page 1 :
      capitalisation boursiere, volume echange, valeur transigee.
-  3) Le tableau des FCP / SICAV (derniere page du BOC) : gestionnaire,
+  3) Le tableau des FCP / SICAV (deux dernieres pages du BOC depuis le
+     bulletin du 10/09/2026, une seule auparavant) : gestionnaire,
      nom du fonds, nominal, valeur precedente + valeur du jour + dates,
      date d'emission, performance origine, variation jour.
 
@@ -81,8 +82,8 @@ PRICE_COLUMNS = [
 # Encode Latin-1 (Excel FR), separateur ";".
 AUMFCP_CSV = DATA_DIR / "fcp" / "aumfcp.csv"
 
-# Liste des societes de gestion connues (figurent une fois par groupe sur la
-# derniere page du BOC, puis les lignes suivantes du groupe ne reprennent
+# Liste des societes de gestion connues (figurent une fois par groupe a la fin
+# du BOC, puis les lignes suivantes du groupe ne reprennent
 # que le nom du FCP). Si une nouvelle SDG apparait, l'ajouter ici.
 KNOWN_GESTIONNAIRES = [
     "ATLANTIC ASSET MANAGEMENT ATLANTIQUE FINANCE",
@@ -1261,16 +1262,42 @@ def write_fcp_csv(
     )
 
 
-def extract_last_page_text(pdf_bytes: bytes) -> str:
+# Nombre de pages de fin a lire pour le tableau FCP.
+#
+# Le tableau tenait sur une seule page jusqu'au bulletin du 09/09/2026 ; depuis
+# celui du 10/09/2026 il deborde sur une seconde. La BRVM a reclasse une
+# cinquantaine de fonds d'un calcul hebdomadaire vers un calcul quotidien — la
+# section QUOTIDIENNES passe de 69 a 107 lignes, l'HEBDOMADAIRE de 52 a 17 — et
+# la page n'y suffit plus.
+#
+# En lire deux est SANS RISQUE sur les bulletins anterieurs : mesure faite sur
+# 2025-06-10, 2026-03-12, 2026-07-15 et 2026-09-04, une page et deux pages
+# donnent exactement le meme nombre de lignes. extract_fcp() ne retient que ce
+# qui suit un marqueur de section, donc le contenu etranger de l'avant-derniere
+# page est ignore. Trois pages ne changent rien non plus ; deux suffisent.
+PAGES_TABLEAU_FCP = 2
+
+
+def extract_last_page_text(pdf_bytes: bytes, pages: int = PAGES_TABLEAU_FCP) -> str:
     """
-    Extrait le texte de la DERNIERE page du PDF (table FCP) en preservant
-    la mise en page (layout mode). Indispensable pour decouper Dépositaire,
-    OPCVM et Catégorie qui sont alignes a des positions fixes de colonne.
+    Extrait le texte des DERNIERES pages du PDF (table FCP) en preservant la
+    mise en page (layout mode). Indispensable pour decouper Dépositaire, OPCVM
+    et Catégorie, alignes a des positions fixes de colonne.
+
+    Les pages sont concatenees dans l'ordre du document : la section
+    QUOTIDIENNES commence sur l'avant-derniere et se poursuit sur la derniere,
+    et extract_fcp() lit le flux de haut en bas — il faut donc lui presenter les
+    pages dans cet ordre, faute de quoi la continuation precederait son entete.
     """
     reader = pypdf.PdfReader(io.BytesIO(pdf_bytes))
-    if len(reader.pages) == 0:
+    total = len(reader.pages)
+    if total == 0:
         return ""
-    return reader.pages[-1].extract_text(extraction_mode="layout") or ""
+    debut = max(0, total - max(1, pages))
+    return "\n".join(
+        (reader.pages[i].extract_text(extraction_mode="layout") or "")
+        for i in range(debut, total)
+    )
 
 
 def main() -> int:
@@ -1391,7 +1418,7 @@ def main() -> int:
         )
     else:
         print(
-            "FCP : aucune ligne extraite de la derniere page — CSV inchange.",
+            "FCP : aucune ligne extraite des dernieres pages — CSV inchange.",
             file=sys.stderr,
         )
 
