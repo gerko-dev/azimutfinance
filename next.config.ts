@@ -95,6 +95,24 @@ const CLE_ROUTES_CHROMIUM =
   "gestion-portefeuille/reporting/pdf}";
 
 const nextConfig: NextConfig = {
+  experimental: {
+    serverActions: {
+      // LE CORPS D'UNE SERVER ACTION EST BORNE A 1 Mo PAR DEFAUT.
+      //
+      // Les pieces jointes des actualites voyagent dans ce corps : au-dela
+      // d'un megaoctet, la requete etait rejetee AVANT que le controle
+      // applicatif — qui annoncait 20 Mo — ait la moindre chance de
+      // s'executer, et l'ecran d'erreur de la console admin prenait la place
+      // du formulaire. Les 20 Mo annonces etaient une fiction.
+      //
+      // 4 Mo et pas davantage : Vercel refuse tout corps de requete au-dela
+      // de 4,5 Mo sur une fonction serverless, et CETTE borne-la ne se
+      // configure pas. Monter plus haut ne ferait que deplacer l'echec du
+      // cadre de Next vers celui de la plate-forme, avec un message encore
+      // moins parlant.
+      bodySizeLimit: "4mb",
+    },
+  },
   // Bundle the brvm.org TLS intermediate with serverless functions so
   // NODE_EXTRA_CA_CERTS can resolve it at runtime on Vercel.
   // brvm.org sends only the leaf cert; without this intermediate the live

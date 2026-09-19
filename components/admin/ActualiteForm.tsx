@@ -3,7 +3,11 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createActualite, updateActualite } from "@/lib/actualites/actions";
-import type { Actualite } from "@/lib/actualites/types";
+import {
+  MAX_PIECES_JOINTES_OCTETS,
+  formatTaille,
+  type Actualite,
+} from "@/lib/actualites/types";
 import { NEWS_TYPES, NEWS_TYPE_LABELS, type NewsType } from "@/lib/newsTypes";
 
 function fmtSize(bytes: number | null): string {
@@ -47,6 +51,28 @@ export default function ActualiteForm({
       setFeedback({ ok: false, msg: "Ticker, titre et corps obligatoires." });
       return;
     }
+
+    // LA TAILLE SE VERIFIE ICI, AVANT L'ENVOI.
+    //
+    // Passe cette limite, la Server Action refuse le corps de la requete et
+    // leve : l'ecran d'erreur de la console remplace alors le formulaire, et
+    // la saisie est perdue sans que rien n'explique pourquoi. Un controle
+    // cote client rend la contrainte lisible et garde le travail en cours.
+    //
+    // Les DEUX pieces comptent ensemble : c'est le corps de la requete qui
+    // est borne, pas chaque fichier.
+    const poids = (file?.size ?? 0) + (file2?.size ?? 0);
+    if (poids > MAX_PIECES_JOINTES_OCTETS) {
+      setFeedback({
+        ok: false,
+        msg:
+          `Pièces jointes trop volumineuses : ${formatTaille(poids)} au total, ` +
+          `maximum ${formatTaille(MAX_PIECES_JOINTES_OCTETS)}. ` +
+          `Allège le fichier ou publie-le ailleurs et mets le lien en source.`,
+      });
+      return;
+    }
+
     setFeedback(null);
 
     const fd = new FormData();
@@ -183,7 +209,7 @@ export default function ActualiteForm({
       </div>
 
       <AttachmentField
-        label="Pièce jointe principale (PDF, DOCX, image — max 20 Mo)"
+        label={`Pièce jointe principale (PDF, DOCX, image — ${formatTaille(MAX_PIECES_JOINTES_OCTETS)} au total avec la secondaire)`}
         existingName={initial?.attachment_name ?? null}
         existingSize={initial?.attachment_size_bytes ?? null}
         showExisting={hasExistingAttachment}

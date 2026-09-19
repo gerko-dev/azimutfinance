@@ -4,10 +4,8 @@ import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getMyAdminLevel } from "@/lib/admin/auth";
 import type { ActionResult, Actualite } from "./types";
-import { STORAGE_BUCKET } from "./types";
+import { MAX_PIECES_JOINTES_OCTETS, STORAGE_BUCKET, formatTaille } from "./types";
 import { NEWS_TYPES, type NewsType } from "@/lib/newsTypes";
-
-const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024; // 20 MB
 
 /** Valide la categorie recue du formulaire ; repli 'communique' si inconnue. */
 function parseCategory(raw: FormDataEntryValue | null): NewsType {
@@ -33,8 +31,13 @@ async function uploadAttachmentFile(
   | { ok: true; path: string; name: string; size: number }
   | { ok: false; error: string }
 > {
-  if (file.size > MAX_ATTACHMENT_BYTES) {
-    return { ok: false, error: "Pièce jointe trop volumineuse (max 20 Mo)." };
+  if (file.size > MAX_PIECES_JOINTES_OCTETS) {
+    return {
+      ok: false,
+      error:
+        `Pièce jointe trop volumineuse (${formatTaille(file.size)}) : ` +
+        `maximum ${formatTaille(MAX_PIECES_JOINTES_OCTETS)}.`,
+    };
   }
   const safeName = sanitizeFilename(file.name);
   const now = new Date();
