@@ -31,6 +31,51 @@ const fmt2 = new Intl.NumberFormat("fr-FR", {
 });
 
 const montant = (v: number | null) => (v === null ? "—" : fmt0.format(Math.round(v)));
+
+/**
+ * Met en forme ce que le trésorier tape dans une case de solde.
+ *
+ * Les soldes se comptent en centaines de millions de francs : sans
+ * séparateurs, « 220180967 » ne se relit pas, et une erreur d'un facteur dix
+ * passe inaperçue. On les pose donc À LA FRAPPE, et pas seulement à la
+ * validation — l'erreur doit se voir au moment où elle se commet.
+ *
+ * Le signe est conservé : un compte peut être à découvert.
+ *
+ * Tout ce qui suit une virgule ou un point est COUPÉ, pas ignoré. Le franc CFA
+ * n'a pas de subdivision, donc un solde n'a pas de décimales ; mais si l'on se
+ * contentait de retirer les caractères non chiffrés, « 12,5 » collé depuis un
+ * relevé deviendrait « 125 » — un facteur dix passé inaperçu, précisément
+ * l'erreur que ces séparateurs sont censés rendre visible.
+ *
+ * `lu()` retire les espaces avant de convertir, y compris l'espace fine
+ * insécable (U+202F) que produit le format fr-FR : `\s` la couvre.
+ */
+function formaterSaisie(brut: string): string {
+  const negatif = brut.trimStart().startsWith("-");
+  const chiffres = brut.split(/[.,]/)[0].replace(/\D/g, "");
+  if (!chiffres) return negatif ? "-" : "";
+  return (negatif ? "-" : "") + fmt0.format(Number(chiffres));
+}
+
+/**
+ * Position du curseur après remise en forme.
+ *
+ * Sans ce calcul, réécrire la valeur renvoie le curseur en fin de champ à
+ * chaque touche : corriger un chiffre au milieu d'un montant devient
+ * impossible. On compte les CHIFFRES situés avant le curseur — les
+ * séparateurs ne comptent pas, puisqu'ils se déplacent — et on le repose
+ * après le même nombre de chiffres dans la chaîne reformatée.
+ */
+function positionApresFormatage(formate: string, chiffresAvant: number): number {
+  let i = 0;
+  let vus = 0;
+  while (i < formate.length && vus < chiffresAvant) {
+    if (/\d/.test(formate[i])) vus++;
+    i++;
+  }
+  return i;
+}
 const pourcent = (v: number | null) => (v === null ? "—" : fmt2.format(v * 100) + " %");
 
 function classeLigne(l: { nature: LigneTresorerie["nature"]; source: LigneTresorerie["source"] }) {
@@ -74,7 +119,10 @@ function Contenu({ point }: { point: PointTresorerie }) {
 
   const [saisie, setSaisie] = useState<Record<string, string>>(() =>
     Object.fromEntries(
-      point.banques.map((b) => [b, String(Math.round(ligneSolde?.parBanque[b] ?? 0))]),
+      point.banques.map((b) => [
+        b,
+        formaterSaisie(String(Math.round(ligneSolde?.parBanque[b] ?? 0))),
+      ]),
     ),
   );
   const [dateArrete, setDateArrete] = useState(
@@ -331,9 +379,20 @@ function Contenu({ point }: { point: PointTresorerie }) {
                         <td key={b} className="px-1 py-1 bg-white">
                           <input
                             value={saisie[b] ?? ""}
-                            onChange={(e) =>
-                              setSaisie((s) => ({ ...s, [b]: e.target.value }))
-                            }
+                            onChange={(e) => {
+                              const champ = e.currentTarget;
+                              const chiffresAvant = champ.value
+                                .slice(0, champ.selectionStart ?? champ.value.length)
+                                .replace(/\D/g, "").length;
+                              const formate = formaterSaisie(champ.value);
+                              setSaisie((s) => ({ ...s, [b]: formate }));
+                              // Après le rendu, sinon React remet le curseur
+                              // en fin de champ.
+                              requestAnimationFrame(() => {
+                                const pos = positionApresFormatage(formate, chiffresAvant);
+                                champ.setSelectionRange(pos, pos);
+                              });
+                            }}
                             inputMode="numeric"
                             className="w-full text-right px-1.5 py-1 rounded border border-slate-300 tabular-nums focus:border-blue-400 focus:outline-none"
                           />
