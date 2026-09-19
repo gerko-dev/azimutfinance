@@ -99,6 +99,53 @@ export const loadOperationsMarche = cache(
   },
 );
 
+/** Une opération, augmentée du fonds auquel elle appartient. */
+export type OperationAvecFonds = OperationMarche & {
+  fondsId: string;
+  fondsNom: string;
+};
+
+/**
+ * Toutes les opérations du gérant, tous fonds confondus.
+ *
+ * L'écran de saisie est INTERFONDS : le gérant y passe ses opérations de la
+ * journée, qui portent souvent sur plusieurs fonds à la fois — une même
+ * adjudication se répartit entre les portefeuilles. Les séparer par fonds
+ * l'obligerait à changer d'écran entre deux lignes du même bordereau.
+ *
+ * La RLS restreint déjà la lecture aux fonds du gérant : pas de filtre à
+ * ajouter ici, et surtout pas de liste d'identifiants à tenir à jour.
+ */
+export const loadToutesOperationsMarche = cache(
+  async (): Promise<OperationAvecFonds[]> => {
+    const supabase = await createSupabaseServerClient();
+    const { data } = await supabase
+      .from("fund_market_operations")
+      .select(
+        "id, fund_id, date_operation, date_denouement, description, instrument, code, libelle, " +
+          "quantite, prix, sgi, taux_courtage, taux_tps, taux_brvm, interets_courus, " +
+          "compte_reglement, statut, note, managed_funds(nom)",
+      )
+      .order("date_operation", { ascending: false })
+      .order("created_at", { ascending: false });
+
+    type LigneJointe = Ligne & {
+      fund_id: string;
+      managed_funds: { nom: string } | { nom: string }[] | null;
+    };
+    return ((data ?? []) as unknown as LigneJointe[]).map((l) => {
+      // PostgREST renvoie la jointure tantôt en objet, tantôt en tableau selon
+      // qu'il la juge unique : les deux formes se rencontrent, on les couvre.
+      const f = Array.isArray(l.managed_funds) ? l.managed_funds[0] : l.managed_funds;
+      return {
+        ...versOperation(l),
+        fondsId: l.fund_id,
+        fondsNom: f?.nom ?? "—",
+      };
+    });
+  },
+);
+
 /**
  * Montants par POSTE puis par COMPTE DE RÈGLEMENT, à une date d'arrêté.
  *

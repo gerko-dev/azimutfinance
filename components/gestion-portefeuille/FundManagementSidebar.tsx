@@ -30,6 +30,11 @@ type Item = {
 const ITEMS: Item[] = [
   { label: "Vue d'ensemble", href: "/gestion-portefeuille", icone: "◧" },
   { label: "Fonds gérés", href: "/gestion-portefeuille/fonds", icone: "▦" },
+  {
+    label: "Opérations de marché",
+    href: "/gestion-portefeuille/operations-marche",
+    icone: "⇄",
+  },
   { label: "Investisseurs", href: "/gestion-portefeuille/investisseurs", icone: "◍", bientot: true },
   { label: "Reporting", href: "/gestion-portefeuille/reporting", icone: "▤" },
   { label: "Paramètres", href: "/gestion-portefeuille/parametres", icone: "◎" },

@@ -1,15 +1,20 @@
 "use client";
 
-// === Opérations de marché ===
+// === Opérations de marché — module interfonds ===
 //
-// Saisie des achats et ventes qui alimentent le point de trésorerie. Reprend
-// la feuille « Opérations de marché » du classeur : une ligne par négociation,
-// et le point les somme par poste, par compte de règlement et par dénouement.
+// Reprend la feuille « Opérations de marché » du classeur : une ligne par
+// négociation, TOUS FONDS CONFONDUS, le fonds étant une colonne de la saisie.
+// C'est l'ordre de travail du gérant — une même adjudication se répartit entre
+// plusieurs portefeuilles, et changer d'écran entre deux lignes du même
+// bordereau n'aurait pas de sens.
+//
+// Pour l'instant, ces opérations n'alimentent QUE le point de trésorerie.
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import {
+  comptesReglementAction,
   enregistrerOperationMarcheAction,
   supprimerOperationMarcheAction,
 } from "@/app/gestion-portefeuille/operations-marche-actions";
@@ -22,9 +27,8 @@ import {
   sensDe,
   type DescriptionOperation,
   type Instrument,
-  type OperationMarche,
 } from "@/app/gestion-portefeuille/operations-marche-types";
-import type { PointTresorerie } from "@/app/gestion-portefeuille/tresorerie-types";
+import type { OperationAvecFonds } from "@/app/gestion-portefeuille/operations-marche-data";
 
 const fmt0 = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
 const montantFr = (v: number) => fmt0.format(Math.round(v));
@@ -37,6 +41,8 @@ const etiquette = "text-[10px] uppercase tracking-wider text-slate-500";
  *  0,4 % de courtage, 10 % de TPS SUR CE COURTAGE, 0,3 % BRVM/DC-BR.
  *  Les titres publics n'en supportent aucun. */
 const TAUX_ACTIONS = { courtage: 0.004, tps: 0.1, brvm: 0.003 };
+
+type Compte = { cle: string; nom: string; pays: string; sens: string };
 
 function Champ({
   label,
@@ -56,19 +62,25 @@ function Champ({
 }
 
 export default function OperationsMarchePanel({
-  fondsId,
-  point,
+  fonds,
   operations,
+  comptesInitiaux,
 }: {
-  fondsId: string;
-  point: PointTresorerie | null;
-  operations: OperationMarche[];
+  fonds: { id: string; nom: string }[];
+  operations: OperationAvecFonds[];
+  /** Comptes du PREMIER fonds, résolus au serveur. Les suivants se chargent
+   *  au changement de fonds, c'est-à-dire sur un ÉVÉNEMENT et non dans un
+   *  effet — le lint du projet interdit un setState dans un effet, et il a
+   *  raison : ce serait un rendu en cascade pour une donnée qu'on sait
+   *  produire au moment du clic. */
+  comptesInitiaux: Compte[];
 }) {
   const router = useRouter();
   const [enCours, demarrer] = useTransition();
   const [erreur, setErreur] = useState<string | null>(null);
   const [ok, setOk] = useState(false);
 
+  const [fondsId, setFondsId] = useState(fonds[0]?.id ?? "");
   const [dateOperation, setDateOperation] = useState(() =>
     new Date().toISOString().slice(0, 10),
   );
@@ -89,6 +101,32 @@ export default function OperationsMarchePanel({
   // Le dénouement est CALCULÉ mais reste modifiable : un règlement peut
   // déraper, et la liste des jours fériés s'arrête à début 2027.
   const [denouementManuel, setDenouementManuel] = useState<string | null>(null);
+
+  // Comptes de règlement du fonds choisi — les COLONNES de son point de
+  // trésorerie. Ceux du premier fonds viennent du serveur ; les autres se
+  // chargent au changement de fonds. Précharger ceux de TOUS les fonds ferait
+  // autant de lectures d'inventaire pour n'en servir qu'une.
+  const [comptes, setComptes] = useState<Compte[]>(comptesInitiaux);
+  const [comptesEtat, setComptesEtat] = useState<"chargement" | "pret" | "erreur">("pret");
+  const [comptesErreur, setComptesErreur] = useState<string | null>(null);
+
+  const changerFonds = (id: string) => {
+    setFondsId(id);
+    setCompteReglement("");
+    setComptesEtat("chargement");
+    setComptesErreur(null);
+    demarrer(async () => {
+      const res = await comptesReglementAction(id);
+      if (res.ok) {
+        setComptes(res.data);
+        setComptesEtat("pret");
+      } else {
+        setComptes([]);
+        setComptesEtat("erreur");
+        setComptesErreur(res.error);
+      }
+    });
+  };
 
   const n = (v: string) => {
     const x = Number(v.replace(/\s/g, "").replace(",", "."));
@@ -129,11 +167,13 @@ export default function OperationsMarchePanel({
     setDenouementManuel(null);
   };
 
-  const comptes = point?.etablissements ?? [];
-
   const enregistrer = () => {
     setErreur(null);
     setOk(false);
+    if (!fondsId) {
+      setErreur("Choisis le fonds concerné.");
+      return;
+    }
     demarrer(async () => {
       const res = await enregistrerOperationMarcheAction(fondsId, {
         dateOperation,
@@ -158,6 +198,8 @@ export default function OperationsMarchePanel({
         return;
       }
       setOk(true);
+      // Le fonds, la date et le type RESTENT : on saisit un bordereau, pas une
+      // opération isolée, et les lignes qui se suivent partagent l'essentiel.
       setCode("");
       setLibelle("");
       setQuantite("");
@@ -168,16 +210,33 @@ export default function OperationsMarchePanel({
     });
   };
 
-  const supprimer = (id: string) => {
+  const supprimer = (op: OperationAvecFonds) => {
     demarrer(async () => {
-      const res = await supprimerOperationMarcheAction(fondsId, id);
+      const res = await supprimerOperationMarcheAction(op.fondsId, op.id);
       if (!res.ok) setErreur(res.error);
       else router.refresh();
     });
   };
 
+  if (fonds.length === 0) {
+    return (
+      <div className="bg-white border border-slate-200 rounded-lg p-6 text-sm text-slate-600">
+        Aucun fonds géré : crée un fonds avant de saisir des opérations de marché.
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
+      <div>
+        <h1 className="text-lg font-semibold text-slate-900">Opérations de marché</h1>
+        <p className="text-xs text-slate-500 mt-0.5">
+          Achats et ventes, tous fonds confondus. Pour l&apos;instant, elles
+          alimentent le <strong>point de trésorerie</strong> du fonds concerné — et
+          rien d&apos;autre.
+        </p>
+      </div>
+
       {/* ── Formulaire ───────────────────────────────────────────────────── */}
       <div className="bg-white border border-slate-200 rounded-lg p-4">
         <h2 className="text-sm font-semibold text-slate-900">Saisir une opération</h2>
@@ -187,6 +246,20 @@ export default function OperationsMarchePanel({
         </p>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
+          <Champ label="Fonds">
+            <select
+              value={fondsId}
+              onChange={(e) => changerFonds(e.target.value)}
+              className={champ}
+            >
+              {fonds.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.nom}
+                </option>
+              ))}
+            </select>
+          </Champ>
+
           <Champ label="Date d'opération">
             <input
               type="date"
@@ -286,13 +359,20 @@ export default function OperationsMarchePanel({
             />
           </Champ>
 
-          <Champ label="Compte de règlement">
+          <Champ label="Compte de règlement" large>
             <select
               value={compteReglement}
               onChange={(e) => setCompteReglement(e.target.value)}
-              className={champ}
+              disabled={comptesEtat !== "pret"}
+              className={`${champ} disabled:bg-slate-50 disabled:text-slate-400`}
             >
-              <option value="">— Choisir —</option>
+              <option value="">
+                {comptesEtat === "chargement"
+                  ? "Chargement des comptes…"
+                  : comptesEtat === "erreur"
+                    ? "Comptes indisponibles"
+                    : "— Choisir —"}
+              </option>
               {comptes.map((c) => (
                 <option key={c.cle} value={c.cle}>
                   {c.nom}
@@ -301,6 +381,9 @@ export default function OperationsMarchePanel({
                 </option>
               ))}
             </select>
+            {comptesErreur && (
+              <span className="text-[9px] text-amber-700">{comptesErreur}</span>
+            )}
           </Champ>
 
           <Champ label="Taux de courtage">
@@ -366,52 +449,11 @@ export default function OperationsMarchePanel({
         )}
         {ok && !erreur && (
           <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-3 py-2 mt-3">
-            Opération enregistrée. Le point de trésorerie la prend en compte à sa date
-            de dénouement.
+            Opération enregistrée. Le point de trésorerie du fonds la prend en compte à
+            sa date de dénouement.
           </p>
         )}
       </div>
-
-      {/* ── Ce qui ne compte pas, et pourquoi ────────────────────────────── */}
-      {point && point.operationsSansColonne.length > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-          <p className="text-xs font-semibold text-amber-900">
-            {point.operationsSansColonne.length} montant(s) sans colonne au point de
-            trésorerie
-          </p>
-          <p className="text-[11px] text-amber-800 mt-1">
-            Leur compte de règlement ne figure pas dans l&apos;inventaire de fin : le
-            montant n&apos;entre dans aucune colonne et ne compte nulle part.
-          </p>
-          <ul className="text-[11px] text-amber-900 mt-2 space-y-0.5">
-            {point.operationsSansColonne.map((o) => (
-              <li key={`${o.libelle}-${o.compte}`} className="tabular-nums">
-                {o.libelle} · {o.compte} — {montantFr(o.montant)} F
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {point && point.operationsNonDenouees.length > 0 && (
-        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
-          <p className="text-xs font-semibold text-slate-800">
-            {point.operationsNonDenouees.length} opération(s) non dénouée(s) à
-            l&apos;arrêté
-          </p>
-          <p className="text-[11px] text-slate-600 mt-1">
-            Négociées, mais réglées après la date d&apos;arrêté : elles ne comptent pas
-            encore dans le point de trésorerie.
-          </p>
-          <ul className="text-[11px] text-slate-700 mt-2 space-y-0.5">
-            {point.operationsNonDenouees.map((o, i) => (
-              <li key={i} className="tabular-nums">
-                {o.dateDenouement} · {o.libelle} — {montantFr(o.montant)} F
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
 
       {/* ── Liste ────────────────────────────────────────────────────────── */}
       <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
@@ -421,6 +463,7 @@ export default function OperationsMarchePanel({
               <tr>
                 <th className="text-left px-3 py-2 font-medium">Date</th>
                 <th className="text-left px-3 py-2 font-medium">Dénouement</th>
+                <th className="text-left px-3 py-2 font-medium">Fonds</th>
                 <th className="text-left px-3 py-2 font-medium">Poste</th>
                 <th className="text-left px-3 py-2 font-medium">Titre</th>
                 <th className="text-right px-3 py-2 font-medium">Quantité</th>
@@ -433,16 +476,21 @@ export default function OperationsMarchePanel({
             <tbody className="divide-y divide-slate-100">
               {operations.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-3 py-6 text-center text-slate-400">
-                    Aucune opération saisie pour ce fonds.
+                  <td colSpan={10} className="px-3 py-6 text-center text-slate-400">
+                    Aucune opération saisie.
                   </td>
                 </tr>
               )}
               {operations.map((o) => (
                 <tr key={o.id} className="hover:bg-slate-50">
-                  <td className="px-3 py-1.5 tabular-nums">{o.dateOperation}</td>
-                  <td className="px-3 py-1.5 tabular-nums">{o.dateDenouement}</td>
-                  <td className="px-3 py-1.5">{posteDe(o.description)}</td>
+                  <td className="px-3 py-1.5 tabular-nums whitespace-nowrap">
+                    {o.dateOperation}
+                  </td>
+                  <td className="px-3 py-1.5 tabular-nums whitespace-nowrap">
+                    {o.dateDenouement}
+                  </td>
+                  <td className="px-3 py-1.5">{o.fondsNom}</td>
+                  <td className="px-3 py-1.5 whitespace-nowrap">{posteDe(o.description)}</td>
                   <td className="px-3 py-1.5">
                     {o.libelle || o.code || "—"}
                     {o.code && o.libelle && (
@@ -461,7 +509,7 @@ export default function OperationsMarchePanel({
                   <td className="px-3 py-1.5 text-slate-600">{o.compteReglement}</td>
                   <td className="px-3 py-1.5 text-right">
                     <button
-                      onClick={() => supprimer(o.id)}
+                      onClick={() => supprimer(o)}
                       disabled={enCours}
                       className="text-[10px] text-rose-600 hover:text-rose-800 disabled:opacity-50"
                     >

@@ -14,6 +14,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/lib/admin/types";
 
 import { estNiveau1, MSG_NIVEAU1 } from "./guard";
+import { construirePointTresorerie } from "./tresorerie-data";
 import {
   DESCRIPTIONS,
   dateDenouement,
@@ -53,6 +54,42 @@ async function autoriser(fundId: string): Promise<Acces> {
     .maybeSingle();
   if (!fund) return { erreur: "Fonds introuvable." };
   return { supabase, userId: user.id };
+}
+
+/**
+ * Comptes de règlement d'un fonds — les COLONNES de son point de trésorerie.
+ *
+ * Chargé à la demande, quand le gérant choisit le fonds : l'écran est
+ * interfonds, et précharger les comptes de tous les fonds ferait autant de
+ * lectures d'inventaire pour n'en servir qu'une.
+ *
+ * On passe par `construirePointTresorerie` plutôt que de refaire le calcul des
+ * colonnes : les clefs doivent être IDENTIQUES des deux côtés, sinon
+ * l'opération se règle sur un compte qui n'existe pas dans le tableau. Mieux
+ * vaut une lecture plus lourde qu'une duplication qui divergera.
+ */
+export async function comptesReglementAction(
+  fundId: string,
+): Promise<ActionResult<{ cle: string; nom: string; pays: string; sens: string }[]>> {
+  const acces = await autoriser(fundId);
+  if ("erreur" in acces) return { ok: false, error: acces.erreur };
+
+  const point = await construirePointTresorerie(fundId, "");
+  if (!point)
+    return {
+      ok: false,
+      error:
+        "Ce fonds n'a pas encore d'inventaire : ses comptes de trésorerie sont inconnus.",
+    };
+  return {
+    ok: true,
+    data: point.etablissements.map((e) => ({
+      cle: e.cle,
+      nom: e.nom,
+      pays: e.pays,
+      sens: e.sens,
+    })),
+  };
 }
 
 export async function enregistrerOperationMarcheAction(
