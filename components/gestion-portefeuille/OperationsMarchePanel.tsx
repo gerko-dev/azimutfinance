@@ -424,9 +424,18 @@ export default function OperationsMarchePanel({
             .replace(".", ",")} %`,
         }));
 
-  /** Choisir une SGI applique SES taux négociés : c'est la raison d'être de
-   *  la fiche partenaire. Un BTCC n'en porte pas — le marché des titres
-   *  publics ne supporte pas de courtage. */
+  /**
+   * Choisir une SGI applique SES taux NÉGOCIÉS : courtage et TPS. C'est la
+   * raison d'être de la fiche partenaire.
+   *
+   * La commission BRVM / DC-BR n'en fait pas partie : c'est un tarif de
+   * place, identique quelle que soit la SGI. Elle reste donc celle que
+   * l'instrument a posée — l'écraser avec une valeur recopiée sur une fiche
+   * partenaire laisserait croire qu'elle se négocie.
+   *
+   * Un BTCC ne porte aucun taux : le marché des titres publics ne supporte
+   * pas de courtage.
+   */
   const choisirIntermediaire = (nom: string) => {
     setSgi(nom);
     if (marche === "mtp") return;
@@ -434,7 +443,6 @@ export default function OperationsMarchePanel({
     if (!p) return;
     setTauxCourtage(String(p.tauxCourtage));
     setTauxTps(String(p.tauxTps));
-    setTauxBrvm(String(p.tauxBrvm));
   };
 
   // LA LISTE SUIT L'INSTRUMENT, SANS EXCEPTION.

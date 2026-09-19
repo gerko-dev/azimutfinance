@@ -53,6 +53,10 @@ export type Partenaire = {
   /** Taux en DÉCIMAL (0,004 = 0,4 %), comme partout dans le module. */
   tauxCourtage: number;
   tauxTps: number;
+  /** Commission BRVM / DC-BR. NE SE SAISIT PLUS sur une fiche partenaire :
+   *  c'est un tarif de PLACE, identique quelle que soit la SGI, réglé par
+   *  instrument à la saisie de l'opération. Le champ survit pour les fiches
+   *  déjà enregistrées ; il n'est plus ni affiché ni appliqué. */
   tauxBrvm: number;
   referents: Referent[];
   actif: boolean;
@@ -70,11 +74,14 @@ export function partenaireVide(): SaisiePartenaire {
     email: "",
     telephone: "",
     adresse: "",
-    // Les taux réglementaires d'une négociation d'actions à la BRVM, qui sont
-    // le cas courant. Ils restent modifiables : le courtage se négocie.
+    // Les taux usuels d'une négociation d'actions à la BRVM, qui sont le cas
+    // courant. Ils restent modifiables : le courtage se négocie.
     tauxCourtage: 0.004,
     tauxTps: 0.1,
-    tauxBrvm: 0.003,
+    // Zéro et non 0,003 : la commission de place ne se porte plus ici, et
+    // l'enregistrer quand même en ferait une donnée morte que quelqu'un
+    // finirait par lire de bonne foi.
+    tauxBrvm: 0,
     referents: [referentVide()],
     actif: true,
     note: "",

@@ -18,6 +18,7 @@ import {
   enregistrerPartenaireAction,
   supprimerPartenaireAction,
 } from "@/app/gestion-portefeuille/partenaires-actions";
+import { UEMOA_CODES, WORLD_COUNTRIES } from "@/lib/onboarding/countries";
 import {
   LIBELLES_NATURE,
   REFERENTS_MAX,
@@ -31,6 +32,22 @@ import {
 
 const champ =
   "w-full text-xs border border-slate-300 rounded px-2 py-1.5 focus:border-blue-400 focus:outline-none";
+
+/**
+ * Pays proposés : les huit UEMOA d'abord, le reste du monde ensuite.
+ *
+ * Un `datalist` conserve l'ordre de déclaration tant que le champ est vide :
+ * mettre l'UEMOA en tête place donc sous le curseur les pays qui concernent
+ * presque toutes les fiches, sans interdire les autres. La liste mondiale est
+ * celle de l'onboarding — la dupliquer ici l'aurait laissée diverger.
+ */
+const PAYS_PROPOSES: string[] = (() => {
+  const uemoa = WORLD_COUNTRIES.filter((c) => UEMOA_CODES.has(c.code)).map((c) => c.label);
+  const reste = WORLD_COUNTRIES.filter((c) => !UEMOA_CODES.has(c.code)).map((c) => c.label);
+  return [...uemoa.sort((a, b) => a.localeCompare(b, "fr")), ...reste];
+})();
+
+const ID_PAYS = "partenaires-pays";
 const etiquette = "text-[10px] uppercase tracking-wider text-slate-500";
 
 /** Les taux sont stockés en décimal et saisis en POURCENTAGE : personne ne
@@ -42,17 +59,33 @@ const depuisPct = (s: string) => {
   return Number.isFinite(n) ? n / 100 : 0;
 };
 
+/**
+ * Un champ, large de `span` colonnes sur la grille de six.
+ *
+ * Six et non quatre : c'est le plus petit nombre divisible par 2 et par 3,
+ * donc le seul qui permette des rangées de deux, de trois ou de six champs
+ * sans qu'aucun ne tombe à cheval. Les classes sont écrites EN TOUTES LETTRES
+ * — Tailwind analyse le source, une classe assemblée à l'exécution ne serait
+ * jamais générée.
+ */
+const LARGEURS: Record<number, string> = {
+  2: "sm:col-span-2",
+  3: "sm:col-span-3",
+  4: "sm:col-span-4",
+  6: "sm:col-span-6",
+};
+
 function Champ({
   label,
   children,
-  large = false,
+  span = 2,
 }: {
   label: string;
   children: React.ReactNode;
-  large?: boolean;
+  span?: 2 | 3 | 4 | 6;
 }) {
   return (
-    <label className={`flex flex-col gap-1 ${large ? "sm:col-span-2" : ""}`}>
+    <label className={`flex flex-col gap-1 ${LARGEURS[span]}`}>
       <span className={etiquette}>{label}</span>
       {children}
     </label>
@@ -207,14 +240,26 @@ export default function PartenairesPanel({
             {editionId ? "Modifier le partenaire" : "Nouveau partenaire"}
           </h3>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-3">
-            <Champ label="Nature">
+          {/* DISPOSITION EN BLOCS, ET NON EN GRILLE UNIFORME.
+              Une fiche partenaire répond à trois questions distinctes : qui
+              est-ce, comment le joindre, à quelles conditions. Les aligner
+              dans une seule grille de quatre colonnes mettait l'agrément à
+              côté du taux de TPS — deux champs qu'on ne remplit jamais dans
+              le même geste. Chaque bloc a donc sa grille, calée sur le nombre
+              de champs qu'il contient. */}
+
+          {/* Identité */}
+          <div className="grid grid-cols-1 sm:grid-cols-6 gap-3 mt-3">
+            <Champ label="Nature" span={2}>
               <select
                 value={saisie.kind}
                 onChange={(e) => set("kind", e.target.value as NaturePartenaire)}
                 className={champ}
               >
-                {(Object.keys(LIBELLES_NATURE) as NaturePartenaire[]).map((k) => (
+                {/* Pas de BTCC ici : ce sont les banques du fonds, déjà
+                    décrites par ses comptes de trésorerie. Les saisir une
+                    seconde fois les ferait diverger. */}
+                {(["sgi", "autre"] as NaturePartenaire[]).map((k) => (
                   <option key={k} value={k}>
                     {LIBELLES_NATURE[k]}
                   </option>
@@ -222,7 +267,7 @@ export default function PartenairesPanel({
               </select>
             </Champ>
 
-            <Champ label="Nom" large>
+            <Champ label="Nom" span={4}>
               <input
                 value={saisie.nom}
                 onChange={(e) => set("nom", e.target.value)}
@@ -231,7 +276,7 @@ export default function PartenairesPanel({
               />
             </Champ>
 
-            <Champ label="N° d'agrément">
+            <Champ label="N° d'agrément" span={2}>
               <input
                 value={saisie.agrement}
                 onChange={(e) => set("agrement", e.target.value)}
@@ -239,70 +284,25 @@ export default function PartenairesPanel({
               />
             </Champ>
 
-            <Champ label="Pays">
+            <Champ label="Pays" span={2}>
+              {/* Saisissable ET listé : les huit UEMOA en tête, le reste du
+                  monde derrière. Le champ reste libre pour ne pas bloquer une
+                  dénomination que la liste ignore. */}
               <input
                 value={saisie.pays}
                 onChange={(e) => set("pays", e.target.value)}
+                list={ID_PAYS}
+                placeholder="Taper ou choisir…"
                 className={champ}
               />
+              <datalist id={ID_PAYS}>
+                {PAYS_PROPOSES.map((p) => (
+                  <option key={p} value={p} />
+                ))}
+              </datalist>
             </Champ>
 
-            <Champ label="Email">
-              <input
-                value={saisie.email}
-                onChange={(e) => set("email", e.target.value)}
-                className={champ}
-              />
-            </Champ>
-
-            <Champ label="Téléphone">
-              <input
-                value={saisie.telephone}
-                onChange={(e) => set("telephone", e.target.value)}
-                className={champ}
-              />
-            </Champ>
-
-            <Champ label="Adresse" large>
-              <input
-                value={saisie.adresse}
-                onChange={(e) => set("adresse", e.target.value)}
-                className={champ}
-              />
-            </Champ>
-
-            {/* Saisis en POURCENTAGE : personne ne pense « 0,004 ». */}
-            <Champ label="Courtage standard (%)">
-              <input
-                value={versPct(saisie.tauxCourtage)}
-                onChange={(e) => set("tauxCourtage", depuisPct(e.target.value))}
-                inputMode="decimal"
-                className={`${champ} text-right tabular-nums`}
-              />
-              <span className="text-[9px] text-slate-400">Usuel : 0,4</span>
-            </Champ>
-
-            <Champ label="TPS sur courtage (%)">
-              <input
-                value={versPct(saisie.tauxTps)}
-                onChange={(e) => set("tauxTps", depuisPct(e.target.value))}
-                inputMode="decimal"
-                className={`${champ} text-right tabular-nums`}
-              />
-              <span className="text-[9px] text-slate-400">Usuel : 10</span>
-            </Champ>
-
-            <Champ label="BRVM / DC-BR (%)">
-              <input
-                value={versPct(saisie.tauxBrvm)}
-                onChange={(e) => set("tauxBrvm", depuisPct(e.target.value))}
-                inputMode="decimal"
-                className={`${champ} text-right tabular-nums`}
-              />
-              <span className="text-[9px] text-slate-400">Usuel : 0,3</span>
-            </Champ>
-
-            <Champ label="Statut">
+            <Champ label="Statut" span={2}>
               <select
                 value={saisie.actif ? "actif" : "inactif"}
                 onChange={(e) => set("actif", e.target.value === "actif")}
@@ -312,17 +312,72 @@ export default function PartenairesPanel({
                 <option value="inactif">Inactif</option>
               </select>
               <span className="text-[9px] text-slate-400">
-                Un partenaire inactif reste en base mais n&apos;est plus proposé.
+                Un partenaire inactif n&apos;est plus proposé à la saisie.
               </span>
             </Champ>
+          </div>
 
-            <Champ label="Note" large>
+          {/* Coordonnées */}
+          <div className="grid grid-cols-1 sm:grid-cols-6 gap-3 mt-3 pt-3 border-t border-slate-100">
+            <Champ label="Email" span={2}>
               <input
-                value={saisie.note}
-                onChange={(e) => set("note", e.target.value)}
+                value={saisie.email}
+                onChange={(e) => set("email", e.target.value)}
                 className={champ}
               />
             </Champ>
+            <Champ label="Téléphone" span={2}>
+              <input
+                value={saisie.telephone}
+                onChange={(e) => set("telephone", e.target.value)}
+                className={champ}
+              />
+            </Champ>
+            <Champ label="Adresse" span={2}>
+              <input
+                value={saisie.adresse}
+                onChange={(e) => set("adresse", e.target.value)}
+                className={champ}
+              />
+            </Champ>
+          </div>
+
+          {/* Conditions négociées */}
+          <div className="mt-3 pt-3 border-t border-slate-100">
+            <h4 className="text-xs font-semibold text-slate-800">Conditions négociées</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-6 gap-3 mt-2">
+              {/* La commission BRVM / DC-BR ne figure PAS ici : c'est un tarif
+                  de place, identique pour toutes les SGI, et il se règle par
+                  instrument à la saisie de l'opération. La faire figurer sur
+                  une fiche partenaire laissait croire qu'elle se négocie. */}
+              <Champ label="Courtage (%)" span={2}>
+                <input
+                  value={versPct(saisie.tauxCourtage)}
+                  onChange={(e) => set("tauxCourtage", depuisPct(e.target.value))}
+                  inputMode="decimal"
+                  className={`${champ} text-right tabular-nums`}
+                />
+                <span className="text-[9px] text-slate-400">Usuel : 0,4</span>
+              </Champ>
+
+              <Champ label="TPS sur courtage (%)" span={2}>
+                <input
+                  value={versPct(saisie.tauxTps)}
+                  onChange={(e) => set("tauxTps", depuisPct(e.target.value))}
+                  inputMode="decimal"
+                  className={`${champ} text-right tabular-nums`}
+                />
+                <span className="text-[9px] text-slate-400">Usuel : 10</span>
+              </Champ>
+
+              <Champ label="Note" span={2}>
+                <input
+                  value={saisie.note}
+                  onChange={(e) => set("note", e.target.value)}
+                  className={champ}
+                />
+              </Champ>
+            </div>
           </div>
 
           {/* ── Référents ─────────────────────────────────────────────────── */}
@@ -345,45 +400,53 @@ export default function PartenairesPanel({
             {saisie.referents.map((r, i) => (
               <div
                 key={i}
-                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-3 pt-3 border-t border-slate-100 first:border-0 first:pt-0"
+                className="mt-3 pt-3 border-t border-slate-100 first:border-0 first:pt-0"
               >
-                <Champ label={`Référent ${i + 1} — nom`}>
-                  <input
-                    value={r.nom}
-                    onChange={(e) => setReferent(i, "nom", e.target.value)}
-                    className={champ}
-                  />
-                </Champ>
-                <Champ label="Fonction">
-                  <input
-                    value={r.fonction}
-                    onChange={(e) => setReferent(i, "fonction", e.target.value)}
-                    className={champ}
-                  />
-                </Champ>
-                <Champ label="Email">
-                  <input
-                    value={r.email}
-                    onChange={(e) => setReferent(i, "email", e.target.value)}
-                    className={champ}
-                  />
-                </Champ>
-                <div className="flex items-end gap-2">
-                  <Champ label="Téléphone">
+                {/* Le bouton de retrait est dans l'EN-TÊTE du bloc et non
+                    collé au dernier champ : accroché à « Téléphone », il
+                    tombait sous le curseur juste après la saisie, à l'endroit
+                    exact où l'on tabule. */}
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-[10px] uppercase tracking-wider text-slate-500">
+                    Référent {i + 1}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => retirerReferent(i)}
+                    className="text-[10px] text-rose-600 hover:text-rose-800"
+                  >
+                    Retirer
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-6 gap-3 mt-1.5">
+                  <Champ label="Nom" span={3}>
+                    <input
+                      value={r.nom}
+                      onChange={(e) => setReferent(i, "nom", e.target.value)}
+                      className={champ}
+                    />
+                  </Champ>
+                  <Champ label="Fonction" span={3}>
+                    <input
+                      value={r.fonction}
+                      onChange={(e) => setReferent(i, "fonction", e.target.value)}
+                      className={champ}
+                    />
+                  </Champ>
+                  <Champ label="Email" span={3}>
+                    <input
+                      value={r.email}
+                      onChange={(e) => setReferent(i, "email", e.target.value)}
+                      className={champ}
+                    />
+                  </Champ>
+                  <Champ label="Téléphone" span={3}>
                     <input
                       value={r.telephone}
                       onChange={(e) => setReferent(i, "telephone", e.target.value)}
                       className={champ}
                     />
                   </Champ>
-                  <button
-                    type="button"
-                    onClick={() => retirerReferent(i)}
-                    title="Retirer ce référent"
-                    className="mb-1.5 text-[11px] text-rose-600 hover:text-rose-800"
-                  >
-                    Retirer
-                  </button>
                 </div>
               </div>
             ))}
@@ -423,7 +486,6 @@ export default function PartenairesPanel({
                 <th className="text-left px-3 py-2 font-medium">Agrément</th>
                 <th className="text-right px-3 py-2 font-medium">Courtage</th>
                 <th className="text-right px-3 py-2 font-medium">TPS</th>
-                <th className="text-right px-3 py-2 font-medium">BRVM</th>
                 <th className="text-left px-3 py-2 font-medium">Référents</th>
                 <th className="text-left px-3 py-2 font-medium">Statut</th>
                 <th className="px-3 py-2" />
@@ -432,7 +494,7 @@ export default function PartenairesPanel({
             <tbody className="divide-y divide-slate-100">
               {initialPartenaires.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-3 py-6 text-center text-slate-400">
+                  <td colSpan={8} className="px-3 py-6 text-center text-slate-400">
                     Aucun partenaire enregistré.
                   </td>
                 </tr>
@@ -449,9 +511,6 @@ export default function PartenairesPanel({
                     </td>
                     <td className="px-3 py-1.5 text-right tabular-nums">
                       {(p.tauxTps * 100).toFixed(2).replace(".", ",")} %
-                    </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums">
-                      {(p.tauxBrvm * 100).toFixed(2).replace(".", ",")} %
                     </td>
                     <td
                       className="px-3 py-1.5 text-slate-600"
