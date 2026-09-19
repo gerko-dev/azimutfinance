@@ -16,6 +16,14 @@ import type { ActionResult } from "@/lib/admin/types";
 import { estNiveau1, MSG_NIVEAU1 } from "./guard";
 import { construirePointTresorerie } from "./tresorerie-data";
 import {
+  caracteristiques,
+  etatsMtp,
+  titresMfr,
+  titresMtp,
+  type CaracteristiquesTitre,
+  type OptionTitre,
+} from "./operations-marche-titres";
+import {
   DESCRIPTIONS,
   dateDenouement,
   type DescriptionOperation,
@@ -90,6 +98,50 @@ export async function comptesReglementAction(
       sens: e.sens,
     })),
   };
+}
+
+/**
+ * Titres proposables, selon le marche.
+ *
+ * MFR : actions et obligations COTEES du referentiel BRVM. MTP : titres
+ * publics de l'Etat choisi. Ces listes se lisent dans les CSV du site, donc au
+ * serveur ; elles ne sont pas assez volumineuses pour justifier une recherche
+ * paginee, et une liste complete se filtre au clavier dans le navigateur.
+ *
+ * Pas de garde sur un fonds ici : ce sont des donnees de marche, publiques sur
+ * le portail. Le niveau 1 du layout suffit.
+ */
+export async function listerTitresAction(
+  marche: "mfr" | "mtp",
+  pays: string,
+): Promise<
+  ActionResult<{ etats: { code: string; nom: string }[]; titres: OptionTitre[] }>
+> {
+  if (!(await estNiveau1())) return { ok: false, error: MSG_NIVEAU1 };
+  if (marche === "mfr") return { ok: true, data: { etats: [], titres: titresMfr() } };
+  const etats = etatsMtp();
+  const choisi = pays || etats[0]?.code || "";
+  return { ok: true, data: { etats, titres: choisi ? titresMtp(choisi) : [] } };
+}
+
+/**
+ * Caracteristiques d'un titre a une date : ISIN, nominal, taux facial,
+ * echeance et INTERETS COURUS PAR TITRE.
+ *
+ * Les courus sont la raison d'etre de cette action. Les ressaisir a la main
+ * etait la porte ouverte a un zero oublie sur un montant a neuf chiffres,
+ * alors que le site connait le taux facial et les dates de detachement.
+ */
+export async function caracteristiquesTitreAction(
+  marche: "mfr" | "mtp",
+  cle: string,
+  pays: string,
+  dateOperation: string,
+): Promise<ActionResult<CaracteristiquesTitre>> {
+  if (!(await estNiveau1())) return { ok: false, error: MSG_NIVEAU1 };
+  const c = caracteristiques(marche, cle, pays, dateOperation);
+  if (!c) return { ok: false, error: "Titre introuvable dans le référentiel." };
+  return { ok: true, data: c };
 }
 
 export async function enregistrerOperationMarcheAction(

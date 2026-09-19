@@ -8,20 +8,30 @@
 // plusieurs portefeuilles, et changer d'écran entre deux lignes du même
 // bordereau n'aurait pas de sens.
 //
+// LE TITRE SE CHOISIT, IL NE SE RETAPE PAS. Le site connaît le référentiel
+// BRVM et les titres publics UMOA : l'ISIN, le taux facial et les dates de
+// détachement en découlent, et avec eux les intérêts courus. Les ressaisir à
+// la main était la porte ouverte à un zéro oublié sur un montant à neuf
+// chiffres.
+//
 // Pour l'instant, ces opérations n'alimentent QUE le point de trésorerie.
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import {
+  caracteristiquesTitreAction,
   comptesReglementAction,
   enregistrerOperationMarcheAction,
+  listerTitresAction,
   supprimerOperationMarcheAction,
 } from "@/app/gestion-portefeuille/operations-marche-actions";
 import {
   DESCRIPTIONS,
+  INSTRUMENTS_ADMIS,
   LIBELLES_INSTRUMENT,
   dateDenouement,
+  marcheDe,
   montantOperation,
   posteDe,
   sensDe,
@@ -29,6 +39,7 @@ import {
   type Instrument,
 } from "@/app/gestion-portefeuille/operations-marche-types";
 import type { OperationAvecFonds } from "@/app/gestion-portefeuille/operations-marche-data";
+import type { OptionTitre } from "@/app/gestion-portefeuille/operations-marche-titres";
 
 const fmt0 = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
 const montantFr = (v: number) => fmt0.format(Math.round(v));
@@ -36,6 +47,7 @@ const montantFr = (v: number) => fmt0.format(Math.round(v));
 const champ =
   "w-full text-xs border border-slate-300 rounded px-2 py-1.5 focus:border-blue-400 focus:outline-none";
 const etiquette = "text-[10px] uppercase tracking-wider text-slate-500";
+const aide = "text-[9px] text-slate-400";
 
 /** Taux usuels d'une négociation d'actions à la BRVM, repris du classeur :
  *  0,4 % de courtage, 10 % de TPS SUR CE COURTAGE, 0,3 % BRVM/DC-BR.
@@ -43,6 +55,7 @@ const etiquette = "text-[10px] uppercase tracking-wider text-slate-500";
 const TAUX_ACTIONS = { courtage: 0.004, tps: 0.1, brvm: 0.003 };
 
 type Compte = { cle: string; nom: string; pays: string; sens: string };
+type Etat = { code: string; nom: string };
 
 function Champ({
   label,
@@ -65,6 +78,8 @@ export default function OperationsMarchePanel({
   fonds,
   operations,
   comptesInitiaux,
+  etatsInitiaux,
+  titresInitiaux,
 }: {
   fonds: { id: string; nom: string }[];
   operations: OperationAvecFonds[];
@@ -74,6 +89,9 @@ export default function OperationsMarchePanel({
    *  raison : ce serait un rendu en cascade pour une donnée qu'on sait
    *  produire au moment du clic. */
   comptesInitiaux: Compte[];
+  etatsInitiaux: Etat[];
+  /** Titres du marché présenté d'emblée (MTP, premier État). */
+  titresInitiaux: OptionTitre[];
 }) {
   const router = useRouter();
   const [enCours, demarrer] = useTransition();
@@ -95,20 +113,41 @@ export default function OperationsMarchePanel({
   const [tauxCourtage, setTauxCourtage] = useState("0");
   const [tauxTps, setTauxTps] = useState("0");
   const [tauxBrvm, setTauxBrvm] = useState("0");
-  const [interetsCourus, setInteretsCourus] = useState("0");
   const [compteReglement, setCompteReglement] = useState("");
   const [note, setNote] = useState("");
   // Le dénouement est CALCULÉ mais reste modifiable : un règlement peut
   // déraper, et la liste des jours fériés s'arrête à début 2027.
   const [denouementManuel, setDenouementManuel] = useState<string | null>(null);
 
-  // Comptes de règlement du fonds choisi — les COLONNES de son point de
-  // trésorerie. Ceux du premier fonds viennent du serveur ; les autres se
-  // chargent au changement de fonds. Précharger ceux de TOUS les fonds ferait
-  // autant de lectures d'inventaire pour n'en servir qu'une.
+  const marche = marcheDe(description);
+
+  // ── Choix du titre ───────────────────────────────────────────────────────
+  const [etats] = useState<Etat[]>(etatsInitiaux);
+  const [pays, setPays] = useState(etatsInitiaux[0]?.code ?? "");
+  const [titres, setTitres] = useState<OptionTitre[]>(titresInitiaux);
+  const [titreCle, setTitreCle] = useState("");
+  const [titresEtat, setTitresEtat] = useState<"chargement" | "pret">("pret");
+
+  // Intérêts courus : calculés d'après les caractéristiques du titre, et
+  // MULTIPLIÉS par la quantité. Le gérant peut forcer la valeur — un avis
+  // d'opéré fait foi contre un calcul — et l'écran dit alors qu'elle est
+  // forcée plutôt que de laisser croire qu'elle a été calculée.
+  const [couruParTitre, setCouruParTitre] = useState(0);
+  const [couruAvertissement, setCouruAvertissement] = useState<string | null>(null);
+  const [couruManuel, setCouruManuel] = useState<string | null>(null);
+
+  // ── Comptes de règlement du fonds choisi ────────────────────────────────
   const [comptes, setComptes] = useState<Compte[]>(comptesInitiaux);
   const [comptesEtat, setComptesEtat] = useState<"chargement" | "pret" | "erreur">("pret");
   const [comptesErreur, setComptesErreur] = useState<string | null>(null);
+
+  const n = (v: string) => {
+    const x = Number(v.replace(/\s/g, "").replace(",", "."));
+    return Number.isFinite(x) ? x : 0;
+  };
+
+  const couruCalcule = couruParTitre * n(quantite);
+  const interetsCourus = couruManuel !== null ? n(couruManuel) : couruCalcule;
 
   const changerFonds = (id: string) => {
     setFondsId(id);
@@ -128,9 +167,102 @@ export default function OperationsMarchePanel({
     });
   };
 
-  const n = (v: string) => {
-    const x = Number(v.replace(/\s/g, "").replace(",", "."));
-    return Number.isFinite(x) ? x : 0;
+  /** Vide ce qui décrit le titre : changer de marché ou d'État invalide le
+   *  titre choisi, et garder son ISIN ou ses courus serait pire que rien. */
+  const oublierTitre = () => {
+    setTitreCle("");
+    setCode("");
+    setLibelle("");
+    setCouruParTitre(0);
+    setCouruAvertissement(null);
+    setCouruManuel(null);
+  };
+
+  const chargerTitres = (m: "mfr" | "mtp", p: string) => {
+    setTitresEtat("chargement");
+    demarrer(async () => {
+      const res = await listerTitresAction(m, p);
+      setTitres(res.ok ? res.data.titres : []);
+      setTitresEtat("pret");
+    });
+  };
+
+  // Changer de type d'opération repositionne le marché, l'instrument ET les
+  // taux sur ce qui est usuel : les titres publics ne supportent pas de
+  // courtage, les actions oui. Le gérant reste libre de corriger.
+  const changerDescription = (d: DescriptionOperation) => {
+    setDescription(d);
+    const m = marcheDe(d);
+    const suggere = DESCRIPTIONS.find((x) => x.valeur === d)?.instrumentSuggere ?? "mtp";
+    setInstrument(suggere);
+    const actions = suggere === "actions";
+    setTauxCourtage(actions ? String(TAUX_ACTIONS.courtage) : "0");
+    setTauxTps(actions ? String(TAUX_ACTIONS.tps) : "0");
+    setTauxBrvm(actions ? String(TAUX_ACTIONS.brvm) : "0");
+    setDenouementManuel(null);
+    oublierTitre();
+    if (m === "mfr" || m === "mtp") chargerTitres(m, pays);
+    else setTitres([]);
+  };
+
+  const changerPays = (p: string) => {
+    setPays(p);
+    oublierTitre();
+    chargerTitres("mtp", p);
+  };
+
+  const choisirTitre = (cle: string) => {
+    setTitreCle(cle);
+    if (!cle) {
+      oublierTitre();
+      return;
+    }
+    const opt = titres.find((t) => t.cle === cle);
+    if (opt) {
+      setCode(opt.isin || opt.cle);
+      setLibelle(opt.libelle);
+      // L'instrument découle du titre : une action ne peut pas être saisie
+      // comme obligation, et l'inverse fausserait le délai de dénouement.
+      setInstrument(opt.instrument);
+      setDenouementManuel(null);
+    }
+    setCouruManuel(null);
+    demarrer(async () => {
+      const res = await caracteristiquesTitreAction(
+        marche === "mtp" ? "mtp" : "mfr",
+        cle,
+        pays,
+        dateOperation,
+      );
+      if (res.ok) {
+        setCouruParTitre(res.data.couruParTitre);
+        setCouruAvertissement(res.data.avertissement);
+        if (res.data.isin) setCode(res.data.isin);
+      } else {
+        setCouruParTitre(0);
+        setCouruAvertissement(res.error);
+      }
+    });
+  };
+
+  // Les courus dépendent de la date : la changer les recalcule sur le titre
+  // déjà choisi, au lieu de laisser à l'écran une valeur devenue fausse.
+  const changerDate = (d: string) => {
+    setDateOperation(d);
+    setDenouementManuel(null);
+    if (!titreCle) return;
+    demarrer(async () => {
+      const res = await caracteristiquesTitreAction(
+        marche === "mtp" ? "mtp" : "mfr",
+        titreCle,
+        pays,
+        d,
+      );
+      if (res.ok) {
+        setCouruParTitre(res.data.couruParTitre);
+        setCouruAvertissement(res.data.avertissement);
+      }
+    });
   };
 
   const denouementCalcule = useMemo(
@@ -148,24 +280,10 @@ export default function OperationsMarchePanel({
         tauxCourtage: Number(tauxCourtage.replace(",", ".")) || 0,
         tauxTps: Number(tauxTps.replace(",", ".")) || 0,
         tauxBrvm: Number(tauxBrvm.replace(",", ".")) || 0,
-        interetsCourus: Number(interetsCourus.replace(/\s/g, "").replace(",", ".")) || 0,
+        interetsCourus,
       }),
     [description, quantite, prix, tauxCourtage, tauxTps, tauxBrvm, interetsCourus],
   );
-
-  // Changer de type d'opération repositionne l'instrument ET les taux sur ce
-  // qui est usuel pour ce marché : les titres publics ne supportent pas de
-  // courtage, les actions oui. Le gérant reste libre de corriger.
-  const changerDescription = (d: DescriptionOperation) => {
-    setDescription(d);
-    const suggere = DESCRIPTIONS.find((x) => x.valeur === d)?.instrumentSuggere ?? "mtp";
-    setInstrument(suggere);
-    const actions = suggere === "actions";
-    setTauxCourtage(actions ? String(TAUX_ACTIONS.courtage) : "0");
-    setTauxTps(actions ? String(TAUX_ACTIONS.tps) : "0");
-    setTauxBrvm(actions ? String(TAUX_ACTIONS.brvm) : "0");
-    setDenouementManuel(null);
-  };
 
   const enregistrer = () => {
     setErreur(null);
@@ -188,7 +306,7 @@ export default function OperationsMarchePanel({
         tauxCourtage: n(tauxCourtage),
         tauxTps: n(tauxTps),
         tauxBrvm: n(tauxBrvm),
-        interetsCourus: n(interetsCourus),
+        interetsCourus,
         compteReglement,
         statut: "ok",
         note,
@@ -200,12 +318,10 @@ export default function OperationsMarchePanel({
       setOk(true);
       // Le fonds, la date et le type RESTENT : on saisit un bordereau, pas une
       // opération isolée, et les lignes qui se suivent partagent l'essentiel.
-      setCode("");
-      setLibelle("");
       setQuantite("");
       setPrix("");
-      setInteretsCourus("0");
       setNote("");
+      oublierTitre();
       router.refresh();
     });
   };
@@ -225,6 +341,8 @@ export default function OperationsMarchePanel({
       </div>
     );
   }
+
+  const instrumentsAdmis = INSTRUMENTS_ADMIS[marche];
 
   return (
     <div className="space-y-4">
@@ -264,10 +382,7 @@ export default function OperationsMarchePanel({
             <input
               type="date"
               value={dateOperation}
-              onChange={(e) => {
-                setDateOperation(e.target.value);
-                setDenouementManuel(null);
-              }}
+              onChange={(e) => changerDate(e.target.value)}
               className={champ}
             />
           </Champ>
@@ -295,13 +410,75 @@ export default function OperationsMarchePanel({
               }}
               className={champ}
             >
-              {(Object.keys(LIBELLES_INSTRUMENT) as Instrument[]).map((i) => (
+              {instrumentsAdmis.map((i) => (
                 <option key={i} value={i}>
                   {LIBELLES_INSTRUMENT[i]}
                 </option>
               ))}
             </select>
+            <span className={aide}>
+              {marche === "mfr"
+                ? "MFR : actions et obligations cotées"
+                : marche === "mtp"
+                  ? "MTP : OAT, OTAR et BAT"
+                  : "Hors marché coté"}
+            </span>
           </Champ>
+
+          {/* MTP : l'État d'abord, puis ses titres. */}
+          {marche === "mtp" && (
+            <Champ label="État émetteur">
+              <select
+                value={pays}
+                onChange={(e) => changerPays(e.target.value)}
+                className={champ}
+              >
+                {etats.map((e) => (
+                  <option key={e.code} value={e.code}>
+                    {e.nom}
+                  </option>
+                ))}
+              </select>
+            </Champ>
+          )}
+
+          {/* MFR et MTP : le titre se choisit dans le référentiel. */}
+          {(marche === "mfr" || marche === "mtp") && (
+            <Champ label={marche === "mtp" ? "Titre public" : "Titre"} large>
+              <select
+                value={titreCle}
+                onChange={(e) => choisirTitre(e.target.value)}
+                disabled={titresEtat === "chargement"}
+                className={`${champ} disabled:bg-slate-50 disabled:text-slate-400`}
+              >
+                <option value="">
+                  {titresEtat === "chargement"
+                    ? "Chargement des titres…"
+                    : `— Choisir parmi ${titres.length} titres —`}
+                </option>
+                {titres.map((t) => (
+                  <option key={t.cle} value={t.cle}>
+                    {t.libelle} · {t.detail}
+                  </option>
+                ))}
+              </select>
+            </Champ>
+          )}
+
+          <Champ label="Code / ISIN">
+            <input value={code} onChange={(e) => setCode(e.target.value)} className={champ} />
+            <span className={aide}>Pré-rempli par le titre, modifiable.</span>
+          </Champ>
+
+          {marche === "autre" && (
+            <Champ label="Titre" large>
+              <input
+                value={libelle}
+                onChange={(e) => setLibelle(e.target.value)}
+                className={champ}
+              />
+            </Champ>
+          )}
 
           <Champ label="Dénouement">
             <input
@@ -310,22 +487,10 @@ export default function OperationsMarchePanel({
               onChange={(e) => setDenouementManuel(e.target.value)}
               className={champ}
             />
-            <span className="text-[9px] text-slate-400">
+            <span className={aide}>
               {instrument === "actions" ? "J+2 ouvrés" : "J+0"}
               {denouementManuel && denouementManuel !== denouementCalcule && " · forcé"}
             </span>
-          </Champ>
-
-          <Champ label="Code / ISIN">
-            <input value={code} onChange={(e) => setCode(e.target.value)} className={champ} />
-          </Champ>
-
-          <Champ label="Titre" large>
-            <input
-              value={libelle}
-              onChange={(e) => setLibelle(e.target.value)}
-              className={champ}
-            />
           </Champ>
 
           <Champ label="SGI / BTCC">
@@ -352,11 +517,31 @@ export default function OperationsMarchePanel({
 
           <Champ label="Intérêts courus">
             <input
-              value={interetsCourus}
-              onChange={(e) => setInteretsCourus(e.target.value)}
+              value={couruManuel ?? String(Math.round(couruCalcule))}
+              onChange={(e) => setCouruManuel(e.target.value)}
               inputMode="numeric"
-              className={`${champ} text-right tabular-nums`}
+              className={`${champ} text-right tabular-nums ${
+                couruManuel === null ? "bg-slate-50" : ""
+              }`}
             />
+            <span className={aide}>
+              {couruManuel !== null ? (
+                <>
+                  forcé ·{" "}
+                  <button
+                    type="button"
+                    onClick={() => setCouruManuel(null)}
+                    className="underline hover:text-slate-600"
+                  >
+                    revenir au calcul
+                  </button>
+                </>
+              ) : couruParTitre > 0 ? (
+                `calculé · ${montantFr(couruParTitre)} F par titre`
+              ) : (
+                "calculé d'après le titre choisi"
+              )}
+            </span>
           </Champ>
 
           <Champ label="Compte de règlement" large>
@@ -418,6 +603,12 @@ export default function OperationsMarchePanel({
           </Champ>
         </div>
 
+        {couruAvertissement && (
+          <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2 mt-3">
+            {couruAvertissement}
+          </p>
+        )}
+
         {/* Le montant se calcule sous les yeux du gérant : c'est là qu'une
             erreur de taux ou de quantité se voit, pas après enregistrement. */}
         <div className="flex flex-wrap items-center justify-between gap-3 mt-4 pt-3 border-t border-slate-200">
@@ -430,7 +621,7 @@ export default function OperationsMarchePanel({
               {fmt0.format(n(quantite))} × {fmt0.format(n(prix))}
               {n(tauxCourtage) + n(tauxBrvm) > 0 &&
                 ` ${sensDe(description) === "achat" ? "+" : "−"} frais`}
-              {n(interetsCourus) !== 0 && " + courus"}
+              {interetsCourus !== 0 && ` + ${montantFr(interetsCourus)} de courus`}
             </span>
           </div>
           <button
@@ -468,6 +659,7 @@ export default function OperationsMarchePanel({
                 <th className="text-left px-3 py-2 font-medium">Titre</th>
                 <th className="text-right px-3 py-2 font-medium">Quantité</th>
                 <th className="text-right px-3 py-2 font-medium">Prix</th>
+                <th className="text-right px-3 py-2 font-medium">Courus</th>
                 <th className="text-right px-3 py-2 font-medium">Montant</th>
                 <th className="text-left px-3 py-2 font-medium">Règlement</th>
                 <th className="px-3 py-2" />
@@ -476,7 +668,7 @@ export default function OperationsMarchePanel({
             <tbody className="divide-y divide-slate-100">
               {operations.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="px-3 py-6 text-center text-slate-400">
+                  <td colSpan={11} className="px-3 py-6 text-center text-slate-400">
                     Aucune opération saisie.
                   </td>
                 </tr>
@@ -502,6 +694,9 @@ export default function OperationsMarchePanel({
                   </td>
                   <td className="px-3 py-1.5 text-right tabular-nums">
                     {fmt0.format(o.prix)}
+                  </td>
+                  <td className="px-3 py-1.5 text-right tabular-nums text-slate-500">
+                    {o.interetsCourus ? montantFr(o.interetsCourus) : "—"}
                   </td>
                   <td className="px-3 py-1.5 text-right tabular-nums font-medium">
                     {montantFr(o.montant)}

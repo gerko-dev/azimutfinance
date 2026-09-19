@@ -3,6 +3,7 @@ import OperationsMarchePanel from "@/components/gestion-portefeuille/OperationsM
 import { loadMyFunds } from "../data";
 import { loadToutesOperationsMarche } from "../operations-marche-data";
 import { construirePointTresorerie } from "../tresorerie-data";
+import { etatsMtp, titresMtp } from "../operations-marche-titres";
 
 export const metadata = {
   title: "Opérations de marché — Gestion de portefeuille",
@@ -40,11 +41,20 @@ export default async function OperationsMarchePage() {
     sens: e.sens,
   }));
 
+  // Le formulaire s'ouvre sur « Achats MTP réalisés » : ses États et les
+  // titres du premier d'entre eux sont résolus ici, pour la même raison que
+  // les comptes — pas de chargement au montage, donc pas de setState dans un
+  // effet.
+  const etatsInitiaux = etatsMtp();
+  const titresInitiaux = etatsInitiaux[0] ? titresMtp(etatsInitiaux[0].code) : [];
+
   return (
     <OperationsMarchePanel
       fonds={fonds.map((f) => ({ id: f.id, nom: f.nom }))}
       operations={operations}
       comptesInitiaux={comptesInitiaux}
+      etatsInitiaux={etatsInitiaux}
+      titresInitiaux={titresInitiaux}
     />
   );
 }

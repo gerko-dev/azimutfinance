@@ -52,11 +52,25 @@ export type SaisieOperation = Omit<OperationMarche, "id" | "montant">;
  * trésorerie — qui est la clef de rapprochement, d'où l'orthographe exacte du
  * classeur, accent compris.
  */
+/** Marché sur lequel l'opération se traite. Décide de la façon dont le titre
+ *  se choisit : référentiel BRVM pour le MFR, titres publics par État pour le
+ *  MTP, saisie libre pour le reste. */
+export type Marche = "mfr" | "mtp" | "autre";
+
+/** Instruments admis selon le marché. Un achat MFR porte sur une action ou une
+ *  obligation cotée, jamais sur un titre public — et réciproquement. */
+export const INSTRUMENTS_ADMIS: Record<Marche, Instrument[]> = {
+  mfr: ["actions", "obligations"],
+  mtp: ["mtp"],
+  autre: ["actions", "obligations", "mtp"],
+};
+
 export const DESCRIPTIONS: {
   valeur: DescriptionOperation;
   libelle: string;
   poste: string;
   sens: "achat" | "vente";
+  marche: Marche;
   instrumentSuggere: Instrument;
 }[] = [
   {
@@ -64,6 +78,7 @@ export const DESCRIPTIONS: {
     libelle: "Achats MFR validés",
     poste: "ACHATS MFR VALIDES",
     sens: "achat",
+    marche: "mfr",
     instrumentSuggere: "actions",
   },
   {
@@ -71,6 +86,7 @@ export const DESCRIPTIONS: {
     libelle: "Achats MTP validés",
     poste: "ACHATS MTP VALIDES",
     sens: "achat",
+    marche: "mtp",
     instrumentSuggere: "mtp",
   },
   {
@@ -78,6 +94,7 @@ export const DESCRIPTIONS: {
     libelle: "Achats à réméré validés",
     poste: "ACHATS A RÉMÉRÉ VALIDES",
     sens: "achat",
+    marche: "autre",
     instrumentSuggere: "obligations",
   },
   {
@@ -85,6 +102,7 @@ export const DESCRIPTIONS: {
     libelle: "Achats MFR réalisés",
     poste: "ACHATS MFR REALISES",
     sens: "achat",
+    marche: "mfr",
     instrumentSuggere: "actions",
   },
   {
@@ -92,6 +110,7 @@ export const DESCRIPTIONS: {
     libelle: "Achats MTP réalisés",
     poste: "ACHATS MTP REALISES",
     sens: "achat",
+    marche: "mtp",
     instrumentSuggere: "mtp",
   },
   {
@@ -99,6 +118,7 @@ export const DESCRIPTIONS: {
     libelle: "Ventes MFR réalisées",
     poste: "VENTES MFR REALISEES",
     sens: "vente",
+    marche: "mfr",
     instrumentSuggere: "actions",
   },
   {
@@ -106,6 +126,7 @@ export const DESCRIPTIONS: {
     libelle: "Ventes MTP réalisées",
     poste: "VENTES MTP REALISEES",
     sens: "vente",
+    marche: "mtp",
     instrumentSuggere: "mtp",
   },
 ];
@@ -121,6 +142,11 @@ const PAR_DESCRIPTION = new Map(DESCRIPTIONS.map((d) => [d.valeur, d]));
 /** Poste du point de trésorerie visé par cette description. */
 export function posteDe(d: DescriptionOperation): string {
   return PAR_DESCRIPTION.get(d)?.poste ?? "";
+}
+
+/** Marché de l'opération : décide de la façon dont le titre se choisit. */
+export function marcheDe(d: DescriptionOperation): Marche {
+  return PAR_DESCRIPTION.get(d)?.marche ?? "autre";
 }
 
 /** Achat ou vente — c'est ce qui décide du SENS des frais. */
