@@ -355,14 +355,22 @@ export default function OperationsMarchePanel({
 
   const instrumentsAdmis = INSTRUMENTS_ADMIS[marche];
 
-  // LA LISTE SUIT L'INSTRUMENT.
+  // LA LISTE SUIT L'INSTRUMENT, SANS EXCEPTION.
   //
-  // Sur le MFR, actions et obligations cotées viennent du même référentiel et
-  // arrivent dans la même réponse. Les présenter mêlées obligeait à retrouver
-  // une action parmi des dizaines d'obligations alors que la nature du titre
-  // est DÉJÀ choisie juste au-dessus. On filtre donc sur elle.
-  const titresAffiches =
-    marche === "mfr" ? titres.filter((t) => t.instrument === instrument) : titres;
+  // Chaque option porte sa nature : `titresMfr()` étiquette les actions
+  // « actions » et les cotées « obligations », `titresMtp()` étiquette tout en
+  // « mtp ». Filtrer sur l'instrument choisi garantit donc qu'aucune option
+  // d'une autre nature ne peut s'afficher — un FCTC, qui est une obligation
+  // cotée, ne peut pas apparaître sous « Instruments du marché monétaire ».
+  //
+  // Le filtre ne portait d'abord QUE sur le MFR, en supposant que la liste
+  // chargée correspondait toujours au marché courant. Cette supposition est
+  // fausse : `titres` garde le contenu du chargement précédent le temps que le
+  // suivant arrive, et un changement de marché laisse donc, pendant un instant
+  // ou après un aller-retour, des options qui n'ont rien à y faire. Le filtre
+  // s'applique maintenant à tous les marchés, ce qui rend le cas impossible
+  // plutôt qu'improbable.
+  const titresAffiches = titres.filter((t) => t.instrument === instrument);
 
   /**
    * Ce que le gérant tape se résout en titre par comparaison au libellé
