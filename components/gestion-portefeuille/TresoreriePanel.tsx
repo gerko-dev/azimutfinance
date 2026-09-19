@@ -183,7 +183,23 @@ function Contenu({ point }: { point: PointTresorerie }) {
 
       <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
         <div className="overflow-x-auto">
-          <table className="text-[11px] border-collapse">
+          {/* LARGEURS IMPOSEES.
+              Sans `table-fixed`, le navigateur dimensionne chaque colonne sur
+              son contenu : « UBA » tenait en quelques pixels quand « Coris Bank
+              International - Sénégal (CBI-Sénégal) » en prenait dix fois plus,
+              et les montants d'une même ligne ne s'alignaient sur rien. Or un
+              point de trésorerie se lit en balayant une ligne du regard.
+              Le `colgroup` fixe une largeur unique pour toutes les colonnes
+              d'établissement ; le poste et le total, qui ne sont pas du même
+              ordre, gardent la leur. */}
+          <table className="text-[11px] border-collapse table-fixed">
+            <colgroup>
+              <col className="w-64" />
+              {point.etablissements.map((e) => (
+                <col key={e.cle} className="w-[7.5rem]" />
+              ))}
+              <col className="w-32" />
+            </colgroup>
             <thead className="bg-slate-100 text-slate-600">
               {/* Regroupement : dépositaires, espèce, mobile money. Une colonne
                   par établissement, mais le trésorier raisonne d'abord par
@@ -220,7 +236,11 @@ function Contenu({ point }: { point: PointTresorerie }) {
                   Poste
                 </th>
                 {point.etablissements.map((e) => (
-                  <th key={e.cle} className="text-right px-3 py-2 font-medium whitespace-nowrap">
+                  <th
+                    key={e.cle}
+                    className="text-right px-2 py-2 font-medium align-bottom leading-tight break-words"
+                    title={e.nom}
+                  >
                     {e.nom}
                     <span className="block text-[9px] font-normal text-slate-400">
                       {e.pays || "—"}
@@ -250,7 +270,7 @@ function Contenu({ point }: { point: PointTresorerie }) {
                     )}
                   </th>
                 ))}
-                <th className="text-right px-3 py-2 font-semibold whitespace-nowrap border-l border-slate-300 bg-slate-200/70">
+                <th className="text-right px-2 py-2 font-semibold whitespace-nowrap border-l border-slate-300 bg-slate-200/70">
                   Total
                 </th>
               </tr>
@@ -290,7 +310,7 @@ function Contenu({ point }: { point: PointTresorerie }) {
                               setSaisie((s) => ({ ...s, [b]: e.target.value }))
                             }
                             inputMode="numeric"
-                            className="w-28 text-right px-2 py-1 rounded border border-slate-300 tabular-nums focus:border-blue-400 focus:outline-none"
+                            className="w-full text-right px-1.5 py-1 rounded border border-slate-300 tabular-nums focus:border-blue-400 focus:outline-none"
                           />
                           <span
                             className="block text-right text-[9px] text-slate-400 mt-0.5 tabular-nums"
@@ -300,12 +320,12 @@ function Contenu({ point }: { point: PointTresorerie }) {
                           </span>
                         </td>
                       ) : (
-                        <td key={b} className="text-right px-3 py-1.5 tabular-nums">
+                        <td key={b} className="text-right px-2 py-1.5 tabular-nums whitespace-nowrap">
                           {l ? valeur(l.parBanque[b] ?? null) : "—"}
                         </td>
                       ),
                     )}
-                    <td className="text-right px-3 py-1.5 tabular-nums font-semibold border-l border-slate-300 bg-slate-50/80">
+                    <td className="text-right px-2 py-1.5 tabular-nums font-semibold border-l border-slate-300 bg-slate-50/80 whitespace-nowrap">
                       {def.libelle === "SOLDE"
                         ? montant(soldeReel)
                         : l
