@@ -1,5 +1,5 @@
 import { notFound, redirect } from "next/navigation";
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import Header from "@/components/Header";
 import ReadingProgressBar from "@/components/academie/ReadingProgressBar";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -92,21 +92,21 @@ export default async function ArticlePage({
 
       <div className="bg-slate-900 text-white py-2">
         <div className="max-w-5xl mx-auto px-4 flex items-center justify-between text-[11px]">
-          <Lien href="/academie/magazine" className="flex items-baseline gap-1.5 hover:text-slate-300 transition">
+          <Link href="/academie/magazine" className="flex items-baseline gap-1.5 hover:text-slate-300 transition">
             <span className="font-bold tracking-tight" style={{ fontFamily: "Georgia, serif" }}>
               AZIMUT
             </span>
             <span className="italic text-slate-300" style={{ fontFamily: "Georgia, serif" }}>
               magazine
             </span>
-          </Lien>
+          </Link>
           {issue && (
-            <Lien
+            <Link
               href={`/academie/magazine/numero/${issue.slug}`}
               className="text-slate-300 hover:text-white transition"
             >
               N° {String(issue.number).padStart(2, "0")} · {issue.monthLabel}
-            </Lien>
+            </Link>
           )}
         </div>
       </div>
@@ -117,13 +117,13 @@ export default async function ArticlePage({
       >
         <div className="max-w-3xl mx-auto px-4 md:px-6 py-8 md:py-12">
           <div className="text-xs text-slate-500 mb-3 flex items-center gap-1.5 flex-wrap">
-            <Lien href="/academie/magazine" className="hover:text-slate-700">Magazine</Lien>
+            <Link href="/academie/magazine" className="hover:text-slate-700">Magazine</Link>
             <span>›</span>
             {issue && (
               <>
-                <Lien href={`/academie/magazine/numero/${issue.slug}`} className="hover:text-slate-700">
+                <Link href={`/academie/magazine/numero/${issue.slug}`} className="hover:text-slate-700">
                   {issue.monthLabel}
-                </Lien>
+                </Link>
                 <span>›</span>
               </>
             )}
@@ -242,7 +242,7 @@ export default async function ArticlePage({
                   {related.map((r) => {
                     const c = ARTICLE_CATEGORY_META[r.category];
                     return (
-                      <Lien
+                      <Link
                         key={r.slug}
                         href={`/academie/magazine/article/${r.slug}`}
                         className="group block border border-slate-200 rounded-lg p-4 hover:border-slate-300 hover:shadow-sm transition"
@@ -263,7 +263,7 @@ export default async function ArticlePage({
                           {r.readingTimeMinutes} min ·{" "}
                           {r.publishedAt ? fmtArticleDate(r.publishedAt) : ""}
                         </div>
-                      </Lien>
+                      </Link>
                     );
                   })}
                 </div>
@@ -272,12 +272,12 @@ export default async function ArticlePage({
 
             {issue && (
               <div className="mt-12 pt-6 border-t border-slate-200">
-                <Lien
+                <Link
                   href={`/academie/magazine/numero/${issue.slug}`}
                   className="inline-flex items-center gap-2 text-sm text-slate-700 hover:text-blue-700 hover:underline"
                 >
                   ← Retour au sommaire de {issue.monthLabel}
-                </Lien>
+                </Link>
               </div>
             )}
           </article>

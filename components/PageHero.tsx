@@ -1,4 +1,4 @@
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 
 type Crumb = { label: string; href?: string };
 
@@ -31,9 +31,9 @@ export default function PageHero({
               <span key={i} className="flex items-center gap-x-2">
                 {i > 0 && <span className="text-slate-500">›</span>}
                 {c.href ? (
-                  <Lien href={c.href} className="hover:text-white transition">
+                  <Link href={c.href} className="hover:text-white transition">
                     {c.label}
-                  </Lien>
+                  </Link>
                 ) : (
                   <span className="text-slate-200">{c.label}</span>
                 )}

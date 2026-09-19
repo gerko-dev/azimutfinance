@@ -1,4 +1,4 @@
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import Header from "@/components/Header";
 import PageHero from "@/components/PageHero";
@@ -120,18 +120,18 @@ export default async function CompteDashboard({
         )} · devise ${account.currency}`}
       >
         <div className="flex items-center gap-2">
-          <Lien
+          <Link
             href={`/outils/portefeuille/${id}/parametres`}
             className="text-xs bg-white/10 text-white hover:bg-white/20 border border-white/20 font-medium px-3 py-1.5 rounded"
           >
             Paramètres
-          </Lien>
-          <Lien
+          </Link>
+          <Link
             href={`/outils/portefeuille/${id}/transactions/nouvelle`}
             className="text-sm bg-blue-600 hover:bg-blue-700 text-white font-medium px-3 py-1.5 rounded"
           >
             + Transaction
-          </Lien>
+          </Link>
         </div>
       </PageHero>
       <main className="max-w-7xl mx-auto px-4 md:px-6 py-5 md:py-6 space-y-5">

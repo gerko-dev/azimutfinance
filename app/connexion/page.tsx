@@ -1,4 +1,4 @@
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import Header from "@/components/Header";
 import PageHero from "@/components/PageHero";
 import SocialButtons from "@/components/auth/SocialButtons";
@@ -44,9 +44,9 @@ export default async function ConnexionPage({
 
           <p className="mt-6 text-sm text-center text-slate-600">
             Pas encore de compte ?{" "}
-            <Lien href="/inscription" className="text-blue-700 hover:underline font-medium">
+            <Link href="/inscription" className="text-blue-700 hover:underline font-medium">
               Inscris-toi
-            </Lien>
+            </Link>
           </p>
         </div>
       </main>

@@ -1,4 +1,4 @@
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import Header from "@/components/Header";
 import PageHero from "@/components/PageHero";
 import MessagerieApp from "@/components/messagerie/MessagerieApp";
@@ -44,18 +44,18 @@ export default async function Page({
               analyses, vos idées d&apos;investissement, organisez des échanges entre pros.
             </p>
             <div className="mt-6 flex justify-center gap-3 flex-wrap">
-              <Lien
+              <Link
                 href="/connexion?redirect=/messagerie"
                 className="text-sm bg-slate-900 hover:bg-slate-700 text-white font-medium px-5 py-2.5 rounded transition"
               >
                 Se connecter
-              </Lien>
-              <Lien
+              </Link>
+              <Link
                 href="/inscription?redirect=/messagerie"
                 className="text-sm bg-white hover:bg-slate-50 text-slate-900 font-medium px-5 py-2.5 rounded border border-slate-300 transition"
               >
                 Créer un compte
-              </Lien>
+              </Link>
             </div>
           </div>
         </main>

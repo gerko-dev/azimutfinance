@@ -1,4 +1,4 @@
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 
 /**
  * Mur Premium du portefeuille optimal.
@@ -59,19 +59,19 @@ export default function OptimalGate({
         </ul>
 
         <div className="flex flex-wrap gap-3 mt-5">
-          <Lien
+          <Link
             href="/premium"
             className="inline-flex items-center px-5 py-2.5 rounded-md text-sm font-semibold bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-sm transition"
           >
             Découvrir Premium
-          </Lien>
+          </Link>
           {!isMember && (
-            <Lien
+            <Link
               href={`/connexion?redirect=${encodeURIComponent(retour)}`}
               className="inline-flex items-center px-5 py-2.5 rounded-md text-sm font-medium border border-slate-300 hover:bg-slate-50 transition"
             >
               J&apos;ai déjà un compte
-            </Lien>
+            </Link>
           )}
         </div>
       </div>

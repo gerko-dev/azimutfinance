@@ -1,4 +1,4 @@
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import { getMagazineCounts } from "@/lib/magazine/queries";
 import { fmtNumber } from "@/components/admin/format";
 
@@ -44,7 +44,7 @@ export default async function MagazineOverviewPage() {
     <div className="space-y-4">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {cards.map((c) => (
-          <Lien
+          <Link
             key={c.href}
             href={c.href}
             className="bg-white border border-slate-200 rounded-lg p-3 hover:border-slate-300 hover:shadow-sm transition"
@@ -56,12 +56,12 @@ export default async function MagazineOverviewPage() {
               {c.value}
             </div>
             <div className="text-[10px] text-slate-400 mt-0.5">{c.sub}</div>
-          </Lien>
+          </Link>
         ))}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <Lien
+        <Link
           href="/admin/magazine/numeros/nouveau"
           className="bg-white border border-slate-200 rounded-lg p-4 hover:border-slate-300 hover:shadow-sm transition"
         >
@@ -71,8 +71,8 @@ export default async function MagazineOverviewPage() {
           <div className="text-xs text-slate-500 mt-1">
             Créez la prochaine édition mensuelle, puis ajoutez ses articles.
           </div>
-        </Lien>
-        <Lien
+        </Link>
+        <Link
           href="/admin/magazine/articles/nouveau"
           className="bg-white border border-slate-200 rounded-lg p-4 hover:border-slate-300 hover:shadow-sm transition"
         >
@@ -82,7 +82,7 @@ export default async function MagazineOverviewPage() {
           <div className="text-xs text-slate-500 mt-1">
             Construisez un article avec des paragraphes, citations, callouts et stats.
           </div>
-        </Lien>
+        </Link>
       </div>
     </div>
   );

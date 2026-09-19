@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import { requireAdmin } from "@/lib/admin/auth";
 import { getMemberSummary } from "@/lib/admin/queries";
 import { ROLE_COLOR, ROLE_LABEL, type AppRole } from "@/lib/admin/types";
@@ -63,9 +63,9 @@ export default async function MemberDetailPage({
   return (
     <div className="space-y-5">
       <div className="text-xs text-slate-500">
-        <Lien href="/admin/membres" className="hover:text-slate-700">
+        <Link href="/admin/membres" className="hover:text-slate-700">
           Membres
-        </Lien>{" "}
+        </Link>{" "}
         &rsaquo; {profile.full_name || profile.username || profile.email}
       </div>
 

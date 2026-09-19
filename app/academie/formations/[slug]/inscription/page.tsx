@@ -1,5 +1,5 @@
 import { notFound, redirect } from "next/navigation";
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import Header from "@/components/Header";
 import PageHero from "@/components/PageHero";
 import InscriptionForm from "@/components/academie/InscriptionForm";
@@ -145,20 +145,20 @@ export default async function InscriptionPage({
                   )}
                 ) est dépassée.
               </p>
-              <Lien
+              <Link
                 href={`/academie/formations/${formation.slug}`}
                 className="inline-block text-sm bg-slate-900 hover:bg-slate-700 text-white px-4 py-2 rounded font-medium transition"
               >
                 ← Retour à la formation
-              </Lien>
+              </Link>
               <div className="text-[11px] text-slate-500 pt-2 border-t border-slate-100">
                 Une nouvelle session sera bientôt annoncée.{" "}
-                <Lien
+                <Link
                   href="/academie/formations"
                   className="text-slate-700 hover:underline"
                 >
                   Voir le catalogue
-                </Lien>
+                </Link>
                 .
               </div>
             </div>

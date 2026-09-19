@@ -1,4 +1,4 @@
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 
 type BreadcrumbStep = { label: string; href?: string };
 
@@ -29,9 +29,9 @@ export default function PremiumPaywall({
             {breadcrumb.map((step, i) => (
               <span key={i}>
                 {step.href ? (
-                  <Lien href={step.href} className="hover:text-white transition">
+                  <Link href={step.href} className="hover:text-white transition">
                     {step.label}
-                  </Lien>
+                  </Link>
                 ) : (
                   <span className="text-slate-200">{step.label}</span>
                 )}
@@ -70,34 +70,34 @@ export default function PremiumPaywall({
 
           <div className="flex flex-wrap items-center justify-center gap-3">
             {isMember ? (
-              <Lien
+              <Link
                 href="/premium"
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md bg-amber-500 text-white font-medium hover:bg-amber-600 transition"
               >
                 ⭐ Passer à Premium
-              </Lien>
+              </Link>
             ) : (
               <>
-                <Lien
+                <Link
                   href="/inscription"
                   className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md bg-blue-600 text-white font-medium hover:bg-blue-700 transition"
                 >
                   Créer un compte
-                </Lien>
-                <Lien
+                </Link>
+                <Link
                   href="/connexion"
                   className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md border border-slate-300 text-slate-700 font-medium hover:border-slate-400 transition"
                 >
                   Se connecter
-                </Lien>
+                </Link>
               </>
             )}
-            <Lien
+            <Link
               href={back.href}
               className="text-sm text-slate-500 hover:text-slate-900 transition"
             >
               ← {back.label}
-            </Lien>
+            </Link>
           </div>
         </div>
       </main>

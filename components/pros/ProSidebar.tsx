@@ -1,6 +1,6 @@
 "use client";
 
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
@@ -97,7 +97,7 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
     );
   }
   return (
-    <Lien
+    <Link
       href={item.href}
       className={`${base} ${
         active
@@ -106,7 +106,7 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
       }`}
     >
       {item.label}
-    </Lien>
+    </Link>
   );
 }
 
@@ -145,12 +145,12 @@ export default function ProSidebar({
         ))}
       </div>
 
-      <Lien
+      <Link
         href="/"
         className="mt-2 px-3 py-2 text-[12px] text-slate-500 hover:text-slate-300 border border-slate-800 rounded-md hover:border-slate-700 text-center"
       >
         ← Retour au site public
-      </Lien>
+      </Link>
     </nav>
   );
 
@@ -175,7 +175,7 @@ export default function ProSidebar({
         }`}
       >
         <div className="px-4 py-4 border-b border-slate-800 flex items-center justify-between gap-2">
-          <Lien href="/pros" className="block min-w-0">
+          <Link href="/pros" className="block min-w-0">
             <div className="text-base font-semibold tracking-tight">
               <span className="text-blue-400">Azimut</span>
               <span className="text-slate-100">Finance</span>
@@ -183,7 +183,7 @@ export default function ProSidebar({
             <div className="text-[10px] uppercase tracking-[0.2em] text-purple-400 mt-0.5">
               Pro Terminal
             </div>
-          </Lien>
+          </Link>
           <button
             type="button"
             onClick={onClose}
@@ -208,7 +208,7 @@ export default function ProSidebar({
           />
           <aside className="relative w-64 bg-slate-950 border-r border-slate-800 flex flex-col">
             <div className="px-4 py-4 border-b border-slate-800 flex items-center justify-between">
-              <Lien
+              <Link
                 href="/pros"
                 onClick={() => setOpenMobile(false)}
                 className="block"
@@ -220,7 +220,7 @@ export default function ProSidebar({
                 <div className="text-[10px] uppercase tracking-[0.2em] text-purple-400 mt-0.5">
                   Pro Terminal
                 </div>
-              </Lien>
+              </Link>
               <button
                 onClick={() => setOpenMobile(false)}
                 className="p-1 text-slate-400 hover:text-white"

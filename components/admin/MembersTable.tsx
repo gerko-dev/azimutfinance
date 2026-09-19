@@ -1,6 +1,6 @@
 "use client";
 
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { deleteUser, setMemberTier, setUserRole } from "@/lib/admin/actions";
@@ -135,12 +135,12 @@ export default function MembersTable({
                 return (
                   <tr key={m.id} className="border-t border-slate-100 hover:bg-slate-50">
                     <td className="py-2 pl-4 pr-2">
-                      <Lien
+                      <Link
                         href={`/admin/membres/${m.id}`}
                         className="font-medium text-slate-900 hover:text-blue-700 hover:underline"
                       >
                         {m.full_name || m.username || "—"}
-                      </Lien>
+                      </Link>
                       {isMe && (
                         <span className="ml-2 text-[10px] text-blue-700 font-semibold uppercase">
                           moi

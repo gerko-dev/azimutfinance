@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import {
   Area,
   ComposedChart,
@@ -165,13 +165,13 @@ export default function SovereignProView({ data }: { data: SovereignProData }) {
       {/* ====== EN-TETE ====== */}
       <div className="border-b border-slate-800 pb-4">
         <div className="text-[11px] text-slate-500 mb-2 flex items-center gap-1.5 flex-wrap">
-          <Lien href="/pros" className="hover:text-slate-300 transition">
+          <Link href="/pros" className="hover:text-slate-300 transition">
             Pro Terminal
-          </Lien>
+          </Link>
           <span className="text-slate-700">›</span>
-          <Lien href="/pros/souverains" className="hover:text-slate-300 transition">
+          <Link href="/pros/souverains" className="hover:text-slate-300 transition">
             Souverains UMOA-Titres
-          </Lien>
+          </Link>
           <span className="text-slate-700">›</span>
           <span className="text-slate-400">
             {bond.type} {bond.country}
@@ -221,13 +221,13 @@ export default function SovereignProView({ data }: { data: SovereignProData }) {
                 UMOA-Titres ↗
               </a>
             )}
-            <Lien
+            <Link
               href={`/souverain/${encodeURIComponent(bond.id)}`}
               className="text-[11px] px-2.5 py-1 rounded-md border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-600 transition"
               title="Voir la fiche publique"
             >
               Fiche publique ↗
-            </Lien>
+            </Link>
           </div>
         </div>
       </div>
@@ -540,7 +540,7 @@ function SyntheseTab({
           <Card title="Titres comparables" subtitle="même pays · maturité proche">
             <div className="divide-y divide-slate-800">
               {related.map((s) => (
-                <Lien
+                <Link
                   key={s.id}
                   href={`/pros/souverain/${encodeURIComponent(s.id)}`}
                   className="flex items-center justify-between px-4 py-2.5 hover:bg-slate-800/40 transition text-sm"
@@ -562,7 +562,7 @@ function SyntheseTab({
                     <span className="text-emerald-400">{fmtPct(s.lastYield * 100)}</span>
                     <span className="text-slate-600">→</span>
                   </div>
-                </Lien>
+                </Link>
               ))}
             </div>
           </Card>

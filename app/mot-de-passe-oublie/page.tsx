@@ -1,4 +1,4 @@
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import Header from "@/components/Header";
 import PageHero from "@/components/PageHero";
 import ResetForm from "./ResetForm";
@@ -25,9 +25,9 @@ export default function MotDePasseOubliePage() {
           <ResetForm />
 
           <p className="mt-6 text-sm text-center text-slate-600">
-            <Lien href="/connexion" className="text-blue-700 hover:underline">
+            <Link href="/connexion" className="text-blue-700 hover:underline">
               ← Retour à la connexion
-            </Lien>
+            </Link>
           </p>
         </div>
       </main>

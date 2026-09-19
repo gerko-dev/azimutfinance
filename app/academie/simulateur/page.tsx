@@ -1,4 +1,4 @@
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import Header from "@/components/Header";
 import PageHero from "@/components/PageHero";
 import EquityCurveChart from "@/components/academie/simulateur/EquityCurveChart";
@@ -59,18 +59,18 @@ export default async function Page() {
               classement général en fin de saison. Connectez-vous pour participer.
             </p>
             <div className="mt-6 flex justify-center gap-3 flex-wrap">
-              <Lien
+              <Link
                 href="/connexion?redirect=/academie/simulateur"
                 className="text-sm bg-slate-900 hover:bg-slate-700 text-white font-medium px-5 py-2.5 rounded transition"
               >
                 Se connecter
-              </Lien>
-              <Lien
+              </Link>
+              <Link
                 href="/inscription?redirect=/academie/simulateur"
                 className="text-sm bg-white hover:bg-slate-50 text-slate-900 font-medium px-5 py-2.5 rounded border border-slate-300 transition"
               >
                 Créer un compte
-              </Lien>
+              </Link>
             </div>
           </div>
         </main>
@@ -262,24 +262,24 @@ export default async function Page() {
               d&apos;envoi.
             </p>
             <div className="mt-6 flex flex-wrap justify-center gap-3">
-              <Lien
+              <Link
                 href="/marches/actions"
                 className="bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-semibold px-5 py-2.5 rounded-md text-sm transition"
               >
                 Explorer le marché BRVM →
-              </Lien>
-              <Lien
+              </Link>
+              <Link
                 href="/academie/formations"
                 className="bg-white/10 hover:bg-white/15 border border-white/20 text-white font-medium px-5 py-2.5 rounded-md text-sm transition"
               >
                 Voir les formations
-              </Lien>
-              <Lien
+              </Link>
+              <Link
                 href="/academie/glossaire"
                 className="bg-white/10 hover:bg-white/15 border border-white/20 text-white font-medium px-5 py-2.5 rounded-md text-sm transition"
               >
                 Glossaire financier
-              </Lien>
+              </Link>
             </div>
           </section>
         </main>
@@ -459,30 +459,30 @@ export default async function Page() {
               <div className="text-xs font-semibold text-slate-900 mb-1.5">Raccourcis</div>
               <ul className="space-y-1.5">
                 <li>
-                  <Lien
+                  <Link
                     href="/academie/simulateur/carnet"
                     className="text-amber-700 hover:underline font-medium"
                   >
                     Carnet d&apos;ordres →
-                  </Lien>{" "}
+                  </Link>{" "}
                   ladder, depth, tape, chandelier
                 </li>
                 <li>
-                  <Lien
+                  <Link
                     href="/academie/simulateur/marche"
                     className="text-amber-700 hover:underline font-medium"
                   >
                     Marché →
-                  </Lien>{" "}
+                  </Link>{" "}
                   tous les titres BRVM
                 </li>
                 <li>
-                  <Lien
+                  <Link
                     href="/academie/simulateur/performance"
                     className="text-amber-700 hover:underline font-medium"
                   >
                     Performance →
-                  </Lien>{" "}
+                  </Link>{" "}
                   attribution par titre
                 </li>
               </ul>

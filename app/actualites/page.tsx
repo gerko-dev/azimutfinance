@@ -1,4 +1,4 @@
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import Header from "@/components/Header";
 import PageHero from "@/components/PageHero";
 import { listPublishedActualites } from "@/lib/actualites/queries";
@@ -49,9 +49,9 @@ export default async function ActualitesListPage({
       <main className="max-w-4xl mx-auto px-4 md:px-6 py-8 md:py-10">
         {ticker && (
           <div className="mb-4">
-            <Lien href="/actualites" className="text-xs text-blue-700 hover:underline">
+            <Link href="/actualites" className="text-xs text-blue-700 hover:underline">
               ← Voir toutes les valeurs
-            </Lien>
+            </Link>
           </div>
         )}
 
@@ -63,7 +63,7 @@ export default async function ActualitesListPage({
           <ul className="space-y-3">
             {items.map((a) => (
               <li key={a.id}>
-                <Lien
+                <Link
                   href={`/actualites/${a.id}`}
                   className="block bg-white border border-slate-200 hover:border-slate-300 hover:shadow-sm rounded-lg p-4 transition group"
                 >
@@ -94,7 +94,7 @@ export default async function ActualitesListPage({
                       {a.excerpt}
                     </p>
                   )}
-                </Lien>
+                </Link>
               </li>
             ))}
           </ul>

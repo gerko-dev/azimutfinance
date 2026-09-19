@@ -1,4 +1,4 @@
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 
 export const metadata = {
   title: "Fund management — Vue d'ensemble",
@@ -64,12 +64,12 @@ export default function FundManagementOverviewPage() {
               <span className="text-blue-400 mt-0.5">1.</span>
               <span>
                 Renseigner les informations de la société de gestion dans{" "}
-                <Lien
+                <Link
                   href="/gestion-portefeuille/parametres"
                   className="text-blue-300 hover:text-blue-200 transition"
                 >
                   Paramètres
-                </Lien>
+                </Link>
                 .
               </span>
             </li>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect, useDeferredValue } from "react";
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import {
   XAxis,
   YAxis,
@@ -435,7 +435,7 @@ export default function ActionsBRVMView({
       <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-b border-slate-800">
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10">
           <div className="text-xs md:text-sm text-slate-400 mb-2">
-            <Lien href="/" className="hover:text-white transition">Marchés</Lien>
+            <Link href="/" className="hover:text-white transition">Marchés</Link>
             <span className="mx-2 text-slate-500">›</span>
             <span className="text-slate-200">Actions BRVM</span>
           </div>
@@ -534,12 +534,12 @@ export default function ActionsBRVMView({
           <section className="bg-white rounded-lg border border-slate-200 p-4 md:p-6">
             <div className="flex justify-between items-baseline flex-wrap gap-2 mb-4">
               <h2 className="text-lg md:text-xl font-semibold">Indices BRVM</h2>
-              <Lien
+              <Link
                 href="/marches/indices"
                 className="text-xs text-blue-700 hover:text-blue-900"
               >
                 Tous les indices →
-              </Lien>
+              </Link>
             </div>
 
             {/* Indices principaux */}
@@ -592,7 +592,7 @@ export default function ActionsBRVMView({
                 </div>
               ) : (
                 topGainers.map((a) => (
-                  <Lien
+                  <Link
                     key={a.code}
                     href={`/titre/${a.code}`}
                     className="flex justify-between items-center p-2 rounded hover:bg-green-50/50 transition"
@@ -610,7 +610,7 @@ export default function ActionsBRVMView({
                         +{a.changePercent.toFixed(2).replace(".", ",")}%
                       </div>
                     </div>
-                  </Lien>
+                  </Link>
                 ))
               )}
             </div>
@@ -625,7 +625,7 @@ export default function ActionsBRVMView({
                 </div>
               ) : (
                 topLosers.map((a) => (
-                  <Lien
+                  <Link
                     key={a.code}
                     href={`/titre/${a.code}`}
                     className="flex justify-between items-center p-2 rounded hover:bg-red-50/50 transition"
@@ -643,7 +643,7 @@ export default function ActionsBRVMView({
                         {a.changePercent.toFixed(2).replace(".", ",")}%
                       </div>
                     </div>
-                  </Lien>
+                  </Link>
                 ))
               )}
             </div>
@@ -908,18 +908,18 @@ export default function ActionsBRVMView({
                       </div>
                     </div>
                     <div className="flex gap-2 flex-wrap shrink-0">
-                      <Lien
+                      <Link
                         href="/inscription"
                         className="inline-flex items-center px-3 py-1.5 rounded-md bg-blue-700 text-white text-xs md:text-sm font-medium hover:bg-blue-800 transition whitespace-nowrap"
                       >
                         S&apos;inscrire
-                      </Lien>
-                      <Lien
+                      </Link>
+                      <Link
                         href="/connexion"
                         className="inline-flex items-center px-3 py-1.5 rounded-md border border-slate-300 text-xs md:text-sm font-medium hover:bg-slate-50 transition whitespace-nowrap"
                       >
                         Connexion
-                      </Lien>
+                      </Link>
                     </div>
                   </div>
                 </div>
@@ -1060,17 +1060,17 @@ export default function ActionsBRVMView({
                     className="border-b border-slate-100 hover:bg-blue-50/30 transition"
                   >
                     <td className="px-3 py-3">
-                      <Lien
+                      <Link
                         href={`/titre/${a.code}`}
                         className="font-mono font-medium hover:text-blue-700"
                       >
                         {a.code}
-                      </Lien>
+                      </Link>
                     </td>
                     <td className="px-3 py-3">
-                      <Lien href={`/titre/${a.code}`} className="hover:text-blue-700">
+                      <Link href={`/titre/${a.code}`} className="hover:text-blue-700">
                         {a.name}
-                      </Lien>
+                      </Link>
                     </td>
                     <td className="px-3 py-3 hidden md:table-cell">
                       <span
@@ -1214,7 +1214,7 @@ function IndexCard({
   const displayLabel = isPrincipal ? index.name : shortLabel;
 
   return (
-    <Lien
+    <Link
       href={`/marches/indices/${encodeURIComponent(index.code)}`}
       className={`block rounded-md border p-${compact ? "2" : "3"} ${bgClass} hover:shadow-sm hover:border-slate-300 transition`}
     >
@@ -1244,6 +1244,6 @@ function IndexCard({
           {ytdValue.toFixed(2).replace(".", ",")}%)
         </span>
       </div>
-    </Lien>
+    </Link>
   );
 }

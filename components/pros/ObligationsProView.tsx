@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useDeferredValue, useCallback } from "react";
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import {
   XAxis,
   YAxis,
@@ -339,9 +339,9 @@ export default function ObligationsProView({
       <div className="border-b border-slate-800 pb-4 flex items-end justify-between flex-wrap gap-3">
         <div>
           <div className="text-[11px] text-slate-500 mb-2 flex items-center gap-1.5">
-            <Lien href="/pros" className="hover:text-slate-300 transition">
+            <Link href="/pros" className="hover:text-slate-300 transition">
               Pro Terminal
-            </Lien>
+            </Link>
             <span className="text-slate-700">›</span>
             <span className="text-slate-400">Obligations cotées</span>
           </div>
@@ -650,7 +650,7 @@ export default function ObligationsProView({
                     className="border-b border-slate-800 last:border-0 hover:bg-slate-800/40 transition"
                   >
                     <td className="px-3 py-2.5">
-                      <Lien
+                      <Link
                         href={`/pros${bondHref(b)}`}
                         className="flex items-center gap-1.5 group"
                       >
@@ -672,7 +672,7 @@ export default function ObligationsProView({
                             {b.isin}
                           </span>
                         </span>
-                      </Lien>
+                      </Link>
                     </td>
                     <td className="px-3 py-2.5 hidden lg:table-cell">
                       <div className="text-slate-300 truncate max-w-[180px]">
@@ -910,7 +910,7 @@ function ToolLink({
   desc: string;
 }) {
   return (
-    <Lien
+    <Link
       href={href}
       className="group flex items-start gap-3 bg-slate-800/40 border border-slate-700 rounded-lg p-3 hover:border-blue-500/50 hover:bg-slate-800/70 transition"
     >
@@ -926,7 +926,7 @@ function ToolLink({
       <span className="ml-auto text-slate-600 group-hover:text-blue-400" aria-hidden>
         →
       </span>
-    </Lien>
+    </Link>
   );
 }
 

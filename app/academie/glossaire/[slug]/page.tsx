@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import Header from "@/components/Header";
 import {
   GLOSSAIRE,
@@ -58,9 +58,9 @@ export default async function GlossTermPage({
       <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-b border-slate-800">
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10">
           <div className="text-xs text-slate-400 mb-2 flex items-center gap-1.5 flex-wrap">
-            <Lien href="/" className="hover:text-white">Accueil</Lien>
+            <Link href="/" className="hover:text-white">Accueil</Link>
             <span>›</span>
-            <Lien href="/academie/glossaire" className="hover:text-white">Glossaire</Lien>
+            <Link href="/academie/glossaire" className="hover:text-white">Glossaire</Link>
             <span>›</span>
             <span className="text-slate-200">{term.term}</span>
           </div>
@@ -110,7 +110,7 @@ export default async function GlossTermPage({
                   {related.map((r) => {
                     const cat = GLOSS_CATEGORY_META[r.category];
                     return (
-                      <Lien
+                      <Link
                         key={r.slug}
                         href={`/academie/glossaire/${r.slug}`}
                         className="group block border border-slate-200 rounded p-2.5 hover:border-slate-300 hover:shadow-sm transition"
@@ -132,7 +132,7 @@ export default async function GlossTermPage({
                         <p className="text-[11px] text-slate-600 leading-relaxed line-clamp-2">
                           {r.short}
                         </p>
-                      </Lien>
+                      </Link>
                     );
                   })}
                 </div>
@@ -168,7 +168,7 @@ export default async function GlossTermPage({
               </div>
             ) : (
               sameCategory.map((r) => (
-                <Lien
+                <Link
                   key={r.slug}
                   href={`/academie/glossaire/${r.slug}`}
                   className="block border border-slate-200 rounded p-2.5 bg-white hover:border-slate-300 hover:shadow-sm transition"
@@ -184,15 +184,15 @@ export default async function GlossTermPage({
                   <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-2 leading-snug">
                     {r.short}
                   </p>
-                </Lien>
+                </Link>
               ))
             )}
-            <Lien
+            <Link
               href="/academie/glossaire"
               className="block text-center text-[11px] text-slate-600 hover:text-slate-900 px-2 py-2 border border-dashed border-slate-200 rounded-lg"
             >
               ← Tout le glossaire
-            </Lien>
+            </Link>
           </aside>
         </div>
       </main>

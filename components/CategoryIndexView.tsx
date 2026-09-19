@@ -1,6 +1,6 @@
 "use client";
 
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import type { CategoryIndexRow } from "@/app/fcp/categories/page";
 
 function fmtBigFCFA(v: number | null): string {
@@ -66,9 +66,9 @@ export default function CategoryIndexView({ rows, refQuarter, marketTotalAUM, to
       <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-b border-slate-800">
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10">
           <div className="text-xs text-slate-400 mb-2 flex items-center gap-1.5 flex-wrap">
-            <Lien href="/" className="hover:text-white">Accueil</Lien>
+            <Link href="/" className="hover:text-white">Accueil</Link>
             <span>›</span>
-            <Lien href="/marches/fcp" className="hover:text-white">FCP / OPCVM</Lien>
+            <Link href="/marches/fcp" className="hover:text-white">FCP / OPCVM</Link>
             <span>›</span>
             <span className="text-slate-200">Catégories</span>
           </div>
@@ -93,7 +93,7 @@ export default function CategoryIndexView({ rows, refQuarter, marketTotalAUM, to
 
       <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {rows.map((r) => (
-          <Lien
+          <Link
             key={r.slug}
             href={`/fcp/categorie/${r.slug}`}
             className="block bg-white border border-slate-200 rounded-lg p-5 hover:border-slate-400 hover:shadow-sm transition"
@@ -125,7 +125,7 @@ export default function CategoryIndexView({ rows, refQuarter, marketTotalAUM, to
                 <span className="text-slate-500">({fmtPct(r.spread1Y, 1)} d&apos;écart)</span>
               )}
             </div>
-          </Lien>
+          </Link>
         ))}
       </section>
 

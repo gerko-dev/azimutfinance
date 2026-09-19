@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import {
   Area,
   Line,
@@ -2849,7 +2849,7 @@ export default function BondDetailView({
                   </p>
                   <div className="space-y-2">
                     {similarBonds.map((b) => (
-                      <Lien
+                      <Link
                         key={b.isin}
                         href={bondHref(b)}
                         className="block p-2.5 rounded-md border border-slate-200 hover:border-blue-300 hover:bg-blue-50/30 transition"
@@ -2862,7 +2862,7 @@ export default function BondDetailView({
                           </span>
                           <span className="font-mono">{b.isin}</span>
                         </div>
-                      </Lien>
+                      </Link>
                     ))}
                   </div>
                 </section>
@@ -2886,12 +2886,12 @@ export default function BondDetailView({
         </div>
 
         <div className="pt-2">
-          <Lien
+          <Link
             href="/marches/obligations"
             className="inline-flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900"
           >
             ← Retour à la liste des obligations cotées
-          </Lien>
+          </Link>
         </div>
       </main>
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   resolveForumReportAction,
@@ -151,14 +151,14 @@ function ReportCard({
 
       <div className="flex flex-wrap items-center justify-between gap-3 mt-3">
         {topicHref ? (
-          <Lien
+          <Link
             href={topicHref}
             target="_blank"
             rel="noreferrer"
             className="text-xs text-blue-700 hover:underline"
           >
             Voir la discussion ↗
-          </Lien>
+          </Link>
         ) : (
           <span className="text-xs text-slate-400">Lien indisponible</span>
         )}

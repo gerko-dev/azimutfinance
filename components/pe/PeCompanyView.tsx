@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import type { PeActionnaire, PeModele, PeUnite } from "@/lib/pe";
 
 export type PeBloc = { titre: string; codes: string[] };
@@ -724,12 +724,12 @@ export default function PeCompanyView({
                 {peers.map((p) => (
                   <tr key={p.slug} className="hover:bg-slate-50">
                     <td className="px-4 py-2">
-                      <Lien
+                      <Link
                         href={`/marches/private-equity/${p.slug}`}
                         className="text-blue-700 hover:underline"
                       >
                         {p.nom}
-                      </Lien>
+                      </Link>
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">
                       {fmt(p.revenu)}
@@ -755,9 +755,9 @@ export default function PeCompanyView({
       <p className="mt-6 text-xs text-slate-500 leading-relaxed">
         Montants en millions de FCFA, issus des états financiers déposés. Les
         exercices manquants ne sont pas estimés.{" "}
-        <Lien href="/marches/private-equity" className="text-blue-700 hover:underline">
+        <Link href="/marches/private-equity" className="text-blue-700 hover:underline">
           Retour à la liste
-        </Lien>
+        </Link>
         .
       </p>
     </div>

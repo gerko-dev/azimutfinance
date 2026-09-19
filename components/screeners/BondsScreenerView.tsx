@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import type { BondScreenerRow, BondSegment } from "@/lib/screeners/obligations";
 
 type Props = {
@@ -383,12 +383,12 @@ export default function BondsScreenerView({
               {visible.map((r) => (
                 <tr key={r.isin} className="hover:bg-slate-50">
                   <td className="px-3 py-2">
-                    <Lien
+                    <Link
                       href={`/obligation/${r.isin}`}
                       className="font-medium text-blue-700 hover:underline"
                     >
                       {r.code || r.isin}
-                    </Lien>
+                    </Link>
                     <div className="flex items-center gap-1.5 mt-0.5">
                       {r.greenBond && (
                         <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20">

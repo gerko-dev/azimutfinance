@@ -1,4 +1,4 @@
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import SimulatorShell from "@/components/academie/simulateur/SimulatorShell";
 import WatchlistStar from "@/components/academie/simulateur/WatchlistStar";
@@ -75,12 +75,12 @@ export default async function Page() {
           <div className="bg-white rounded-lg border border-slate-200 p-10 text-center text-sm text-slate-500">
             Ta watchlist est vide. Clique sur l&apos;étoile{" "}
             <span className="text-amber-500 text-base">☆</span> sur la page{" "}
-            <Lien
+            <Link
               href="/academie/simulateur/marche"
               className="text-amber-700 hover:underline font-medium"
             >
               Marché
-            </Lien>{" "}
+            </Link>{" "}
             pour ajouter des titres.
           </div>
         ) : (
@@ -104,12 +104,12 @@ export default async function Page() {
                       <WatchlistStar code={r.code} initialWatched={true} size="sm" />
                     </td>
                     <td className="px-3 py-1.5 font-mono font-semibold text-slate-900">
-                      <Lien
+                      <Link
                         href={`/academie/simulateur/titre/${r.code}`}
                         className="hover:underline"
                       >
                         {r.code}
-                      </Lien>
+                      </Link>
                     </td>
                     <td className="px-3 py-1.5 text-slate-700 truncate max-w-[280px]">
                       {r.name}
@@ -151,18 +151,18 @@ export default async function Page() {
                       )}
                     </td>
                     <td className="px-3 py-1.5 text-right space-x-2">
-                      <Lien
+                      <Link
                         href={`/academie/simulateur/titre/${r.code}`}
                         className="text-[11px] text-slate-600 hover:underline"
                       >
                         Détail
-                      </Lien>
-                      <Lien
+                      </Link>
+                      <Link
                         href={`/academie/simulateur/carnet?code=${r.code}`}
                         className="text-[11px] text-amber-700 hover:underline font-medium"
                       >
                         Carnet
-                      </Lien>
+                      </Link>
                     </td>
                   </tr>
                 ))}

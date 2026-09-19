@@ -1,4 +1,4 @@
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import { requireAdmin } from "@/lib/admin/auth";
 import {
   getBrokerageStats,
@@ -24,9 +24,9 @@ export default async function AdminCompteTitrePage() {
     <div className="space-y-5">
       <div>
         <div className="text-xs text-slate-500">
-          <Lien href="/admin" className="hover:text-slate-700">
+          <Link href="/admin" className="hover:text-slate-700">
             Admin
-          </Lien>{" "}
+          </Link>{" "}
           &rsaquo;{" "}
           <span className="text-slate-700">Mon portefeuille</span>
         </div>

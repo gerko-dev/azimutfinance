@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import type { ScreenerRow, ScreenerPeriodKey, ScreenerCadence } from "@/lib/screenerFCPTypes";
 
 // ==========================================
@@ -601,29 +601,29 @@ export default function FCPScreenerView(props: Props) {
                 paged.map((r) => (
                   <tr key={r.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
                     <td className="px-4 py-2 min-w-0">
-                      <Lien
+                      <Link
                         href={`/fcp/${r.id}`}
                         className="text-sm font-medium text-slate-900 hover:underline"
                       >
                         {r.nom}
-                      </Lien>
+                      </Link>
                       <div className="text-[11px] text-slate-500 md:hidden">
-                        <Lien
+                        <Link
                           href={`/sgo/${managerSlug(r.gestionnaire)}`}
                           className="hover:underline"
                         >
                           {r.gestionnaire}
-                        </Lien>{" "}
+                        </Link>{" "}
                         · {r.categorie}
                       </div>
                     </td>
                     <td className="px-3 py-2 text-xs text-slate-600 hidden md:table-cell">
-                      <Lien
+                      <Link
                         href={`/sgo/${managerSlug(r.gestionnaire)}`}
                         className="hover:underline"
                       >
                         {r.gestionnaire}
-                      </Lien>
+                      </Link>
                     </td>
                     <td className="px-3 py-2 hidden lg:table-cell">
                       <span className="inline-flex items-center gap-1.5 text-xs text-slate-700">

@@ -1,4 +1,4 @@
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import SimulatorShell from "@/components/academie/simulateur/SimulatorShell";
 import MarketBrowser, {
@@ -150,7 +150,7 @@ function MoverCard({
               key={r.code}
               className="px-3 py-1.5 flex items-center justify-between hover:bg-slate-50"
             >
-              <Lien
+              <Link
                 href={`/academie/simulateur/titre/${r.code}`}
                 className="flex-1 min-w-0 flex items-baseline gap-2 hover:underline"
               >
@@ -160,7 +160,7 @@ function MoverCard({
                 <span className="text-[11px] text-slate-500 truncate">
                   {r.name}
                 </span>
-              </Lien>
+              </Link>
               <span
                 className={`text-[12px] tabular-nums font-semibold ml-2 ${
                   valueLabel === "Var." && r.changePct !== null

@@ -1,4 +1,4 @@
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import { requireAdmin } from "@/lib/admin/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
@@ -39,7 +39,7 @@ export default async function EmailTemplatesPage() {
           const row = bySlug.get(slug);
           const isInDb = !!row;
           return (
-            <Lien
+            <Link
               key={slug}
               href={`/admin/email-templates/${slug}`}
               className="block bg-white border border-slate-200 rounded-lg p-5 hover:border-slate-300 hover:shadow-sm transition"
@@ -78,7 +78,7 @@ export default async function EmailTemplatesPage() {
               <div className="text-xs text-blue-700 mt-3 font-medium">
                 Éditer →
               </div>
-            </Lien>
+            </Link>
           );
         })}
       </div>

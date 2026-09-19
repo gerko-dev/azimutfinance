@@ -1,4 +1,4 @@
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import FormationForm from "@/components/admin/FormationForm";
 import { requireAdmin } from "@/lib/admin/auth";
 
@@ -8,9 +8,9 @@ export default async function NewFormationPage() {
   return (
     <div className="space-y-4">
       <div className="text-xs text-slate-500">
-        <Lien href="/admin/formations" className="hover:text-slate-700">
+        <Link href="/admin/formations" className="hover:text-slate-700">
           Formations
-        </Lien>{" "}
+        </Link>{" "}
         &rsaquo; Nouvelle
       </div>
       <h1 className="text-2xl font-bold text-slate-900">Nouvelle formation</h1>

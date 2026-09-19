@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Treemap,
@@ -409,7 +409,7 @@ export default function FCPMarketView(props: Props) {
       <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-b border-slate-800">
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10">
           <div className="text-xs text-slate-400 mb-2 flex items-center gap-1.5 flex-wrap">
-            <Lien href="/" className="hover:text-white">Accueil</Lien>
+            <Link href="/" className="hover:text-white">Accueil</Link>
             <span>›</span>
             <span className="text-slate-200">Marchés UEMOA</span>
             <span>›</span>
@@ -425,18 +425,18 @@ export default function FCPMarketView(props: Props) {
             plus de 15 jours avant {fmtDateFR(latestVLGlobal)} exclus du classement.
           </p>
           <div className="flex flex-wrap gap-2 mt-3">
-            <Lien
+            <Link
               href="/sgo"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-white/20 bg-white/10 hover:bg-white/20 text-white"
             >
               Sociétés de gestion
-            </Lien>
-            <Lien
+            </Link>
+            <Link
               href="/fcp/categories"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-white/20 bg-white/10 hover:bg-white/20 text-white"
             >
               OPC
-            </Lien>
+            </Link>
           </div>
         </div>
       </div>
@@ -477,7 +477,7 @@ export default function FCPMarketView(props: Props) {
       {/* === CARDS CATEGORIE (clickables, médiane YTD) === */}
       <section className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
         {categoryStats.map((c) => (
-          <Lien
+          <Link
             key={c.categorie}
             href={`/fcp/categorie/${CATEGORY_SLUG[c.categorie] || ""}`}
             className="block p-4 rounded-lg border border-slate-200 bg-white hover:border-slate-400 hover:shadow-sm transition"
@@ -494,7 +494,7 @@ export default function FCPMarketView(props: Props) {
               {c.nbFundsAtRef} fonds · médiane YTD{" "}
               {fmtPct(c.perfMedianByPeriod[TREEMAP_PERIOD])}
             </div>
-          </Lien>
+          </Link>
         ))}
       </section>
 
@@ -775,28 +775,28 @@ export default function FCPMarketView(props: Props) {
                   <tr key={c.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
                     <td className="px-3 py-2 text-xs font-bold text-slate-500">{i + 1}</td>
                     <td className="px-3 py-2">
-                      <Lien
+                      <Link
                         href={`/fcp/${c.id}`}
                         className="text-sm font-medium text-slate-900 hover:underline"
                       >
                         {c.nom}
-                      </Lien>
+                      </Link>
                       <div className="text-[11px] text-slate-500 md:hidden">
-                        <Lien
+                        <Link
                           href={`/sgo/${managerSlug(c.gestionnaire)}`}
                           className="hover:underline"
                         >
                           {c.gestionnaire}
-                        </Lien>
+                        </Link>
                       </div>
                     </td>
                     <td className="px-3 py-2 text-xs text-slate-600 hidden md:table-cell">
-                      <Lien
+                      <Link
                         href={`/sgo/${managerSlug(c.gestionnaire)}`}
                         className="hover:underline"
                       >
                         {c.gestionnaire}
-                      </Lien>
+                      </Link>
                     </td>
                     <td className="px-3 py-2 hidden lg:table-cell">
                       <span className="inline-flex items-center gap-1.5 text-xs text-slate-700">

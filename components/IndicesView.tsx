@@ -1,6 +1,6 @@
 "use client";
 
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import { LineChart, Line, YAxis } from "recharts";
 import { ResponsiveContainer } from "@/components/ui/ChartContainer";
 import LivePriceBadge from "./LivePriceBadge";
@@ -106,9 +106,9 @@ export default function IndicesView({
       <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-b border-slate-800">
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10">
           <div className="text-xs md:text-sm text-slate-400 mb-2">
-            <Lien href="/" className="hover:text-white transition">
+            <Link href="/" className="hover:text-white transition">
               Marchés
-            </Lien>
+            </Link>
             <span className="mx-2 text-slate-500">›</span>
             <span className="text-slate-200">Indices BRVM</span>
           </div>
@@ -254,13 +254,13 @@ export default function IndicesView({
                     className="border-b border-slate-100 hover:bg-blue-50/30 transition cursor-pointer"
                   >
                     <td className="px-3 py-3">
-                      <Lien
+                      <Link
                         href={`/marches/indices/${encodeURIComponent(i.code)}`}
                         className="hover:text-blue-700"
                       >
                         <div className="font-medium">{i.name}</div>
                         <div className="text-xs text-slate-400 font-mono">{i.code}</div>
-                      </Lien>
+                      </Link>
                     </td>
                     <td className="px-3 py-3 hidden md:table-cell">
                       <span
@@ -325,12 +325,12 @@ function IndexDetailCard({
 }) {
   const cardContent = <IndexCardInner index={index} spark={spark} ytdValue={ytdValue} />;
   return (
-    <Lien
+    <Link
       href={`/marches/indices/${encodeURIComponent(index.code)}`}
       className="block bg-white rounded-lg border border-slate-200 p-4 md:p-5 hover:shadow-sm hover:border-slate-300 transition"
     >
       {cardContent}
-    </Lien>
+    </Link>
   );
 }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 /**
@@ -136,7 +136,7 @@ export default function FundManagementSidebar() {
             }
 
             return (
-              <Lien
+              <Link
                 key={item.href}
                 href={item.href}
                 title={replie ? item.label : undefined}
@@ -148,7 +148,7 @@ export default function FundManagementSidebar() {
                 }`}
               >
                 {contenu}
-              </Lien>
+              </Link>
             );
           })}
         </nav>

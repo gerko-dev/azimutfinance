@@ -1,4 +1,4 @@
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import { requireAdmin } from "@/lib/admin/auth";
 import {
   listPricingPlans,
@@ -28,12 +28,12 @@ export default async function AdminPromoCodesPage() {
             limite éventuellement à certains plans.
           </p>
         </div>
-        <Lien
+        <Link
           href="/admin/tarification"
           className="text-xs text-blue-700 hover:underline"
         >
           ← Retour
-        </Lien>
+        </Link>
       </div>
 
       <PromoCodesManager promos={promos} allPlans={plans} />

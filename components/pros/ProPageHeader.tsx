@@ -1,4 +1,4 @@
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 
 type Crumb = { label: string; href?: string };
 
@@ -29,12 +29,12 @@ export default function ProPageHeader({
               <span key={i} className="flex items-center gap-1.5">
                 {i > 0 && <span className="text-slate-700">›</span>}
                 {c.href ? (
-                  <Lien
+                  <Link
                     href={c.href}
                     className="hover:text-slate-300 transition"
                   >
                     {c.label}
-                  </Lien>
+                  </Link>
                 ) : (
                   <span className="text-slate-400">{c.label}</span>
                 )}

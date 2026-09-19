@@ -1,6 +1,6 @@
 "use client";
 
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import { DEFAULT_PERIOD, PERIOD_OPTIONS, type PeriodId } from "./macroPeriod";
 
 export default function MacroPeriodSelector({
@@ -28,7 +28,7 @@ export default function MacroPeriodSelector({
       {PERIOD_OPTIONS.map((p) => {
         const active = p.id === selected;
         return (
-          <Lien
+          <Link
             key={p.id}
             href={buildHref(p.id)}
             scroll={false}
@@ -39,7 +39,7 @@ export default function MacroPeriodSelector({
             }`}
           >
             {p.label}
-          </Lien>
+          </Link>
         );
       })}
     </div>

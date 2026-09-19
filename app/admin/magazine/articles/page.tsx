@@ -1,4 +1,4 @@
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import { listAllArticles, listAllIssues } from "@/lib/magazine/queries";
 import { ARTICLE_CATEGORY_META } from "@/lib/magazine";
 import { fmtDateTime } from "@/components/admin/format";
@@ -25,12 +25,12 @@ export default async function ArticlesAdminPage({
         <p className="text-sm text-slate-600">
           Tous les articles, brouillons inclus. Le bouton &laquo; Voir &raquo; sur le site public mène ici à l&apos;édition.
         </p>
-        <Lien
+        <Link
           href="/admin/magazine/articles/nouveau"
           className="text-sm bg-slate-900 hover:bg-slate-700 text-white font-medium px-3 py-1.5 rounded"
         >
           + Nouvel article
-        </Lien>
+        </Link>
       </div>
 
       <form
@@ -70,12 +70,12 @@ export default async function ArticlesAdminPage({
           Filtrer
         </button>
         {(search || issueId) && (
-          <Lien
+          <Link
             href="/admin/magazine/articles"
             className="text-xs text-slate-600 hover:text-slate-900 underline pb-1.5"
           >
             Réinitialiser
-          </Lien>
+          </Link>
         )}
       </form>
 
@@ -135,12 +135,12 @@ export default async function ArticlesAdminPage({
                       {fmtDateTime(a.updatedAt)}
                     </td>
                     <td className="py-2 pr-4 pl-2 text-right whitespace-nowrap">
-                      <Lien
+                      <Link
                         href={`/admin/magazine/articles/${a.id}`}
                         className="text-[11px] text-blue-700 hover:underline"
                       >
                         Éditer
-                      </Lien>
+                      </Link>
                       <span className="text-slate-300 mx-1.5">·</span>
                       <span className="text-[10px] text-slate-500">Flash</span>
                       <a

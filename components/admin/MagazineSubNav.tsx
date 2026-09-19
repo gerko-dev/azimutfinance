@@ -1,6 +1,6 @@
 "use client";
 
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const TABS: { href: string; label: string; match?: (p: string) => boolean }[] = [
@@ -38,7 +38,7 @@ export default function MagazineSubNav() {
       {TABS.map((t) => {
         const active = t.match ? t.match(pathname) : pathname === t.href;
         return (
-          <Lien
+          <Link
             key={t.href}
             href={t.href}
             className={`text-sm px-3 py-2 -mb-px border-b-2 transition whitespace-nowrap ${
@@ -48,7 +48,7 @@ export default function MagazineSubNav() {
             }`}
           >
             {t.label}
-          </Lien>
+          </Link>
         );
       })}
     </nav>

@@ -1,4 +1,4 @@
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import { requireAdmin } from "@/lib/admin/auth";
 import {
   listTrialConfigs,
@@ -26,12 +26,12 @@ export default async function AdminTrialPage() {
             seul essai.
           </p>
         </div>
-        <Lien
+        <Link
           href="/admin/tarification"
           className="text-xs text-blue-700 hover:underline"
         >
           ← Retour
-        </Lien>
+        </Link>
       </div>
 
       <TrialManager configs={configs} users={users} />

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { resolveReport, resolveReportWithSanction } from "@/lib/admin/actions";
 import {
@@ -189,7 +189,7 @@ export default function ReportsList({
       <div className="flex items-center gap-2 mb-3 text-xs">
         <span className="text-slate-500">Filtrer :</span>
         {(["open", "actioned", "dismissed", "all"] as const).map((s) => (
-          <Lien
+          <Link
             key={s}
             href={`/admin/signalements?status=${s}`}
             className={`px-2.5 py-1 rounded ${
@@ -200,7 +200,7 @@ export default function ReportsList({
             scroll={false}
           >
             {s === "all" ? "Tous" : REPORT_STATUS_LABEL[s as ReportStatus]}
-          </Lien>
+          </Link>
         ))}
       </div>
 
@@ -276,14 +276,14 @@ export default function ReportsList({
                   <span>
                     <span className="text-slate-400">Signalé par </span>
                     {r.reporter_id ? (
-                      <Lien
+                      <Link
                         href={`/admin/membres/${r.reporter_id}`}
                         className="font-medium text-slate-900 hover:underline"
                       >
                         {r.reporter_username
                           ? `@${r.reporter_username}`
                           : r.reporter_email ?? "?"}
-                      </Lien>
+                      </Link>
                     ) : (
                       "?"
                     )}
@@ -291,14 +291,14 @@ export default function ReportsList({
                   <span>
                     <span className="text-slate-400">Auteur du message </span>
                     {r.sender_id ? (
-                      <Lien
+                      <Link
                         href={`/admin/membres/${r.sender_id}`}
                         className="font-medium text-slate-900 hover:underline"
                       >
                         {r.sender_username
                           ? `@${r.sender_username}`
                           : r.sender_email ?? "?"}
-                      </Lien>
+                      </Link>
                     ) : (
                       "compte supprimé"
                     )}

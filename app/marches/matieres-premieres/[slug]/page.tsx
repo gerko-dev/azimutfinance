@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import Header from "@/components/Header";
 import CommodityDetailView from "@/components/macro/CommodityDetailView";
 import CommodityAdvancedChart from "@/components/macro/CommodityAdvancedChart";
@@ -107,11 +107,11 @@ export default async function CommodityPage({
         <Header />
         <div className="max-w-3xl mx-auto px-4 md:px-6 py-12">
           <div className="text-xs text-slate-500 mb-4 flex items-center gap-1.5 flex-wrap">
-            <Lien href="/" className="hover:text-slate-700">Accueil</Lien>
+            <Link href="/" className="hover:text-slate-700">Accueil</Link>
             <span>›</span>
-            <Lien href="/marches/matieres-premieres" className="hover:text-slate-700">
+            <Link href="/marches/matieres-premieres" className="hover:text-slate-700">
               Matières premières
-            </Lien>
+            </Link>
             <span>›</span>
             <span className="text-slate-700">{meta.name}</span>
           </div>
@@ -126,18 +126,18 @@ export default async function CommodityPage({
               gratuit avec un compte AzimutFinance.
             </p>
             <div className="mt-6 flex gap-2 justify-center flex-wrap">
-              <Lien
+              <Link
                 href="/auth/login"
                 className="px-5 py-2.5 bg-slate-900 text-white text-sm rounded hover:bg-slate-700 transition font-medium"
               >
                 Se connecter
-              </Lien>
-              <Lien
+              </Link>
+              <Link
                 href="/auth/signup"
                 className="px-5 py-2.5 border border-slate-300 text-slate-700 text-sm rounded hover:bg-slate-50 transition font-medium"
               >
                 S&apos;inscrire gratuitement
-              </Lien>
+              </Link>
             </div>
           </div>
         </div>
@@ -200,9 +200,9 @@ export default async function CommodityPage({
       <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-b border-slate-800">
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10">
           <div className="text-xs text-slate-400 mb-2 flex items-center gap-1.5 flex-wrap">
-            <Lien href="/" className="hover:text-white">Accueil</Lien>
+            <Link href="/" className="hover:text-white">Accueil</Link>
             <span>›</span>
-            <Lien href="/marches/matieres-premieres" className="hover:text-white">Matières premières</Lien>
+            <Link href="/marches/matieres-premieres" className="hover:text-white">Matières premières</Link>
             <span>›</span>
             <span className="text-slate-200">{meta.name}</span>
           </div>
@@ -232,12 +232,12 @@ export default async function CommodityPage({
                   isAuthenticated={true}
                   variant="dark"
                 />
-                <Lien
+                <Link
                   href="/outils/alertes"
                   className="px-3 py-1.5 text-xs md:text-sm border border-white/20 bg-white/10 hover:bg-white/20 text-white rounded-md inline-flex items-center gap-1.5"
                 >
                   🔔 Alerte
-                </Lien>
+                </Link>
               </div>
             </div>
 
@@ -360,13 +360,13 @@ export default async function CommodityPage({
                       {impact.brvmTickers.length > 0 ? (
                         <div className="flex flex-wrap gap-1.5">
                           {impact.brvmTickers.map((t) => (
-                            <Lien
+                            <Link
                               key={t.code}
                               href={`/titre/${t.code}`}
                               className="text-[11px] px-2 py-0.5 rounded bg-slate-900 text-white font-medium hover:bg-slate-700"
                             >
                               {t.code}
-                            </Lien>
+                            </Link>
                           ))}
                         </div>
                       ) : (
@@ -419,12 +419,12 @@ export default async function CommodityPage({
                         </div>
                       </div>
                       <div className="flex gap-2 mt-4">
-                        <Lien
+                        <Link
                           href="/abonnements"
                           className="px-4 py-2 bg-amber-500 text-white text-sm rounded hover:bg-amber-600 transition font-medium"
                         >
                           Passer Premium
-                        </Lien>
+                        </Link>
                       </div>
                     </div>
                   </div>
@@ -595,7 +595,7 @@ export default async function CommodityPage({
               const s = computeCommodityStats(c.slug);
               const ytd = s?.returns.YTD ?? null;
               return (
-                <Lien
+                <Link
                   key={c.slug}
                   href={`/marches/matieres-premieres/${c.slug}`}
                   className="block border border-slate-200 rounded-lg p-2.5 bg-white hover:border-slate-300 hover:shadow-sm transition"
@@ -619,15 +619,15 @@ export default async function CommodityPage({
                   <div className="text-[10px] text-slate-400 mt-0.5">
                     {s ? fmtNum(s.last, s.last >= 1000 ? 0 : 2) : "—"} {c.unit.split(" / ")[0]}
                   </div>
-                </Lien>
+                </Link>
               );
             })}
-            <Lien
+            <Link
               href="/marches/matieres-premieres"
               className="block text-center text-[11px] text-slate-600 hover:text-slate-900 px-2 py-2 border border-dashed border-slate-200 rounded-lg"
             >
               ← Tableau de bord
-            </Lien>
+            </Link>
           </aside>
         </div>
       </main>

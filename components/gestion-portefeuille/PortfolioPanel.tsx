@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import {
   createCustomSecurityAction,
   getSecurityDefaultsAction,
@@ -682,9 +682,9 @@ function PositionRowView({
           {row.matchLabel && row.matchLabel !== row.rawLabel && (
             <div className="text-[10px] text-slate-600 mt-0.5">
               {href ? (
-                <Lien href={href} className="text-blue-600 hover:text-blue-800" target="_blank">
+                <Link href={href} className="text-blue-600 hover:text-blue-800" target="_blank">
                   {row.matchLabel} ↗
-                </Lien>
+                </Link>
               ) : (
                 row.matchLabel
               )}

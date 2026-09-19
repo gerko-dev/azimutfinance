@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import { signUpAction, type AuthState } from "@/lib/auth/actions";
 import SubmitButton from "@/components/auth/SubmitButton";
 import PasswordInput from "@/components/auth/PasswordInput";
@@ -20,12 +20,12 @@ export default function SignupForm() {
         </div>
         <p className="text-xs text-center text-slate-500">
           Mauvaise adresse email ?{" "}
-          <Lien
+          <Link
             href="/inscription"
             className="text-blue-700 hover:underline font-medium"
           >
             Recommencer l&apos;inscription
-          </Lien>
+          </Link>
         </p>
       </div>
     );

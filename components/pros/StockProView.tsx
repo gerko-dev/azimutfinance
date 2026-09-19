@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import KlineChart, { type OhlcPoint } from "@/components/charting/KlineChart";
 import {
   LineChart,
@@ -778,12 +778,12 @@ function PeersTable({
         {peers.map((p) => (
           <tr key={p.code} className="border-b border-slate-800 last:border-0 hover:bg-slate-800/30">
             <td className="px-3 py-1.5">
-              <Lien
+              <Link
                 href={`/pros/titre/${p.code}`}
                 className="font-mono text-slate-200 hover:text-blue-300"
               >
                 {p.code}
-              </Lien>
+              </Link>
               <div className="text-[10px] text-slate-500 truncate max-w-[140px]">{p.name}</div>
             </td>
             {!compact && (
@@ -1024,12 +1024,12 @@ function IssuerBondsTable({ bonds }: { bonds: ListedBond[] }) {
         {bonds.map((b) => (
           <tr key={b.isin} className="border-b border-slate-800 last:border-0 hover:bg-slate-800/30">
             <td className="px-3 py-1.5">
-              <Lien
+              <Link
                 href={bondHref(b)}
                 className="font-mono text-slate-200 hover:text-blue-300"
               >
                 {b.isin}
-              </Lien>
+              </Link>
             </td>
             <td className="px-2 py-1.5 text-slate-400 truncate max-w-[200px]">{b.name}</td>
             <td className="px-2 py-1.5 text-right font-mono tabular-nums text-slate-300">

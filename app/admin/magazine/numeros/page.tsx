@@ -1,4 +1,4 @@
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import { listAllIssues, listAllArticles } from "@/lib/magazine/queries";
 import { fmtDateTime } from "@/components/admin/format";
 
@@ -28,12 +28,12 @@ export default async function IssuesAdminPage({
         <p className="text-sm text-slate-600">
           Chaque numéro regroupe ~5 articles. Le numéro le plus récent fait la couverture du magazine.
         </p>
-        <Lien
+        <Link
           href="/admin/magazine/numeros/nouveau"
           className="text-sm bg-slate-900 hover:bg-slate-700 text-white font-medium px-3 py-1.5 rounded"
         >
           + Nouveau numéro
-        </Lien>
+        </Link>
       </div>
 
       <form className="flex gap-2 max-w-md" action="/admin/magazine/numeros" method="get">
@@ -110,12 +110,12 @@ export default async function IssuesAdminPage({
                       {fmtDateTime(i.updatedAt)}
                     </td>
                     <td className="py-2 pr-4 pl-2 text-right">
-                      <Lien
+                      <Link
                         href={`/admin/magazine/numeros/${i.id}`}
                         className="text-[11px] text-blue-700 hover:underline"
                       >
                         Éditer
-                      </Lien>
+                      </Link>
                     </td>
                   </tr>
                 );

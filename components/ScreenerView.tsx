@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useDeferredValue } from "react";
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import CountryFlag from "./CountryFlag";
 import type { ActionRow } from "@/lib/dataLoader";
 import type { Quadrant } from "@/lib/stockStats";
@@ -1369,20 +1369,20 @@ export default function ScreenerView({ stocks }: Props) {
                     className="border-b border-slate-100 hover:bg-blue-50/30 transition"
                   >
                     <td className="px-3 py-3">
-                      <Lien
+                      <Link
                         href={`/titre/${a.code}`}
                         className="font-mono font-medium hover:text-blue-700"
                       >
                         {a.code}
-                      </Lien>
+                      </Link>
                     </td>
                     <td className="px-3 py-3">
-                      <Lien
+                      <Link
                         href={`/titre/${a.code}`}
                         className="hover:text-blue-700"
                       >
                         {a.name}
-                      </Lien>
+                      </Link>
                     </td>
                     <td className="px-3 py-3 hidden md:table-cell text-xs text-slate-600">
                       {a.sector || "—"}

@@ -1,6 +1,6 @@
 "use client";
 
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import WatchlistStar from "./WatchlistStar";
 import { fmtFCFAPlain as fmtFCFA } from "@/lib/format";
@@ -171,12 +171,12 @@ export default function MarketBrowser({ rows, watchedCodes }: Props) {
                   />
                 </td>
                 <td className="px-3 py-1.5 font-mono font-semibold text-slate-900">
-                  <Lien
+                  <Link
                     href={`/academie/simulateur/titre/${r.code}`}
                     className="hover:underline"
                   >
                     {r.code}
-                  </Lien>
+                  </Link>
                 </td>
                 <td className="px-3 py-1.5 text-slate-700 truncate max-w-[280px]">
                   {r.name}
@@ -202,12 +202,12 @@ export default function MarketBrowser({ rows, watchedCodes }: Props) {
                   )}
                 </td>
                 <td className="px-3 py-1.5 text-right">
-                  <Lien
+                  <Link
                     href={`/academie/simulateur/carnet?code=${r.code}`}
                     className="text-[11px] text-amber-700 hover:underline font-medium"
                   >
                     Carnet →
-                  </Lien>
+                  </Link>
                 </td>
               </tr>
             ))

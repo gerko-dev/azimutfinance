@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import type { PeSyntheseLigne } from "@/lib/pe";
 
 type Props = {
@@ -240,12 +240,12 @@ export default function PrivateEquityView({ lignes, secteurs, pays }: Props) {
               {visible.map((l) => (
                 <tr key={l.slug} className="hover:bg-slate-50">
                   <td className="px-3 py-2">
-                    <Lien
+                    <Link
                       href={`/marches/private-equity/${l.slug}`}
                       className="font-medium text-blue-700 hover:underline"
                     >
                       {l.nom}
-                    </Lien>
+                    </Link>
                     {l.modele !== "societe" && (
                       <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">
                         {MODELE_LABEL[l.modele]}

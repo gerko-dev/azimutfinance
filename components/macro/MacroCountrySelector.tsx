@@ -1,6 +1,6 @@
 "use client";
 
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import CountryFlag from "@/components/CountryFlag";
 import { MACRO_COUNTRIES, type MacroCountryCode } from "@/lib/macroTypes";
 
@@ -29,7 +29,7 @@ export default function MacroCountrySelector({
       {MACRO_COUNTRIES.map((c) => {
         const active = c.code === selected;
         return (
-          <Lien
+          <Link
             key={c.code}
             href={buildHref(c.code)}
             scroll={false}
@@ -41,7 +41,7 @@ export default function MacroCountrySelector({
           >
             <CountryFlag country={c.code === "UMOA" ? "UEMOA" : c.code} size={14} />
             <span>{c.shortName}</span>
-          </Lien>
+          </Link>
         );
       })}
     </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 
 /**
  * Barre d'outils de la page imprimable d'un numero de magazine.
@@ -57,12 +57,12 @@ export default function MagazinePrintToolbar({ backHref }: { backHref: string })
   return (
     <div className="no-print fixed top-0 inset-x-0 z-50 bg-slate-900 text-white shadow-lg">
       <div className="max-w-[820px] mx-auto px-4 h-14 flex items-center justify-between gap-3">
-        <Lien
+        <Link
           href={backHref}
           className="text-sm text-slate-300 hover:text-white transition"
         >
           ← Retour au numéro
-        </Lien>
+        </Link>
         <div className="flex items-center gap-3">
           <span className="hidden sm:block text-[11px] text-slate-400">
             Astuce : choisissez « Enregistrer au format PDF » comme destination

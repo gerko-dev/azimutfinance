@@ -1,4 +1,4 @@
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import { requireAdmin } from "@/lib/admin/auth";
 import { listAllActualites } from "@/lib/actualites/queries";
 import { fmtDateTime } from "@/components/admin/format";
@@ -25,12 +25,12 @@ export default async function ActualitesAdminPage({
             Articles d&apos;actualité par valeur cotée.
           </p>
         </div>
-        <Lien
+        <Link
           href="/admin/actualites/nouvelle"
           className="text-sm bg-slate-900 hover:bg-slate-700 text-white font-medium px-3 py-1.5 rounded"
         >
           + Nouvelle actualité
-        </Lien>
+        </Link>
       </div>
 
       <form className="flex gap-2 max-w-md" action="/admin/actualites" method="get">
@@ -103,12 +103,12 @@ export default async function ActualitesAdminPage({
                     {fmtDateTime(a.updated_at)}
                   </td>
                   <td className="py-2 pr-4 pl-2 text-right">
-                    <Lien
+                    <Link
                       href={`/admin/actualites/${a.id}`}
                       className="text-[11px] text-blue-700 hover:underline"
                     >
                       Éditer
-                    </Lien>
+                    </Link>
                   </td>
                 </tr>
               ))}

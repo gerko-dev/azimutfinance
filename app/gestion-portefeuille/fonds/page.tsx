@@ -1,7 +1,4 @@
-// `Lien` et non `Link` : la fiche d'un fonds est la navigation la plus
-// coûteuse du site (sept chargements en parallèle). Sans retour visible, le
-// clic passe pour ignoré.
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import { loadMyFunds } from "../data";
 import { formatBenchmark } from "../types";
 
@@ -18,12 +15,12 @@ export default async function FundsListPage() {
     return (
       <div className="bg-slate-800/40 border border-slate-700 rounded-lg p-10 text-center">
         <p className="text-sm text-slate-400">Aucun fonds créé pour le moment.</p>
-        <Lien
+        <Link
           href="/gestion-portefeuille/parametres"
           className="inline-block mt-4 px-4 py-2 text-sm font-medium rounded-md border border-blue-500/50 bg-blue-600/15 text-blue-300 hover:bg-blue-600/25 transition"
         >
           + Créer un fonds
-        </Lien>
+        </Link>
       </div>
     );
   }
@@ -34,17 +31,17 @@ export default async function FundsListPage() {
         <p className="text-sm text-slate-400">
           {funds.length} fonds géré{funds.length > 1 ? "s" : ""} — sélectionnez-en un pour le gérer.
         </p>
-        <Lien
+        <Link
           href="/gestion-portefeuille/parametres"
           className="text-[12px] text-blue-300 hover:text-blue-200 transition shrink-0"
         >
           + Nouveau fonds
-        </Lien>
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
         {funds.map((f) => (
-          <Lien
+          <Link
             key={f.id}
             href={`/gestion-portefeuille/fonds/${f.id}`}
             className="block bg-slate-800/50 border border-slate-700 rounded-lg p-4 hover:border-blue-500/60 hover:bg-slate-800/80 transition"
@@ -79,7 +76,7 @@ export default async function FundsListPage() {
               <span className="text-slate-600">Benchmark : </span>
               {formatBenchmark(f.benchmark)}
             </div>
-          </Lien>
+          </Link>
         ))}
       </div>
     </div>

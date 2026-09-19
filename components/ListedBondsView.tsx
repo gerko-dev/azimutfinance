@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useDeferredValue, useCallback, memo } from "react";
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import type {
   ListedBond,
   ListedBondPrice,
@@ -98,7 +98,7 @@ function TeaserCard({
 }) {
   const a = KPI_ACCENT[accent];
   return (
-    <Lien
+    <Link
       href={href}
       className="group relative flex flex-col bg-white rounded-xl border border-slate-200 p-5 hover:shadow-lg hover:-translate-y-0.5 transition-all overflow-hidden"
     >
@@ -138,7 +138,7 @@ function TeaserCard({
         {unlocked ? "Ouvrir" : "Voir avec Premium"}
         <span aria-hidden>→</span>
       </div>
-    </Lien>
+    </Link>
   );
 }
 
@@ -341,9 +341,9 @@ export default function ListedBondsView({
       <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-b border-slate-800">
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10">
           <div className="text-xs md:text-sm text-slate-400 mb-2">
-            <Lien href="/" className="hover:text-white transition">
+            <Link href="/" className="hover:text-white transition">
               Marchés
-            </Lien>
+            </Link>
             <span className="mx-2 text-slate-500">›</span>
             <span className="text-slate-200">Obligations cotées</span>
           </div>
@@ -664,7 +664,7 @@ const BondsTable = memo(function BondsTable({
               className="border-b border-slate-100 hover:bg-blue-50/30 transition"
             >
               <td className="px-3 md:px-4 py-3">
-                <Lien
+                <Link
                   href={bondHref(b)}
                   className="flex items-center gap-2 hover:text-blue-700"
                 >
@@ -684,7 +684,7 @@ const BondsTable = memo(function BondsTable({
                     </div>
                     <div className="text-xs text-slate-500 font-mono">{b.isin}</div>
                   </div>
-                </Lien>
+                </Link>
               </td>
               <td className="px-3 md:px-4 py-3 hidden md:table-cell">
                 <div className="text-sm">{b.issuer}</div>

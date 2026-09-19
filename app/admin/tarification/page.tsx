@@ -1,4 +1,4 @@
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import { requireAdmin } from "@/lib/admin/auth";
 import {
   listPricingPlans,
@@ -68,12 +68,12 @@ export default async function TarificationOverviewPage() {
           <h2 className="text-base font-semibold text-slate-900">
             Plans actifs sur /premium
           </h2>
-          <Lien
+          <Link
             href="/admin/tarification/plans"
             className="text-xs text-blue-700 hover:underline"
           >
             Gérer les plans →
-          </Lien>
+          </Link>
         </div>
         {activePlans.length === 0 ? (
           <div className="text-xs text-slate-400 text-center py-8">
@@ -136,7 +136,7 @@ function SectionCard({
   description: string;
 }) {
   return (
-    <Lien
+    <Link
       href={href}
       className="block bg-white border border-slate-200 rounded-lg p-4 hover:border-slate-300 hover:shadow-sm transition"
     >
@@ -153,6 +153,6 @@ function SectionCard({
       <div className="text-xs text-slate-600 mt-2 leading-relaxed">
         {description}
       </div>
-    </Lien>
+    </Link>
   );
 }

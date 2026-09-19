@@ -1,4 +1,4 @@
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import Header from "@/components/Header";
 import UnsubscribeForm from "./UnsubscribeForm";
 
@@ -24,16 +24,16 @@ export default async function UnsubscribePage({
       <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-b border-slate-800">
         <div className="max-w-3xl mx-auto px-4 md:px-6 py-6 md:py-10">
           <div className="text-xs text-slate-400 mb-2 flex items-center gap-1.5 flex-wrap">
-            <Lien href="/" className="hover:text-white">
+            <Link href="/" className="hover:text-white">
               Accueil
-            </Lien>
+            </Link>
             <span>›</span>
-            <Lien
+            <Link
               href="/communaute/newsletter"
               className="hover:text-white"
             >
               Newsletter
-            </Lien>
+            </Link>
             <span>›</span>
             <span className="text-slate-200">Désinscription</span>
           </div>

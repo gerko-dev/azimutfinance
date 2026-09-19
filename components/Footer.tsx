@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import CookiePreferencesTrigger from "@/components/CookiePreferencesTrigger";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -50,10 +50,10 @@ export default function Footer() {
         <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-10 lg:gap-12">
           {/* Bloc marque */}
           <div>
-            <Lien href="/" className="text-lg font-semibold tracking-tight">
+            <Link href="/" className="text-lg font-semibold tracking-tight">
               <span className="text-blue-400">Azimut</span>
               <span className="text-white">Finance</span>
-            </Lien>
+            </Link>
             <p className="text-sm text-slate-400 mt-3 leading-relaxed max-w-xs">
               Le portail des marchés financiers de l&apos;UEMOA : actions, obligations,
               macroéconomie, formation et communauté.
@@ -98,10 +98,10 @@ export default function Footer() {
         <div className="mt-10 pt-6 border-t border-slate-800 flex flex-wrap items-center justify-between gap-4 text-xs text-slate-400">
           <div>© {year} AzimutFinance. Tous droits réservés.</div>
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-            <Lien href="/legal/mentions" className="hover:text-white">Mentions légales</Lien>
-            <Lien href="/legal/cgu" className="hover:text-white">CGU</Lien>
-            <Lien href="/legal/confidentialite" className="hover:text-white">Confidentialité</Lien>
-            <Lien href="/legal/cookies" className="hover:text-white">Cookies</Lien>
+            <Link href="/legal/mentions" className="hover:text-white">Mentions légales</Link>
+            <Link href="/legal/cgu" className="hover:text-white">CGU</Link>
+            <Link href="/legal/confidentialite" className="hover:text-white">Confidentialité</Link>
+            <Link href="/legal/cookies" className="hover:text-white">Cookies</Link>
             <CookiePreferencesTrigger />
           </div>
         </div>
@@ -143,9 +143,9 @@ function Item({
 }) {
   return (
     <li>
-      <Lien href={href} className="text-slate-400 hover:text-white transition">
+      <Link href={href} className="text-slate-400 hover:text-white transition">
         {children}
-      </Lien>
+      </Link>
     </li>
   );
 }

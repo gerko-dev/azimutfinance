@@ -1,4 +1,4 @@
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import type { ForumTopicListItem } from "@/lib/forum/types";
 
 function authorName(a: ForumTopicListItem["author"]): string {
@@ -38,7 +38,7 @@ export default function TopicRow({
     : authorName(topic.author);
   const lastWhen = topic.last_reply_at ?? topic.created_at;
   return (
-    <Lien
+    <Link
       href={href}
       className="flex flex-wrap items-start gap-3 px-4 py-3 hover:bg-slate-50 transition"
     >
@@ -99,6 +99,6 @@ export default function TopicRow({
         <div className="text-slate-700 truncate max-w-[8rem]">{lastWho}</div>
         <div>{fmtRelative(lastWhen)}</div>
       </div>
-    </Lien>
+    </Link>
   );
 }

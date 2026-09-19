@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import type { SGOIndexRow } from "@/app/sgo/page";
 
 // ==========================================
@@ -161,12 +161,12 @@ export default function SGOIndexView({ rows, refQuarter, marketTotalAUM, totalFu
                   <tr key={r.slug} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
                     <td className="px-3 py-2.5 text-xs font-bold text-slate-500">{i + 1}</td>
                     <td className="px-3 py-2.5">
-                      <Lien
+                      <Link
                         href={`/sgo/${r.slug}`}
                         className="text-sm font-medium text-slate-900 hover:underline"
                       >
                         {r.name}
-                      </Lien>
+                      </Link>
                     </td>
                     <td className="px-3 py-2.5 hidden lg:table-cell">
                       <div className="flex flex-wrap gap-1">

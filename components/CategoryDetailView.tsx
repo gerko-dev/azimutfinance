@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import {
   AreaChart,
   Area,
@@ -133,11 +133,11 @@ export default function CategoryDetailView(props: Props) {
       <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-b border-slate-800">
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10">
           <div className="text-xs text-slate-400 mb-2 flex items-center gap-1.5 flex-wrap">
-            <Lien href="/" className="hover:text-white">Accueil</Lien>
+            <Link href="/" className="hover:text-white">Accueil</Link>
             <span>›</span>
-            <Lien href="/marches/fcp" className="hover:text-white">FCP / OPCVM</Lien>
+            <Link href="/marches/fcp" className="hover:text-white">FCP / OPCVM</Link>
             <span>›</span>
-            <Lien href="/fcp/categories" className="hover:text-white">Catégories</Lien>
+            <Link href="/fcp/categories" className="hover:text-white">Catégories</Link>
             <span>›</span>
             <span className="text-slate-200">{category}</span>
           </div>
@@ -258,7 +258,7 @@ export default function CategoryDetailView(props: Props) {
                 <tr key={m.slug} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
                   <td className="px-3 py-2 text-xs font-bold text-slate-500">{i + 1}</td>
                   <td className="px-4 py-2">
-                    <Lien href={`/sgo/${m.slug}`} className="text-sm font-medium text-slate-900 hover:underline">{m.name}</Lien>
+                    <Link href={`/sgo/${m.slug}`} className="text-sm font-medium text-slate-900 hover:underline">{m.name}</Link>
                   </td>
                   <td className="px-3 py-2 text-right text-xs tabular-nums text-slate-700">{m.nbFunds}</td>
                   <td className="px-3 py-2 text-right text-xs tabular-nums text-slate-700">{fmtBigFCFA(m.aum)}</td>
@@ -325,13 +325,13 @@ export default function CategoryDetailView(props: Props) {
                 filteredFunds.map((f) => (
                   <tr key={f.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
                     <td className="px-3 py-2 min-w-0">
-                      <Lien href={`/fcp/${f.id}`} className="text-sm font-medium text-slate-900 hover:underline">{f.nom}</Lien>
+                      <Link href={`/fcp/${f.id}`} className="text-sm font-medium text-slate-900 hover:underline">{f.nom}</Link>
                       <div className="text-[11px] text-slate-500 md:hidden">
-                        <Lien href={`/sgo/${f.managerSlug}`} className="hover:underline">{f.gestionnaire}</Lien>
+                        <Link href={`/sgo/${f.managerSlug}`} className="hover:underline">{f.gestionnaire}</Link>
                       </div>
                     </td>
                     <td className="px-3 py-2 text-xs text-slate-600 hidden md:table-cell">
-                      <Lien href={`/sgo/${f.managerSlug}`} className="hover:underline">{f.gestionnaire}</Lien>
+                      <Link href={`/sgo/${f.managerSlug}`} className="hover:underline">{f.gestionnaire}</Link>
                     </td>
                     <td className="px-3 py-2 text-right text-xs tabular-nums text-slate-700">{fmtBigFCFA(f.aum)}</td>
                     <td className={`px-3 py-2 text-right text-xs tabular-nums font-medium hidden sm:table-cell ${f.ytd !== null && f.ytd >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
@@ -363,14 +363,14 @@ export default function CategoryDetailView(props: Props) {
         <h3 className="text-sm font-semibold text-slate-900 mb-3">Autres catégories</h3>
         <div className="flex flex-wrap gap-2">
           {otherCategories.map((c) => (
-            <Lien
+            <Link
               key={c.slug}
               href={`/fcp/categorie/${c.slug}`}
               className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-md border border-slate-200 hover:border-slate-400 transition"
             >
               <span className="w-2 h-2 rounded-full" style={{ background: CATEGORY_COLORS[c.name] || "#94a3b8" }} />
               {c.name}
-            </Lien>
+            </Link>
           ))}
         </div>
       </section>

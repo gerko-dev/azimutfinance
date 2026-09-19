@@ -1,4 +1,4 @@
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import PageHero from "@/components/PageHero";
 import { pageMetadata } from "@/lib/seo";
 
@@ -55,12 +55,12 @@ export default function ConfidentialitePage() {
         <p>
           Le responsable du traitement est l&apos;éditeur du site, identifié
           dans les{" "}
-          <Lien
+          <Link
             href="/legal/mentions"
             className="text-blue-700 hover:underline"
           >
             mentions légales
-          </Lien>
+          </Link>
           . Pour toute question relative à vos données&nbsp;:{" "}
           <a
             href="mailto:contact@azimutfinance.com"
@@ -103,12 +103,12 @@ export default function ConfidentialitePage() {
             navigateur, système d&apos;exploitation, résolution d&apos;écran,
             pages d&apos;entrée et de sortie, horodatage des requêtes, cookies
             (voir notre{" "}
-            <Lien
+            <Link
               href="/legal/cookies"
               className="text-blue-700 hover:underline"
             >
               Politique de cookies
-            </Lien>
+            </Link>
             ).
           </li>
           <li>
@@ -233,12 +233,12 @@ export default function ConfidentialitePage() {
           <li>
             <strong>Cookies non nécessaires&nbsp;:</strong> 13&nbsp;mois
             maximum (voir{" "}
-            <Lien
+            <Link
               href="/legal/cookies"
               className="text-blue-700 hover:underline"
             >
               Politique de cookies
-            </Lien>
+            </Link>
             ).
           </li>
           <li>

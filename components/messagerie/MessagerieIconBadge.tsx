@@ -1,6 +1,6 @@
 "use client";
 
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -78,7 +78,7 @@ export default function MessagerieIconBadge({ user }: { user: User | null }) {
   const display = unread > 99 ? "99+" : String(unread);
 
   return (
-    <Lien
+    <Link
       href="/messagerie"
       className="relative inline-flex items-center justify-center w-9 h-9 rounded-md hover:bg-slate-100 transition text-slate-700"
       aria-label={
@@ -105,6 +105,6 @@ export default function MessagerieIconBadge({ user }: { user: User | null }) {
           {display}
         </span>
       )}
-    </Lien>
+    </Link>
   );
 }

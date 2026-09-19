@@ -1,4 +1,4 @@
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import Header from "@/components/Header";
 import PageHero from "@/components/PageHero";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -48,18 +48,18 @@ export default async function ComptesTitresPage() {
               d&apos;actif et secteur.
             </p>
             <div className="mt-6 flex justify-center gap-3 flex-wrap">
-              <Lien
+              <Link
                 href="/connexion?redirect=/outils/portefeuille"
                 className="text-sm bg-slate-900 hover:bg-slate-700 text-white font-medium px-5 py-2.5 rounded transition"
               >
                 Se connecter
-              </Lien>
-              <Lien
+              </Link>
+              <Link
                 href="/inscription?redirect=/outils/portefeuille"
                 className="text-sm bg-white hover:bg-slate-50 text-slate-900 font-medium px-5 py-2.5 rounded border border-slate-300 transition"
               >
                 Créer un compte
-              </Lien>
+              </Link>
             </div>
             <p className="text-[11px] text-slate-400 mt-4">
               Inscription gratuite · données privées (visibles par vous uniquement)
@@ -101,12 +101,12 @@ export default async function ComptesTitresPage() {
         title="Mon portefeuille"
         subtitle="Vos comptes-titres réels, leurs positions et leur performance."
       >
-        <Lien
+        <Link
           href="/outils/portefeuille/nouveau"
           className="inline-block text-sm bg-blue-600 hover:bg-blue-700 text-white font-medium px-3 py-2 rounded"
         >
           + Nouveau compte
-        </Lien>
+        </Link>
       </PageHero>
       <main className="max-w-6xl mx-auto px-4 md:px-6 py-5 md:py-6 space-y-5">
         {summaries.length === 0 ? (
@@ -119,17 +119,17 @@ export default async function ComptesTitresPage() {
               puis enregistrez vos transactions au fil du temps. Le tableau de bord se construit
               automatiquement.
             </p>
-            <Lien
+            <Link
               href="/outils/portefeuille/nouveau"
               className="inline-block mt-5 text-sm bg-slate-900 hover:bg-slate-700 text-white font-medium px-4 py-2 rounded"
             >
               Créer mon premier compte
-            </Lien>
+            </Link>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {summaries.map(({ account, snapshot, txCount }) => (
-              <Lien
+              <Link
                 key={account.id}
                 href={`/outils/portefeuille/${account.id}`}
                 className="block bg-white rounded-lg border border-slate-200 p-4 hover:border-slate-300 hover:shadow-sm transition"
@@ -174,7 +174,7 @@ export default async function ComptesTitresPage() {
                     </div>
                   </div>
                 </div>
-              </Lien>
+              </Link>
             ))}
           </div>
         )}

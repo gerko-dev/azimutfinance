@@ -1,4 +1,4 @@
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 
 type Slug = "courbe" | "surveillance" | "calendrier";
 
@@ -46,18 +46,18 @@ export default function BondsRelatedLinks({ current }: Props) {
         <h2 className="text-base md:text-lg font-semibold text-slate-900">
           Voir aussi
         </h2>
-        <Lien
+        <Link
           href="/marches/obligations"
           className="text-xs md:text-sm text-slate-500 hover:text-slate-900 transition"
         >
           ← Retour aux obligations cotées
-        </Lien>
+        </Link>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
         {others.map((slug) => {
           const p = PAGES[slug];
           return (
-            <Lien
+            <Link
               key={slug}
               href={p.href}
               className="group relative flex items-start gap-3 bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md hover:-translate-y-0.5 transition-all overflow-hidden"
@@ -86,7 +86,7 @@ export default function BondsRelatedLinks({ current }: Props) {
               >
                 →
               </span>
-            </Lien>
+            </Link>
           );
         })}
       </div>

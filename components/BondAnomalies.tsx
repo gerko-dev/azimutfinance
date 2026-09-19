@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import type { ListedBond, ListedBondPrice } from "@/lib/listedBondsTypes";
 import { getBondYTMFromLatest } from "@/lib/listedBondsTypes";
 import { bondHref } from "@/lib/listedBondsTypes";
@@ -284,7 +284,7 @@ export default function BondAnomalies({ bonds, prices, limit = null }: Props) {
       ) : (
         <div className="space-y-2">
           {filteredAnomalies.map((a, i) => (
-            <Lien
+            <Link
               key={i}
               href={bondHref(a.bond)}
               className={`block p-3 rounded-md border text-sm hover:shadow-sm transition ${
@@ -331,7 +331,7 @@ export default function BondAnomalies({ bonds, prices, limit = null }: Props) {
                   </div>
                 </div>
               </div>
-            </Lien>
+            </Link>
           ))}
         </div>
       )}

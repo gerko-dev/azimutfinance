@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import {
   AreaChart,
   Area,
@@ -509,12 +509,12 @@ function GestionnairesTab({ data }: { data: FCPProData }) {
               <tr key={m.gestionnaire} className="border-b border-slate-800 last:border-0 hover:bg-slate-800/40">
                 <td className="px-4 py-2 font-mono text-slate-500">{i + 1}</td>
                 <td className="px-3 py-2">
-                  <Lien
+                  <Link
                     href={`/pros/sgo/${m.slug}`}
                     className="text-slate-200 hover:text-blue-300 transition"
                   >
                     {m.gestionnaire}
-                  </Lien>
+                  </Link>
                 </td>
                 <td className="px-3 py-2 text-right font-mono text-slate-400">{m.nbFunds}</td>
                 <td className="px-3 py-2">
@@ -628,7 +628,7 @@ function LeaderTable({ title, rows, positive }: { title: string; rows: FundRow[]
     <Card title={title} subtitle="rendement total 1 an">
       <div className="divide-y divide-slate-800">
         {rows.map((f) => (
-          <Lien
+          <Link
             key={f.id}
             href={`/pros/fcp/${f.id}`}
             className="flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-slate-800/40 transition text-sm"
@@ -642,7 +642,7 @@ function LeaderTable({ title, rows, positive }: { title: string; rows: FundRow[]
             <span className={`font-mono font-medium shrink-0 ${positive ? "text-emerald-400" : "text-red-400"}`}>
               {fmtPctSigned(f.y1)}
             </span>
-          </Lien>
+          </Link>
         ))}
       </div>
     </Card>
@@ -757,10 +757,10 @@ function ExplorateurTab({ data }: { data: FCPProData }) {
             {filtered.map((f) => (
               <tr key={f.id} className="border-b border-slate-800 last:border-0 hover:bg-slate-800/40">
                 <td className="px-4 py-2">
-                  <Lien href={`/pros/fcp/${f.id}`} className="text-slate-200 hover:text-white transition flex items-center gap-1.5">
+                  <Link href={`/pros/fcp/${f.id}`} className="text-slate-200 hover:text-white transition flex items-center gap-1.5">
                     {f.nom}
                     {f.isStale && <span title="VL périmée (> 15 j)" className="text-amber-400 text-[10px]">⚠</span>}
-                  </Lien>
+                  </Link>
                 </td>
                 <td className="px-3 py-2 text-slate-400 hidden md:table-cell truncate max-w-[10rem]">{f.gestionnaire}</td>
                 <td className="px-3 py-2">

@@ -1,4 +1,4 @@
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 
 // === Annonce de remise Premium ===
 //
@@ -24,13 +24,13 @@ export default function PremiumDiscountBadge({
   const label = `−${pct} % de réduction sur Premium`;
 
   return (
-    <Lien
+    <Link
       href={href}
       title={label}
       className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-sm hover:shadow transition whitespace-nowrap ${className}`}
     >
       <span aria-hidden>★</span>
       {label}
-    </Lien>
+    </Link>
   );
 }

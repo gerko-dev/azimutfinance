@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import {
   readConsent,
   writeConsent,
@@ -71,12 +71,12 @@ export default function CookieConsent() {
             Nous utilisons des cookies strictement nécessaires au fonctionnement
             du site. Avec votre accord, nous utilisons également des cookies
             fonctionnels et de mesure d&apos;audience.{" "}
-            <Lien
+            <Link
               href="/legal/cookies"
               className="underline text-blue-300 hover:text-blue-200"
             >
               En savoir plus
-            </Lien>
+            </Link>
             .
           </p>
           <div className="flex flex-wrap gap-2 md:flex-nowrap shrink-0">
@@ -122,12 +122,12 @@ export default function CookieConsent() {
             </h2>
             <p className="text-xs text-slate-500 mt-1">
               Activez ou désactivez les catégories ci-dessous. Voir notre{" "}
-              <Lien
+              <Link
                 href="/legal/cookies"
                 className="text-blue-700 hover:underline"
               >
                 politique de cookies
-              </Lien>
+              </Link>
               .
             </p>
           </div>

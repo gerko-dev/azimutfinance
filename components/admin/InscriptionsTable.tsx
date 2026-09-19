@@ -2,7 +2,7 @@
 
 import { useTransition, useState } from "react";
 import { useRouter } from "next/navigation";
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import { setInscriptionStatus } from "@/lib/formations/actions";
 import {
   INSCRIPTION_STATUS_COLOR,
@@ -122,12 +122,12 @@ function FragmentRow({
         </td>
         {!compact && (
           <td className="py-2 px-2 max-w-xs truncate">
-            <Lien
+            <Link
               href={`/admin/formations/${i.formation_id}`}
               className="text-blue-700 hover:underline"
             >
               {i.formation_title}
-            </Lien>
+            </Link>
           </td>
         )}
         <td className="py-2 px-2 text-slate-700">

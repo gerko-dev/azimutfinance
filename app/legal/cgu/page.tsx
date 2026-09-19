@@ -1,4 +1,4 @@
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import PageHero from "@/components/PageHero";
 import { pageMetadata } from "@/lib/seo";
 
@@ -57,12 +57,12 @@ export default function CGUPage() {
           </li>
           <li>
             <strong>Éditeur&nbsp;:</strong> la personne identifiée dans les{" "}
-            <Lien
+            <Link
               href="/legal/mentions"
               className="text-blue-700 hover:underline"
             >
               mentions légales
-            </Lien>
+            </Link>
             .
           </li>
           <li>
@@ -134,9 +134,9 @@ export default function CGUPage() {
           Le site propose des abonnements Premium ouvrant l&apos;accès à des
           contenus et outils supplémentaires. Les prix, durées et modalités de
           chaque offre sont précisés sur la page{" "}
-          <Lien href="/premium" className="text-blue-700 hover:underline">
+          <Link href="/premium" className="text-blue-700 hover:underline">
             /premium
-          </Lien>{" "}
+          </Link>{" "}
           au moment de la souscription.
         </p>
         <p className="mt-3">
@@ -365,19 +365,19 @@ export default function CGUPage() {
       <Section title="13. Données personnelles">
         <p>
           Le traitement des données personnelles est détaillé dans la{" "}
-          <Lien
+          <Link
             href="/legal/confidentialite"
             className="text-blue-700 hover:underline"
           >
             Politique de confidentialité
-          </Lien>
+          </Link>
           . L&apos;utilisation des cookies est précisée dans la{" "}
-          <Lien
+          <Link
             href="/legal/cookies"
             className="text-blue-700 hover:underline"
           >
             Politique de cookies
-          </Lien>
+          </Link>
           .
         </p>
       </Section>

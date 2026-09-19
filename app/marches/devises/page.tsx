@@ -1,4 +1,4 @@
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import Header from "@/components/Header";
 import FxAnalyzer from "@/components/macro/FxAnalyzer";
 import { fetchUserRole } from "@/lib/auth/userRole";
@@ -403,10 +403,10 @@ export default async function Page() {
                           {stat.volatility1Y === null ? "—" : `${stat.volatility1Y.toFixed(0)} %`}
                         </span>
                         <span className="text-slate-300">·</span>
-                        <Lien href={`/marches/devises/${meta.slug}`}
+                        <Link href={`/marches/devises/${meta.slug}`}
                           className="text-blue-700 hover:underline font-medium">
                           Détail →
-                        </Lien>
+                        </Link>
                       </div>
                     )}
                   </div>
@@ -430,12 +430,12 @@ export default async function Page() {
                       </div>
                     </div>
                     <div className="flex gap-2 mt-4">
-                      <Lien
+                      <Link
                         href="/abonnements"
                         className="px-4 py-2 bg-amber-500 text-white text-sm rounded hover:bg-amber-600 transition font-medium"
                       >
                         Passer Premium
-                      </Lien>
+                      </Link>
                     </div>
                   </div>
                 </div>
@@ -494,7 +494,7 @@ function FxCard({
     .join(" ");
 
   return (
-    <Lien
+    <Link
       href={`/marches/devises/${slug}`}
       className="block border border-slate-200 rounded-lg p-3 bg-white hover:shadow-sm hover:border-slate-300 transition"
     >
@@ -538,7 +538,7 @@ function FxCard({
           </span>
         </span>
       </div>
-    </Lien>
+    </Link>
   );
 }
 

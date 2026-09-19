@@ -1,4 +1,4 @@
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import Header from "@/components/Header";
 import PageHero from "@/components/PageHero";
@@ -113,12 +113,12 @@ export default async function ComptePage() {
                 Quelques questions rapides pour personnaliser votre expérience.
               </div>
             </div>
-            <Lien
+            <Link
               href="/bienvenue"
               className="px-4 py-2 text-xs font-medium bg-amber-700 text-white rounded-md hover:bg-amber-800 whitespace-nowrap"
             >
               Continuer
-            </Lien>
+            </Link>
           </div>
         )}
 
@@ -163,12 +163,12 @@ export default async function ComptePage() {
             <h2 className="text-sm font-medium text-slate-900">
               Mon profil investisseur
             </h2>
-            <Lien
+            <Link
               href="/bienvenue"
               className="text-xs text-blue-700 hover:underline"
             >
               Modifier
-            </Lien>
+            </Link>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
             <Field
@@ -229,19 +229,19 @@ export default async function ComptePage() {
             <h2 className="text-sm font-medium text-slate-900">
               Mes formations
             </h2>
-            <Lien
+            <Link
               href="/academie/formations"
               className="text-xs text-blue-700 hover:underline"
             >
               Catalogue
-            </Lien>
+            </Link>
           </div>
           {inscriptions.length === 0 ? (
             <div className="text-sm text-slate-500 pt-2 border-t border-slate-100">
               Vous n&apos;êtes inscrit à aucune formation pour le moment.{" "}
-              <Lien href="/academie/formations" className="text-blue-700 hover:underline">
+              <Link href="/academie/formations" className="text-blue-700 hover:underline">
                 Découvrir le catalogue →
-              </Lien>
+              </Link>
             </div>
           ) : (
             <ul className="divide-y divide-slate-100 -mx-2">
@@ -250,12 +250,12 @@ export default async function ComptePage() {
                 return (
                   <li key={i.id} className="px-2 py-3">
                     <div className="flex items-center justify-between gap-3 flex-wrap">
-                      <Lien
+                      <Link
                         href={`/academie/formations/${i.formation_slug}`}
                         className="text-sm font-medium text-slate-900 hover:text-blue-700 truncate"
                       >
                         {i.formation_title}
-                      </Lien>
+                      </Link>
                       <span
                         className="text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded shrink-0"
                         style={{ background: color + "15", color }}
@@ -293,22 +293,22 @@ export default async function ComptePage() {
               <h2 className="text-sm font-medium text-slate-900">
                 Mes watchlists
               </h2>
-              <Lien
+              <Link
                 href="/outils/watchlist"
                 className="text-xs text-blue-700 hover:underline"
               >
                 Gérer →
-              </Lien>
+              </Link>
             </div>
             {myWatchlists.length === 0 ? (
               <div className="text-xs text-slate-500">
                 Aucune liste pour le moment.{" "}
-                <Lien
+                <Link
                   href="/outils/watchlist"
                   className="text-blue-700 hover:underline"
                 >
                   Créer la première
-                </Lien>
+                </Link>
               </div>
             ) : (
               <ul className="space-y-1.5">
@@ -317,12 +317,12 @@ export default async function ComptePage() {
                     key={w.id}
                     className="flex items-center justify-between text-sm"
                   >
-                    <Lien
+                    <Link
                       href={`/outils/watchlist?id=${w.id}`}
                       className="text-slate-900 hover:text-blue-700 truncate"
                     >
                       {w.name}
-                    </Lien>
+                    </Link>
                     <span className="text-[11px] tabular-nums text-slate-500 shrink-0 ml-2">
                       {w.item_count}
                     </span>
@@ -335,12 +335,12 @@ export default async function ComptePage() {
           <div className="bg-white border border-slate-200 rounded-lg p-5">
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-sm font-medium text-slate-900">Mes alertes</h2>
-              <Lien
+              <Link
                 href="/outils/alertes"
                 className="text-xs text-blue-700 hover:underline"
               >
                 Gérer →
-              </Lien>
+              </Link>
             </div>
             {myAlerts.length === 0 ? (
               <div className="text-xs text-slate-500">
@@ -369,12 +369,12 @@ export default async function ComptePage() {
             <h2 className="text-sm font-medium text-slate-900">
               Mon activité forum
             </h2>
-            <Lien
+            <Link
               href="/communaute/forum"
               className="text-xs text-blue-700 hover:underline"
             >
               Aller au forum
-            </Lien>
+            </Link>
           </div>
 
           <div className="pt-2 border-t border-slate-100">
@@ -384,23 +384,23 @@ export default async function ComptePage() {
             {myTopics.length === 0 ? (
               <div className="text-xs text-slate-500">
                 Vous n&apos;avez pas encore créé de discussion.{" "}
-                <Lien
+                <Link
                   href="/communaute/forum/nouveau"
                   className="text-blue-700 hover:underline"
                 >
                   Démarrer une discussion →
-                </Lien>
+                </Link>
               </div>
             ) : (
               <ul className="divide-y divide-slate-100 -mx-1">
                 {myTopics.map((t) => (
                   <li key={t.id} className="px-1 py-2">
-                    <Lien
+                    <Link
                       href={`/communaute/forum/t/${t.id}`}
                       className="text-sm text-slate-900 hover:text-blue-700 font-medium line-clamp-1"
                     >
                       {t.title}
-                    </Lien>
+                    </Link>
                     <div className="text-[11px] text-slate-500 mt-0.5 flex flex-wrap items-center gap-x-2">
                       <span>{t.category_name}</span>
                       <span className="text-slate-300">·</span>
@@ -431,12 +431,12 @@ export default async function ComptePage() {
               <ul className="divide-y divide-slate-100 -mx-1">
                 {myReplies.map((r) => (
                   <li key={r.reply_id} className="px-1 py-2">
-                    <Lien
+                    <Link
                       href={`/communaute/forum/t/${r.topic_id}`}
                       className="text-sm text-slate-900 hover:text-blue-700 font-medium line-clamp-1"
                     >
                       ↳ {r.topic_title}
-                    </Lien>
+                    </Link>
                     <div className="text-[11px] text-slate-600 line-clamp-2 mt-0.5">
                       {r.body_preview}
                     </div>
@@ -489,12 +489,12 @@ function PremiumStatusCard({
             historiques étendues. À partir de 9 999 FCFA / mois.
           </div>
         </div>
-        <Lien
+        <Link
           href="/premium"
           className="px-4 py-2 text-xs font-medium bg-amber-500 text-white rounded-md hover:bg-amber-600 whitespace-nowrap"
         >
           Découvrir
-        </Lien>
+        </Link>
       </div>
     );
   }
@@ -529,7 +529,7 @@ function PremiumStatusCard({
             </span>
           </div>
         </div>
-        <Lien
+        <Link
           href="/premium"
           className={`px-4 py-2 text-xs font-medium rounded-md whitespace-nowrap ${
             expiringSoon
@@ -538,7 +538,7 @@ function PremiumStatusCard({
           }`}
         >
           {expiringSoon ? "Renouveler maintenant" : "Gérer mon abonnement"}
-        </Lien>
+        </Link>
       </div>
       <div className="border-t border-slate-100 mt-4 pt-3">
         <CancelPremiumButton />

@@ -1,6 +1,6 @@
 "use client";
 
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 
 type FormationLevel = "debutant" | "intermediaire" | "avance";
@@ -306,7 +306,7 @@ function Card({ card }: { card: FormationCard }) {
   const categoryMeta = CATEGORIES.find((c) => c.id === card.category)!;
 
   return (
-    <Lien
+    <Link
       href={`/academie/formations/${card.slug}`}
       className="group block bg-white rounded-lg border border-slate-200 hover:border-slate-300 hover:shadow-md transition overflow-hidden flex flex-col"
     >
@@ -383,6 +383,6 @@ function Card({ card }: { card: FormationCard }) {
           </span>
         </div>
       </div>
-    </Lien>
+    </Link>
   );
 }

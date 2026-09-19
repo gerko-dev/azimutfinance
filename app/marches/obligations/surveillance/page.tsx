@@ -1,6 +1,6 @@
 import Header from "@/components/Header";
 import Ticker from "@/components/Ticker";
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import BondAnomalies from "@/components/BondAnomalies";
 import BondsPaywallSection from "@/components/BondsPaywallSection";
 import BondsRelatedLinks from "@/components/BondsRelatedLinks";
@@ -89,13 +89,13 @@ export default async function Page() {
       <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-b border-slate-800">
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10">
           <div className="text-xs md:text-sm text-slate-400 mb-2">
-            <Lien href="/" className="hover:text-white transition">
+            <Link href="/" className="hover:text-white transition">
               Marchés
-            </Lien>
+            </Link>
             <span className="mx-2 text-slate-500">›</span>
-            <Lien href="/marches/obligations" className="hover:text-white transition">
+            <Link href="/marches/obligations" className="hover:text-white transition">
               Obligations cotées
-            </Lien>
+            </Link>
             <span className="mx-2 text-slate-500">›</span>
             <span className="text-slate-200">À surveiller</span>
           </div>

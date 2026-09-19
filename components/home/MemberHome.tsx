@@ -9,7 +9,7 @@
 // premium et pro ont leur propre page d'accueil.
 // =============================================================================
 
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
 import Header from "@/components/Header";
 import LivePriceBadge from "@/components/LivePriceBadge";
@@ -196,27 +196,27 @@ export default async function MemberHome({ user }: { user: User }) {
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Lien
+              <Link
                 href="/outils/watchlist"
                 className="bg-white/10 hover:bg-white/15 border border-white/20 text-white font-medium px-4 py-2 rounded-md text-sm transition"
               >
                 Ma watchlist
-              </Lien>
+              </Link>
               {/* « Mes alertes » réservé aux comptes Premium. */}
               {alertsAvailable && (
-                <Lien
+                <Link
                   href="/outils/alertes"
                   className="bg-white/10 hover:bg-white/15 border border-white/20 text-white font-medium px-4 py-2 rounded-md text-sm transition"
                 >
                   Mes alertes
-                </Lien>
+                </Link>
               )}
-              <Lien
+              <Link
                 href="/compte"
                 className="bg-white text-slate-900 hover:bg-slate-100 font-semibold px-4 py-2 rounded-md text-sm transition"
               >
                 Mon compte
-              </Lien>
+              </Link>
             </div>
           </div>
 
@@ -241,7 +241,7 @@ export default async function MemberHome({ user }: { user: User }) {
                   const v = d.live!;
                   const up = (v.variationPct ?? 0) >= 0;
                   return (
-                    <Lien
+                    <Link
                       key={d.code}
                       href="/marches/indices"
                       className="group bg-white/[0.05] hover:bg-white/[0.09] border border-white/10 hover:border-white/25 rounded-lg px-4 py-3 transition flex items-center justify-between"
@@ -261,7 +261,7 @@ export default async function MemberHome({ user }: { user: User }) {
                       >
                         {fmtPct(v.variationPct, 2)}
                       </div>
-                    </Lien>
+                    </Link>
                   );
                 })
               )}
@@ -273,7 +273,7 @@ export default async function MemberHome({ user }: { user: User }) {
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-8 md:py-12 space-y-10 md:space-y-14">
         {/* Bandeau onboarding (si profil incomplet) */}
         {!onboarded && (
-          <Lien
+          <Link
             href="/bienvenue"
             className="group flex items-center gap-4 bg-blue-50 border border-blue-200 rounded-xl px-5 py-4 hover:border-blue-300 transition"
           >
@@ -292,7 +292,7 @@ export default async function MemberHome({ user }: { user: User }) {
             <span className="text-sm font-semibold text-blue-700 group-hover:translate-x-0.5 transition">
               Compléter →
             </span>
-          </Lien>
+          </Link>
         )}
 
         {/* ============ Watchlist + Alertes (le « à moi ») ============ */}
@@ -390,7 +390,7 @@ export default async function MemberHome({ user }: { user: User }) {
           />
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mt-5">
             {featuredArticle && (
-              <Lien
+              <Link
                 href={`/academie/magazine/article/${featuredArticle.slug}`}
                 className="lg:col-span-2 group bg-white rounded-xl border border-slate-200 hover:border-slate-300 hover:shadow-lg transition overflow-hidden flex flex-col"
               >
@@ -418,12 +418,12 @@ export default async function MemberHome({ user }: { user: User }) {
                     {featuredArticle.readingTimeMinutes} min de lecture
                   </div>
                 </div>
-              </Lien>
+              </Link>
             )}
 
             <div className="space-y-3">
               {recentArticles.map((a) => (
-                <Lien
+                <Link
                   key={a.slug}
                   href={`/academie/magazine/article/${a.slug}`}
                   className="group block bg-white border border-slate-200 hover:border-slate-300 hover:shadow-md rounded-xl p-4 transition"
@@ -440,7 +440,7 @@ export default async function MemberHome({ user }: { user: User }) {
                   <div className="text-[11px] text-slate-500 mt-1">
                     {a.readingTimeMinutes} min
                   </div>
-                </Lien>
+                </Link>
               ))}
             </div>
           </div>
@@ -501,12 +501,12 @@ function SectionHeader({
         </h2>
       </div>
       {href && hrefLabel && (
-        <Lien
+        <Link
           href={href}
           className="text-sm font-semibold text-blue-700 hover:underline whitespace-nowrap"
         >
           {hrefLabel} →
-        </Lien>
+        </Link>
       )}
     </div>
   );
@@ -534,12 +534,12 @@ function WatchlistPanel({
             {list ? list.name : "Suivez vos valeurs favorites"}
           </h2>
         </div>
-        <Lien
+        <Link
           href="/outils/watchlist"
           className="text-sm font-semibold text-blue-700 hover:underline whitespace-nowrap"
         >
           {list ? "Gérer →" : "Créer →"}
-        </Lien>
+        </Link>
       </div>
 
       {!list || items.length === 0 ? (
@@ -556,12 +556,12 @@ function WatchlistPanel({
             Ajoutez actions, obligations, indices ou devises pour suivre leur
             évolution d&apos;un coup d&apos;œil.
           </p>
-          <Lien
+          <Link
             href="/outils/watchlist"
             className="inline-block mt-4 text-sm font-semibold bg-blue-700 hover:bg-blue-800 text-white px-4 py-2 rounded-md transition"
           >
             {list ? "Ajouter une valeur" : "Créer ma watchlist"}
-          </Lien>
+          </Link>
         </div>
       ) : (
         <>
@@ -570,7 +570,7 @@ function WatchlistPanel({
               const ytd = it.enriched.ytdPct;
               return (
                 <li key={it.id}>
-                  <Lien
+                  <Link
                     href={targetHref(it.target_type, it.target_code)}
                     className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50 group"
                   >
@@ -610,7 +610,7 @@ function WatchlistPanel({
                         {ytd !== null ? `${fmtPct(ytd, 1)} YTD` : "—"}
                       </div>
                     </div>
-                  </Lien>
+                  </Link>
                 </li>
               );
             })}
@@ -619,9 +619,9 @@ function WatchlistPanel({
             <div className="px-5 py-2.5 border-t border-slate-100 text-[11px] text-slate-500">
               + {totalLists - 1} autre{totalLists - 1 > 1 ? "s" : ""} watchlist
               {totalLists - 1 > 1 ? "s" : ""} ·{" "}
-              <Lien href="/outils/watchlist" className="text-blue-700 hover:underline">
+              <Link href="/outils/watchlist" className="text-blue-700 hover:underline">
                 toutes les voir
-              </Lien>
+              </Link>
             </div>
           )}
         </>
@@ -673,12 +673,12 @@ function AlertsPanel({
               : "Restez prévenu"}
           </h2>
         </div>
-        <Lien
+        <Link
           href="/outils/alertes"
           className="text-sm font-semibold text-amber-600 hover:underline whitespace-nowrap"
         >
           {hasAlerts ? "Gérer →" : "Créer →"}
-        </Lien>
+        </Link>
       </div>
 
       {!hasAlerts ? (
@@ -693,12 +693,12 @@ function AlertsPanel({
             Soyez notifié dès qu&apos;un cours, un rendement ou un indice
             franchit votre seuil.
           </p>
-          <Lien
+          <Link
             href="/outils/alertes"
             className="inline-block mt-4 text-sm font-semibold bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-md transition"
           >
             Créer une alerte
-          </Lien>
+          </Link>
         </div>
       ) : (
         <div className="flex-1 flex flex-col">
@@ -792,12 +792,12 @@ function AlertsUpsell() {
             </li>
           ))}
         </ul>
-        <Lien
+        <Link
           href="/premium"
           className="mt-auto pt-5 block text-center text-sm font-semibold bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white px-4 py-2.5 rounded-md transition shadow-sm"
         >
           Passer à Premium →
-        </Lien>
+        </Link>
       </div>
     </div>
   );
@@ -834,7 +834,7 @@ function MoversCard({
         ) : (
           quotes.map((q) => (
             <li key={q.code}>
-              <Lien
+              <Link
                 href={`/titre/${q.code}`}
                 className="flex items-center gap-3 px-5 py-2.5 hover:bg-slate-50 group"
               >
@@ -851,7 +851,7 @@ function MoversCard({
                 >
                   {fmtPct(q.variationPct, 2)}
                 </div>
-              </Lien>
+              </Link>
             </li>
           ))
         )}
@@ -876,7 +876,7 @@ function MacroCard({
   up: boolean;
 }) {
   return (
-    <Lien
+    <Link
       href={href}
       className="group bg-white border border-slate-200 hover:border-slate-300 hover:shadow-md rounded-xl p-4 transition"
     >
@@ -893,7 +893,7 @@ function MacroCard({
       >
         {delta}
       </div>
-    </Lien>
+    </Link>
   );
 }
 
@@ -911,7 +911,7 @@ function ExploreTile({
   hint: string;
 }) {
   return (
-    <Lien
+    <Link
       href={href}
       className="group bg-white border border-slate-200 hover:border-blue-300 hover:shadow-md rounded-xl p-4 transition"
     >
@@ -924,6 +924,6 @@ function ExploreTile({
       <div className="text-[11px] text-slate-500 mt-0.5 leading-tight">
         {hint}
       </div>
-    </Lien>
+    </Link>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 
 type Props = {
   open: boolean;
@@ -66,26 +66,26 @@ export default function MemberGateDialog({
             Plus tard
           </button>
           {tier === "premium" ? (
-            <Lien
+            <Link
               href="/compte"
               className="px-3 py-1.5 rounded-md bg-amber-500 text-white text-sm font-medium hover:bg-amber-600 transition"
             >
               Passer Premium
-            </Lien>
+            </Link>
           ) : (
             <>
-              <Lien
+              <Link
                 href="/connexion"
                 className="px-3 py-1.5 rounded-md border border-slate-300 text-sm font-medium hover:bg-slate-50 transition"
               >
                 Connexion
-              </Lien>
-              <Lien
+              </Link>
+              <Link
                 href="/inscription"
                 className="px-3 py-1.5 rounded-md bg-blue-700 text-white text-sm font-medium hover:bg-blue-800 transition"
               >
                 S&apos;inscrire
-              </Lien>
+              </Link>
             </>
           )}
         </div>

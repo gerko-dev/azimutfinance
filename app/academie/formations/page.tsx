@@ -1,4 +1,4 @@
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import Header from "@/components/Header";
 import FormationsCatalog from "@/components/academie/FormationsCatalog";
 import {
@@ -163,12 +163,12 @@ export default async function Page() {
                   vérifiable, valorisable sur LinkedIn et CV.
                 </p>
               </div>
-              <Lien
+              <Link
                 href="/academie/formations/certification-azimut-niveau-1"
                 className="text-sm bg-slate-900 hover:bg-slate-700 text-white px-4 py-2 rounded font-medium transition"
               >
                 Voir le parcours →
-              </Lien>
+              </Link>
             </div>
           </section>
         )}

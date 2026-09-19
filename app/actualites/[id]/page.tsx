@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import Header from "@/components/Header";
 import {
   attachmentPublicUrl,
@@ -119,15 +119,15 @@ export default async function ActualitePublicPage({
 
       <main className="max-w-3xl mx-auto px-4 md:px-6 py-8 md:py-12">
         <div className="text-xs text-slate-500 mb-3">
-          <Lien href="/" className="hover:text-slate-700">Accueil</Lien> &rsaquo;{" "}
-          <Lien href="/actualites" className="hover:text-slate-700">Actualités</Lien>{" "}
+          <Link href="/" className="hover:text-slate-700">Accueil</Link> &rsaquo;{" "}
+          <Link href="/actualites" className="hover:text-slate-700">Actualités</Link>{" "}
           &rsaquo;{" "}
-          <Lien
+          <Link
             href={`/actualites?ticker=${a.ticker}`}
             className="hover:text-slate-700 font-mono"
           >
             {a.ticker}
-          </Lien>
+          </Link>
         </div>
 
         <article>
@@ -214,12 +214,12 @@ export default async function ActualitePublicPage({
             <ul className="space-y-2.5">
               {related.map((r) => (
                 <li key={r.id}>
-                  <Lien
+                  <Link
                     href={`/actualites/${r.id}`}
                     className="block text-sm text-slate-900 hover:text-blue-700 hover:underline"
                   >
                     {r.title}
-                  </Lien>
+                  </Link>
                   <div className="text-[11px] text-slate-500">
                     {fmtDateLong(r.published_at)}
                   </div>
@@ -230,12 +230,12 @@ export default async function ActualitePublicPage({
         )}
 
         <div className="mt-10 pt-6 border-t border-slate-200">
-          <Lien
+          <Link
             href="/actualites"
             className="inline-flex items-center gap-2 text-sm text-slate-700 hover:text-blue-700 hover:underline"
           >
             ← Toutes les actualités
-          </Lien>
+          </Link>
         </div>
       </main>
     </div>

@@ -1,4 +1,4 @@
-import Lien from "@/components/NavigationProgress";
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import SimulatorShell from "@/components/academie/simulateur/SimulatorShell";
 import WatchlistStar from "@/components/academie/simulateur/WatchlistStar";
@@ -102,18 +102,18 @@ export default async function Page({
           </div>
 
           <div className="mt-3 pt-3 border-t border-slate-100 flex flex-wrap gap-2">
-            <Lien
+            <Link
               href={`/academie/simulateur/carnet?code=${code}`}
               className="text-xs bg-amber-600 hover:bg-amber-700 text-white font-semibold px-3 py-1.5 rounded transition"
             >
               Passer un ordre →
-            </Lien>
-            <Lien
+            </Link>
+            <Link
               href={`/titre/${code}`}
               className="text-xs border border-slate-300 text-slate-700 hover:bg-slate-50 font-medium px-3 py-1.5 rounded transition"
             >
               Fiche détaillée
-            </Lien>
+            </Link>
           </div>
         </div>
 
