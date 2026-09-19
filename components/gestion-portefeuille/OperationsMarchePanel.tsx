@@ -54,6 +54,11 @@ const aide = "text-[9px] text-slate-400";
  *  Les titres publics n'en supportent aucun. */
 const TAUX_ACTIONS = { courtage: 0.004, tps: 0.1, brvm: 0.003 };
 
+/** Libellé complet d'une option — c'est CE TEXTE que le navigateur recopie
+ *  dans le champ quand on choisit une suggestion du `datalist`, et donc la
+ *  clef de résolution au retour. */
+const libelleOption = (t: OptionTitre) => `${t.libelle} · ${t.detail}`;
+
 type Compte = { cle: string; nom: string; pays: string; sens: string };
 type Etat = { code: string; nom: string };
 
@@ -127,6 +132,10 @@ export default function OperationsMarchePanel({
   const [titres, setTitres] = useState<OptionTitre[]>(titresInitiaux);
   const [titreCle, setTitreCle] = useState("");
   const [titresEtat, setTitresEtat] = useState<"chargement" | "pret">("pret");
+  // Texte tape dans le champ de recherche du titre. Le `datalist` filtre
+  // dessus ; la selection se resout en comparant ce texte au libelle complet
+  // de chaque option.
+  const [saisieTitre, setSaisieTitre] = useState("");
 
   // Intérêts courus : calculés d'après les caractéristiques du titre, et
   // MULTIPLIÉS par la quantité. Le gérant peut forcer la valeur — un avis
@@ -170,6 +179,7 @@ export default function OperationsMarchePanel({
   /** Vide ce qui décrit le titre : changer de marché ou d'État invalide le
    *  titre choisi, et garder son ISIN ou ses courus serait pire que rien. */
   const oublierTitre = () => {
+    setSaisieTitre("");
     setTitreCle("");
     setCode("");
     setLibelle("");
@@ -219,6 +229,7 @@ export default function OperationsMarchePanel({
     }
     const opt = titres.find((t) => t.cle === cle);
     if (opt) {
+      setSaisieTitre(libelleOption(opt));
       setCode(opt.isin || opt.cle);
       setLibelle(opt.libelle);
       // L'instrument découle du titre : une action ne peut pas être saisie
@@ -353,6 +364,33 @@ export default function OperationsMarchePanel({
   const titresAffiches =
     marche === "mfr" ? titres.filter((t) => t.instrument === instrument) : titres;
 
+  /**
+   * Ce que le gérant tape se résout en titre par comparaison au libellé
+   * complet de l'option — c'est la valeur que le navigateur recopie dans le
+   * champ quand on choisit une suggestion.
+   *
+   * Tant que le texte ne correspond à AUCUNE option, le titre est considéré
+   * comme non choisi : laisser en place l'ISIN et les courus du titre
+   * précédent pendant que le champ affiche autre chose serait le pire des
+   * deux mondes.
+   */
+  const saisirTitre = (texte: string) => {
+    setSaisieTitre(texte);
+    const trouve = titresAffiches.find((t) => libelleOption(t) === texte);
+    if (trouve) {
+      choisirTitre(trouve.cle);
+      return;
+    }
+    if (titreCle) {
+      setTitreCle("");
+      setCode("");
+      setLibelle("");
+      setCouruParTitre(0);
+      setCouruAvertissement(null);
+      setCouruManuel(null);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div>
@@ -467,29 +505,64 @@ export default function OperationsMarchePanel({
               }
               large
             >
-              <select
-                value={titreCle}
-                onChange={(e) => choisirTitre(e.target.value)}
+              {/* UN CHAMP DE RECHERCHE, PAS UN MENU.
+                  Un `select` de cent soixante-dix titres publics ne se
+                  parcourt pas : il faut pouvoir taper « SONATEL » ou une
+                  fraction d'ISIN. Le `datalist` filtre sur le libellé complet
+                  — nom, type, coupon, échéance — donc la recherche porte
+                  aussi bien sur la maturité que sur le nom. */}
+              <input
+                value={saisieTitre}
+                onChange={(e) => saisirTitre(e.target.value)}
+                list={`titres-${marche}-${instrument}`}
                 disabled={titresEtat === "chargement"}
-                className={`${champ} disabled:bg-slate-50 disabled:text-slate-400`}
-              >
-                <option value="">
-                  {titresEtat === "chargement"
+                placeholder={
+                  titresEtat === "chargement"
                     ? "Chargement des titres…"
-                    : `— Choisir parmi ${titresAffiches.length} titres —`}
-                </option>
+                    : `Taper pour chercher parmi ${titresAffiches.length} titres…`
+                }
+                className={`${champ} disabled:bg-slate-50 disabled:text-slate-400`}
+              />
+              <datalist id={`titres-${marche}-${instrument}`}>
                 {titresAffiches.map((t) => (
-                  <option key={t.cle} value={t.cle}>
-                    {t.libelle} · {t.detail}
-                  </option>
+                  <option key={t.cle} value={libelleOption(t)} />
                 ))}
-              </select>
+              </datalist>
+              <span className={aide}>
+                {titreCle ? (
+                  <span className="text-emerald-700">Titre reconnu · {titreCle}</span>
+                ) : saisieTitre ? (
+                  <span className="text-amber-700">
+                    Aucun titre ne correspond — choisis une suggestion.
+                  </span>
+                ) : (
+                  "Le nom, le code ou l'échéance"
+                )}
+              </span>
             </Champ>
           )}
 
           <Champ label="Code / ISIN">
-            <input value={code} onChange={(e) => setCode(e.target.value)} className={champ} />
-            <span className={aide}>Pré-rempli par le titre, modifiable.</span>
+            {/* NON MODIFIABLE DÈS QU'IL VIENT DU RÉFÉRENTIEL.
+                Le corriger à la main revenait à saisir une opération sur un
+                titre dont les caractéristiques — taux facial, échéance,
+                courus — sont celles d'un AUTRE titre. Pour changer d'ISIN, on
+                change de titre.
+                Le réméré échappe à la règle : il n'a pas de référentiel d'où
+                tirer un code, donc le verrouiller le rendrait impossible à
+                renseigner. */}
+            <input
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              readOnly={marche !== "autre"}
+              tabIndex={marche !== "autre" ? -1 : undefined}
+              className={`${champ} ${
+                marche !== "autre" ? "bg-slate-50 text-slate-600 cursor-default" : ""
+              }`}
+            />
+            <span className={aide}>
+              {marche !== "autre" ? "Repris du titre choisi." : "Saisie libre."}
+            </span>
           </Champ>
 
           {marche === "autre" && (
