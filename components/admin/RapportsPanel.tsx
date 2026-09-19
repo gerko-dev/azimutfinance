@@ -226,12 +226,6 @@ export default function RapportsPanel() {
             {busy === "weekly" ? "Génération du PDF…" : "Générer le PDF"}
           </button>
         </div>
-
-        <p className="text-xs text-slate-400 mt-3">
-          La génération peut prendre 1 à 2 minutes (recherches web Claude + rendu
-          Chromium). Nécessite la clé <code>ANTHROPIC_API_KEY</code> ; sans elle,
-          le rapport est produit sans commentaires.
-        </p>
       </div>
 
       <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-sm">
@@ -272,12 +266,6 @@ export default function RapportsPanel() {
             {busy === "mtp" ? "Génération du PDF…" : "Générer le PDF"}
           </button>
         </div>
-
-        <p className="text-xs text-slate-400 mt-3">
-          La génération peut prendre 1 à 2 minutes (recherches web Claude + rendu
-          Chromium). Nécessite la clé <code>ANTHROPIC_API_KEY</code> ; sans elle,
-          le rapport est produit sans commentaires.
-        </p>
       </div>
     </div>
   );

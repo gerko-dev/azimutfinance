@@ -1,6 +1,7 @@
 import "server-only";
 
-import { existsSync } from "fs";
+import { existsSync, readdirSync } from "fs";
+import { join } from "path";
 import type { Browser } from "puppeteer-core";
 
 // Sur Vercel / AWS Lambda on utilise le Chromium packagé par @sparticuz/chromium.
@@ -35,13 +36,62 @@ function findLocalChrome(): string {
   );
 }
 
+/**
+ * Dossier contenant les archives brotli de @sparticuz/chromium.
+ *
+ * SANS ARGUMENT, `executablePath()` deduit ce dossier de l'emplacement du
+ * module — et se trompe des que le bundler a deplace le paquet. C'est
+ * exactement ce que dit l'erreur rencontree en production :
+ *
+ *   The input directory "/var/task/node_modules/@sparticuz/chromium/bin"
+ *   does not exist. […] you must externalize @sparticuz/chromium so it is
+ *   not relocated.
+ *
+ * Le paquet EST declare dans `serverExternalPackages`, mais Turbopack le
+ * republie malgre tout sous `.next/node_modules/@sparticuz/chromium-<hash>`,
+ * un lien qui resout en local et pas dans la fonction deployee. On cesse donc
+ * de laisser la bibliotheque deviner : on lui passe le dossier, choisi parmi
+ * les emplacements possibles, le premier qui existe VRAIMENT.
+ *
+ * Si aucun ne repond, on leve une erreur qui NOMME les chemins essayes : la
+ * prochaine panne livrera la disposition reelle du bundle au lieu d'un message
+ * generique.
+ */
+function dossierBinChromium(): string {
+  const candidats: string[] = [
+    // Emplacement nominal : c'est celui que next.config.ts fait tracer.
+    join(process.cwd(), "node_modules", "@sparticuz", "chromium", "bin"),
+  ];
+
+  // Republication Turbopack : le nom porte un hash, donc on le cherche au lieu
+  // de le coder en dur.
+  const republie = join(process.cwd(), ".next", "node_modules", "@sparticuz");
+  try {
+    for (const entree of readdirSync(republie)) {
+      if (entree.startsWith("chromium")) candidats.push(join(republie, entree, "bin"));
+    }
+  } catch {
+    // Dossier absent : ce n'est pas une anomalie, seulement un candidat en
+    // moins.
+  }
+
+  for (const c of candidats) {
+    if (existsSync(c)) return c;
+  }
+  throw new Error(
+    "Archives Chromium introuvables. Emplacements essayés : " +
+      candidats.join(" | ") +
+      ` (process.cwd() = ${process.cwd()})`,
+  );
+}
+
 async function launchBrowser(): Promise<Browser> {
   const puppeteer = (await import("puppeteer-core")).default;
   if (IS_SERVERLESS) {
     const chromium = (await import("@sparticuz/chromium")).default;
     return puppeteer.launch({
       args: chromium.args,
-      executablePath: await chromium.executablePath(),
+      executablePath: await chromium.executablePath(dossierBinChromium()),
       headless: true,
     });
   }

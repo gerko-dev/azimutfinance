@@ -62,7 +62,11 @@ const SECURITY_HEADERS = [
 // Les deux entrées Chromium historiques employaient pourtant « /** » : si les
 // rapports cotation et commodities passent en production, c'est de justesse.
 const ACTIFS_CHROMIUM = [
-  "./node_modules/@sparticuz/chromium/bin/**/*",
+  // Le PAQUET ENTIER, pas seulement bin/ : son code resout ses archives
+  // brotli par chemin relatif, et un fichier qui manque se paie par un
+  // echec au lancement. Quelques centaines de kilo-octets en plus du
+  // binaire de 64 Mo qu'il faut de toute facon embarquer.
+  "./node_modules/@sparticuz/chromium/**/*",
   // Logos et visuels inlinés dans les rendus (PNG et SVG), lus via fs.
   "./logo/png/**/*",
   "./logo/svg/**/*",
