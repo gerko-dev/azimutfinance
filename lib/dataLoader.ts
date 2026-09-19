@@ -89,8 +89,19 @@ function isPresent(value: unknown): boolean {
   return str !== "" && str !== "NC" && str !== "-";
 }
 
-export function loadStocks(): StockRow[] {
-  return parseCSV<StockRow>("titres.csv");
+let _stocksCache: StockRow[] | null = null;
+
+/**
+ * MEMOISE : sans cache, chaque appel reparsait titres.csv. Un chargeur appele
+ * plusieurs fois par rendu — directement ou depuis une boucle d'un module
+ * appelant — repayait le parsing a chaque fois. Le cache le referme au niveau
+ * du chargeur, ou il vaut pour tous les appelants.
+ */
+export function loadStocks(): StockRow[]{
+  if (_stocksCache) return _stocksCache;
+
+  _stocksCache = parseCSV<StockRow>("titres.csv");
+  return _stocksCache;
 }
 
 /**
@@ -162,23 +173,49 @@ export function loadIssuances(): IssuanceResult[] {
     }));
 }
 
+type LignePrix = ReturnType<typeof loadAllPriceHistory>[number];
+
+let _historyByCodeCache: Map<string, LignePrix[]> | null = null;
+
+/**
+ * Historique complet INDEXE PAR CODE, trie par date.
+ *
+ * `loadAllPriceHistory` est memoise, mais filtrer et trier l'integralite de
+ * l'historique a CHAQUE appel ne l'etait pas : la proposition d'allocation
+ * appelle loadPriceHistory une fois par titre, soit 47 balayages de 144 000
+ * points — 250 ms mesurees, pour un resultat qui ne change jamais. L'index se
+ * construit une fois et sert tout le monde.
+ */
+function historiqueParCode(): Map<string, LignePrix[]> {
+  if (_historyByCodeCache) return _historyByCodeCache;
+  const index = new Map<string, LignePrix[]>();
+  for (const r of loadAllPriceHistory()) {
+    const cle = r.code.toUpperCase();
+    const liste = index.get(cle);
+    if (liste) liste.push(r);
+    else index.set(cle, [r]);
+  }
+  for (const liste of index.values()) liste.sort((a, b) => a.date.localeCompare(b.date));
+  _historyByCodeCache = index;
+  return index;
+}
+
 export function loadPriceHistory(code: string): { date: string; value: number }[] {
-  const codeUpper = code.toUpperCase();
-  return loadAllPriceHistory()
-    .filter((r) => r.code === codeUpper)
-    .map((r) => ({ date: r.date, value: r.value }))
-    .sort((a, b) => a.date.localeCompare(b.date));
+  return (historiqueParCode().get(code.toUpperCase()) ?? []).map((r) => ({
+    date: r.date,
+    value: r.value,
+  }));
 }
 
 /** Variante exposant le volume quotidien lorsque disponible. Mémoisé via loadAllPriceHistory. */
 export function loadPriceHistoryWithVolume(
   code: string
 ): { date: string; value: number; volume: number | null }[] {
-  const codeUpper = code.toUpperCase();
-  return loadAllPriceHistory()
-    .filter((r) => r.code.toUpperCase() === codeUpper)
-    .map((r) => ({ date: r.date, value: r.value, volume: r.volume }))
-    .sort((a, b) => a.date.localeCompare(b.date));
+  return (historiqueParCode().get(code.toUpperCase()) ?? []).map((r) => ({
+    date: r.date,
+    value: r.value,
+    volume: r.volume,
+  }));
 }
 
 /**
@@ -541,11 +578,21 @@ function loadAmortizationSchedules(): Map<
   return m;
 }
 
-export function loadListedBonds(): ListedBond[] {
+let _listedBondsCache: ListedBond[] | null = null;
+
+/**
+ * MEMOISE : sans cache, chaque appel reparsait obligations-cotees.csv. Un chargeur appele
+ * plusieurs fois par rendu — directement ou depuis une boucle d'un module
+ * appelant — repayait le parsing a chaque fois. Le cache le referme au niveau
+ * du chargeur, ou il vaut pour tous les appelants.
+ */
+export function loadListedBonds(): ListedBond[]{
+  if (_listedBondsCache) return _listedBondsCache;
+
   const rows = parseCSV<ListedBondCSVRow>("obligations-cotees.csv");
   const bocVn = loadBocNominalValues();
   const amortSchedules = loadAmortizationSchedules();
-  return rows
+  _listedBondsCache = rows
     .filter((r) => r.isin?.trim())
     .map((r) => {
     const maturityISO = normalizeDateISO(r.maturityDate);
@@ -622,11 +669,29 @@ export function loadListedBonds(): ListedBond[] {
       yearsToMaturity: calculateYearsToMaturity(maturityISO),
     };
   });
+  return _listedBondsCache;
 }
 
+let _listedBondPricesCache: ListedBondPrice[] | null = null;
+
+/**
+ * Historique des cours obligataires cotes — 33 000 lignes, MEMOISE.
+ *
+ * Sans cache, chaque appel reparsait le CSV : 230 ms mesurees. Or
+ * `dernierCoursObligation` (app/gestion-portefeuille/operations-data) l'appelle
+ * UNE FOIS PAR LIGNE OBLIGATAIRE du portefeuille, et le screener obligations en
+ * fait autant dans sa boucle. Sur un fonds d'une cinquantaine de lignes, cela
+ * faisait a lui seul une dizaine de secondes a chaque ouverture de la fiche.
+ *
+ * C'est exactement le piege que CLAUDE.md signale : « Don't add a parse call
+ * inside a tight loop ». Le cache le referme au niveau du chargeur, ou il vaut
+ * pour tous les appelants, plutot que de demander a chacun de hisser son appel
+ * hors de sa boucle.
+ */
 export function loadListedBondPrices(): ListedBondPrice[] {
+  if (_listedBondPricesCache) return _listedBondPricesCache;
   const rows = parseCSV<ListedBondPriceRow>("obligations-cotees-prix.csv");
-  return rows.map((r) => ({
+  _listedBondPricesCache = rows.map((r) => ({
     isin: r.isin?.trim() || "",
     date: normalizeDateISO(r.date),
     cleanPrice: parseNum(r.cleanPrice),
@@ -634,6 +699,7 @@ export function loadListedBondPrices(): ListedBondPrice[] {
     volume: parseNum(r.volume),
     valeurTransigee: parseNum(r.valeurTransigee),
   }));
+  return _listedBondPricesCache;
 }
 
 /**
@@ -1326,11 +1392,7 @@ export function getLatestSikaQuote(code: string): SikaQuote | null {
 export function loadIndexHistory(
   code: string
 ): { date: string; value: number }[] {
-  const all = loadAllPriceHistory();
-  return all
-    .filter((r) => r.code.toUpperCase() === code.toUpperCase())
-    .map((r) => ({ date: r.date, value: r.value }))
-    .sort((a, b) => a.date.localeCompare(b.date));
+  return loadPriceHistory(code);
 }
 
 /** Charge l'historique de plusieurs indices a la fois */

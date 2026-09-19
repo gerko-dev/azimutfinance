@@ -1,5 +1,7 @@
 // Loaders serveur du module Portefeuille (lecture via RLS). Pas un fichier
 // "use server" : simples fonctions appelées depuis des Server Components.
+import { cache } from "react";
+
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { referenceDuSite } from "./portfolio-match";
 import {
@@ -36,7 +38,18 @@ function rowToCustomSecurity(r: CustomSecurityRow): CustomSecurity {
 
 const CUSTOM_COLS = "id, kind, code, name, isin, currency, attributes";
 
-export async function loadCustomSecurities(): Promise<CustomSecurity[]> {
+/**
+ * Referentiel titres de l'utilisateur — MEMOISE PAR REQUETE.
+ *
+ * `cache()` de React deduplique les appels a l'interieur d'un meme rendu. Sans
+ * lui, chaque module qui a besoin du referentiel refaisait l'authentification
+ * puis la requete : sur la fiche d'un fonds, une demi-douzaine d'aller-retours
+ * Supabase pour un resultat rigoureusement identique.
+ *
+ * Le cache ne survit PAS a la requete : deux visiteurs, deux rendus, deux
+ * lectures. Ce n'est pas un cache applicatif, c'est une deduplication.
+ */
+export const loadCustomSecurities = cache(async (): Promise<CustomSecurity[]> => {
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -50,7 +63,7 @@ export async function loadCustomSecurities(): Promise<CustomSecurity[]> {
 
   if (error || !data) return [];
   return (data as CustomSecurityRow[]).map(rowToCustomSecurity);
-}
+});
 
 type PositionRow = {
   id: string;
@@ -133,7 +146,23 @@ type SnapshotRow = {
 
 // Les inventaires d'un fonds : le plus récent par slot (début / intermédiaire /
 // fin), avec leurs positions. Renvoie 0 à 3 snapshots.
-export async function loadFundPortfolios(fundId: string): Promise<PortfolioSnapshot[]> {
+/**
+ * Les inventaires d'un fonds — MEMOISE PAR REQUETE.
+ *
+ * MESURE : la fiche d'un fonds appelait cette fonction SIX fois par rendu — la
+ * page elle-meme, puis allocation-data, anticipation-data, operations-data,
+ * proposition-data et tresorerie-data, chacun de son cote. Chaque appel refait
+ * l'authentification, lit les inventaires, lit le referentiel, puis charge les
+ * positions des trois arretes : six fois une trentaine d'aller-retours pour le
+ * meme resultat. Le chronometrage donnait 21 SECONDES sur ce seul chargement,
+ * et les cinq autres modules affichaient le meme temps parce qu'ils
+ * l'attendaient.
+ *
+ * `cache()` de React deduplique a l'interieur d'un rendu : le premier appelant
+ * paie, les cinq autres recoivent la meme promesse. Aucun des cinq modules n'a
+ * eu besoin d'etre modifie.
+ */
+export const loadFundPortfolios = cache(async (fundId: string): Promise<PortfolioSnapshot[]> => {
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -190,4 +219,4 @@ export async function loadFundPortfolios(fundId: string): Promise<PortfolioSnaps
       rowToSavedPosition(r, customParId),
     ),
   }));
-}
+});
