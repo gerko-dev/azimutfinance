@@ -43,6 +43,12 @@ export type CaracteristiquesTitre = {
   /** Intérêts courus PAR TITRE à la date d'opération. Le formulaire les
    *  multiplie par la quantité. */
   couruParTitre: number;
+  /** Date du dernier détachement retenue par le calcul, et nombre de jours
+   *  courus depuis. Affichés pour que le chiffre soit VÉRIFIABLE : un couru
+   *  qu'on ne peut pas recouper avec l'avis d'opéré ne vaut pas mieux qu'une
+   *  saisie à la main. */
+  dernierDetachement: string;
+  joursCourus: number;
   /** Ce que le gérant doit savoir sur ce chiffre — approximation d'un
    *  amortissement, titre sans coupon, date hors de la vie du titre. */
   avertissement: string | null;
@@ -162,11 +168,22 @@ export function titresMtp(pays: string): OptionTitre[] {
  * fonction que le reste du site emploie déjà. Un calcul maison ici aurait fini
  * par diverger du simulateur YTM et des fiches obligataires.
  */
-function couru(bond: Bond, dateOperation: string): number {
-  const d = new Date(`${iso(dateOperation) || new Date().toISOString().slice(0, 10)}T00:00:00Z`);
-  if (Number.isNaN(d.getTime())) return 0;
-  if (bond.couponRate <= 0) return 0;
-  return calculateAccruedInterest(bond, d).accruedInterest;
+function couru(
+  bond: Bond,
+  dateOperation: string,
+): { montant: number; dernierDetachement: string; jours: number } {
+  const vide = { montant: 0, dernierDetachement: "", jours: 0 };
+  const d = new Date(
+    `${iso(dateOperation) || new Date().toISOString().slice(0, 10)}T00:00:00Z`,
+  );
+  if (Number.isNaN(d.getTime())) return vide;
+  if (bond.couponRate <= 0) return vide;
+  const r = calculateAccruedInterest(bond, d);
+  return {
+    montant: r.accruedInterest,
+    dernierDetachement: r.previousCouponDate.toISOString().slice(0, 10),
+    jours: r.daysSinceLastCoupon,
+  };
 }
 
 export function caracteristiques(
@@ -194,6 +211,7 @@ export function caracteristiques(
       frequency: 1,
       isin_registered: true,
     };
+    const c = couru(equivalent, dateOperation);
     return {
       isin: t.isin,
       libelle: `${t.type} ${t.paysNom} ${t.isin}`,
@@ -201,11 +219,16 @@ export function caracteristiques(
       nominal: 10_000,
       tauxCoupon: t.couponRate,
       echeance: t.echeance,
-      couruParTitre: couru(equivalent, dateOperation),
+      couruParTitre: c.montant,
+      dernierDetachement: c.dernierDetachement,
+      joursCourus: c.jours,
       avertissement:
         t.type === "BAT"
           ? "Bon assimilable du Trésor : escompté, sans coupon — les courus sont donc nuls."
-          : null,
+          : t.couponRate <= 0
+            ? "Aucun taux d'intérêt n'est publié pour cette adjudication : les courus " +
+              "ne peuvent pas être calculés. Saisis-les d'après l'avis d'opéré."
+            : null,
     };
   }
 
@@ -220,6 +243,8 @@ export function caracteristiques(
       tauxCoupon: 0,
       echeance: "",
       couruParTitre: 0,
+      dernierDetachement: "",
+      joursCourus: 0,
       avertissement: null,
     };
   }
@@ -254,6 +279,7 @@ export function caracteristiques(
     isin_registered: true,
   };
 
+  const c = couru(equivalent, dateOperation);
   return {
     isin: ob.isin ?? "",
     libelle: ob.name,
@@ -261,7 +287,9 @@ export function caracteristiques(
     nominal,
     tauxCoupon: ob.couponRate,
     echeance: ob.maturityDate,
-    couruParTitre: couru(equivalent, dateOperation),
+    couruParTitre: c.montant,
+    dernierDetachement: c.dernierDetachement,
+    joursCourus: c.jours,
     avertissement:
       ob.amortizationType !== "IF" && ob.amortizationMode === "N"
         ? "Titre amortissable : les courus sont calculés sur le nominal restant dû, " +

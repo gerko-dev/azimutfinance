@@ -143,6 +143,14 @@ export default function OperationsMarchePanel({
   // forcée plutôt que de laisser croire qu'elle a été calculée.
   const [couruParTitre, setCouruParTitre] = useState(0);
   const [couruAvertissement, setCouruAvertissement] = useState<string | null>(null);
+  // Le DÉTAIL du calcul, affiché sous le champ. Un couru qu'on ne peut pas
+  // recouper avec l'avis d'opéré ne vaut pas mieux qu'une saisie à la main :
+  // on montre donc le taux, le dernier détachement et le nombre de jours.
+  const [couruDetail, setCouruDetail] = useState<{
+    taux: number;
+    dernierDetachement: string;
+    jours: number;
+  } | null>(null);
   const [couruManuel, setCouruManuel] = useState<string | null>(null);
 
   // ── Comptes de règlement du fonds choisi ────────────────────────────────
@@ -185,6 +193,7 @@ export default function OperationsMarchePanel({
     setLibelle("");
     setCouruParTitre(0);
     setCouruAvertissement(null);
+    setCouruDetail(null);
     setCouruManuel(null);
   };
 
@@ -248,9 +257,15 @@ export default function OperationsMarchePanel({
       if (res.ok) {
         setCouruParTitre(res.data.couruParTitre);
         setCouruAvertissement(res.data.avertissement);
+        setCouruDetail({
+          taux: res.data.tauxCoupon,
+          dernierDetachement: res.data.dernierDetachement,
+          jours: res.data.joursCourus,
+        });
         if (res.data.isin) setCode(res.data.isin);
       } else {
         setCouruParTitre(0);
+        setCouruDetail(null);
         setCouruAvertissement(res.error);
       }
     });
@@ -272,6 +287,11 @@ export default function OperationsMarchePanel({
       if (res.ok) {
         setCouruParTitre(res.data.couruParTitre);
         setCouruAvertissement(res.data.avertissement);
+        setCouruDetail({
+          taux: res.data.tauxCoupon,
+          dernierDetachement: res.data.dernierDetachement,
+          jours: res.data.joursCourus,
+        });
       }
     });
   };
@@ -395,6 +415,7 @@ export default function OperationsMarchePanel({
       setLibelle("");
       setCouruParTitre(0);
       setCouruAvertissement(null);
+      setCouruDetail(null);
       setCouruManuel(null);
     }
   };
@@ -640,11 +661,30 @@ export default function OperationsMarchePanel({
                   </button>
                 </>
               ) : couruParTitre > 0 ? (
-                `calculé · ${montantFr(couruParTitre)} F par titre`
+                <>
+                  <span className="text-emerald-700">
+                    {montantFr(couruParTitre)} F par titre
+                  </span>
+                  {/* Sans quantité, le total vaut zéro : le dire, plutôt que
+                      de laisser croire que le calcul n'a pas eu lieu. */}
+                  {n(quantite) > 0 ? (
+                    ` × ${fmt0.format(n(quantite))}`
+                  ) : (
+                    <span className="text-amber-700"> · saisis la quantité</span>
+                  )}
+                </>
+              ) : titreCle ? (
+                "aucun couru sur ce titre"
               ) : (
                 "calculé d'après le titre choisi"
               )}
             </span>
+            {couruDetail && couruParTitre > 0 && (
+              <span className={aide}>
+                coupon {(couruDetail.taux * 100).toFixed(2).replace(".", ",")} % · dernier
+                détachement {couruDetail.dernierDetachement} · {couruDetail.jours} j
+              </span>
+            )}
           </Champ>
 
           <Champ label="Compte de règlement" large>
