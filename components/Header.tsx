@@ -157,7 +157,16 @@ export default function Header() {
     };
   }, [supabase]);
 
-  const showProButton = userRole === "pro" || adminLevel !== null;
+  // Bouton Espace Pro : les comptes « pro », et les admins N1 / N2 seulement.
+  //
+  // La numerotation des niveaux est INVERSEE — N1 est le super-admin, N3
+  // l'editeur, le moins privilegie. `adminLevel !== null` ouvrait donc le
+  // terminal pro a TOUS les admins, editeurs compris, alors que le role
+  // d'editeur se limite au contenu : actualites, magazine, formations,
+  // rapports. Le test porte sur le numero, pas sur la simple presence d'un
+  // niveau.
+  const showProButton =
+    userRole === "pro" || (adminLevel !== null && adminLevel <= 2);
   // "Mes alertes" : reserve aux comptes premium (et au-dessus : pro, admins).
   const showAlertes =
     userRole === "premium" || userRole === "pro" || adminLevel !== null;
