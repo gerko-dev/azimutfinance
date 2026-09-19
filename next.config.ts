@@ -42,6 +42,45 @@ const SECURITY_HEADERS = [
   { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
 ];
 
+// ─── ROUTES QUI LANCENT CHROMIUM ──────────────────────────────────────────
+// Le binaire de @sparticuz/chromium n'est jamais « importé » : le traceur de
+// fichiers ne le voit pas et ne l'embarque pas seul. Idem pour les logos, lus
+// au RUNTIME par lib/reports/assets via readFileSync(join(process.cwd(), …)).
+// Il faut donc les déclarer route par route.
+//
+// Cette liste était tenue à la main et avait dérivé : seules deux des CINQ
+// routes Chromium y figuraient. L'image flash du magazine, le rapport MTP et
+// le reporting de gestion partaient en production sans navigateur ni logo —
+// et échouaient là-bas seulement, puisqu'en local Chrome est trouvé sur le
+// disque et les fichiers lus depuis le dépôt.
+//
+// Une constante partagée plutôt que cinq copies : la prochaine route Chromium
+// n'a qu'à s'ajouter à ROUTES_CHROMIUM.
+// Motifs en « /**/* » et NON en « /** » : c'est la forme qui désigne des
+// FICHIERS, la seule que le traceur retienne. Le dépôt en porte déjà la trace
+// plus haut — « une première tentative en /** n'avait rien embarqué du tout ».
+// Les deux entrées Chromium historiques employaient pourtant « /** » : si les
+// rapports cotation et commodities passent en production, c'est de justesse.
+const ACTIFS_CHROMIUM = [
+  "./node_modules/@sparticuz/chromium/bin/**/*",
+  // Logos et visuels inlinés dans les rendus (PNG et SVG), lus via fs.
+  "./logo/png/**/*",
+  "./logo/svg/**/*",
+  "./lib/reports/assets/**/*",
+];
+
+const ROUTES_CHROMIUM = [
+  "/admin/rapports/cotation/pdf",
+  "/admin/rapports/commodities/pdf",
+  "/admin/rapports/mtp/pdf",
+  "/admin/magazine/articles/[id]/flash",
+  "/gestion-portefeuille/reporting/pdf",
+];
+
+const TRACE_CHROMIUM = Object.fromEntries(
+  ROUTES_CHROMIUM.map((r) => [r, ACTIFS_CHROMIUM]),
+);
+
 const nextConfig: NextConfig = {
   // Bundle the brvm.org TLS intermediate with serverless functions so
   // NODE_EXTRA_CA_CERTS can resolve it at runtime on Vercel.
@@ -82,21 +121,8 @@ const nextConfig: NextConfig = {
     // production alors qu'il fonctionne en local. Restreint a la route qui le
     // lit, le fichier ne pesant que sur celle-la.
     "/api/gestion-portefeuille/propositions": ["./template_propositions.xlsx"],
-    // @sparticuz/chromium stocke le binaire Chromium (brotli) dans bin/ ;
-    // ces fichiers ne sont pas "importés" donc le tracer ne les inclut pas
-    // seul. On les force pour la route de génération PDF sur Vercel.
-    "/admin/rapports/cotation/pdf": [
-      "./node_modules/@sparticuz/chromium/bin/**",
-      // Images inlinées dans le PDF (logo bandeau + fond dernière page) : lues
-      // via fs au runtime, donc non tracées automatiquement.
-      "./logo/png/logo-horizontal-fond-sombre.png",
-      "./lib/reports/assets/**",
-    ],
-    "/admin/rapports/commodities/pdf": [
-      "./node_modules/@sparticuz/chromium/bin/**",
-      "./logo/png/logo-horizontal-fond-sombre.png",
-      "./lib/reports/assets/**",
-    ],
+    // Toutes les routes qui lancent Chromium, binaire et visuels compris.
+    ...TRACE_CHROMIUM,
   },
   // pdfjs-dist spawns a worker that resolves its sibling pdf.worker.mjs by
   // relative path. Turbopack/webpack hoist the bundle into .next/, which
