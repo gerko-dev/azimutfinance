@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import dynamic from "next/dynamic";
 
 // KLineChart manipule directement le DOM (canvas) — chargement dynamique sans SSR
@@ -410,14 +410,14 @@ export default function StockDetailView({
                     BRVM · {stock.country}
                   </span>
                   {quadrant && isMember && (
-                    <Link
+                    <Lien
                       href={`/marches/actions#${quadrant}`}
                       title="Classification Azimut · cliquer pour voir le scatter"
                       className={`text-xs px-2 py-0.5 rounded border ${QUADRANT_INFO[quadrant].cls}`}
                     >
                       {QUADRANT_INFO[quadrant].emoji}{" "}
                       {QUADRANT_INFO[quadrant].name}
-                    </Link>
+                    </Lien>
                   )}
                 </div>
                 <div className="text-xs md:text-sm text-slate-500">
@@ -446,12 +446,12 @@ export default function StockDetailView({
                 </button>
               )}
               {isMember ? (
-                <Link
+                <Lien
                   href="/outils/alertes"
                   className="px-3 py-1.5 text-xs md:text-sm border border-slate-300 rounded-md hover:bg-slate-50 inline-flex items-center"
                 >
                   🔔 Alerte
-                </Link>
+                </Lien>
               ) : (
                 <button
                   type="button"
@@ -915,12 +915,12 @@ export default function StockDetailView({
                           </div>
                         </div>
                         <div className="flex justify-end pt-3 border-t border-slate-100">
-                          <Link
+                          <Lien
                             href="/compte"
                             className="px-3 py-1.5 rounded-md bg-amber-500 text-white text-sm font-medium hover:bg-amber-600 transition"
                           >
                             Passer Premium →
-                          </Link>
+                          </Lien>
                         </div>
                       </div>
                     </div>
@@ -944,12 +944,12 @@ export default function StockDetailView({
                   <h3 className="text-base font-medium">
                     Autres titres · {stock.sector}
                   </h3>
-                  <Link
+                  <Lien
                     href="/marches/actions"
                     className="text-xs text-blue-700 hover:text-blue-900"
                   >
                     Voir toutes les actions →
-                  </Link>
+                  </Lien>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
                   {peers.map((p) => {
@@ -962,7 +962,7 @@ export default function StockDetailView({
                       ? "#dc2626"
                       : "#94a3b8";
                     return (
-                      <Link
+                      <Lien
                         key={p.code}
                         href={`/titre/${p.code}`}
                         className="flex flex-col p-2 rounded border border-slate-100 hover:border-slate-300 hover:bg-slate-50 transition"
@@ -1007,7 +1007,7 @@ export default function StockDetailView({
                                 .toFixed(2)
                                 .replace(".", ",")}%`}
                         </div>
-                      </Link>
+                      </Lien>
                     );
                   })}
                 </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import { useMemo, useState } from "react";
 
 type GlossCategory =
@@ -238,7 +238,7 @@ export default function GlossaireCatalog({
 function TermCard({ term }: { term: GlossTermLight }) {
   const cat = CATEGORIES.find((c) => c.id === term.category)!;
   return (
-    <Link
+    <Lien
       href={`/academie/glossaire/${term.slug}`}
       className="group block bg-white rounded-lg border border-slate-200 hover:border-slate-300 hover:shadow-sm transition p-3"
     >
@@ -261,6 +261,6 @@ function TermCard({ term }: { term: GlossTermLight }) {
         </span>
       </div>
       <p className="text-xs text-slate-600 leading-relaxed line-clamp-3">{term.short}</p>
-    </Link>
+    </Lien>
   );
 }

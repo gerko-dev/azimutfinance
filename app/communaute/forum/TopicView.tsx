@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import { useRouter } from "next/navigation";
 import type { ForumReply, ForumTopicDetail } from "@/lib/forum/types";
 import { FORUM_BODY_CLASSES, renderForumBody } from "@/lib/forum/markdown";
@@ -165,14 +165,14 @@ export default function TopicView({
                   {topic.tickers && topic.tickers.length > 0 && (
                     <div className="flex flex-wrap gap-1">
                       {topic.tickers.map((t) => (
-                        <Link
+                        <Lien
                           key={t}
                           href={`/communaute/forum/ticker/${t.toLowerCase()}`}
                           className="font-mono text-[10px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded hover:bg-slate-200"
                           title={`Voir les discussions sur ${t}`}
                         >
                           {t}
-                        </Link>
+                        </Lien>
                       ))}
                     </div>
                   )}
@@ -278,12 +278,12 @@ export default function TopicView({
             <div className="text-sm text-slate-700 mb-2">
               Connectez-vous pour répondre à cette discussion.
             </div>
-            <Link
+            <Lien
               href={`/connexion?redirect=/communaute/forum/t/${topic.id}`}
               className="inline-block px-4 py-2 rounded-md bg-blue-700 text-white text-sm font-medium hover:bg-blue-800"
             >
               Se connecter
-            </Link>
+            </Lien>
           </div>
         )}
       </div>

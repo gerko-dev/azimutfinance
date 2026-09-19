@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import PageHero from "@/components/PageHero";
 import { pageMetadata } from "@/lib/seo";
 
@@ -243,12 +243,12 @@ export default function CookiesPage() {
         <p>
           Les données collectées via les cookies peuvent constituer des données
           personnelles. Leur traitement est décrit plus largement dans notre{" "}
-          <Link
+          <Lien
             href="/legal/confidentialite"
             className="text-blue-700 hover:underline"
           >
             Politique de confidentialité
-          </Link>
+          </Lien>
           , qui précise notamment les destinataires, les durées de conservation
           et les droits de l&apos;Utilisateur.
         </p>

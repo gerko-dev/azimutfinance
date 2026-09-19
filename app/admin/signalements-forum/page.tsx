@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import { requireAdmin } from "@/lib/admin/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import ForumReportsList from "./ForumReportsList";
@@ -284,7 +284,7 @@ export default async function AdminForumReportsPage({
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {STATUSES.map((s) => (
-          <Link
+          <Lien
             key={s}
             href={`/admin/signalements-forum?status=${s}`}
             className={`bg-white border rounded-lg p-3 transition ${
@@ -299,7 +299,7 @@ export default async function AdminForumReportsPage({
             <div className="text-xl font-bold tabular-nums mt-1 text-slate-900">
               {counts[s] ?? 0}
             </div>
-          </Link>
+          </Lien>
         ))}
       </div>
 

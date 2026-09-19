@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import { useState, useTransition } from "react";
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
@@ -108,12 +108,12 @@ export default function OnboardingWizard({
           </p>
         </div>
         {isEditMode ? (
-          <Link
+          <Lien
             href="/compte"
             className="text-xs text-slate-500 hover:text-slate-800 underline underline-offset-2 whitespace-nowrap"
           >
             Annuler
-          </Link>
+          </Lien>
         ) : (
           <form action={skipOnboardingAction}>
             <SkipButton />

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 
 import { requireAdmin } from "@/lib/admin/auth";
 import FundManagementSidebar from "@/components/gestion-portefeuille/FundManagementSidebar";
@@ -43,12 +43,12 @@ export default async function GestionPortefeuilleLayout({
       <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
         <div className="px-4 md:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-baseline gap-3">
-            <Link
+            <Lien
               href="/gestion-portefeuille"
               className="font-semibold tracking-tight text-slate-900"
             >
               Gestion de portefeuille
-            </Link>
+            </Lien>
             <span className="text-xs text-slate-500 hidden sm:inline">
               Société de gestion · marché BRVM / UEMOA
             </span>
@@ -57,12 +57,12 @@ export default async function GestionPortefeuilleLayout({
             <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
               Accès niveau {level}
             </span>
-            <Link href="/admin" className="text-slate-500 hover:text-slate-900 transition">
+            <Lien href="/admin" className="text-slate-500 hover:text-slate-900 transition">
               Administration
-            </Link>
-            <Link href="/" className="text-slate-500 hover:text-slate-900 transition">
+            </Lien>
+            <Lien href="/" className="text-slate-500 hover:text-slate-900 transition">
               Portail
-            </Link>
+            </Lien>
           </div>
         </div>
       </header>

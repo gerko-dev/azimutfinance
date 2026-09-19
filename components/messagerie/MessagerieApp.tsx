@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
@@ -629,12 +629,12 @@ export default function MessagerieApp({
                     aux conversations que vous recevez, et contacter
                     l&apos;équipe AzimutFinance à tout moment.
                   </p>
-                  <Link
+                  <Lien
                     href="/premium"
                     className="inline-block mt-3 text-xs bg-slate-900 hover:bg-slate-700 text-white font-medium px-3 py-1.5 rounded transition"
                   >
                     Découvrir Premium
-                  </Link>
+                  </Lien>
                 </div>
               </div>
             )}

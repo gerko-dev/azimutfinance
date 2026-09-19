@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import {
   CATEGORY_META,
   FORMAT_META,
@@ -80,7 +80,7 @@ function FicheFormation({ formation }: { formation: Formation }) {
   const gratuite = formation.pricing.type === "gratuit";
 
   return (
-    <Link
+    <Lien
       href={`/academie/formations/${formation.slug}`}
       className="group flex flex-col bg-white rounded-xl border border-slate-200 hover:border-slate-300 hover:shadow-lg transition overflow-hidden"
     >
@@ -144,7 +144,7 @@ function FicheFormation({ formation }: { formation: Formation }) {
           )}
         </div>
       </div>
-    </Link>
+    </Lien>
   );
 }
 
@@ -204,12 +204,12 @@ export default function FormationsSpotlight({
             </p>
           )}
         </div>
-        <Link
+        <Lien
           href="/academie/formations"
           className="shrink-0 inline-flex items-center gap-2 text-sm font-semibold text-purple-700 hover:underline"
         >
           Tout le catalogue →
-        </Link>
+        </Lien>
       </div>
 
       {/* La grille suit le NOMBRE de fiches, elle ne l'impose pas. A trois
@@ -232,12 +232,12 @@ export default function FormationsSpotlight({
       <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2">
         <span className="text-xs text-slate-500">{compteur}</span>
         {invite && (
-          <Link
+          <Lien
             href="/academie/formations"
             className="inline-flex items-center px-4 py-2 rounded-md text-sm font-semibold bg-purple-700 hover:bg-purple-800 text-white transition"
           >
             Voir toutes les formations
-          </Link>
+          </Lien>
         )}
       </div>
     </div>

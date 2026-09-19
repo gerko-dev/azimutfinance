@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect, useDeferredValue } from "react";
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import {
   XAxis,
   YAxis,
@@ -412,9 +412,9 @@ export default function ActionsProView({
       <div className="border-b border-slate-800 pb-4 flex items-end justify-between flex-wrap gap-3">
         <div>
           <div className="text-[11px] text-slate-500 mb-2 flex items-center gap-1.5">
-            <Link href="/pros" className="hover:text-slate-300 transition">
+            <Lien href="/pros" className="hover:text-slate-300 transition">
               Pro Terminal
-            </Link>
+            </Lien>
             <span className="text-slate-700">›</span>
             <span className="text-slate-400">Actions BRVM</span>
           </div>
@@ -524,12 +524,12 @@ export default function ActionsProView({
           title="Indices BRVM"
           subtitle="live"
           right={
-            <Link
+            <Lien
               href="/marches/indices"
               className="text-[11px] text-blue-400 hover:text-blue-300"
             >
               Tous les indices →
-            </Link>
+            </Lien>
           }
         >
           <div className="p-4 space-y-3">
@@ -931,20 +931,20 @@ export default function ActionsProView({
                     className="border-b border-slate-800 hover:bg-slate-800/50 transition"
                   >
                     <td className="px-3 py-2.5">
-                      <Link
+                      <Lien
                         href={`/pros/titre/${a.code}`}
                         className="font-mono font-medium text-slate-200 hover:text-blue-400"
                       >
                         {a.code}
-                      </Link>
+                      </Lien>
                     </td>
                     <td className="px-3 py-2.5">
-                      <Link
+                      <Lien
                         href={`/pros/titre/${a.code}`}
                         className="text-slate-300 hover:text-blue-400"
                       >
                         {a.name}
-                      </Link>
+                      </Lien>
                     </td>
                     <td className="px-3 py-2.5 hidden md:table-cell">
                       <span
@@ -1153,12 +1153,12 @@ function MoversTable({
           return (
             <tr key={r.code} className="border-b border-slate-800 last:border-0">
               <td className="px-4 py-2">
-                <Link
+                <Lien
                   href={`/pros/titre/${r.code}`}
                   className="font-mono text-slate-200 hover:text-blue-400"
                 >
                   {r.code}
-                </Link>
+                </Lien>
                 <div className="text-[10px] text-slate-500 truncate max-w-[150px]">
                   {r.name}
                 </div>
@@ -1196,12 +1196,12 @@ function ActiveTable({ rows }: { rows: ActionRow[] }) {
         {rows.map((r) => (
           <tr key={r.code} className="border-b border-slate-800 last:border-0">
             <td className="px-4 py-2">
-              <Link
+              <Lien
                 href={`/pros/titre/${r.code}`}
                 className="font-mono text-slate-200 hover:text-blue-400"
               >
                 {r.code}
-              </Link>
+              </Lien>
               <div className="text-[10px] text-slate-500 truncate max-w-[150px]">
                 {r.name}
               </div>
@@ -1307,7 +1307,7 @@ function IndexCard({
   const displayLabel = isPrincipal ? index.name : shortLabel;
 
   return (
-    <Link
+    <Lien
       href={`/marches/indices/${encodeURIComponent(index.code)}`}
       className="block rounded-md border border-slate-700 bg-slate-900/50 p-2.5 hover:border-slate-600 hover:bg-slate-900 transition"
     >
@@ -1333,6 +1333,6 @@ function IndexCard({
           {ytdValue.toFixed(2).replace(".", ",")}%)
         </span>
       </div>
-    </Link>
+    </Lien>
   );
 }

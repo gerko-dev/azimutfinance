@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import type { ComparateurTitre } from "@/lib/screeners/comparateur";
 
 type Props = {
@@ -378,12 +378,12 @@ export default function ComparateurView({ titres, dates, series }: Props) {
                     style={{ background: COULEURS[i % COULEURS.length] }}
                   />
                   <div className="flex-1">
-                    <Link
+                    <Lien
                       href={`/titre/${t.code}`}
                       className="text-sm font-medium text-blue-700 hover:underline"
                     >
                       {t.nom}
-                    </Link>
+                    </Lien>
                     <div className="text-xs text-slate-500 mt-0.5">
                       {t.secteur}
                       {t.pays ? ` · ${t.pays}` : ""}

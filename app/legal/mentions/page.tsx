@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import PageHero from "@/components/PageHero";
 import { pageMetadata } from "@/lib/seo";
 
@@ -153,19 +153,19 @@ export default function MentionsLegalesPage() {
         <p>
           Le traitement des données personnelles fait l&apos;objet d&apos;une
           politique dédiée. Pour en savoir plus, consulter notre{" "}
-          <Link
+          <Lien
             href="/legal/confidentialite"
             className="text-blue-700 hover:underline"
           >
             Politique de confidentialité
-          </Link>{" "}
+          </Lien>{" "}
           et notre{" "}
-          <Link
+          <Lien
             href="/legal/cookies"
             className="text-blue-700 hover:underline"
           >
             Politique de cookies
-          </Link>
+          </Lien>
           .
         </p>
       </Section>

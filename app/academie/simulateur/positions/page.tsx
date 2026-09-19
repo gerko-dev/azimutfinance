@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import { redirect } from "next/navigation";
 import PositionsTable from "@/components/academie/simulateur/PositionsTable";
 import SimulatorShell from "@/components/academie/simulateur/SimulatorShell";
@@ -40,23 +40,23 @@ export default async function Page() {
               {ctx.snapshot.positions.length} ligne(s)
             </h1>
           </div>
-          <Link
+          <Lien
             href="/academie/simulateur/carnet"
             className="text-sm text-amber-700 hover:underline font-medium"
           >
             Passer un ordre →
-          </Link>
+          </Lien>
         </div>
 
         {ctx.snapshot.positions.length === 0 ? (
           <div className="bg-white rounded-lg border border-slate-200 p-10 text-center text-sm text-slate-500">
             Vous n&apos;avez aucune position ouverte. Direction le{" "}
-            <Link
+            <Lien
               href="/academie/simulateur/carnet"
               className="text-amber-700 hover:underline font-medium"
             >
               carnet d&apos;ordres
-            </Link>{" "}
+            </Lien>{" "}
             pour commencer à trader.
           </div>
         ) : (

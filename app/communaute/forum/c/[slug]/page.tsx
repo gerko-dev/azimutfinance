@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import { notFound } from "next/navigation";
 import Header from "@/components/Header";
 import PageHero from "@/components/PageHero";
@@ -65,19 +65,19 @@ export default async function ForumCategoryPage({
         subtitle={cat.description ?? undefined}
       >
         {user ? (
-          <Link
+          <Lien
             href={`/communaute/forum/nouveau?categorie=${cat.slug}`}
             className="inline-block px-4 py-2 rounded-md bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
           >
             + Nouvelle discussion
-          </Link>
+          </Lien>
         ) : (
-          <Link
+          <Lien
             href={`/connexion?redirect=/communaute/forum/c/${cat.slug}`}
             className="inline-block px-4 py-2 rounded-md bg-white/10 text-white text-sm font-medium hover:bg-white/20 border border-white/20"
           >
             Connectez-vous pour participer
-          </Link>
+          </Lien>
         )}
       </PageHero>
 

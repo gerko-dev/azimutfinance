@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import { formatBenchmark, type FundRecord } from "@/app/gestion-portefeuille/types";
 import type { PortfolioSnapshot } from "@/app/gestion-portefeuille/portfolio-types";
 import type { NavPoint } from "@/app/gestion-portefeuille/nav-types";
@@ -85,12 +85,12 @@ export default function FundManager({
     <div className="space-y-5">
       {/* Fil d'ariane + titre */}
       <div>
-        <Link
+        <Lien
           href="/gestion-portefeuille/fonds"
           className="text-[12px] text-slate-500 hover:text-slate-700 transition"
         >
           ← Tous les fonds
-        </Link>
+        </Lien>
         <div className="mt-1.5 flex items-center gap-3 flex-wrap">
           <h2 className="text-lg font-semibold text-slate-900">{fund.nom}</h2>
           {fund.abreviation && (

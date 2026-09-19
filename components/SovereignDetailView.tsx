@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import {
   Area,
   Line,
@@ -1639,7 +1639,7 @@ export default function SovereignDetailView({
                   </p>
                   <div className="space-y-2">
                     {related.map((b) => (
-                      <Link
+                      <Lien
                         key={b.id}
                         href={`/souverain/${encodeURIComponent(b.id)}`}
                         className="block p-2.5 rounded-md border border-slate-200 hover:border-blue-300 hover:bg-blue-50/30 transition"
@@ -1654,7 +1654,7 @@ export default function SovereignDetailView({
                           </span>
                           {b.isin && <span className="font-mono">{b.isin}</span>}
                         </div>
-                      </Link>
+                      </Lien>
                     ))}
                   </div>
                 </section>
@@ -1668,12 +1668,12 @@ export default function SovereignDetailView({
         </div>
 
         <div className="pt-2">
-          <Link
+          <Lien
             href="/marches/souverains-non-cotes"
             className="inline-flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900"
           >
             ← Retour à la liste des souverains non cotés
-          </Link>
+          </Lien>
         </div>
       </main>
 

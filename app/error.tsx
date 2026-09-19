@@ -1,7 +1,7 @@
 "use client"; // Les error boundaries doivent être des Client Components
 
 import { useEffect } from "react";
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import Header from "@/components/Header";
 
 /**
@@ -50,12 +50,12 @@ export default function Error({
           >
             Réessayer
           </button>
-          <Link
+          <Lien
             href="/"
             className="px-4 py-2 text-sm border border-slate-300 rounded-md hover:bg-slate-50"
           >
             Retour à l&apos;accueil
-          </Link>
+          </Lien>
         </div>
       </main>
     </>

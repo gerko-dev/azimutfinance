@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import {
   AreaChart,
   Area,
@@ -154,9 +154,9 @@ export default function SGOProView({ data }: { data: SGOProData }) {
       {/* ====== EN-TETE ====== */}
       <div className="border-b border-slate-800 pb-4">
         <div className="text-[11px] text-slate-500 mb-2 flex items-center gap-1.5 flex-wrap">
-          <Link href="/pros" className="hover:text-slate-300 transition">Pro Terminal</Link>
+          <Lien href="/pros" className="hover:text-slate-300 transition">Pro Terminal</Lien>
           <span className="text-slate-700">›</span>
-          <Link href="/pros/sgo" className="hover:text-slate-300 transition">Sociétés de gestion</Link>
+          <Lien href="/pros/sgo" className="hover:text-slate-300 transition">Sociétés de gestion</Lien>
           <span className="text-slate-700">›</span>
           <span className="text-slate-400">{manager.name}</span>
         </div>
@@ -167,12 +167,12 @@ export default function SGOProView({ data }: { data: SGOProData }) {
               Société de gestion · OPCVM UEMOA · {manager.nbFunds} fonds · rang {data.myRank}/{data.nbManagers} par encours
             </p>
           </div>
-          <Link
+          <Lien
             href={`/sgo/${manager.slug}`}
             className="text-[11px] px-2.5 py-1 rounded-md border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-600 transition"
           >
             Fiche publique ↗
-          </Link>
+          </Lien>
         </div>
       </div>
 
@@ -380,10 +380,10 @@ function PerformanceTab({ data }: { data: SGOProData }) {
               {fundsList.map((f) => (
                 <tr key={f.id} className="border-b border-slate-800 last:border-0 hover:bg-slate-800/40">
                   <td className="px-4 py-2">
-                    <Link href={`/pros/fcp/${f.id}`} className="text-slate-200 hover:text-white transition flex items-center gap-1.5">
+                    <Lien href={`/pros/fcp/${f.id}`} className="text-slate-200 hover:text-white transition flex items-center gap-1.5">
                       {f.nom}
                       {f.isStale && <span title="VL périmée" className="text-amber-400 text-[10px]">⚠</span>}
-                    </Link>
+                    </Lien>
                   </td>
                   <td className="px-3 py-2">
                     <span className="inline-flex items-center gap-1.5 text-slate-300">
@@ -524,12 +524,12 @@ function ConcurrenceTab({ data }: { data: SGOProData }) {
                 >
                   <td className="px-4 py-2 font-mono text-slate-500">{i + 1}</td>
                   <td className="px-3 py-2">
-                    <Link
+                    <Lien
                       href={`/pros/sgo/${m.slug}`}
                       className={`hover:text-white transition ${isMe ? "text-blue-300 font-medium" : "text-slate-200"}`}
                     >
                       {m.name}
-                    </Link>
+                    </Lien>
                   </td>
                   <td className="px-3 py-2 text-right font-mono text-slate-400">{m.nbFunds}</td>
                   <td className="px-3 py-2">

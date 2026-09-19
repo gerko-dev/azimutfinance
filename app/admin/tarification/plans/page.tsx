@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import { requireAdmin } from "@/lib/admin/auth";
 import { listPricingPlans } from "@/lib/premium/pricingQueries";
 import PricingPlansManager from "./PricingPlansManager";
@@ -20,12 +20,12 @@ export default async function AdminPricingPlansPage() {
             restent valides.
           </p>
         </div>
-        <Link
+        <Lien
           href="/admin/tarification"
           className="text-xs text-blue-700 hover:underline"
         >
           ← Retour
-        </Link>
+        </Lien>
       </div>
 
       <PricingPlansManager plans={plans} />

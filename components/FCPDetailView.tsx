@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import AddToWatchlistButton from "@/components/watchlist/AddToWatchlistButton";
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import {
   LineChart,
   Line,
@@ -1026,16 +1026,16 @@ export default function FCPDetailView(props: Props) {
       <div className="bg-white border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 md:px-6 pt-4 md:pt-5">
           <div className="text-xs text-slate-500 mb-3 flex items-center gap-1.5 flex-wrap">
-            <Link href="/" className="hover:text-slate-900">Accueil</Link>
+            <Lien href="/" className="hover:text-slate-900">Accueil</Lien>
             <span>›</span>
-            <Link href="/marches/fcp" className="hover:text-slate-900">FCP / OPCVM</Link>
+            <Lien href="/marches/fcp" className="hover:text-slate-900">FCP / OPCVM</Lien>
             <span>›</span>
-            <Link
+            <Lien
               href={`/sgo/${managerSlug(fund.gestionnaire)}`}
               className="hover:text-slate-900"
             >
               {fund.gestionnaire}
-            </Link>
+            </Lien>
             <span>›</span>
             <span className="text-slate-700 truncate">{fund.nom}</span>
           </div>
@@ -1083,12 +1083,12 @@ export default function FCPDetailView(props: Props) {
                   )}
                 </div>
                 <div className="text-xs md:text-sm text-slate-500">
-                  <Link
+                  <Lien
                     href={`/sgo/${managerSlug(fund.gestionnaire)}`}
                     className="hover:underline"
                   >
                     {fund.gestionnaire}
-                  </Link>
+                  </Lien>
                   {fund.depositaire && ` · Dépositaire ${fund.depositaire}`}
                 </div>
               </div>
@@ -1442,12 +1442,12 @@ export default function FCPDetailView(props: Props) {
                   <div className="flex justify-between gap-3 pt-2 border-t border-slate-100">
                     <dt className="text-slate-500">Société de gestion</dt>
                     <dd className="font-medium text-right">
-                      <Link
+                      <Lien
                         href={`/sgo/${managerSlug(fund.gestionnaire)}`}
                         className="hover:underline text-blue-700"
                       >
                         {fund.gestionnaire}
-                      </Link>
+                      </Lien>
                     </dd>
                   </div>
                   <div className="flex justify-between gap-3">
@@ -2692,12 +2692,12 @@ export default function FCPDetailView(props: Props) {
                 title={
                   <>
                     Autres fonds{" "}
-                    <Link
+                    <Lien
                       href={`/sgo/${managerSlug(fund.gestionnaire)}`}
                       className="hover:underline text-blue-700"
                     >
                       {fund.gestionnaire}
-                    </Link>
+                    </Lien>
                   </>
                 }
                 subtitle={`${managerEntries.length} fonds gérés par la même SGO`}
@@ -2981,9 +2981,9 @@ function PeerTable({
             {rows.map((r) => (
               <tr key={r.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
                 <td className="px-4 py-2 min-w-0">
-                  <Link href={`/fcp/${r.id}`} className="text-sm font-medium text-slate-900 hover:underline truncate block">
+                  <Lien href={`/fcp/${r.id}`} className="text-sm font-medium text-slate-900 hover:underline truncate block">
                     {r.nom}
-                  </Link>
+                  </Lien>
                   <div className="text-[11px] text-slate-500 truncate">{r.sub}</div>
                 </td>
                 <td className="px-3 py-2 text-right text-xs tabular-nums text-slate-700">

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import Header from "@/components/Header";
 import PageHero from "@/components/PageHero";
 import Footer from "@/components/Footer";
@@ -45,19 +45,19 @@ export default async function ForumIndexPage() {
         subtitle="Échangez sur les marchés UEMOA : actions BRVM, obligations, FCP, macro, stratégies. La lecture est libre, la participation nécessite un compte gratuit."
       >
         {user ? (
-          <Link
+          <Lien
             href="/communaute/forum/nouveau"
             className="inline-block px-4 py-2 rounded-md bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
           >
             + Nouvelle discussion
-          </Link>
+          </Lien>
         ) : (
-          <Link
+          <Lien
             href="/connexion?redirect=/communaute/forum/nouveau"
             className="inline-block px-4 py-2 rounded-md bg-white/10 text-white text-sm font-medium hover:bg-white/20 border border-white/20"
           >
             Connectez-vous pour participer
-          </Link>
+          </Lien>
         )}
       </PageHero>
 
@@ -110,7 +110,7 @@ function CategoryCard({
   category: Awaited<ReturnType<typeof listCategoriesWithStats>>[number];
 }) {
   return (
-    <Link
+    <Lien
       href={`/communaute/forum/c/${category.slug}`}
       className="block bg-white border border-slate-200 rounded-lg p-4 hover:border-slate-300 hover:shadow-sm transition"
     >
@@ -134,6 +134,6 @@ function CategoryCard({
           </div>
         </div>
       </div>
-    </Link>
+    </Lien>
   );
 }

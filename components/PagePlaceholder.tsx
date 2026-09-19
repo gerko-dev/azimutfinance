@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import Header from "./Header";
 import Ticker from "./Ticker";
 
@@ -35,18 +35,18 @@ export default function PagePlaceholder({ title, description, badge }: Props) {
             Cette section est en cours de construction. Revenez bientôt pour découvrir ce contenu exclusif.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Link
+            <Lien
               href="/"
               className="inline-flex justify-center items-center px-5 py-2.5 text-sm border border-slate-300 rounded-md hover:bg-slate-50"
             >
               ← Retour à l&apos;accueil
-            </Link>
-            <Link
+            </Lien>
+            <Lien
               href="/outils/simulateur-ytm"
               className="inline-flex justify-center items-center px-5 py-2.5 text-sm bg-blue-700 text-white rounded-md hover:bg-blue-800"
             >
               Essayer nos outils Pro
-            </Link>
+            </Lien>
           </div>
         </div>
       </main>

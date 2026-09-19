@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import type { Season } from "@/lib/simulator/types";
@@ -72,7 +72,7 @@ export default function SimulatorShell({
         {/* SIDEBAR */}
         <aside className="bg-slate-900 text-slate-100 flex flex-col">
           {/* Brand */}
-          <Link
+          <Lien
             href="/"
             className="px-4 py-4 border-b border-slate-800 hover:bg-slate-800 transition"
           >
@@ -80,7 +80,7 @@ export default function SimulatorShell({
               AzimutFinance
             </div>
             <div className="text-sm font-bold text-white">Ligue Azimut</div>
-          </Link>
+          </Lien>
 
           {/* Nav */}
           <nav className="flex-1 py-3 px-2 space-y-0.5">
@@ -90,7 +90,7 @@ export default function SimulatorShell({
                   ? pathname === base || pathname === `${base}/`
                   : pathname.startsWith(item.href);
               return (
-                <Link
+                <Lien
                   key={item.href}
                   href={item.href}
                   className={`flex items-center justify-between px-3 py-2 rounded text-sm transition ${
@@ -111,7 +111,7 @@ export default function SimulatorShell({
                       {item.badge}
                     </span>
                   )}
-                </Link>
+                </Lien>
               );
             })}
           </nav>

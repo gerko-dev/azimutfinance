@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import Header from "@/components/Header";
 import CommodityDetailView from "@/components/macro/CommodityDetailView";
 import CommodityAdvancedChart from "@/components/macro/CommodityAdvancedChart";
@@ -97,9 +97,9 @@ export default async function FxPairPage({
         <Header />
         <div className="max-w-3xl mx-auto px-4 md:px-6 py-12">
           <div className="text-xs text-slate-500 mb-4 flex items-center gap-1.5 flex-wrap">
-            <Link href="/" className="hover:text-slate-700">Accueil</Link>
+            <Lien href="/" className="hover:text-slate-700">Accueil</Lien>
             <span>›</span>
-            <Link href="/marches/devises" className="hover:text-slate-700">Devises</Link>
+            <Lien href="/marches/devises" className="hover:text-slate-700">Devises</Lien>
             <span>›</span>
             <span className="text-slate-700">{meta.pair}</span>
           </div>
@@ -114,18 +114,18 @@ export default async function FxPairPage({
               gratuit avec un compte AzimutFinance.
             </p>
             <div className="mt-6 flex gap-2 justify-center flex-wrap">
-              <Link
+              <Lien
                 href="/auth/login"
                 className="px-5 py-2.5 bg-slate-900 text-white text-sm rounded hover:bg-slate-700 transition font-medium"
               >
                 Se connecter
-              </Link>
-              <Link
+              </Lien>
+              <Lien
                 href="/auth/signup"
                 className="px-5 py-2.5 border border-slate-300 text-slate-700 text-sm rounded hover:bg-slate-50 transition font-medium"
               >
                 S&apos;inscrire gratuitement
-              </Link>
+              </Lien>
             </div>
           </div>
         </div>
@@ -178,9 +178,9 @@ export default async function FxPairPage({
       <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-b border-slate-800">
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10">
           <div className="text-xs text-slate-400 mb-2 flex items-center gap-1.5 flex-wrap">
-            <Link href="/" className="hover:text-white">Accueil</Link>
+            <Lien href="/" className="hover:text-white">Accueil</Lien>
             <span>›</span>
-            <Link href="/marches/devises" className="hover:text-white">Devises &amp; FX</Link>
+            <Lien href="/marches/devises" className="hover:text-white">Devises &amp; FX</Lien>
             <span>›</span>
             <span className="text-slate-200">{meta.pair}</span>
           </div>
@@ -209,12 +209,12 @@ export default async function FxPairPage({
                   isAuthenticated={true}
                   variant="dark"
                 />
-                <Link
+                <Lien
                   href="/outils/alertes"
                   className="px-3 py-1.5 text-xs md:text-sm border border-white/20 bg-white/10 hover:bg-white/20 text-white rounded-md inline-flex items-center gap-1.5"
                 >
                   🔔 Alerte
-                </Link>
+                </Lien>
               </div>
             </div>
 
@@ -385,12 +385,12 @@ export default async function FxPairPage({
                         </div>
                       </div>
                       <div className="flex gap-2 mt-4">
-                        <Link
+                        <Lien
                           href="/abonnements"
                           className="px-4 py-2 bg-amber-500 text-white text-sm rounded hover:bg-amber-600 transition font-medium"
                         >
                           Passer Premium
-                        </Link>
+                        </Lien>
                       </div>
                     </div>
                   </div>
@@ -409,7 +409,7 @@ export default async function FxPairPage({
               const s = computeFxStats(p.slug);
               const ytd = s?.returns.YTD ?? null;
               return (
-                <Link
+                <Lien
                   key={p.slug}
                   href={`/marches/devises/${p.slug}`}
                   className="block border border-slate-200 rounded-lg p-2.5 bg-white hover:border-slate-300 hover:shadow-sm transition"
@@ -429,13 +429,13 @@ export default async function FxPairPage({
                   <div className="text-[10px] text-slate-400 mt-0.5">
                     {s ? fmtNum(s.last, p.decimals) : "—"} {p.unitSuffix}
                   </div>
-                </Link>
+                </Lien>
               );
             })}
-            <Link href="/marches/devises"
+            <Lien href="/marches/devises"
               className="block text-center text-[11px] text-slate-600 hover:text-slate-900 px-2 py-2 border border-dashed border-slate-200 rounded-lg">
               ← Tableau de bord
-            </Link>
+            </Lien>
           </aside>
         </div>
       </main>

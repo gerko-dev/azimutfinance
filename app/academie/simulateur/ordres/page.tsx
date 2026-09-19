@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import { redirect } from "next/navigation";
 import MyOrdersTable from "@/components/academie/simulateur/MyOrdersTable";
 import SimulatorShell from "@/components/academie/simulateur/SimulatorShell";
@@ -38,12 +38,12 @@ export default async function Page() {
               {orders.open.length} ouvert(s) · {orders.history.length} historique
             </h1>
           </div>
-          <Link
+          <Lien
             href="/academie/simulateur/carnet"
             className="text-sm text-amber-700 hover:underline font-medium"
           >
             Passer un nouvel ordre →
-          </Link>
+          </Lien>
         </div>
         <MyOrdersTable openOrders={orders.open} history={orders.history} />
       </div>

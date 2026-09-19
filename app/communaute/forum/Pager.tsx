@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 
 /**
  * Pagination simple "Précédent / Page X sur Y / Suivant".
@@ -35,12 +35,12 @@ export default function Pager({
       className="flex items-center justify-between gap-3 mt-5 text-xs"
     >
       {hasPrev ? (
-        <Link
+        <Lien
           href={href(prev)}
           className="px-3 py-1.5 rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
         >
           ← Précédent
-        </Link>
+        </Lien>
       ) : (
         <span className="px-3 py-1.5 rounded-md border border-slate-200 bg-slate-50 text-slate-400">
           ← Précédent
@@ -54,12 +54,12 @@ export default function Pager({
       </span>
 
       {hasNext ? (
-        <Link
+        <Lien
           href={href(next)}
           className="px-3 py-1.5 rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
         >
           Suivant →
-        </Link>
+        </Lien>
       ) : (
         <span className="px-3 py-1.5 rounded-md border border-slate-200 bg-slate-50 text-slate-400">
           Suivant →

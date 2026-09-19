@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useDeferredValue, useCallback } from "react";
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import {
   XAxis,
   YAxis,
@@ -597,22 +597,22 @@ export default function SouverainsProView({ data }: { data: SouverainsProData })
               {paged.map((b) => (
                 <tr key={b.id} className="border-b border-slate-800 last:border-0 hover:bg-slate-800/40 transition">
                   <td className="px-3 py-2.5">
-                    <Link
+                    <Lien
                       href={`/pros/souverain/${encodeURIComponent(b.id)}`}
                       className="flex items-center gap-2 group"
                       title="Ouvrir la fiche pro"
                     >
                       <CountryFlag country={b.country} size={16} />
                       <span className="text-slate-300 group-hover:text-white transition">{b.country}</span>
-                    </Link>
+                    </Lien>
                   </td>
                   <td className="px-3 py-2.5 font-mono text-slate-400">
-                    <Link
+                    <Lien
                       href={`/pros/souverain/${encodeURIComponent(b.id)}`}
                       className="hover:text-blue-300 transition"
                     >
                       {b.isin || b.id.replace(/^BAT-/, "")}
-                    </Link>
+                    </Lien>
                   </td>
                   <td className="px-3 py-2.5">
                     <TypeBadge type={b.type} />

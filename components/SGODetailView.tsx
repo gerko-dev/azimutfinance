@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import {
   AreaChart,
   Area,
@@ -482,12 +482,12 @@ export default function SGODetailView(props: Props) {
               {fundsList.map((f) => (
                 <tr key={f.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
                   <td className="px-4 py-2 min-w-0">
-                    <Link
+                    <Lien
                       href={`/fcp/${f.id}`}
                       className="text-sm font-medium text-slate-900 hover:underline"
                     >
                       {f.nom}
-                    </Link>
+                    </Lien>
                     <div className="text-[11px] text-slate-500 md:hidden">{f.categorie}</div>
                   </td>
                   <td className="px-3 py-2 hidden md:table-cell">
@@ -694,14 +694,14 @@ export default function SGODetailView(props: Props) {
                   >
                     <td className="px-3 py-2 text-xs font-bold text-slate-500">{i + 1}</td>
                     <td className="px-4 py-2">
-                      <Link
+                      <Lien
                         href={`/sgo/${m.slug}`}
                         className={`text-sm hover:underline ${
                           isMe ? "font-bold text-blue-900" : "font-medium text-slate-900"
                         }`}
                       >
                         {m.name}
-                      </Link>
+                      </Lien>
                     </td>
                     <td className="px-3 py-2 text-right text-xs tabular-nums text-slate-700">
                       {m.nbFunds}

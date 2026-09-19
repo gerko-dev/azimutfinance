@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import Header from "@/components/Header";
 import CommoditiesAnalyzer from "@/components/macro/CommoditiesAnalyzer";
 import {
@@ -378,12 +378,12 @@ export default async function Page() {
                       </div>
                     </div>
                     <div className="flex gap-2 mt-4">
-                      <Link
+                      <Lien
                         href="/abonnements"
                         className="px-4 py-2 bg-amber-500 text-white text-sm rounded hover:bg-amber-600 transition font-medium"
                       >
                         Passer Premium
-                      </Link>
+                      </Lien>
                     </div>
                   </div>
                 </div>
@@ -445,7 +445,7 @@ function CommodityCard({
       : "text-rose-600";
 
   return (
-    <Link
+    <Lien
       href={`/marches/matieres-premieres/${slug}`}
       className="block border border-slate-200 rounded-lg p-3 bg-white hover:shadow-sm hover:border-slate-300 transition"
     >
@@ -488,7 +488,7 @@ function CommodityCard({
         </span>
       </div>
       <div className={`text-[10px] mt-0.5 ${dayClass}`}></div>
-    </Link>
+    </Lien>
   );
 }
 
@@ -609,13 +609,13 @@ function TickerImpactRow({
 }) {
   return (
     <li className="flex items-center gap-2 text-[11px]">
-      <Link
+      <Lien
         href={`/titre/${ticker.code}`}
         className="font-mono font-semibold text-slate-900 hover:underline shrink-0"
         style={{ minWidth: 48 }}
       >
         {ticker.code}
-      </Link>
+      </Lien>
       <span className="text-slate-600 truncate flex-1" title={ticker.rationale ?? name}>
         {name}
       </span>

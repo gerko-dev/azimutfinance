@@ -7,7 +7,7 @@ import {
   useCallback,
   memo,
 } from "react";
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import { useRouter } from "next/navigation";
 import type {
   SovereignBondLite,
@@ -257,9 +257,9 @@ export default function SouverainsNonCotesView({
       <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-b border-slate-800">
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10">
           <div className="text-xs md:text-sm text-slate-400 mb-2">
-            <Link href="/" className="hover:text-white transition">
+            <Lien href="/" className="hover:text-white transition">
               Marchés
-            </Link>
+            </Lien>
             <span className="mx-2 text-slate-500">›</span>
             <span className="text-slate-200">Souverains non cotés</span>
           </div>
@@ -854,7 +854,7 @@ function SovereignToolCard({
   unlocked: boolean;
 }) {
   return (
-    <Link
+    <Lien
       href={href}
       className="group relative flex flex-col bg-white rounded-xl border border-slate-200 p-5 hover:shadow-lg hover:-translate-y-0.5 transition-all overflow-hidden"
     >
@@ -889,6 +889,6 @@ function SovereignToolCard({
       >
         {unlocked ? "Ouvrir" : "Débloquer"} →
       </div>
-    </Link>
+    </Lien>
   );
 }

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import Header from "@/components/Header";
 import MagazineCover from "@/components/academie/MagazineCover";
 import NewsletterForm from "@/components/academie/NewsletterForm";
@@ -83,7 +83,7 @@ export default async function Page() {
               <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-8 items-center">
                 {heroArticle && (
                   <article className="min-w-0">
-                    <Link href={`/academie/magazine/article/${heroArticle.slug}`} className="group block">
+                    <Lien href={`/academie/magazine/article/${heroArticle.slug}`} className="group block">
                       <div className="flex items-center gap-2 mb-3">
                         <span
                           className="text-[10px] uppercase tracking-wide font-semibold px-2 py-0.5 rounded border"
@@ -120,11 +120,11 @@ export default async function Page() {
                           {heroArticle.readingTimeMinutes} min de lecture
                         </span>
                       </div>
-                    </Link>
+                    </Lien>
                   </article>
                 )}
 
-                <Link
+                <Lien
                   href={`/academie/magazine/numero/${latestIssue.slug}`}
                   className="block group justify-self-center lg:justify-self-end"
                 >
@@ -150,7 +150,7 @@ export default async function Page() {
                       Lire le sommaire →
                     </span>
                   </div>
-                </Link>
+                </Lien>
               </div>
             </div>
           </div>
@@ -176,7 +176,7 @@ export default async function Page() {
                 <div className="mt-5 grid grid-cols-1 lg:grid-cols-3 gap-5">
                   {featured[0] && (
                     <article className="lg:col-span-2 lg:row-span-2 bg-white rounded-lg border border-slate-200 overflow-hidden hover:shadow-md hover:border-slate-300 transition group">
-                      <Link href={`/academie/magazine/article/${featured[0].slug}`} className="block">
+                      <Lien href={`/academie/magazine/article/${featured[0].slug}`} className="block">
                         <div
                           className="h-64 md:h-80 relative flex items-end p-6"
                           style={{
@@ -208,7 +208,7 @@ export default async function Page() {
                             <span>{featured[0].readingTimeMinutes} min</span>
                           </div>
                         </div>
-                      </Link>
+                      </Lien>
                     </article>
                   )}
 
@@ -234,7 +234,7 @@ export default async function Page() {
                 {issues.map((issue) => {
                   const articleCount = articles.filter((a) => a.issueId === issue.id).length;
                   return (
-                    <Link
+                    <Lien
                       key={issue.slug}
                       href={`/academie/magazine/numero/${issue.slug}`}
                       className="group block"
@@ -263,7 +263,7 @@ export default async function Page() {
                           {articleCount} articles
                         </div>
                       </div>
-                    </Link>
+                    </Lien>
                   );
                 })}
               </div>
@@ -348,9 +348,9 @@ function SectionHeading({
         </h2>
       </div>
       {link && linkLabel && (
-        <Link href={link} className="text-xs text-slate-700 hover:text-blue-700 hover:underline font-medium">
+        <Lien href={link} className="text-xs text-slate-700 hover:text-blue-700 hover:underline font-medium">
           {linkLabel} →
-        </Link>
+        </Lien>
       )}
     </div>
   );
@@ -367,7 +367,7 @@ function ArticleCard({
 
   if (variant === "compact") {
     return (
-      <Link
+      <Lien
         href={`/academie/magazine/article/${article.slug}`}
         className="group block bg-white rounded-lg border border-slate-200 hover:border-slate-300 hover:shadow-sm transition p-4 flex gap-3"
       >
@@ -389,13 +389,13 @@ function ArticleCard({
             {article.authorName ?? "La rédaction"} · {article.readingTimeMinutes} min
           </div>
         </div>
-      </Link>
+      </Lien>
     );
   }
 
   if (variant === "feature") {
     return (
-      <Link
+      <Lien
         href={`/academie/magazine/article/${article.slug}`}
         className="group block bg-white rounded-lg border border-slate-200 hover:border-slate-300 hover:shadow-md transition overflow-hidden col-span-1 md:col-span-2"
       >
@@ -423,12 +423,12 @@ function ArticleCard({
             <span>{article.readingTimeMinutes} min</span>
           </div>
         </div>
-      </Link>
+      </Lien>
     );
   }
 
   return (
-    <Link
+    <Lien
       href={`/academie/magazine/article/${article.slug}`}
       className="group block bg-white rounded-lg border border-slate-200 hover:border-slate-300 hover:shadow-sm transition overflow-hidden flex flex-col"
     >
@@ -453,7 +453,7 @@ function ArticleCard({
           <span className="tabular-nums">{article.readingTimeMinutes} min</span>
         </div>
       </div>
-    </Link>
+    </Lien>
   );
 }
 

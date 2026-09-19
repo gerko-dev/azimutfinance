@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import Header from "@/components/Header";
 import PageHero from "@/components/PageHero";
 import Footer from "@/components/Footer";
@@ -49,7 +49,7 @@ export default async function ForumSearchPage({
             ) : (
               <div className="bg-white border border-slate-200 rounded-lg divide-y divide-slate-100">
                 {hits.map((h) => (
-                  <Link
+                  <Lien
                     key={h.topic_id}
                     href={`/communaute/forum/t/${h.topic_id}`}
                     className="block px-4 py-3 hover:bg-slate-50 transition"
@@ -68,7 +68,7 @@ export default async function ForumSearchPage({
                         dangerouslySetInnerHTML={{ __html: h.snippet }}
                       />
                     )}
-                  </Link>
+                  </Lien>
                 ))}
               </div>
             )}

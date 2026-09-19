@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import { notFound } from "next/navigation";
 import FormationForm from "@/components/admin/FormationForm";
 import InscriptionsTable from "@/components/admin/InscriptionsTable";
@@ -27,21 +27,21 @@ export default async function EditFormationPage({
   return (
     <div className="space-y-6">
       <div className="text-xs text-slate-500">
-        <Link href="/admin/formations" className="hover:text-slate-700">
+        <Lien href="/admin/formations" className="hover:text-slate-700">
           Formations
-        </Link>{" "}
+        </Lien>{" "}
         &rsaquo; <span className="text-slate-700">{formation.title}</span>
       </div>
 
       <div className="flex items-baseline justify-between flex-wrap gap-2">
         <h1 className="text-2xl font-bold text-slate-900">{formation.title}</h1>
-        <Link
+        <Lien
           href={`/academie/formations/${formation.slug}`}
           target="_blank"
           className="text-xs text-slate-600 hover:text-slate-900 underline"
         >
           Voir la page publique →
-        </Link>
+        </Lien>
       </div>
 
       <FormationForm mode="edit" initial={formation} />

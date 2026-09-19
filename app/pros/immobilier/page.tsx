@@ -1,5 +1,5 @@
 import React from "react";
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import ProPageHeader from "@/components/pros/ProPageHeader";
 import {
   BIEN_CATEGORIES,
@@ -273,7 +273,7 @@ function FilterPill({
   muted?: boolean;
 }) {
   return (
-    <Link
+    <Lien
       href={href}
       title={muted ? "Pas encore de données dans la base — sélectionne pour voir" : undefined}
       className={`text-[11px] px-2.5 py-1 rounded-md border transition ${
@@ -286,7 +286,7 @@ function FilterPill({
     >
       {label}
       {muted && !active && <span className="ml-1 text-slate-300">·</span>}
-    </Link>
+    </Lien>
   );
 }
 

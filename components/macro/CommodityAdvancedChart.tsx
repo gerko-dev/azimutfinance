@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import dynamic from "next/dynamic";
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import type { OhlcPoint } from "../charting/KlineChart";
 import type { UserRole } from "@/lib/auth/userRole";
 
@@ -85,18 +85,18 @@ export default function CommodityAdvancedChart({
             Inscription gratuite.
           </p>
           <div className="mt-4 flex gap-2 justify-center">
-            <Link
+            <Lien
               href="/auth/login"
               className="px-4 py-2 bg-slate-900 text-white text-sm rounded hover:bg-slate-700 transition"
             >
               Se connecter
-            </Link>
-            <Link
+            </Lien>
+            <Lien
               href="/auth/signup"
               className="px-4 py-2 border border-slate-300 text-slate-700 text-sm rounded hover:bg-slate-50 transition"
             >
               S&apos;inscrire
-            </Link>
+            </Lien>
           </div>
         </div>
       </section>
@@ -168,12 +168,12 @@ export default function CommodityAdvancedChart({
                 </div>
               </div>
               <div className="flex gap-2 mt-4">
-                <Link
+                <Lien
                   href="/abonnements"
                   className="px-4 py-2 bg-amber-500 text-white text-sm rounded hover:bg-amber-600 transition font-medium"
                 >
                   Passer Premium
-                </Link>
+                </Lien>
               </div>
             </div>
           </div>

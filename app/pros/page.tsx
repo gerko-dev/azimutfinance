@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import Flag from "@/components/Flag";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
@@ -323,12 +323,12 @@ export default async function ProDashboard() {
                       const bond = isinToBond.get(e.isin);
                       return (
                         <li key={`${e.isin}-${e.date}-${idx}`} className="flex items-center justify-between gap-2">
-                          <Link
+                          <Lien
                             href={bondHref(bond ?? { isin: e.isin })}
                             className="truncate text-slate-300 hover:text-blue-300 min-w-0"
                           >
                             {bond?.name || e.isin}
-                          </Link>
+                          </Lien>
                           <span className="text-slate-500 font-mono shrink-0">{fmtDate(e.date)}</span>
                         </li>
                       );
@@ -452,12 +452,12 @@ function MoversTable({ rows }: { rows: ActionRow[] }) {
           return (
             <tr key={r.code} className="border-b border-slate-800 last:border-0">
               <td className="px-3 py-1.5">
-                <Link
+                <Lien
                   href={`/pros/titre/${r.code}`}
                   className="font-mono text-slate-200 hover:text-blue-300"
                 >
                   {r.code}
-                </Link>
+                </Lien>
                 <div className="text-[10px] text-slate-500 truncate max-w-[140px]">
                   {r.name}
                 </div>
@@ -490,12 +490,12 @@ function VolumeTable({ rows }: { rows: ActionRow[] }) {
         {rows.map((r) => (
           <tr key={r.code} className="border-b border-slate-800 last:border-0">
             <td className="px-3 py-1.5">
-              <Link
+              <Lien
                 href={`/pros/titre/${r.code}`}
                 className="font-mono text-slate-200 hover:text-blue-300"
               >
                 {r.code}
-              </Link>
+              </Lien>
               <div className="text-[10px] text-slate-500 truncate max-w-[140px]">
                 {r.name}
               </div>
@@ -556,12 +556,12 @@ function EmissionsTable({ rows }: { rows: Emission[] }) {
 
 function QuickLink({ href, label }: { href: string; label: string }) {
   return (
-    <Link
+    <Lien
       href={href}
       className="flex items-center justify-center px-2 py-2 text-xs text-slate-300 bg-slate-700/40 hover:bg-slate-700 hover:text-white rounded border border-slate-700 transition"
     >
       {label}
-    </Link>
+    </Lien>
   );
 }
 

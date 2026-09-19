@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import {
   TXN_TYPE_LABELS,
   type BrokerageTransaction,
@@ -16,12 +16,12 @@ export default function TransactionsLog({
     return (
       <div className="bg-white rounded-lg border border-slate-200 p-6 text-center">
         <div className="text-sm text-slate-500">Aucune transaction enregistrée.</div>
-        <Link
+        <Lien
           href={`/outils/portefeuille/${accountId}/transactions/nouvelle`}
           className="inline-block mt-3 text-xs bg-slate-900 hover:bg-slate-700 text-white font-medium px-3 py-1.5 rounded"
         >
           + Saisir la première transaction
-        </Link>
+        </Lien>
       </div>
     );
   }
@@ -34,12 +34,12 @@ export default function TransactionsLog({
             ({transactions.length})
           </span>
         </h3>
-        <Link
+        <Lien
           href={`/outils/portefeuille/${accountId}/transactions/nouvelle`}
           className="text-xs bg-slate-900 hover:bg-slate-700 text-white font-medium px-2.5 py-1 rounded"
         >
           + Nouvelle transaction
-        </Link>
+        </Lien>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-xs border-separate border-spacing-0">
@@ -98,12 +98,12 @@ export default function TransactionsLog({
                     {fmtFCFA(t.netAmount)}
                   </td>
                   <td className="py-2 pr-4 pl-2 text-right">
-                    <Link
+                    <Lien
                       href={`/outils/portefeuille/${accountId}/transactions/${t.id}`}
                       className="text-[11px] text-blue-700 hover:underline"
                     >
                       Éditer
-                    </Link>
+                    </Lien>
                   </td>
                 </tr>
               );

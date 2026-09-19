@@ -1,7 +1,7 @@
 "use client"; // Les error boundaries doivent être des Client Components
 
 import { useEffect } from "react";
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 
 /**
  * Error boundary du segment /admin. Rendu à l'intérieur du layout admin
@@ -45,12 +45,12 @@ export default function AdminError({
         >
           Réessayer
         </button>
-        <Link
+        <Lien
           href="/admin"
           className="px-4 py-2 text-sm border border-slate-300 rounded-md hover:bg-slate-50"
         >
           Tableau de bord admin
-        </Link>
+        </Lien>
       </div>
     </div>
   );

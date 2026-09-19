@@ -1,5 +1,5 @@
 import { notFound, redirect } from "next/navigation";
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import Header from "@/components/Header";
 import PageHero from "@/components/PageHero";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -105,18 +105,18 @@ export default async function ConfirmationPage({
           )}
 
           <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-            <Link
+            <Lien
               href="/compte"
               className="text-sm bg-slate-900 hover:bg-slate-700 text-white font-medium px-4 py-2 rounded"
             >
               Voir mes inscriptions
-            </Link>
-            <Link
+            </Lien>
+            <Lien
               href="/academie/formations"
               className="text-sm text-slate-700 hover:text-slate-900 underline"
             >
               Retour au catalogue
-            </Link>
+            </Lien>
           </div>
         </div>
       </main>

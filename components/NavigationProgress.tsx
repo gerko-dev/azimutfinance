@@ -28,15 +28,15 @@ function BarreDeProgression() {
  * Remplacement direct de `<Link>` : mêmes props, même comportement. Il ajoute
  * seulement la barre de progression quand la navigation dure.
  *
- * QUAND S'EN SERVIR. Pas partout : un lien dont la destination est préchargée
- * navigue instantanément, `pending` ne passe jamais à vrai, et le composant ne
- * rend rien. Il est utile là où la destination est DYNAMIQUE et coûteuse —
- * fiche de fonds, console d'administration, écrans de marché — c'est-à-dire
- * là où le clic reste aujourd'hui sans réponse.
+ * EMPLOYÉ PARTOUT, et sans coût quand il ne sert pas : sur une destination
+ * préchargée, `pending` ne passe jamais à vrai et le composant ne rend
+ * AUCUN nœud. Il n'y a donc ni décalage de mise en page ni élément parasite
+ * dans les liens — seulement un appel de hook de plus par lien monté.
  *
  * Ce n'est pas la réponse de fond : `loading.tsx` l'est, parce qu'il montre la
  * structure de la page au lieu d'un simple trait. Les deux se complètent — la
- * barre couvre l'instant où le squelette lui-même n'est pas encore arrivé.
+ * barre couvre l'instant où le squelette lui-même n'est pas encore arrivé,
+ * réseau lent ou préchargement inachevé.
  */
 export default function Lien(props: ComponentProps<typeof Link>) {
   const { children, ...reste } = props;

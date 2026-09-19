@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import Header from "@/components/Header";
 import { computeCommodityStats } from "@/lib/commodities";
 import { computeFxStats } from "@/lib/fx";
@@ -222,25 +222,25 @@ export default async function Home() {
               apprendre, décider et investir sur les marchés en un seul endroit.
             </p>
             <div className="flex flex-wrap gap-3 mt-7">
-              <Link
+              <Lien
                 href="/inscription"
                 className="bg-white text-slate-900 hover:bg-slate-100 font-semibold px-6 py-3 rounded-md text-sm md:text-base transition shadow-lg shadow-blue-500/10"
               >
                 Créer un compte gratuit →
-              </Link>
-              <Link
+              </Lien>
+              <Lien
                 href="/premium"
                 className="bg-white/10 hover:bg-white/15 border border-white/20 text-white font-medium px-6 py-3 rounded-md text-sm md:text-base transition"
               >
                 Découvrir Premium
-              </Link>
+              </Lien>
             </div>
             {/* Troisieme porte d'entree, en texte et non en bouton : ajouter un
                 bouton diluerait les deux appels a l'action qui precedent, mais
                 les formations meritent d'exister des le premier ecran — et le
                 mot « gratuite » est ce qui fait cliquer. */}
             {catalog.total > 0 && (
-              <Link
+              <Lien
                 href="/academie/formations"
                 className="group inline-flex items-center gap-2.5 mt-5 text-sm text-slate-300 hover:text-white transition"
               >
@@ -265,7 +265,7 @@ export default async function Home() {
                     →
                   </span>
                 </span>
-              </Link>
+              </Lien>
             )}
           </div>
 
@@ -284,13 +284,13 @@ export default async function Home() {
                   isClosed={indicesSnapshot.isClosed}
                 />
               </div>
-              <Link
+              <Lien
                 href="/marches/actions"
                 className="text-[11px] text-slate-300 hover:text-white inline-flex items-center gap-1"
               >
                 Voir toute la cote
                 <span aria-hidden>→</span>
-              </Link>
+              </Lien>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 md:gap-3">
               <BrvmCard
@@ -348,13 +348,13 @@ export default async function Home() {
               <div className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold">
                 Autres instruments cotés importants
               </div>
-              <Link
+              <Lien
                 href="/marches/matieres-premieres"
                 className="text-[11px] text-slate-300 hover:text-white inline-flex items-center gap-1"
               >
                 Toutes les matières premières
                 <span aria-hidden>→</span>
-              </Link>
+              </Lien>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 md:gap-3">
               <BrvmCard
@@ -533,20 +533,20 @@ export default async function Home() {
               </div>
 
               <div className="mt-7 flex flex-wrap gap-3">
-                <Link
+                <Lien
                   href="/academie/simulateur"
                   className="bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-semibold px-6 py-3 rounded-md text-sm md:text-base transition"
                 >
                   {currentSeason
                     ? "Rejoindre la saison →"
                     : "Découvrir la Ligue Azimut →"}
-                </Link>
-                <Link
+                </Lien>
+                <Lien
                   href="/inscription"
                   className="bg-white/10 hover:bg-white/15 border border-white/20 text-white font-medium px-6 py-3 rounded-md text-sm md:text-base transition"
                 >
                   Créer mon compte
-                </Link>
+                </Lien>
               </div>
             </div>
 
@@ -637,12 +637,12 @@ export default async function Home() {
           <MoversBlock title="Top baisses YTD" tone="down" stocks={topLosers} />
         </div>
         <div className="text-center mt-8">
-          <Link
+          <Lien
             href="/marches/actions"
             className="inline-flex items-center gap-2 text-sm font-semibold text-blue-700 hover:underline"
           >
             Voir toutes les valeurs cotées →
-          </Link>
+          </Lien>
         </div>
       </section>
 
@@ -665,7 +665,7 @@ export default async function Home() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mt-10 md:mt-12">
             {/* Article featured */}
             {featuredArticle && (
-              <Link
+              <Lien
                 href={`/academie/magazine/article/${featuredArticle.slug}`}
                 className="lg:col-span-2 group bg-white rounded-xl border border-slate-200 hover:border-slate-300 hover:shadow-lg transition overflow-hidden flex flex-col"
               >
@@ -693,12 +693,12 @@ export default async function Home() {
                     {featuredArticle.readingTimeMinutes} min de lecture
                   </div>
                 </div>
-              </Link>
+              </Lien>
             )}
 
             {/* Mini menu */}
             <div className="space-y-4">
-              <Link
+              <Lien
                 href="/academie/glossaire"
                 className="group block bg-white border border-slate-200 hover:border-slate-300 hover:shadow-md rounded-xl p-5 transition"
               >
@@ -711,8 +711,8 @@ export default async function Home() {
                 <div className="text-[11px] text-slate-500 mt-1">
                   YTM, OAT, BCEAO, EBITDA, ROCE…
                 </div>
-              </Link>
-              <Link
+              </Lien>
+              <Lien
                 href="/academie/magazine"
                 className="group block bg-white border border-slate-200 hover:border-slate-300 hover:shadow-md rounded-xl p-5 transition"
               >
@@ -725,7 +725,7 @@ export default async function Home() {
                 <div className="text-[11px] text-slate-500 mt-1">
                   {articlesCount} articles signés
                 </div>
-              </Link>
+              </Lien>
             </div>
           </div>
         </div>
@@ -841,18 +841,18 @@ export default async function Home() {
             Inscription gratuite en 30 secondes.
           </p>
           <div className="mt-7 flex flex-wrap gap-3 justify-center">
-            <Link
+            <Lien
               href="/inscription"
               className="bg-white text-blue-900 hover:bg-blue-50 font-semibold px-6 py-3 rounded-md text-sm md:text-base transition shadow-lg"
             >
               Créer mon compte gratuit →
-            </Link>
-            <Link
+            </Lien>
+            <Lien
               href="/communaute/newsletter"
               className="bg-white/10 hover:bg-white/15 border border-white/20 text-white font-medium px-6 py-3 rounded-md text-sm md:text-base transition"
             >
               S&apos;abonner à la newsletter
-            </Link>
+            </Lien>
           </div>
           <div className="mt-6 text-[11px] text-blue-200/70">
             En vous inscrivant, vous acceptez nos CGU et notre politique de confidentialité.
@@ -883,7 +883,7 @@ function BrvmCard({
   positive: boolean;
 }) {
   return (
-    <Link
+    <Lien
       href={href}
       className="group relative bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-white/25 rounded-lg p-3 md:p-3.5 transition"
     >
@@ -909,7 +909,7 @@ function BrvmCard({
       >
         →
       </span>
-    </Link>
+    </Lien>
   );
 }
 
@@ -976,7 +976,7 @@ function FeatureCard({
   href: string;
 }) {
   return (
-    <Link
+    <Lien
       href={href}
       className="group block bg-white border border-slate-200 hover:border-slate-300 hover:shadow-lg rounded-xl overflow-hidden transition"
     >
@@ -1000,7 +1000,7 @@ function FeatureCard({
           <span>→</span>
         </div>
       </div>
-    </Link>
+    </Lien>
   );
 }
 
@@ -1051,7 +1051,7 @@ function MoversBlock({
         ) : (
           stocks.map((s) => (
             <li key={s.code}>
-              <Link
+              <Lien
                 href={`/titre/${s.code}`}
                 className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50 group"
               >
@@ -1070,7 +1070,7 @@ function MoversBlock({
                   {s.ytdChange >= 0 ? "+" : ""}
                   {s.ytdChange.toFixed(1).replace(".", ",")} %
                 </div>
-              </Link>
+              </Lien>
             </li>
           ))
         )}
@@ -1139,7 +1139,7 @@ function PricingCard({
           </li>
         ))}
       </ul>
-      <Link
+      <Lien
         href={ctaHref}
         className={`block w-full mt-7 text-center font-semibold py-3 rounded-md text-sm transition ${
           highlighted
@@ -1148,7 +1148,7 @@ function PricingCard({
         }`}
       >
         {cta}
-      </Link>
+      </Lien>
     </div>
   );
 }

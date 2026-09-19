@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import Header from "@/components/Header";
 
 export const metadata = {
@@ -27,24 +27,24 @@ export default function NotFound() {
         </p>
 
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-          <Link
+          <Lien
             href="/"
             className="px-4 py-2 text-sm bg-blue-700 text-white rounded-md hover:bg-blue-800"
           >
             Retour à l&apos;accueil
-          </Link>
-          <Link
+          </Lien>
+          <Lien
             href="/marches/actions"
             className="px-4 py-2 text-sm border border-slate-300 rounded-md hover:bg-slate-50"
           >
             Actions BRVM
-          </Link>
-          <Link
+          </Lien>
+          <Lien
             href="/academie/glossaire"
             className="px-4 py-2 text-sm border border-slate-300 rounded-md hover:bg-slate-50"
           >
             Glossaire financier
-          </Link>
+          </Lien>
         </div>
       </main>
     </>

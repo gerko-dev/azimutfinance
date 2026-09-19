@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import Header from "@/components/Header";
 import PageHero from "@/components/PageHero";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -64,12 +64,12 @@ export default async function PremiumPage() {
                 .
               </div>
             </div>
-            <Link
+            <Lien
               href="/compte"
               className="px-4 py-2 text-xs font-medium bg-emerald-700 text-white rounded-md hover:bg-emerald-800"
             >
               Voir mon compte
-            </Link>
+            </Lien>
           </div>
         )}
 

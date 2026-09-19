@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import {
   LineChart,
   Line,
@@ -159,9 +159,9 @@ export default function FCPProDetailView({ data }: { data: FCPProDetailData }) {
       {/* ====== EN-TETE ====== */}
       <div className="border-b border-slate-800 pb-4">
         <div className="text-[11px] text-slate-500 mb-2 flex items-center gap-1.5 flex-wrap">
-          <Link href="/pros" className="hover:text-slate-300 transition">Pro Terminal</Link>
+          <Lien href="/pros" className="hover:text-slate-300 transition">Pro Terminal</Lien>
           <span className="text-slate-700">›</span>
-          <Link href="/pros/fcp" className="hover:text-slate-300 transition">Marché FCP</Link>
+          <Lien href="/pros/fcp" className="hover:text-slate-300 transition">Marché FCP</Lien>
           <span className="text-slate-700">›</span>
           <span className="text-slate-400">{fund.nom}</span>
         </div>
@@ -182,19 +182,19 @@ export default function FCPProDetailView({ data }: { data: FCPProDetailData }) {
               )}
             </h1>
             <p className="text-sm text-slate-400 mt-1">
-              <Link href={`/pros/sgo/${fund.gestionnaireSlug}`} className="hover:text-blue-300 transition">
+              <Lien href={`/pros/sgo/${fund.gestionnaireSlug}`} className="hover:text-blue-300 transition">
                 {fund.gestionnaire}
-              </Link>
+              </Lien>
               {fund.depositaire && <> · dépositaire {fund.depositaire}</>}
               {fund.frequenceCalcul && <> · VL {fund.frequenceCalcul.toLowerCase()}</>}
             </p>
           </div>
-          <Link
+          <Lien
             href={`/fcp/${fund.id}`}
             className="text-[11px] px-2.5 py-1 rounded-md border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-600 transition"
           >
             Fiche publique ↗
-          </Link>
+          </Lien>
         </div>
       </div>
 
@@ -546,9 +546,9 @@ function PeerTable({
           {rows.map((r) => (
             <tr key={r.id} className="border-b border-slate-800 last:border-0 hover:bg-slate-800/40">
               <td className="px-4 py-2">
-                <Link href={`/pros/fcp/${r.id}`} className="text-slate-200 hover:text-white transition block truncate max-w-[16rem]">
+                <Lien href={`/pros/fcp/${r.id}`} className="text-slate-200 hover:text-white transition block truncate max-w-[16rem]">
                   {r.label}
-                </Link>
+                </Lien>
                 <div className="text-[10px] text-slate-500 truncate max-w-[16rem]">{r.sub}</div>
               </td>
               <td className="px-3 py-2 text-right font-mono text-slate-300">{fmtBigFCFA(r.aum)}</td>

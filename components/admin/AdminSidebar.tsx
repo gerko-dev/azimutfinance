@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import type { AdminLevel } from "@/lib/admin/types";
@@ -177,7 +177,7 @@ export default function AdminSidebar({
                     const badge = itemBadge(it) > 0 ? itemBadge(it) : null;
                     return (
                       <li key={it.href}>
-                        <Link
+                        <Lien
                           href={it.href}
                           className={`flex items-center gap-2.5 px-3 py-2 rounded text-sm transition ${
                             active
@@ -198,7 +198,7 @@ export default function AdminSidebar({
                               {badge}
                             </span>
                           )}
-                        </Link>
+                        </Lien>
                       </li>
                     );
                   })}

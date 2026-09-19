@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useCallback, useEffect } from "react";
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import type { ListedBondEvent } from "@/lib/listedBondsTypes";
 import CountryFlag from "./CountryFlag";
 
@@ -799,7 +799,7 @@ export default function BondsEventsCalendar({
                   const b = bondByCode.get(e.code);
                   return (
                     <li key={i}>
-                      <Link
+                      <Lien
                         href={lienFiche(b ?? { isin: e.isin })}
                         className="block px-4 md:px-5 py-3 hover:bg-blue-50/40 transition"
                       >
@@ -837,7 +837,7 @@ export default function BondsEventsCalendar({
                             </div>
                           </div>
                         </div>
-                      </Link>
+                      </Lien>
                     </li>
                   );
                 })}

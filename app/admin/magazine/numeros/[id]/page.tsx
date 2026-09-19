@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import { notFound } from "next/navigation";
 import IssueForm from "@/components/admin/IssueForm";
 import {
@@ -31,13 +31,13 @@ export default async function EditIssuePage({
           N° {String(issue.number).padStart(2, "0")} · {issue.theme}
         </h2>
         {issue.publishedAt && (
-          <Link
+          <Lien
             href={`/academie/magazine/numero/${issue.slug}`}
             target="_blank"
             className="text-xs text-slate-600 hover:text-slate-900 underline"
           >
             Voir la page publique →
-          </Link>
+          </Lien>
         )}
       </div>
 
@@ -48,12 +48,12 @@ export default async function EditIssuePage({
           <h3 className="text-base font-semibold text-slate-900">
             Articles de ce numéro
           </h3>
-          <Link
+          <Lien
             href={`/admin/magazine/articles/nouveau?issue=${issue.id}`}
             className="text-xs bg-slate-900 hover:bg-slate-700 text-white font-medium px-2.5 py-1 rounded"
           >
             + Nouvel article
-          </Link>
+          </Lien>
         </div>
         {articles.length === 0 ? (
           <div className="text-xs text-slate-400 text-center py-8">
@@ -114,12 +114,12 @@ export default async function EditIssuePage({
                       {fmtDateTime(a.updatedAt)}
                     </td>
                     <td className="py-2 pr-4 pl-2 text-right">
-                      <Link
+                      <Lien
                         href={`/admin/magazine/articles/${a.id}`}
                         className="text-[11px] text-blue-700 hover:underline"
                       >
                         Éditer
-                      </Link>
+                      </Lien>
                     </td>
                   </tr>
                 );

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import {
   SECURITY_TYPE_LABELS,
   type AccountPosition,
@@ -47,12 +47,12 @@ export default function PositionsTable({
               >
                 <td className="py-2 pl-4 pr-2">
                   {p.securityType === "stock" ? (
-                    <Link
+                    <Lien
                       href={`/titre/${p.code}`}
                       className="font-mono font-semibold text-slate-900 hover:text-blue-700 hover:underline"
                     >
                       {p.code}
-                    </Link>
+                    </Lien>
                   ) : (
                     <span className="font-mono font-semibold text-slate-900">
                       {p.code}

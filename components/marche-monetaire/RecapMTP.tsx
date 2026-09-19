@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import type { EmissionUMOA } from "@/lib/listedBondsTypes";
 import {
   umoaCoverageRatio,
@@ -166,7 +166,7 @@ export default function RecapMTP({ emissions }: Props) {
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
           {countryRows.map((r) => (
-            <Link
+            <Lien
               key={r.code}
               href={`/marche-monetaire/mtp/${r.code.toLowerCase()}`}
               className="group bg-white border border-slate-200 hover:border-blue-400 hover:shadow-md rounded-lg p-3 text-center transition"
@@ -185,7 +185,7 @@ export default function RecapMTP({ emissions }: Props) {
               <div className="text-[10px] text-slate-500 mt-0.5 font-mono">
                 {fmtMillions(r.amount)} · {r.count} ém.
               </div>
-            </Link>
+            </Lien>
           ))}
         </div>
       </div>
@@ -272,7 +272,7 @@ export default function RecapMTP({ emissions }: Props) {
                     className="border-t border-slate-100 hover:bg-slate-50 transition"
                   >
                     <td className="px-3 py-2">
-                      <Link
+                      <Lien
                         href={`/marche-monetaire/mtp/${r.code.toLowerCase()}`}
                         className="inline-flex items-center gap-2 text-slate-900 hover:text-blue-700 hover:underline"
                       >
@@ -293,7 +293,7 @@ export default function RecapMTP({ emissions }: Props) {
                         >
                           <path d="M9 6l6 6-6 6" />
                         </svg>
-                      </Link>
+                      </Lien>
                     </td>
                     <td className="px-3 py-2 text-right font-mono text-slate-700">
                       {r.count}
@@ -459,12 +459,12 @@ export default function RecapMTP({ emissions }: Props) {
                       const label = e.isin || (e.type === "BAT" ? "BAT" : "—");
                       if (!href) return <span className="text-slate-500">{label}</span>;
                       return (
-                        <Link
+                        <Lien
                           href={href}
                           className="text-blue-700 hover:underline"
                         >
                           {label}
-                        </Link>
+                        </Lien>
                       );
                     })()}
                   </td>

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import { notFound } from "next/navigation";
 import Header from "@/components/Header";
 import Ticker from "@/components/Ticker";
@@ -197,17 +197,17 @@ export default async function CountryMTPPage({ params }: { params: Params }) {
       <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-b border-slate-800">
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10">
           <div className="text-xs md:text-sm text-slate-400 mb-2">
-            <Link href="/" className="hover:text-white hover:underline">
+            <Lien href="/" className="hover:text-white hover:underline">
               Accueil
-            </Link>{" "}
+            </Lien>{" "}
             ›{" "}
-            <Link href="/marche-monetaire" className="hover:text-white hover:underline">
+            <Lien href="/marche-monetaire" className="hover:text-white hover:underline">
               Marché monétaire
-            </Link>{" "}
+            </Lien>{" "}
             ›{" "}
-            <Link href="/marche-monetaire/mtp" className="hover:text-white hover:underline">
+            <Lien href="/marche-monetaire/mtp" className="hover:text-white hover:underline">
               Récapitulatif MTP
-            </Link>{" "}
+            </Lien>{" "}
             › <span className="text-slate-200">{meta.label}</span>
           </div>
           <div className="flex items-end gap-4 flex-wrap">
@@ -237,7 +237,7 @@ export default async function CountryMTPPage({ params }: { params: Params }) {
               {Object.entries(COUNTRIES)
                 .filter(([code]) => code !== country)
                 .map(([code, c]) => (
-                  <Link
+                  <Lien
                     key={code}
                     href={`/marche-monetaire/mtp/${code}`}
                     title={c.label}
@@ -248,7 +248,7 @@ export default async function CountryMTPPage({ params }: { params: Params }) {
                       size="lg"
                       className="rounded-sm shadow-sm border border-slate-200"
                     />
-                  </Link>
+                  </Lien>
                 ))}
             </div>
           </div>
@@ -471,12 +471,12 @@ export default async function CountryMTPPage({ params }: { params: Params }) {
                         if (!href)
                           return <span className="text-slate-500">{label}</span>;
                         return (
-                          <Link
+                          <Lien
                             href={href}
                             className="text-blue-700 hover:underline"
                           >
                             {label}
-                          </Link>
+                          </Lien>
                         );
                       })()}
                     </td>

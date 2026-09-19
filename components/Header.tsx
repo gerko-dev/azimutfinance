@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo } from "react";
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import { usePathname } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -215,13 +215,13 @@ export default function Header() {
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 md:py-4 flex items-center justify-between">
         {/* Logo + Menu desktop */}
         <div className="flex items-center gap-4 lg:gap-8">
-          <Link
+          <Lien
             href="/"
             className="text-lg md:text-xl font-semibold tracking-tight transition-opacity hover:opacity-80"
           >
             <span className="text-blue-700">Azimut</span>
             <span className="text-slate-900">Finance</span>
-          </Link>
+          </Lien>
 
           {/* Menu desktop */}
           <nav className="hidden lg:flex gap-0.5 text-sm">
@@ -287,7 +287,7 @@ export default function Header() {
                           setActiveFlyout(item.children ? item.href : null)
                         }
                       >
-                        <Link
+                        <Lien
                           href={item.href}
                           onClick={() => {
                             setActiveDesktopMenu(null);
@@ -320,12 +320,12 @@ export default function Header() {
                               </svg>
                             )}
                           </span>
-                        </Link>
+                        </Lien>
                         {/* Flyout enfants : visible seulement au hover sur l'item */}
                         {item.children && flyoutOpen && (
                           <div className="az-flyout-in absolute left-full top-0 ml-1.5 bg-white rounded-xl ring-1 ring-slate-900/[0.07] shadow-xl shadow-slate-900/[0.08] p-1.5 min-w-[228px]">
                             {item.children.map((child) => (
-                              <Link
+                              <Lien
                                 key={child.href}
                                 href={child.href}
                                 onClick={() => {
@@ -340,7 +340,7 @@ export default function Header() {
                               >
                                 <span>{child.label}</span>
                                 {child.badge && <BadgeLabel badge={child.badge} />}
-                              </Link>
+                              </Lien>
                             ))}
                           </div>
                         )}
@@ -365,7 +365,7 @@ export default function Header() {
           ) : user ? (
             <>
               {showProButton && (
-                <Link
+                <Lien
                   href="/pros"
                   className="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-semibold bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white shadow-sm hover:shadow transition"
                 >
@@ -382,7 +382,7 @@ export default function Header() {
                     <path d="M12 2l2.39 7.36H22l-6.18 4.49 2.39 7.36L12 16.72l-6.21 4.49 2.39-7.36L2 9.36h7.61z" />
                   </svg>
                   Espace Pro
-                </Link>
+                </Lien>
               )}
               <NotificationsBell user={user} />
               <MessagerieIconBadge user={user} />
@@ -407,44 +407,44 @@ export default function Header() {
                       {user.email}
                     </div>
                   </div>
-                  <Link
+                  <Lien
                     href="/compte"
                     onClick={() => setUserMenuOpen(false)}
                     className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
                   >
                     Mon compte
-                  </Link>
-                  <Link
+                  </Lien>
+                  <Lien
                     href="/outils/watchlist"
                     onClick={() => setUserMenuOpen(false)}
                     className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
                   >
                     Ma watchlist
-                  </Link>
+                  </Lien>
                   {showAlertes && (
-                    <Link
+                    <Lien
                       href="/outils/alertes"
                       onClick={() => setUserMenuOpen(false)}
                       className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
                     >
                       Mes alertes
-                    </Link>
+                    </Lien>
                   )}
-                  <Link
+                  <Lien
                     href="/messagerie"
                     onClick={() => setUserMenuOpen(false)}
                     className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
                   >
                     Messagerie
-                  </Link>
+                  </Lien>
                   {adminLevel !== null && (
-                    <Link
+                    <Lien
                       href="/admin"
                       onClick={() => setUserMenuOpen(false)}
                       className="block px-4 py-2 text-sm text-rose-700 font-medium hover:bg-rose-50 border-t border-slate-100"
                     >
                       Administration · N{adminLevel}
-                    </Link>
+                    </Lien>
                   )}
                   <form action={signOutAction}>
                     <button
@@ -460,18 +460,18 @@ export default function Header() {
             </>
           ) : (
             <>
-              <Link
+              <Lien
                 href="/connexion"
                 className="px-4 py-2 text-sm border border-slate-300 rounded-md hover:bg-slate-50"
               >
                 Connexion
-              </Link>
-              <Link
+              </Lien>
+              <Lien
                 href="/inscription"
                 className="px-3 lg:px-4 py-2 text-sm bg-blue-700 text-white rounded-md hover:bg-blue-800"
               >
                 S&apos;inscrire
-              </Link>
+              </Lien>
             </>
           )}
         </div>
@@ -515,7 +515,7 @@ export default function Header() {
               />
             )}
             {showProButton && (
-              <Link
+              <Lien
                 href="/pros"
                 onClick={() => {
                   setMenuOpen(false);
@@ -536,7 +536,7 @@ export default function Header() {
                   <path d="M12 2l2.39 7.36H22l-6.18 4.49 2.39 7.36L12 16.72l-6.21 4.49 2.39-7.36L2 9.36h7.61z" />
                 </svg>
                 Espace Pro
-              </Link>
+              </Lien>
             )}
             {visibleMenuSections.map((section) => {
               const open = activeMobileMenu === section.label;
@@ -577,7 +577,7 @@ export default function Header() {
                       return (
                       <div key={item.href}>
                         <div className="flex items-center">
-                          <Link
+                          <Lien
                             href={item.href}
                             onClick={() => {
                               setMenuOpen(false);
@@ -594,7 +594,7 @@ export default function Header() {
                               {item.label}
                             </span>
                             {item.badge && <BadgeLabel badge={item.badge} />}
-                          </Link>
+                          </Lien>
                           {item.children && (
                             <button
                               onClick={(e) => {
@@ -624,7 +624,7 @@ export default function Header() {
                         {item.children && flyoutOpen && (
                           <div className="az-menu-in ml-2.5 pl-3 flex flex-col gap-0.5 border-l border-slate-200 mb-1">
                             {item.children.map((child) => (
-                              <Link
+                              <Lien
                                 key={child.href}
                                 href={child.href}
                                 onClick={() => {
@@ -640,7 +640,7 @@ export default function Header() {
                               >
                                 <span>{child.label}</span>
                                 {child.badge && <BadgeLabel badge={child.badge} />}
-                              </Link>
+                              </Lien>
                             ))}
                           </div>
                         )}
@@ -660,44 +660,44 @@ export default function Header() {
                   <div className="text-xs text-slate-500 px-1">
                     Connecté : <span className="text-slate-700 font-medium">{user.email}</span>
                   </div>
-                  <Link
+                  <Lien
                     href="/compte"
                     onClick={() => setMenuOpen(false)}
                     className="px-4 py-2 text-sm text-center bg-blue-700 text-white rounded-md"
                   >
                     Mon compte
-                  </Link>
-                  <Link
+                  </Lien>
+                  <Lien
                     href="/outils/watchlist"
                     onClick={() => setMenuOpen(false)}
                     className="px-4 py-2 text-sm text-center border border-slate-300 rounded-md"
                   >
                     Ma watchlist
-                  </Link>
+                  </Lien>
                   {showAlertes && (
-                    <Link
+                    <Lien
                       href="/outils/alertes"
                       onClick={() => setMenuOpen(false)}
                       className="px-4 py-2 text-sm text-center border border-slate-300 rounded-md"
                     >
                       Mes alertes
-                    </Link>
+                    </Lien>
                   )}
-                  <Link
+                  <Lien
                     href="/messagerie"
                     onClick={() => setMenuOpen(false)}
                     className="px-4 py-2 text-sm text-center border border-slate-300 rounded-md"
                   >
                     Messagerie
-                  </Link>
+                  </Lien>
                   {adminLevel !== null && (
-                    <Link
+                    <Lien
                       href="/admin"
                       onClick={() => setMenuOpen(false)}
                       className="px-4 py-2 text-sm text-center bg-rose-600 text-white rounded-md font-medium"
                     >
                       Administration · N{adminLevel}
-                    </Link>
+                    </Lien>
                   )}
                   <form action={signOutAction}>
                     <button
@@ -710,20 +710,20 @@ export default function Header() {
                 </div>
               ) : (
                 <div className="flex gap-2">
-                  <Link
+                  <Lien
                     href="/connexion"
                     onClick={() => setMenuOpen(false)}
                     className="flex-1 px-4 py-2 text-sm text-center border border-slate-300 rounded-md"
                   >
                     Connexion
-                  </Link>
-                  <Link
+                  </Lien>
+                  <Lien
                     href="/inscription"
                     onClick={() => setMenuOpen(false)}
                     className="flex-1 px-4 py-2 text-sm text-center bg-blue-700 text-white rounded-md"
                   >
                     S&apos;inscrire
-                  </Link>
+                  </Lien>
                 </div>
               )}
             </div>

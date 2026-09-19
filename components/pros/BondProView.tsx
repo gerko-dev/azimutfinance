@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import {
   LineChart,
   Line,
@@ -192,13 +192,13 @@ export default function BondProView({ data }: { data: BondProData }) {
       {/* ====== EN-TETE ====== */}
       <div className="border-b border-slate-800 pb-4">
         <div className="text-[11px] text-slate-500 mb-2 flex items-center gap-1.5 flex-wrap">
-          <Link href="/pros" className="hover:text-slate-300 transition">
+          <Lien href="/pros" className="hover:text-slate-300 transition">
             Pro Terminal
-          </Link>
+          </Lien>
           <span className="text-slate-700">›</span>
-          <Link href="/pros/obligations" className="hover:text-slate-300 transition">
+          <Lien href="/pros/obligations" className="hover:text-slate-300 transition">
             Obligations cotées
-          </Link>
+          </Lien>
           <span className="text-slate-700">›</span>
           <span className="text-slate-400">{bond.name}</span>
         </div>
@@ -227,13 +227,13 @@ export default function BondProView({ data }: { data: BondProData }) {
               isClosed={data.session.isClosed}
               variant="dark"
             />
-            <Link
+            <Lien
               href={bondHref(bond)}
               className="text-[11px] px-2.5 py-1 rounded-md border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-600 transition"
               title="Voir la fiche publique"
             >
               Fiche publique ↗
-            </Link>
+            </Lien>
           </div>
         </div>
       </div>
@@ -513,7 +513,7 @@ function SyntheseTab({
         <Card title="Obligations comparables" subtitle="même pays · maturité proche">
           <div className="divide-y divide-slate-800">
             {similarBonds.map((s) => (
-              <Link
+              <Lien
                 key={s.isin}
                 href={`/pros${bondHref(s)}`}
                 className="flex items-center justify-between px-4 py-2.5 hover:bg-slate-800/40 transition text-sm"
@@ -529,7 +529,7 @@ function SyntheseTab({
                   <span>{s.yearsToMaturity.toFixed(1).replace(".", ",")} ans</span>
                   <span className="text-slate-600">→</span>
                 </div>
-              </Link>
+              </Lien>
             ))}
           </div>
         </Card>

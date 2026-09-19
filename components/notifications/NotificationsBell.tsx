@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -234,7 +234,7 @@ export default function NotificationsBell({ user }: { user: User | null }) {
               <ul className="divide-y divide-slate-100">
                 {items.map((n) => (
                   <li key={`${n.kind}:${n.id}`} className="group relative">
-                    <Link
+                    <Lien
                       href={n.href}
                       onClick={() => setOpen(false)}
                       className={`block px-3 py-2.5 pr-9 hover:bg-slate-50 transition ${
@@ -257,7 +257,7 @@ export default function NotificationsBell({ user }: { user: User | null }) {
                       <div className="text-xs text-slate-500 mt-0.5 line-clamp-2">
                         {n.subtitle}
                       </div>
-                    </Link>
+                    </Lien>
                     <button
                       type="button"
                       onClick={(e) => {

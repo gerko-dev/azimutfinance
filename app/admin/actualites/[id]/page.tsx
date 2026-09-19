@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import ActualiteForm from "@/components/admin/ActualiteForm";
 import DeleteActualiteButton from "@/components/admin/DeleteActualiteButton";
 import { requireAdmin } from "@/lib/admin/auth";
@@ -20,9 +20,9 @@ export default async function EditActualitePage({
   return (
     <div className="space-y-4">
       <div className="text-xs text-slate-500">
-        <Link href="/admin/actualites" className="hover:text-slate-700">
+        <Lien href="/admin/actualites" className="hover:text-slate-700">
           Actualités
-        </Link>{" "}
+        </Lien>{" "}
         &rsaquo; {actualite.ticker} &rsaquo; Édition
       </div>
       <div className="flex items-baseline justify-between flex-wrap gap-2">

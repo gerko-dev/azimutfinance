@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import {
   BarChart,
   Bar,
@@ -439,12 +439,12 @@ export default function AdvancedStatsView({
                   </div>
                 </div>
                 <div className="flex justify-end pt-2 border-t border-slate-100">
-                  <Link
+                  <Lien
                     href="/compte"
                     className="px-3 py-1.5 rounded-md bg-amber-500 text-white text-xs font-medium hover:bg-amber-600 transition"
                   >
                     Passer Premium →
-                  </Link>
+                  </Lien>
                 </div>
               </div>
             </div>

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import { redirect } from "next/navigation";
 import Header from "@/components/Header";
 import PageHero from "@/components/PageHero";
@@ -101,18 +101,18 @@ export default async function PaiementRecuPage() {
           )}
 
           <div className="flex flex-wrap items-center justify-center gap-3">
-            <Link
+            <Lien
               href="/compte"
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md bg-blue-600 text-white font-medium hover:bg-blue-700 transition"
             >
               Aller à mon compte
-            </Link>
-            <Link
+            </Lien>
+            <Lien
               href="/"
               className="text-sm text-slate-500 hover:text-slate-900 transition"
             >
               ← Retour à l&apos;accueil
-            </Link>
+            </Lien>
           </div>
         </div>
 

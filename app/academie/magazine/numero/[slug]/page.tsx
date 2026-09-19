@@ -1,5 +1,5 @@
 import { notFound, redirect } from "next/navigation";
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import Header from "@/components/Header";
 import MagazineCover from "@/components/academie/MagazineCover";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -63,14 +63,14 @@ export default async function IssuePage({
 
       <div className="bg-slate-900 text-white py-2">
         <div className="max-w-5xl mx-auto px-4 flex items-center justify-between text-[11px]">
-          <Link href="/academie/magazine" className="flex items-baseline gap-1.5 hover:text-slate-300 transition">
+          <Lien href="/academie/magazine" className="flex items-baseline gap-1.5 hover:text-slate-300 transition">
             <span className="font-bold tracking-tight" style={{ fontFamily: "Georgia, serif" }}>
               AZIMUT
             </span>
             <span className="italic text-slate-300" style={{ fontFamily: "Georgia, serif" }}>
               magazine
             </span>
-          </Link>
+          </Lien>
           <span className="text-slate-300">
             N° {String(issue.number).padStart(2, "0")} · {issue.monthLabel}
           </span>
@@ -85,7 +85,7 @@ export default async function IssuePage({
       >
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-10 md:py-14">
           <div className="text-xs text-slate-500 mb-4 flex items-center gap-1.5 flex-wrap">
-            <Link href="/academie/magazine" className="hover:text-slate-700">Magazine</Link>
+            <Lien href="/academie/magazine" className="hover:text-slate-700">Magazine</Lien>
             <span>›</span>
             <span className="text-slate-700">{issue.monthLabel}</span>
           </div>
@@ -102,13 +102,13 @@ export default async function IssuePage({
                   size="lg"
                 />
               </div>
-              <Link
+              <Lien
                 href={`/academie/magazine/numero/${issue.slug}/imprimer`}
                 className="mt-4 w-full text-xs bg-slate-900 hover:bg-slate-700 text-white py-2.5 rounded font-medium transition flex items-center justify-center gap-2"
                 title="Ouvre la version imprimable — choisissez « Enregistrer en PDF »"
               >
                 ↓ Télécharger en PDF
-              </Link>
+              </Lien>
             </div>
 
             <div className="min-w-0">
@@ -188,7 +188,7 @@ export default async function IssuePage({
               const cat = ARTICLE_CATEGORY_META[a.category];
               return (
                 <li key={a.slug}>
-                  <Link
+                  <Lien
                     href={`/academie/magazine/article/${a.slug}`}
                     className="group block p-4 rounded-lg border border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm transition"
                   >
@@ -232,7 +232,7 @@ export default async function IssuePage({
                         →
                       </div>
                     </div>
-                  </Link>
+                  </Lien>
                 </li>
               );
             })}
@@ -241,7 +241,7 @@ export default async function IssuePage({
 
         <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {prevIssue ? (
-            <Link
+            <Lien
               href={`/academie/magazine/numero/${prevIssue.slug}`}
               className="group block p-4 rounded-lg border border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm transition"
             >
@@ -271,12 +271,12 @@ export default async function IssuePage({
                   </div>
                 </div>
               </div>
-            </Link>
+            </Lien>
           ) : (
             <div />
           )}
           {nextIssue ? (
-            <Link
+            <Lien
               href={`/academie/magazine/numero/${nextIssue.slug}`}
               className="group block p-4 rounded-lg border border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm transition"
             >
@@ -306,19 +306,19 @@ export default async function IssuePage({
                   />
                 </div>
               </div>
-            </Link>
+            </Lien>
           ) : (
             <div />
           )}
         </section>
 
         <div>
-          <Link
+          <Lien
             href="/academie/magazine"
             className="inline-flex items-center gap-2 text-sm text-slate-700 hover:text-blue-700 hover:underline"
           >
             ← Toutes les éditions du magazine
-          </Link>
+          </Lien>
         </div>
       </main>
     </div>

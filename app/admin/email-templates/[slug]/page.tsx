@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import { requireAdmin } from "@/lib/admin/auth";
 import { loadEmailTemplate } from "@/lib/email/load";
 import {
@@ -27,9 +27,9 @@ export default async function EmailTemplateEditPage({
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 text-xs text-slate-500">
-        <Link href="/admin/email-templates" className="hover:text-slate-900">
+        <Lien href="/admin/email-templates" className="hover:text-slate-900">
           Templates emails
-        </Link>
+        </Lien>
         <span>›</span>
         <span className="text-slate-900">{EMAIL_TEMPLATE_LABELS[slug]}</span>
       </div>

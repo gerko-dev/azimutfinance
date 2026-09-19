@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 
 export type SGOIndexRow = {
   slug: string;
@@ -134,9 +134,9 @@ export default function SGOProIndexView({ rows, totalAUM }: { rows: SGOIndexRow[
               <tr key={r.slug} className="border-b border-slate-800 last:border-0 hover:bg-slate-800/40">
                 <td className="px-4 py-2 font-mono text-slate-500">{i + 1}</td>
                 <td className="px-3 py-2">
-                  <Link href={`/pros/sgo/${r.slug}`} className="text-slate-200 hover:text-white transition">
+                  <Lien href={`/pros/sgo/${r.slug}`} className="text-slate-200 hover:text-white transition">
                     {r.name}
-                  </Link>
+                  </Lien>
                   <div className="text-[10px] text-slate-500">{r.nbCategories} catégories</div>
                 </td>
                 <td className="px-3 py-2 text-right font-mono text-slate-400">{r.nbFunds}</td>

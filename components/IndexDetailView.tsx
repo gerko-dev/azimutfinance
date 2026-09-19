@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import {
   AreaChart,
   Area,
@@ -490,13 +490,13 @@ export default function IndexDetailView({
       <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-b border-slate-800">
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10">
           <div className="text-xs md:text-sm text-slate-400 mb-2">
-            <Link href="/" className="hover:text-white transition">
+            <Lien href="/" className="hover:text-white transition">
               Marchés
-            </Link>
+            </Lien>
             <span className="mx-2 text-slate-500">›</span>
-            <Link href="/marches/indices" className="hover:text-white transition">
+            <Lien href="/marches/indices" className="hover:text-white transition">
               Indices
-            </Link>
+            </Lien>
             <span className="mx-2 text-slate-500">›</span>
             <span className="text-slate-200">{name}</span>
           </div>
@@ -1064,12 +1064,12 @@ export default function IndexDetailView({
         )}
 
         <div className="text-center">
-          <Link
+          <Lien
             href="/marches/indices"
             className="text-sm text-blue-700 hover:text-blue-900"
           >
             ← Retour à tous les indices
-          </Link>
+          </Lien>
         </div>
       </main>
     </>
@@ -1154,7 +1154,7 @@ function SectorComponentsSection({
                   {i + 1}
                 </td>
                 <td className="px-2 md:px-3 py-2">
-                  <Link
+                  <Lien
                     href={`/titre/${c.code}`}
                     className="text-blue-700 hover:underline"
                   >
@@ -1162,7 +1162,7 @@ function SectorComponentsSection({
                       {c.code}
                     </span>
                     <span>{c.name}</span>
-                  </Link>
+                  </Lien>
                 </td>
                 <td className="px-2 md:px-3 py-2 text-right tabular-nums">
                   {c.currentPrice > 0 ? formatNumber(c.currentPrice, 0) : "—"}

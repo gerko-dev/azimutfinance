@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import Header from "@/components/Header";
 import PageHero from "@/components/PageHero";
 import Footer from "@/components/Footer";
@@ -61,19 +61,19 @@ export default async function ForumByTickerPage({
         subtitle="Tous les topics du forum qui mentionnent ce code dans leurs tags."
       >
         <div className="flex flex-wrap items-center gap-3">
-          <Link
+          <Lien
             href={`/titre/${code.toLowerCase()}`}
             className="text-xs text-blue-300 hover:text-blue-200 hover:underline"
           >
             Voir la fiche titre →
-          </Link>
+          </Lien>
           {user && (
-            <Link
+            <Lien
               href="/communaute/forum/nouveau"
               className="inline-block px-4 py-2 rounded-md bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
             >
               + Nouvelle discussion
-            </Link>
+            </Lien>
           )}
         </div>
       </PageHero>

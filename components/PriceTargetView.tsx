@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import type { PriceTarget, PriceTargetMethod } from "@/lib/priceTarget";
 import type { UserRole } from "@/lib/auth/userRole";
 
@@ -48,12 +48,12 @@ export default function PriceTargetView({ ticker, target, userRole }: Props) {
           historique, réversion à la moyenne). Intervalle pondéré ±1σ,
           upside %, hypothèses détaillées par méthode.
         </p>
-        <Link
+        <Lien
           href="/compte"
           className="inline-flex items-center px-4 py-2 rounded-md bg-amber-500 text-white text-sm font-medium hover:bg-amber-600 transition"
         >
           Passer Premium →
-        </Link>
+        </Lien>
       </div>
     );
   }

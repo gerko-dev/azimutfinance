@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import Link from "next/link";
+import Lien from "@/components/NavigationProgress";
 import { useRouter } from "next/navigation";
 import type {
   WatchlistWithCount,
@@ -150,7 +150,7 @@ function Sidebar({
             const active = selectedId === l.id;
             return (
               <li key={l.id}>
-                <Link
+                <Lien
                   href={`/outils/watchlist?id=${l.id}`}
                   className={`block px-3 py-2.5 hover:bg-slate-50 ${
                     active ? "bg-blue-50/50" : ""
@@ -169,7 +169,7 @@ function Sidebar({
                       Défaut
                     </span>
                   )}
-                </Link>
+                </Lien>
               </li>
             );
           })}
@@ -376,12 +376,12 @@ function Item({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap mb-0.5">
-            <Link
+            <Lien
               href={targetHref(item.target_type as WatchlistTargetType, item.target_code)}
               className="text-sm font-semibold text-slate-900 hover:text-blue-700"
             >
               {formatTargetCode(item.target_type, item.target_code)}
-            </Link>
+            </Lien>
             <span className="text-[10px] uppercase font-semibold bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded">
               {TARGET_TYPE_LABEL[item.target_type as WatchlistTargetType]}
             </span>
