@@ -6,7 +6,6 @@ import {
 } from "@/app/gestion-portefeuille/portfolio-security-schema";
 
 const PAYS = [...Object.keys(BANKS_BY_COUNTRY), "Autre"];
-const MM_LIST_ID = "mm-providers";
 
 // Champs d'un compte de trésorerie : cascade Pays → Banque (liste BCEAO des
 // établissements agréés du pays), type de compte et rémunération éventuelle.
@@ -44,7 +43,10 @@ export default function TreasuryFields({
               // Pas de compte courant pour le mobile money : bascule sur un
               // type valide si un compte courant était sélectionné.
               if (attrs.typeCompte === "courant" || attrs.typeCompte === "courant_remunere") {
-                setAttr("typeCompte", "encaissement");
+                // On EFFACE plutôt que de choisir à la place du gérant : un
+                // compte courant qui devient mobile money n'est pas plus un
+                // encaissement qu'un décaissement.
+                setAttr("typeCompte", "");
               }
             }
           }}
@@ -112,19 +114,32 @@ export default function TreasuryFields({
           <span className="text-[10px] uppercase tracking-wider text-slate-500">
             Nom du Mobile Money
           </span>
-          <input
-            type="text"
-            list={MM_LIST_ID}
+          {/* UN CHOIX, PAS UNE SAISIE.
+              Ce champ était un `input` avec datalist — donc une suggestion que
+              rien n'imposait. Le même opérateur s'est retrouvé écrit de quatre
+              façons (« MTN CI », « MTN BJ », « MTN BENIN », « MTN Mobile Money
+              (MoMo) »), et comme ce nom est la CLEF d'agrégation du point de
+              trésorerie, un opérateur occupait quatre colonnes au lieu d'une.
+              Les banques, elles, sont un `select` depuis le début : aucune ne
+              s'est fragmentée. On aligne le mobile money dessus.
+              Le pays est un champ séparé : il n'a pas à figurer dans le nom. */}
+          <select
             value={attrs.banque ?? ""}
             onChange={(e) => setAttr("banque", e.target.value)}
-            placeholder="Ex. Wave, Orange Money…"
             className={inputCls}
-          />
-          <datalist id={MM_LIST_ID}>
+          >
+            <option value="">— Choisir —</option>
             {MOBILE_MONEY_PROVIDERS.map((m) => (
-              <option key={m} value={m} />
+              <option key={m} value={m}>
+                {m}
+              </option>
             ))}
-          </datalist>
+            {/* Conserve une valeur héritée hors liste, comme pour les banques :
+                une fiche ancienne reste lisible tant qu'elle n'est pas reprise. */}
+            {attrs.banque && !MOBILE_MONEY_PROVIDERS.includes(attrs.banque) && (
+              <option value={attrs.banque}>{attrs.banque} (hors liste)</option>
+            )}
+          </select>
         </label>
       )}
 
@@ -146,11 +161,23 @@ export default function TreasuryFields({
 
       <label className="flex flex-col gap-1">
         <span className="text-[10px] uppercase tracking-wider text-slate-500">Type de compte</span>
+        {/* AUCUN DÉFAUT IMPLICITE.
+            Ce menu affichait « Encaissement » dès que le canal était mobile
+            money, alors que `onChange` ne se déclenche QUE sur changement : le
+            gérant voyait la bonne valeur, l'enregistrait, et rien ne partait en
+            base. D'où seize comptes nommés « … ENCAISSEMENT » sans aucun
+            `typeCompte`, et pas un seul encaissement au point de trésorerie —
+            tandis que les décaissements, eux, passaient, puisqu'il fallait
+            cliquer pour les choisir.
+            Un menu ne doit jamais montrer une valeur qu'il n'écrit pas : à
+            défaut de choix, on affiche « à préciser » et la fiche se signale
+            comme incomplète. */}
         <select
-          value={attrs.typeCompte ?? (canal === "banque" ? "courant" : "encaissement")}
+          value={attrs.typeCompte ?? ""}
           onChange={(e) => setAttr("typeCompte", e.target.value)}
           className={inputCls}
         >
+          <option value="">— à préciser —</option>
           {canal === "banque" && (
             <>
               <option value="courant">Compte courant</option>

@@ -13,6 +13,8 @@ import AllocationPanel from "./AllocationPanel";
 import PropositionPanel from "./PropositionPanel";
 import OperationsPanel from "./OperationsPanel";
 import AnticipationPanel from "./AnticipationPanel";
+import TresoreriePanel from "./TresoreriePanel";
+import type { PointTresorerie } from "@/app/gestion-portefeuille/tresorerie-types";
 import type { TableauAllocation } from "@/app/gestion-portefeuille/allocation-types";
 import type { PlanOperations } from "@/app/gestion-portefeuille/operations-types";
 import type { TableauProposition } from "@/app/gestion-portefeuille/proposition-types";
@@ -35,6 +37,7 @@ const MANAGE_TABS = [
   "Portefeuille",
   "Anticipations de cours",
   "Référentiel titres",
+  "Gestion de trésorerie",
   "Valeur liquidative",
   "Analyse de performance",
   "Reporting",
@@ -57,6 +60,7 @@ export default function FundManager({
   initialOperations,
   initialAnticipations,
   initialProposition,
+  initialTresorerie,
 }: {
   fund: FundRecord;
   initialPortfolios?: PortfolioSnapshot[];
@@ -65,6 +69,7 @@ export default function FundManager({
   initialOperations?: PlanOperations;
   initialAnticipations?: TableauAnticipation;
   initialProposition?: TableauProposition;
+  initialTresorerie?: PointTresorerie | null;
 }) {
   const [tab, setTab] = useState<(typeof MANAGE_TABS)[number]>("Vue d'ensemble");
   const [sousOnglet, setSousOnglet] =
@@ -116,6 +121,7 @@ export default function FundManager({
             t === "Portefeuille" ||
             t === "Anticipations de cours" ||
             t === "Référentiel titres" ||
+            t === "Gestion de trésorerie" ||
             t === "Valeur liquidative" ||
             t === "Analyse de performance";
           if (!enabled) {
@@ -259,6 +265,11 @@ export default function FundManager({
 
       {/* Référentiel titres (propre à ce fonds) */}
       {tab === "Référentiel titres" && <SecuritiesReferential fundId={fund.id} />}
+
+      {/* Point de trésorerie : soldes bancaires, engagements et flux attendus */}
+      {tab === "Gestion de trésorerie" && (
+        <TresoreriePanel point={initialTresorerie ?? null} />
+      )}
 
       {/* Historique de valeur liquidative / actif net */}
       {tab === "Valeur liquidative" && <NavPanel fundId={fund.id} initialHistory={initialNav} />}

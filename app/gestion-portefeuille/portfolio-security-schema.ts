@@ -120,8 +120,12 @@ const TYPE_COMPTE: readonly FieldOption[] = [
   { value: "autre", label: "Autre" },
 ];
 
-// Principaux émetteurs de monnaie électronique / mobile money en UEMOA
-// (suggestions ; saisie libre possible).
+// Émetteurs de monnaie électronique et agrégateurs de paiement employés en
+// UEMOA. LISTE FERMÉE, comme celle des banques : le nom de l'établissement est
+// la clef d'agrégation du point de trésorerie, et une saisie libre la brise.
+// « MTN CI », « MTN BJ », « MTN BENIN » et « MTN Mobile Money (MoMo) »
+// désignaient le même opérateur sur quatre colonnes distinctes — le pays est
+// un champ à part, il n'a rien à faire dans ce nom.
 export const MOBILE_MONEY_PROVIDERS: readonly string[] = [
   "Orange Money",
   "MTN Mobile Money (MoMo)",
@@ -134,6 +138,9 @@ export const MOBILE_MONEY_PROVIDERS: readonly string[] = [
   "Bizao",
   "E-Money",
   "InTouch",
+  "Best Cash",
+  "Cyber Source",
+  "PAPS",
 ];
 
 // Banques et établissements de crédit agréés dans l'UMOA par pays.
