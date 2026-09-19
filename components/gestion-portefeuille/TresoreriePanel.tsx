@@ -40,6 +40,21 @@ function classeLigne(l: { nature: LigneTresorerie["nature"]; source: LigneTresor
   return l.source === "a_alimenter" ? "text-slate-400" : "text-slate-700";
 }
 
+/**
+ * Largeurs du tableau, en pixels.
+ *
+ * En pixels et non en `rem` : ces nombres servent aussi à CALCULER la largeur
+ * de la table, et un calcul mêlant unités relatives et absolues serait faux
+ * dès que la taille de police racine change.
+ *
+ * 120 px pour une colonne d'établissement : le plus long montant des
+ * inventaires, « -220 180 967 », occupe environ 90 px en tabulaire de 11 px,
+ * padding compris. Le reste est la marge.
+ */
+const LARGEUR_POSTE = 256;
+const LARGEUR_COLONNE = 120;
+const LARGEUR_TOTAL = 128;
+
 export default function TresoreriePanel({ point }: { point: PointTresorerie | null }) {
   if (!point) {
     return (
@@ -183,22 +198,32 @@ function Contenu({ point }: { point: PointTresorerie }) {
 
       <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
         <div className="overflow-x-auto">
-          {/* LARGEURS IMPOSEES.
-              Sans `table-fixed`, le navigateur dimensionne chaque colonne sur
-              son contenu : « UBA » tenait en quelques pixels quand « Coris Bank
+          {/* LARGEURS IMPOSEES, EN PIXELS ET EN DUR.
+              Sans contrainte, le navigateur dimensionne chaque colonne sur son
+              contenu : « UBA » tenait en quelques pixels quand « Coris Bank
               International - Sénégal (CBI-Sénégal) » en prenait dix fois plus,
               et les montants d'une même ligne ne s'alignaient sur rien. Or un
-              point de trésorerie se lit en balayant une ligne du regard.
-              Le `colgroup` fixe une largeur unique pour toutes les colonnes
-              d'établissement ; le poste et le total, qui ne sont pas du même
-              ordre, gardent la leur. */}
-          <table className="text-[11px] border-collapse table-fixed">
+              point de trésorerie se lit en balayant la ligne du regard.
+
+              LA LARGEUR DE LA TABLE EST CALCULEE, pas laissée à « auto ».
+              C'est ce qui manquait à la première tentative : en disposition
+              `fixed`, une table de largeur auto se cale sur son conteneur puis
+              redistribue l'espace entre les colonnes — les largeurs du
+              `colgroup` n'étaient plus que des suggestions, et rien ne
+              s'harmonisait. En donnant à la table exactement la somme de ses
+              colonnes, il n'y a plus rien à redistribuer. Le conteneur parent
+              défile horizontalement, ce qui est de toute façon nécessaire
+              au-delà d'une dizaine d'établissements. */}
+          <table
+            className="text-[11px] border-collapse table-fixed"
+            style={{ width: LARGEUR_POSTE + point.etablissements.length * LARGEUR_COLONNE + LARGEUR_TOTAL }}
+          >
             <colgroup>
-              <col className="w-64" />
+              <col style={{ width: LARGEUR_POSTE }} />
               {point.etablissements.map((e) => (
-                <col key={e.cle} className="w-[7.5rem]" />
+                <col key={e.cle} style={{ width: LARGEUR_COLONNE }} />
               ))}
-              <col className="w-32" />
+              <col style={{ width: LARGEUR_TOTAL }} />
             </colgroup>
             <thead className="bg-slate-100 text-slate-600">
               {/* Regroupement : dépositaires, espèce, mobile money. Une colonne
@@ -232,7 +257,7 @@ function Contenu({ point }: { point: PointTresorerie }) {
                 <th className="border-l border-slate-300 bg-slate-200/70" />
               </tr>
               <tr>
-                <th className="sticky left-0 z-10 bg-slate-100 text-left px-3 py-2 font-medium border-r border-slate-200 min-w-[16rem]">
+                <th className="sticky left-0 z-10 bg-slate-100 text-left px-3 py-2 font-medium border-r border-slate-200">
                   Poste
                 </th>
                 {point.etablissements.map((e) => (
