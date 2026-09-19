@@ -234,7 +234,17 @@ function CustomSecurityForm({
   const isLink = isCote || kind === "opcvm";
   const detailFields = fields.filter((f) => f.key !== "cote");
 
-  const buildInput = (): CustomSecurityInput => ({ kind, code, name, currency, attributes: attrs });
+  // `initial.name` porte le libellé de l'inventaire tel qu'il a ouvert ce
+  // formulaire. On le transmet même si le gérant a renommé le titre : c'est la
+  // clef que le prochain import présentera.
+  const buildInput = (): CustomSecurityInput => ({
+    kind,
+    code,
+    name,
+    currency,
+    attributes: attrs,
+    libelleInventaire: initial.name,
+  });
 
   // Crée effectivement le titre personnalisé (après vérif / choix explicite).
   const doCreate = () => {
@@ -1047,9 +1057,11 @@ export default function PortfolioPanel({
           )}
 
           {unmatchedCount > 0 && (
-            <p className="text-[11px] text-amber-600 bg-amber-50 border border-amber-200 rounded px-3 py-2">
-              {unmatchedCount} ligne(s) au code non reconnu. Clique sur « Créer le titre » pour les
-              rattacher, ou enregistre tel quel.
+            <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+              <strong>{unmatchedCount} ligne(s) absente(s) du référentiel.</strong> Elles y seront
+              ajoutées à l&apos;enregistrement, sous leur libellé d&apos;inventaire — tu n&apos;auras
+              rien à recréer aux imports suivants. Clique sur « Créer le titre » seulement si tu veux
+              dès maintenant les lier au référentiel du site ou préciser leurs caractéristiques.
             </p>
           )}
 

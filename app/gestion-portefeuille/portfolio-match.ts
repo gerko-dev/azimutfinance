@@ -54,7 +54,17 @@ function identifiantsDuLibelle(label: string): string[] {
 
 // Normalisation "nom" tolérante (accents, ponctuation) pour les OPCVM.
 const DIACRITICS = /[̀-ͯ]/g;
-function normName(s: string): string {
+/**
+ * Nom normalise : minuscules, sans accents, ponctuation ramenee a un espace.
+ *
+ * EXPORTE parce que l'appariement par nom exact ne doit avoir qu'UNE
+ * definition. Le point de tresorerie s'en sert pour retrouver, a la lecture, la
+ * fiche d'une position dont le lien manque — un import anterieur a la creation
+ * de la fiche laisse `customSecurityId` a null, et ce null ne se repare jamais
+ * tout seul. Deux normalisations divergentes feraient reconnaitre une ligne a
+ * l'import et pas a la lecture, ou l'inverse.
+ */
+export function normName(s: string): string {
   return (s ?? "")
     .normalize("NFD")
     .replace(DIACRITICS, "")

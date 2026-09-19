@@ -87,6 +87,16 @@ export type CustomSecurityInput = {
   name: string;
   currency: string;
   attributes: Record<string, string>;
+  /** Libellé EXACT de la ligne d'inventaire à l'origine de la création.
+   *
+   *  Il est conservé en alias sur la fiche, et c'est ce qui rend le travail
+   *  définitif : le gérant renomme presque toujours le titre en adoptant la
+   *  dénomination officielle du site — « FCTC ZAKA RMBS NSIA BANQUE CI7,00%
+   *  2025-2036 » — alors que son état porte « EMPRUNT OBLIGATAIRE FCTC ZAKA
+   *  RMBS NSIA BANQUE 7,00% 2025-2036 (20.12.2025) ». Sans l'alias, le
+   *  rapprochement par nom exact échoue au prochain import et la ligne
+   *  redemande une création, indéfiniment. */
+  libelleInventaire?: string;
 };
 
 // Correspondance trouvée dans le référentiel du site (pour proposer une liaison

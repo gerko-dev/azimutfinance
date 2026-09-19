@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/lib/admin/types";
 import { parseInventoryBuffer, type RawPosition } from "./portfolio-parse";
-import { matchPositions, lookupReference, siteSecurityAttributes } from "./portfolio-match";
+import { matchPositions, lookupReference, siteSecurityAttributes, normName } from "./portfolio-match";
 import { loadCustomSecurities } from "./portfolio-data";
 import { loadFunds } from "@/lib/fcp";
 import {
@@ -311,6 +311,25 @@ export async function createCustomSecurityAction(
   const currency = CURRENCIES.includes(input.currency) ? input.currency : "XOF";
 
   const attributes = buildAttributes(kind, input.attributes);
+
+  // Le libellé de l'inventaire entre en ALIAS, TOUJOURS.
+  //
+  // Sans le dernier argument à vide, `ajouterAlias` écartait l'alias dès qu'il
+  // coïncidait avec le Nom — or le formulaire pré-remplit justement le Nom avec
+  // le libellé d'inventaire. Le titre se créait donc sans aucun alias, et la
+  // colonne du référentiel affichait « aucun ».
+  //
+  // Le doublon apparent n'en est pas un : Nom et Alias ne jouent pas le même
+  // rôle. Le Nom est libre — le gérant le remplace souvent par la dénomination
+  // officielle du site — tandis que l'Alias est la CLEF de rapprochement et
+  // doit survivre à ce renommage. Les lier revenait à perdre la clef au premier
+  // changement de nom.
+  const libelleInventaire = (input.libelleInventaire ?? "").trim();
+  if (libelleInventaire) {
+    const alias = ajouterAlias(attributes, libelleInventaire, []);
+    if (alias !== null) attributes.alias = alias;
+  }
+
   const isin = (attributes.isin ?? "").trim();
 
   const cols = "id, kind, code, name, isin, currency, attributes";
@@ -873,15 +892,17 @@ async function memoriserLibelles(
   ownerId: string,
   positions: ImportedPosition[],
 ): Promise<number> {
+  const normCle = (s: string): string => s.trim().toLowerCase();
+
   // Un seul libellé par titre et par import : un inventaire ne nomme pas deux
   // fois la même ligne différemment.
   const parTitre = new Map<string, string>();
-  // Lignes rapprochées via le référentiel de MARCHÉ : elles n'ont pas de
-  // customSecurityId, mais l'enregistrement vient de leur créer un titre
-  // portant leur symbole. On les retrouve par ce symbole, sans quoi seules les
-  // lignes déjà locales apprendraient leur libellé — et un titre coté dont
-  // l'export change le nom redeviendrait non reconnu.
-  const parCode = new Map<string, string>();
+  // Lignes rapprochées via le référentiel de MARCHÉ : elles n'ont PAS de
+  // customSecurityId — la liaison au site ne crée pas de fiche locale — et ce
+  // sont justement celles dont le libellé doit être mémorisé. On les retrouve
+  // par leur code, ou à défaut par leur nom exact quand l'inventaire ne porte
+  // pas de colonne symbole (cas de nos propres états).
+  const parCle = new Map<string, string>();
   for (const p of positions) {
     const libelle = (p.rawLabel ?? "").trim();
     if (libelle.length < 4) continue;
@@ -889,37 +910,32 @@ async function memoriserLibelles(
       if (!parTitre.has(p.customSecurityId)) parTitre.set(p.customSecurityId, libelle);
       continue;
     }
-    const code = (p.rawCode ?? "").trim().toLowerCase();
-    if (code && !parCode.has(code)) parCode.set(code, libelle);
+    for (const cle of [normCle(p.rawCode ?? ""), normName(libelle)]) {
+      if (cle && !parCle.has(cle)) parCle.set(cle, libelle);
+    }
   }
-  if (parTitre.size === 0 && parCode.size === 0) return 0;
+  if (parTitre.size === 0 && parCle.size === 0) return 0;
 
-  const requetes = [];
-  if (parTitre.size > 0) {
-    requetes.push(
-      supabase
-        .from("custom_securities")
-        .select("id, code, name, attributes")
-        .eq("owner_id", ownerId)
-        .in("id", [...parTitre.keys()]),
-    );
-  }
-  if (parCode.size > 0) {
-    requetes.push(
-      supabase
-        .from("custom_securities")
-        .select("id, code, name, attributes")
-        .eq("owner_id", ownerId)
-        .in("code", [...parCode.keys()]),
-    );
-  }
-  const reponses = await Promise.all(requetes);
-  const lignes = reponses.flatMap((r) => (r.data ?? []) as Record<string, unknown>[]);
-  // Une même ligne peut remonter deux fois si les deux requêtes la ramènent.
-  const data = [...new Map(lignes.map((l) => [String(l.id), l])).values()];
+  // UNE SEULE LECTURE, ET LE RAPPROCHEMENT EN MÉMOIRE.
+  //
+  // La version précédente filtrait côté serveur : `.in("code", [...clefs])`
+  // avec des clefs MISES EN MINUSCULES. Or ce filtre est sensible à la casse —
+  // `in.(fcags.o2)` ne ramène pas la ligne dont le code est `FCAGS.O2`. Comme
+  // presque tous les codes portent des majuscules, cette branche n'a JAMAIS
+  // rien trouvé : les titres liés au site — les seuls qu'elle avait pour
+  // mission de servir — repartaient sans alias, et l'import suivant les
+  // redemandait à la création. C'est précisément le cas du FCAGS.O2.
+  //
+  // Le référentiel d'un gérant tient en quelques centaines de lignes, et le
+  // bloc de création juste au-dessus le lit déjà en entier : on le relit ici
+  // sans filtre et on compare en mémoire, casse normalisée des deux côtés.
+  const { data } = await supabase
+    .from("custom_securities")
+    .select("id, code, name, attributes")
+    .eq("owner_id", ownerId);
 
   let ecrits = 0;
-  for (const brut of data) {
+  for (const brut of (data ?? []) as Record<string, unknown>[]) {
     const row = brut as unknown as {
       id: string;
       code: string;
@@ -927,12 +943,23 @@ async function memoriserLibelles(
       attributes: Record<string, string> | null;
     };
     const libelle =
-      parTitre.get(row.id) ?? parCode.get((row.code ?? "").trim().toLowerCase());
+      parTitre.get(row.id) ??
+      parCle.get(normCle(row.code ?? "")) ??
+      parCle.get(normName(row.name ?? ""));
     if (!libelle) continue;
     const attrs = row.attributes ?? {};
-    // Le nom et le code sont déjà des clés de rapprochement : les répéter en
-    // alias gonflerait le champ sans rien reconnaître de plus.
-    const alias = ajouterAlias(attrs, libelle, [row.name ?? "", row.code ?? ""]);
+    // L'ALIAS EST ENREGISTRE MEME S'IL COINCIDE AVEC LE NOM.
+    //
+    // La version precedente l'ecartait dans ce cas, au motif que le nom est
+    // deja une clef de rapprochement — vrai a l'instant T, faux des le
+    // lendemain. Le gerant renomme presque toujours le titre en adoptant la
+    // denomination officielle du site ; le nom cesse alors de correspondre a
+    // l'inventaire, et comme aucun alias n'avait ete conserve, la ligne
+    // redevenait « a creer » import apres import.
+    //
+    // Le nom est LIBRE, l'alias est la CLEF : les lier revenait a perdre la
+    // clef au premier changement de nom.
+    const alias = ajouterAlias(attrs, libelle, []);
     if (alias === null) continue;
     const { error } = await supabase
       .from("custom_securities")
@@ -1027,28 +1054,88 @@ export async function savePortfolioAction(
   // TOUS les titres de l'inventaire à ce fonds via fund_securities. Espèces
   // exclues. Best-effort : n'échoue pas l'enregistrement du portefeuille.
   try {
-    // 1 titre par code (dédup intra-lot). On exclut la trésorerie NON convertie
-    // (matchKind "cash") ; les comptes explicitement enregistrés en titres
-    // (matchKind "custom", section tresorerie) sont conservés et rattachés.
+    // UNE FICHE PAR LIGNE D'INVENTAIRE, sans exception.
+    //
+    // La trésorerie « non convertie » (matchKind "cash") était écartée d'office.
+    // C'est ce qui empêchait DEPOSIT_OPCVM001, MOOV MONEY DECAISSEMENT et leurs
+    // semblables d'entrer au référentiel : ils n'y entraient JAMAIS, et l'écran
+    // les redemandait à chaque import. Or le module a un formulaire dédié à ces
+    // comptes — canal, pays, banque, nature, sens — qui n'a de sens que s'ils y
+    // figurent.
+    //
+    // La règle est désormais celle du gérant, sans exception : tout libellé
+    // d'inventaire dont le NOM EXACT est absent du référentiel y est ajouté,
+    // sous ce nom-là. La liaison au site reste possible ensuite ; elle ne
+    // conditionne pas l'entrée au référentiel.
+    // CLEF DE CROISEMENT : le code quand il existe, le NOM EXACT sinon.
+    //
+    // Ne s'appuyer que sur le code écartait en silence toute ligne qui n'en
+    // porte pas — et nos propres inventaires n'ont pas de colonne symbole pour
+    // les comptes de trésorerie. Six comptes (DEPOSIT_OPCVM001, MOOV MONEY
+    // DECAISSEMENT, MTN CI 2 OPCVM001…) n'entraient donc JAMAIS au référentiel :
+    // `if (key && …)` les jetait avant examen, à chaque import, indéfiniment.
+    // Le gérant les voyait « non reconnus » et n'avait aucun moyen de les faire
+    // entrer, puisque c'est précisément l'import qui alimente le référentiel.
+    const cleDe = (p: ImportedPosition): string => {
+      const code = (p.rawCode ?? "").trim().toLowerCase();
+      return code || normName(p.rawLabel ?? "");
+    };
+
     const byCode = new Map<string, ImportedPosition>();
     for (const p of input.positions) {
-      if (p.matchKind === "cash") continue;
-      const key = (p.rawCode ?? "").trim().toLowerCase();
+      const key = cleDe(p);
       if (key && !byCode.has(key)) byCode.set(key, p);
     }
 
     if (byCode.size > 0) {
-      // Titres déjà présents au niveau utilisateur (code -> id).
+      // Titres déjà présents au niveau utilisateur, indexés par les DEUX clefs :
+      // un titre créé jadis avec un code doit rester reconnu quand l'inventaire
+      // ne le porte plus, et inversement.
       const { data: existing } = await supabase
         .from("custom_securities")
-        .select("id, code")
+        .select("id, code, name")
         .eq("owner_id", user.id);
       const idByCode = new Map<string, string>();
-      for (const r of (existing ?? []) as { id: string; code: string }[]) {
-        idByCode.set((r.code ?? "").trim().toLowerCase(), r.id);
+      for (const r of (existing ?? []) as { id: string; code: string; name: string }[]) {
+        const code = (r.code ?? "").trim().toLowerCase();
+        if (code) idByCode.set(code, r.id);
+        const nom = normName(r.name ?? "");
+        if (nom && !idByCode.has(nom)) idByCode.set(nom, r.id);
       }
 
       // Insère les titres manquants.
+      // TOUTE FICHE DOIT PORTER UN CODE DISTINCT.
+      //
+      // L'index unique de la table porte sur (owner_id, lower(code)) : la
+      // chaine vide y est une valeur comme une autre, donc UN SEUL titre par
+      // gerant peut etre sans code. Or nos propres inventaires ne portent pas
+      // de colonne symbole pour les FCP ni pour la tresorerie — deux lignes
+      // arrivaient avec un code vide, Postgres rejetait l'INSERT, et comme il
+      // porte sur le LOT ENTIER, les autres fiches du meme import tombaient
+      // avec elles. C'est ainsi que TPCI 5,70% 2026-2033, FCP BRIDGE CONFORT
+      // et FCP BRIDGE INSTITUTIONNEL se perdaient a chaque enregistrement, en
+      // compagnie des deux lignes fautives.
+      //
+      // A defaut de symbole, on en derive un du nom : lisible, stable d'un
+      // import a l'autre, et que le gerant reste libre de corriger. Le
+      // rapprochement, lui, ne depend pas du code mais de l'alias.
+      const codesPris = new Set<string>();
+      for (const r of (existing ?? []) as { code: string }[]) {
+        const c = (r.code ?? "").trim().toLowerCase();
+        if (c) codesPris.add(c);
+      }
+      for (const p of byCode.values()) {
+        const c = (p.rawCode ?? "").trim().toLowerCase();
+        if (c) codesPris.add(c);
+      }
+      const codeDeSecours = (nom: string): string => {
+        const base = normName(nom).replace(/ /g, "").toUpperCase().slice(0, 24) || "TITRE";
+        let code = base;
+        for (let n = 2; codesPris.has(code.toLowerCase()); n++) code = `${base}-${n}`;
+        codesPris.add(code.toLowerCase());
+        return code;
+      };
+
       const toInsert: Record<string, unknown>[] = [];
       for (const [key, p] of byCode) {
         if (idByCode.has(key)) continue;
@@ -1084,13 +1171,19 @@ export async function savePortfolioAction(
         const attributs: Record<string, string> = known
           ? { source: p.matchKind, refId: p.matchId ?? "" }
           : {};
-        const aliasSite = ajouterAlias(attributs, nomSite, [nomInventaire]);
-        if (aliasSite !== null) attributs.alias = aliasSite;
+        // L'ALIAS porte le nom d'inventaire — c'est LUI la clef de
+        // rapprochement au prochain import, et il doit survivre a tout
+        // renommage ulterieur du titre. Le nom officiel du site y entre aussi,
+        // pour le cas ou un export futur emploierait cette denomination.
+        for (const libelle of [nomInventaire, nomSite]) {
+          const alias = ajouterAlias(attributs, libelle, []);
+          if (alias !== null) attributs.alias = alias;
+        }
 
         toInsert.push({
           owner_id: user.id,
           kind: SECTIONS.includes(p.section) ? p.section : "autre",
-          code: (p.rawCode ?? "").trim(),
+          code: (p.rawCode ?? "").trim() || codeDeSecours(nomInventaire),
           name: nomInventaire,
           isin: linkedIsin ? (p.matchId ?? "") : "",
           currency: "XOF",
@@ -1098,12 +1191,52 @@ export async function savePortfolioAction(
         });
       }
       if (toInsert.length) {
-        const { data: inserted } = await supabase
+        // UN ECHEC DE LOT NE DOIT PAS EMPORTER LES FICHES SAINES.
+        //
+        // Un INSERT multi-lignes est atomique : une seule ligne en conflit et
+        // tout le lot est perdu. On garde le lot pour sa rapidite — c'est le
+        // cas courant — mais on retombe ligne a ligne des qu'il echoue, de
+        // sorte qu'une fiche fautive ne coute qu'elle-meme. Et l'erreur est
+        // tracee : c'est son silence qui a masque la perte pendant plusieurs
+        // imports.
+        const cols = "id, code, name";
+        const { data: lot, error: errLot } = await supabase
           .from("custom_securities")
           .insert(toInsert)
-          .select("id, code");
-        for (const r of (inserted ?? []) as { id: string; code: string }[]) {
-          idByCode.set((r.code ?? "").trim().toLowerCase(), r.id);
+          .select(cols);
+        let inserted = lot;
+        if (errLot) {
+          console.error(
+            `[référentiel] insertion groupée refusée (${toInsert.length} fiche(s)) : ` +
+              `${errLot.message} — reprise ligne à ligne`,
+          );
+          const unes: { id: string; code: string; name: string }[] = [];
+          for (const fiche of toInsert) {
+            const { data: une, error: errUne } = await supabase
+              .from("custom_securities")
+              .insert(fiche)
+              .select(cols)
+              .single();
+            if (errUne) {
+              console.error(
+                `[référentiel] fiche « ${String(fiche.name)} » (code ${String(
+                  fiche.code,
+                )}) non créée : ${errUne.message}`,
+              );
+              continue;
+            }
+            if (une) unes.push(une as { id: string; code: string; name: string });
+          }
+          inserted = unes;
+        }
+        // Meme double indexation qu'a la lecture : un titre insere SANS code ne
+        // se retrouverait pas par lui, et son rattachement au fonds serait
+        // perdu juste apres sa creation.
+        for (const r of (inserted ?? []) as { id: string; code: string; name: string }[]) {
+          const code = (r.code ?? "").trim().toLowerCase();
+          if (code) idByCode.set(code, r.id);
+          const nom = normName(r.name ?? "");
+          if (nom && !idByCode.has(nom)) idByCode.set(nom, r.id);
         }
       }
 
@@ -1131,8 +1264,16 @@ export async function savePortfolioAction(
     // C'est ce qui rend le travail de rattachement DÉFINITIF : fait une fois,
     // il vaut pour tous les imports suivants, quel que soit le libellé.
     await memoriserLibelles(supabase, user.id, input.positions);
-  } catch {
-    // catalogage best-effort : ignoré en cas d'erreur
+  } catch (e) {
+    // Best-effort : le catalogage ne doit pas faire échouer l'enregistrement du
+    // portefeuille. Mais l'avaler SANS TRACE rendait tout diagnostic
+    // impossible — c'est ce silence qui a masqué le filtre sensible à la casse
+    // ci-dessus pendant plusieurs imports.
+    console.error(
+      `[référentiel] catalogage des libellés interrompu : ${
+        e instanceof Error ? e.message : String(e)
+      }`,
+    );
   }
 
   revalidatePath(`/gestion-portefeuille/fonds/${fundId}`);

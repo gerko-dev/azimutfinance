@@ -876,6 +876,15 @@ export default function SecuritiesReferential({ fundId }: { fundId: string }) {
                 <tr className="text-[11px] text-slate-500 border-b border-slate-200 bg-slate-50">
                   <th className="px-3 py-2 text-left font-medium">Code</th>
                   <th className="px-3 py-2 text-left font-medium">Nom</th>
+                  <th className="px-3 py-2 text-left font-medium">
+                    Alias
+                    <span
+                      className="block text-[9px] font-normal text-slate-400"
+                      title="Libellés sous lesquels ce titre apparaît dans les inventaires importés. C'est par eux que le rapprochement se fait au prochain import."
+                    >
+                      libellés d&apos;inventaire
+                    </span>
+                  </th>
                   <th className="px-3 py-2 text-left font-medium">Type</th>
                   <th className="px-3 py-2 text-left font-medium">ISIN</th>
                   <th className="px-3 py-2 text-left font-medium">Devise</th>
@@ -892,6 +901,35 @@ export default function SecuritiesReferential({ fundId }: { fundId: string }) {
                   <tr key={sc.id} className="border-b border-slate-200 last:border-0">
                     <td className="px-3 py-2 font-mono text-slate-800">{sc.code}</td>
                     <td className="px-3 py-2 text-slate-600">{sc.name}</td>
+                    {/* L'alias est la CLEF de rapprochement : un titre sans
+                        alias sera redemandé à la création au prochain import,
+                        même s'il figure déjà ici. Le signaler évite de chercher
+                        ailleurs une cause qui est là. */}
+                    <td className="px-3 py-2 text-slate-500">
+                      {(() => {
+                        const alias = (sc.attributes?.alias ?? "")
+                          .split("|")
+                          .map((a) => a.trim())
+                          .filter(Boolean);
+                        if (alias.length === 0)
+                          return (
+                            <span
+                              className="text-[10px] text-amber-600"
+                              title="Aucun libellé d'inventaire mémorisé : ce titre sera redemandé à la création au prochain import."
+                            >
+                              aucun
+                            </span>
+                          );
+                        return (
+                          <span className="text-[11px]" title={alias.join(" · ")}>
+                            {alias[0]}
+                            {alias.length > 1 && (
+                              <span className="text-slate-400"> +{alias.length - 1}</span>
+                            )}
+                          </span>
+                        );
+                      })()}
+                    </td>
                     <td className="px-3 py-2 text-slate-500">{KIND_LABEL[sc.kind] ?? sc.kind}</td>
                     <td className="px-3 py-2 font-mono text-slate-500">{sc.isin || "—"}</td>
                     <td className="px-3 py-2 text-slate-500">{sc.currency}</td>
