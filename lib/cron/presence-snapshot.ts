@@ -1,8 +1,8 @@
+import "server-only";
+
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
-export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
 
 /**
  * GET /api/cron/presence-snapshot
@@ -17,7 +17,7 @@ export const runtime = "nodejs";
  *
  * Pré-requis : la migration supabase/presence_v2.sql doit avoir été appliquée.
  */
-export async function GET(req: Request) {
+export async function snapshotPresence(req: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret) {
     return NextResponse.json(

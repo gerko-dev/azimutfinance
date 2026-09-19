@@ -1,3 +1,5 @@
+import "server-only";
+
 import { NextResponse } from "next/server";
 import {
   getBrvmIndicesSnapshot,
@@ -5,9 +7,8 @@ import {
   refreshBrvmIndicesSnapshot,
 } from "@/lib/brvm/liveIndices";
 
-export const dynamic = "force-dynamic";
 
-export async function GET(req: Request) {
+export async function indicesBrvm(req: Request) {
   const url = new URL(req.url);
   const refresh = url.searchParams.get("refresh") === "1";
   const debug = url.searchParams.get("debug") === "1";

@@ -1,3 +1,5 @@
+import "server-only";
+
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { sendEmail, getAppUrl } from "@/lib/email/resend";
@@ -6,8 +8,6 @@ import { loadFunds, type Fund } from "@/lib/fcp";
 import type { Alert, AlertType } from "@/lib/alerts/types";
 import { describeAlert } from "@/lib/alerts/types";
 
-export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
 
 /**
  * GET /api/cron/evaluate-alerts
@@ -31,7 +31,7 @@ const COOLDOWN_HOURS = 24; // ne pas re-trigger la meme alerte avant 24h
 
 type AlertRow = Alert & { profile_email?: string | null; full_name?: string | null };
 
-export async function GET(req: Request) {
+export async function evaluerAlertes(req: Request) {
   // 1. Auth
   const authHeader = req.headers.get("authorization") ?? "";
   const expected = `Bearer ${process.env.CRON_SECRET ?? ""}`;

@@ -1,11 +1,11 @@
+import "server-only";
+
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { sendEmail } from "@/lib/email/resend";
 import { premiumExpiringSoonEmail } from "@/lib/email/templates";
 import type { PlanCode } from "@/lib/premium/plans";
 
-export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
 
 /**
  * GET /api/cron/premium-expiry-reminder
@@ -38,7 +38,7 @@ type ProfileRow = {
   full_name: string | null;
 };
 
-export async function GET(req: Request) {
+export async function relancerAbonnementsExpirants(req: Request) {
   // ---- Auth ----
   const secret = process.env.CRON_SECRET;
   if (!secret) {

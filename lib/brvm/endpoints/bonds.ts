@@ -1,32 +1,33 @@
+import "server-only";
+
 import { NextResponse } from "next/server";
 import {
-  getBrvmSnapshot,
-  getLastBrvmDiag,
-  refreshBrvmSnapshot,
-} from "@/lib/brvm/liveQuotes";
+  getBrvmBondsSnapshot,
+  getLastBrvmBondsDiag,
+  refreshBrvmBondsSnapshot,
+} from "@/lib/brvm/liveBonds";
 
-export const dynamic = "force-dynamic";
 
 /**
- * GET /api/brvm-quotes — snapshot des cours actions BRVM en direct.
+ * GET /api/brvm-bonds — snapshot des cours obligations BRVM en direct.
  *
  * Query :
- *   ?code=SNTS  → renvoie un seul quote
- *   ?refresh=1  → force un refetch (bypass cache)
- *   ?debug=1    → ajoute des stats (nb quotes, premier code, etc.)
+ *   ?code=EOM.O10  → renvoie un seul quote (par mnemonique BRVM)
+ *   ?refresh=1     → force un refetch (bypass cache)
+ *   ?debug=1       → ajoute des stats
  */
-export async function GET(req: Request) {
+export async function obligationsBrvm(req: Request) {
   const url = new URL(req.url);
   const code = url.searchParams.get("code");
   const refresh = url.searchParams.get("refresh") === "1";
   const debug = url.searchParams.get("debug") === "1";
 
-  const snapshot = refresh ? await refreshBrvmSnapshot() : await getBrvmSnapshot();
+  const snapshot = refresh
+    ? await refreshBrvmBondsSnapshot()
+    : await getBrvmBondsSnapshot();
 
   if (code) {
-    const q = snapshot.quotes.find(
-      (qq) => qq.code === code.toUpperCase(),
-    );
+    const q = snapshot.quotes.find((qq) => qq.code === code.toUpperCase());
     return NextResponse.json(
       {
         fetchedAt: snapshot.fetchedAt,
@@ -38,7 +39,7 @@ export async function GET(req: Request) {
             totalQuotes: snapshot.quotes.length,
             firstCodes: snapshot.quotes.slice(0, 5).map((x) => x.code),
             askedCode: code.toUpperCase(),
-            lastFetchDiag: getLastBrvmDiag(),
+            lastFetchDiag: getLastBrvmBondsDiag(),
           },
         }),
       },
@@ -57,7 +58,7 @@ export async function GET(req: Request) {
           debug: {
             totalQuotes: snapshot.quotes.length,
             firstCodes: snapshot.quotes.slice(0, 5).map((x) => x.code),
-            lastFetchDiag: getLastBrvmDiag(),
+            lastFetchDiag: getLastBrvmBondsDiag(),
           },
         }
       : snapshot,

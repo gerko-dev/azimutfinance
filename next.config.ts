@@ -86,7 +86,7 @@ const ACTIFS_CHROMIUM = [
 // Le « [id] » de la route flash est echappe : entre crochets, picomatch y
 // verrait une classe de caracteres.
 const CLE_ROUTES_CHROMIUM =
-  "/{admin/rapports/{cotation,commodities,mtp}/pdf," +
+  "/{admin/rapports/\\[type\\]/\\[format\\]," +
   "admin/magazine/articles/\\[id\\]/flash," +
   "gestion-portefeuille/reporting/pdf}";
 

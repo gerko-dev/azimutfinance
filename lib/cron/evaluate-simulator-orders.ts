@@ -1,9 +1,9 @@
+import "server-only";
+
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getLatestPrices } from "@/lib/simulator/pricing";
 
-export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
 
 /**
  * GET /api/cron/evaluate-simulator-orders
@@ -19,7 +19,7 @@ export const runtime = "nodejs";
  *
  * Auth : header `Authorization: Bearer <CRON_SECRET>`.
  */
-export async function GET(req: Request) {
+export async function evaluerOrdresSimulateur(req: Request) {
   const authHeader = req.headers.get("authorization") ?? "";
   const expected = `Bearer ${process.env.CRON_SECRET ?? ""}`;
   if (!process.env.CRON_SECRET || authHeader !== expected) {
