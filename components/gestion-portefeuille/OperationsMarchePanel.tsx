@@ -41,6 +41,11 @@ import {
 import type { OperationAvecFonds } from "@/app/gestion-portefeuille/operations-marche-data";
 import type { OptionTitre } from "@/app/gestion-portefeuille/operations-marche-titres";
 import type { Partenaire } from "@/app/gestion-portefeuille/partenaires-types";
+import {
+  LIBELLES_BASE,
+  conventionDe,
+  type ParametresMarche,
+} from "@/app/gestion-portefeuille/parametres-marche-types";
 
 const fmt0 = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
 const montantFr = (v: number) => fmt0.format(Math.round(v));
@@ -50,10 +55,13 @@ const champ =
 const etiquette = "text-[10px] uppercase tracking-wider text-slate-500";
 const aide = "text-[9px] text-slate-400";
 
-/** Taux usuels d'une négociation d'actions à la BRVM, repris du classeur :
- *  0,4 % de courtage, 10 % de TPS SUR CE COURTAGE, 0,3 % BRVM/DC-BR.
- *  Les titres publics n'en supportent aucun. */
-const TAUX_ACTIONS = { courtage: 0.004, tps: 0.1, brvm: 0.003 };
+/** Courtage et TPS de repli, quand aucune SGI n'est encore choisie.
+ *
+ *  Les commissions de PLACE n'y figurent plus : elles viennent des paramètres
+ *  du gérant, et le courtage réel vient de la fiche de la SGI. Ces deux
+ *  nombres ne servent donc qu'à ne pas laisser le formulaire à zéro sur une
+ *  opération d'actions. */
+const TAUX_ACTIONS = { courtage: 0.004, tps: 0.1 };
 
 /** Libellé complet d'une option — c'est CE TEXTE que le navigateur recopie
  *  dans le champ quand on choisit une suggestion du `datalist`, et donc la
@@ -96,6 +104,7 @@ export default function OperationsMarchePanel({
   etatsInitiaux,
   titresInitiaux,
   sgi,
+  parametres,
 }: {
   fonds: { id: string; nom: string }[];
   operations: OperationAvecFonds[];
@@ -111,6 +120,9 @@ export default function OperationsMarchePanel({
   /** SGI actives, saisies dans Paramètres › Partenaires. Leur taux de
    *  courtage standard se reporte au choix. */
   sgi: Partenaire[];
+  /** Conventions de denouement et commissions de place, configurees dans
+   *  Parametres › Operations de marche. */
+  parametres: ParametresMarche;
 }) {
   const router = useRouter();
   const [enCours, demarrer] = useTransition();
@@ -132,6 +144,7 @@ export default function OperationsMarchePanel({
   const [tauxCourtage, setTauxCourtage] = useState("0");
   const [tauxTps, setTauxTps] = useState("0");
   const [tauxBrvm, setTauxBrvm] = useState("0");
+  const [tauxDcbr, setTauxDcbr] = useState("0");
   const [compteReglement, setCompteReglement] = useState("");
   const [note, setNote] = useState("");
   // Le dénouement est CALCULÉ mais reste modifiable : un règlement peut
@@ -231,7 +244,10 @@ export default function OperationsMarchePanel({
     const actions = suggere === "actions";
     setTauxCourtage(actions ? String(TAUX_ACTIONS.courtage) : "0");
     setTauxTps(actions ? String(TAUX_ACTIONS.tps) : "0");
-    setTauxBrvm(actions ? String(TAUX_ACTIONS.brvm) : "0");
+    // Les commissions de place viennent des PARAMETRES, et ne s'appliquent
+    // qu'au marche financier : les titres publics n'en supportent aucune.
+    setTauxBrvm(actions ? String(parametres.tauxBrvm) : "0");
+    setTauxDcbr(actions ? String(parametres.tauxDcbr) : "0");
     setDenouementManuel(null);
     oublierTitre();
     // L'intermédiaire change de nature avec le marché — une SGI d'un côté,
@@ -314,9 +330,10 @@ export default function OperationsMarchePanel({
     });
   };
 
+  const convention = conventionDe(parametres, instrument);
   const denouementCalcule = useMemo(
-    () => dateDenouement(dateOperation, instrument),
-    [dateOperation, instrument],
+    () => dateDenouement(dateOperation, conventionDe(parametres, instrument)),
+    [dateOperation, instrument, parametres],
   );
   const denouement = denouementManuel ?? denouementCalcule;
 
@@ -329,9 +346,10 @@ export default function OperationsMarchePanel({
         tauxCourtage: Number(tauxCourtage.replace(",", ".")) || 0,
         tauxTps: Number(tauxTps.replace(",", ".")) || 0,
         tauxBrvm: Number(tauxBrvm.replace(",", ".")) || 0,
+        tauxDcbr: Number(tauxDcbr.replace(",", ".")) || 0,
         interetsCourus,
       }),
-    [description, quantite, prix, tauxCourtage, tauxTps, tauxBrvm, interetsCourus],
+    [description, quantite, prix, tauxCourtage, tauxTps, tauxBrvm, tauxDcbr, interetsCourus],
   );
 
   const enregistrer = () => {
@@ -355,6 +373,7 @@ export default function OperationsMarchePanel({
         tauxCourtage: n(tauxCourtage),
         tauxTps: n(tauxTps),
         tauxBrvm: n(tauxBrvm),
+        tauxDcbr: n(tauxDcbr),
         interetsCourus,
         compteReglement,
         statut: "ok",
@@ -682,7 +701,7 @@ export default function OperationsMarchePanel({
               className={champ}
             />
             <span className={aide}>
-              {instrument === "actions" ? "J+2 ouvrés" : "J+0"}
+              J+{convention.jours} {LIBELLES_BASE[convention.base]}
               {denouementManuel && denouementManuel !== denouementCalcule && " · forcé"}
             </span>
           </Champ>
@@ -826,10 +845,19 @@ export default function OperationsMarchePanel({
             />
           </Champ>
 
-          <Champ label="Taux BRVM / DC-BR">
+          <Champ label="Commission BRVM">
             <input
               value={tauxBrvm}
               onChange={(e) => setTauxBrvm(e.target.value)}
+              inputMode="decimal"
+              className={`${champ} text-right tabular-nums`}
+            />
+          </Champ>
+
+          <Champ label="Commission DC/BR">
+            <input
+              value={tauxDcbr}
+              onChange={(e) => setTauxDcbr(e.target.value)}
               inputMode="decimal"
               className={`${champ} text-right tabular-nums`}
             />
@@ -856,7 +884,7 @@ export default function OperationsMarchePanel({
             </span>
             <span className="text-[10px] text-slate-400 ml-2">
               {fmt0.format(n(quantite))} × {fmt0.format(n(prix))}
-              {n(tauxCourtage) + n(tauxBrvm) > 0 &&
+              {n(tauxCourtage) + n(tauxBrvm) + n(tauxDcbr) > 0 &&
                 ` ${sensDe(description) === "achat" ? "+" : "−"} frais`}
               {interetsCourus !== 0 && ` + ${montantFr(interetsCourus)} de courus`}
             </span>

@@ -27,9 +27,10 @@ import {
   DESCRIPTIONS,
   dateDenouement,
   type DescriptionOperation,
-  type Instrument,
   type SaisieOperation,
 } from "./operations-marche-types";
+import { chargerParametresMarche } from "./parametres-marche-data";
+import { conventionDe } from "./parametres-marche-types";
 
 const EST_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -180,9 +181,14 @@ export async function enregistrerOperationMarcheAction(
         "Choisis le compte de règlement : sans lui, le montant n'entre dans aucune colonne du point de trésorerie.",
     };
 
+  // Le client envoie deja la date calculee ; ce repli sert au cas ou elle
+  // manque, et emploie la MEME convention que l'ecran — celle du gerant.
   const denouement = EST_DATE.test(saisie.dateDenouement)
     ? saisie.dateDenouement
-    : dateDenouement(saisie.dateOperation, saisie.instrument as Instrument);
+    : dateDenouement(
+        saisie.dateOperation,
+        conventionDe(await chargerParametresMarche(), saisie.instrument),
+      );
 
   const { data, error } = await supabase
     .from("fund_market_operations")
@@ -201,6 +207,7 @@ export async function enregistrerOperationMarcheAction(
       taux_courtage: saisie.tauxCourtage,
       taux_tps: saisie.tauxTps,
       taux_brvm: saisie.tauxBrvm,
+      taux_dcbr: saisie.tauxDcbr,
       interets_courus: saisie.interetsCourus,
       compte_reglement: saisie.compteReglement.trim(),
       statut: saisie.statut,

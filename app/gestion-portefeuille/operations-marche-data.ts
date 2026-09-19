@@ -34,6 +34,7 @@ type Ligne = {
   taux_courtage: number | string;
   taux_tps: number | string;
   taux_brvm: number | string;
+  taux_dcbr: number | string;
   interets_courus: number | string;
   compte_reglement: string;
   statut: string;
@@ -55,6 +56,7 @@ function versOperation(l: Ligne): OperationMarche {
     tauxCourtage: nb(l.taux_courtage),
     tauxTps: nb(l.taux_tps),
     tauxBrvm: nb(l.taux_brvm),
+    tauxDcbr: nb(l.taux_dcbr),
     interetsCourus: nb(l.interets_courus),
   };
   return {
@@ -86,7 +88,7 @@ export const loadOperationsMarche = cache(
       .from("fund_market_operations")
       .select(
         "id, date_operation, date_denouement, description, instrument, code, libelle, " +
-          "quantite, prix, sgi, taux_courtage, taux_tps, taux_brvm, interets_courus, " +
+          "quantite, prix, sgi, taux_courtage, taux_tps, taux_brvm, taux_dcbr, interets_courus, " +
           "compte_reglement, statut, note",
       )
       .eq("fund_id", fundId)
@@ -123,7 +125,7 @@ export const loadToutesOperationsMarche = cache(
       .from("fund_market_operations")
       .select(
         "id, fund_id, date_operation, date_denouement, description, instrument, code, libelle, " +
-          "quantite, prix, sgi, taux_courtage, taux_tps, taux_brvm, interets_courus, " +
+          "quantite, prix, sgi, taux_courtage, taux_tps, taux_brvm, taux_dcbr, interets_courus, " +
           "compte_reglement, statut, note, managed_funds(nom)",
       )
       .order("date_operation", { ascending: false })

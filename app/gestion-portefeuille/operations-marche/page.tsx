@@ -5,6 +5,7 @@ import { loadToutesOperationsMarche } from "../operations-marche-data";
 import { construirePointTresorerie } from "../tresorerie-data";
 import { etatsMtp, titresMtp } from "../operations-marche-titres";
 import { listerPartenairesAction } from "../partenaires-actions";
+import { chargerParametresMarche } from "../parametres-marche-data";
 
 export const metadata = {
   title: "Opérations de marché — Gestion de portefeuille",
@@ -24,9 +25,10 @@ export const dynamic = "force-dynamic";
  * serveur ont la leur.
  */
 export default async function OperationsMarchePage() {
-  const [fonds, operations] = await Promise.all([
+  const [fonds, operations, parametres] = await Promise.all([
     loadMyFunds(),
     loadToutesOperationsMarche(),
+    chargerParametresMarche(),
   ]);
 
   // Comptes du PREMIER fonds seulement : c'est celui que le formulaire
@@ -66,6 +68,7 @@ export default async function OperationsMarchePage() {
       etatsInitiaux={etatsInitiaux}
       titresInitiaux={titresInitiaux}
       sgi={sgi}
+      parametres={parametres}
     />
   );
 }

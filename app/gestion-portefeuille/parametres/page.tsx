@@ -6,6 +6,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { loadMyFunds } from "../data";
 import { bondBenchmarkOptions } from "../benchmark-refs";
 import { rowToSgoProfile, type SgoProfile, type SgoProfileRow } from "../types";
+import { chargerParametresMarche } from "../parametres-marche-data";
 import {
   versPartenaire,
   type LignePartenaire,
@@ -79,17 +80,20 @@ async function loadPartenaires(): Promise<Partenaire[]> {
 }
 
 export default async function FundManagementSettingsPage() {
-  const [initialFunds, initialProfile, initialPartenaires] = await Promise.all([
-    loadMyFunds(),
-    loadSgoProfile(),
-    loadPartenaires(),
-  ]);
+  const [initialFunds, initialProfile, initialPartenaires, initialParametresMarche] =
+    await Promise.all([
+      loadMyFunds(),
+      loadSgoProfile(),
+      loadPartenaires(),
+      chargerParametresMarche(),
+    ]);
   return (
     <SettingsForm
       benchmarkOptions={buildBenchmarkOptions()}
       initialFunds={initialFunds}
       initialProfile={initialProfile}
       initialPartenaires={initialPartenaires}
+      initialParametresMarche={initialParametresMarche}
     />
   );
 }

@@ -37,6 +37,11 @@ export type OperationMarche = {
   tauxCourtage: number;
   tauxTps: number;
   tauxBrvm: number;
+  /** Commission du dépositaire central. Séparée de la commission BRVM depuis
+   *  que les deux se configurent indépendamment ; leur SOMME entre dans le
+   *  montant, donc une opération ancienne qui porte tout sur `tauxBrvm` garde
+   *  exactement la même valeur. */
+  tauxDcbr: number;
   interetsCourus: number;
   compteReglement: string;
   statut: StatutOperation;
@@ -177,10 +182,15 @@ export function montantOperation(o: {
   tauxCourtage: number;
   tauxTps: number;
   tauxBrvm: number;
+  tauxDcbr?: number;
   interetsCourus: number;
 }): number {
   const brut = o.quantite * o.prix;
-  const frais = o.tauxCourtage + o.tauxCourtage * o.tauxTps + o.tauxBrvm;
+  // Les deux commissions de place s'AJOUTENT, comme le faisait le champ unique
+  // du classeur : les separer ne change aucun montant, seulement la facon de
+  // les reviser.
+  const frais =
+    o.tauxCourtage + o.tauxCourtage * o.tauxTps + o.tauxBrvm + (o.tauxDcbr ?? 0);
   const signe = sensDe(o.description) === "achat" ? 1 : -1;
   return brut * (1 + signe * frais) + o.interetsCourus;
 }
@@ -220,26 +230,37 @@ function estOuvre(d: Date): boolean {
 }
 
 /**
- * Date de dénouement : J+2 jours ouvrés pour les actions, J+0 sinon.
+ * Date de dénouement, selon la convention du marché.
  *
- * C'est la règle du classeur (`WORKDAY(date, 2)` pour les actions, `WORKDAY(
- * date, 0)` sinon). Le J+0 n'est pas l'identité : si la négociation tombe un
- * samedi ou un jour férié, `WORKDAY(d, 0)` reporte au jour ouvré suivant.
+ * La règle N'EST PLUS ÉCRITE ICI : elle vient des paramètres du gérant, qui
+ * la configure par marché (Paramètres › Opérations de marché). Les conventions
+ * de place changent par décision de la BRVM ou du DC/BR, et le gérant
+ * l'apprend avant nous.
+ *
+ * Deux bases de comptage. En jours OUVRÉS, on avance d'abord puis on compte :
+ * le jour de négociation ne compte pas, et les samedis, dimanches et jours
+ * fériés sont sautés. En jours CALENDAIRES, on ajoute simplement les jours —
+ * y compris zéro, qui rend alors la date de négociation telle quelle. C'est ce
+ * que fait le classeur pour les titres publics, vérifié sur ses propres
+ * lignes, y compris une opération du 30 avril 2026, qui est férié.
  */
-export function dateDenouement(dateOperation: string, instrument: Instrument): string {
+export function dateDenouement(
+  dateOperation: string,
+  convention: { jours: number; base: "ouvres" | "calendaires" },
+): string {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateOperation)) return dateOperation;
   const d = new Date(`${dateOperation}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return dateOperation;
 
-  // J+0 : la date de negociation, telle quelle. C'est ce que fait le classeur
-  // — verifie sur ses propres lignes, ou toutes les operations MTP ont une
-  // date de denouement egale a la date d'operation, y compris le 30 avril
-  // 2026, qui est ferie.
-  if (instrument !== "actions") return dateOperation;
+  const jours = Number.isFinite(convention.jours) ? Math.max(0, convention.jours) : 0;
+  if (jours === 0) return dateOperation;
 
-  // J+2 ouvres pour les actions. On AVANCE d'abord, puis on compte : le jour
-  // de negociation lui-meme ne compte pas.
-  let restant = 2;
+  if (convention.base === "calendaires") {
+    d.setUTCDate(d.getUTCDate() + jours);
+    return d.toISOString().slice(0, 10);
+  }
+
+  let restant = jours;
   while (restant > 0) {
     d.setUTCDate(d.getUTCDate() + 1);
     if (estOuvre(d)) restant--;

@@ -21,6 +21,11 @@ import {
 } from "@/app/gestion-portefeuille/reglementation";
 import type { Partenaire } from "@/app/gestion-portefeuille/partenaires-types";
 import PartenairesPanel from "./PartenairesPanel";
+import ParametresMarchePanel from "./ParametresMarchePanel";
+import {
+  PARAMETRES_DEFAUT,
+  type ParametresMarche,
+} from "@/app/gestion-portefeuille/parametres-marche-types";
 
 const CATEGORIES = [
   "Obligataire",
@@ -358,11 +363,13 @@ export default function SettingsForm({
   initialFunds = [],
   initialProfile = null,
   initialPartenaires = [],
+  initialParametresMarche = PARAMETRES_DEFAUT,
 }: {
   benchmarkOptions?: BenchmarkOption[];
   initialFunds?: FundRecord[];
   initialProfile?: SgoProfile | null;
   initialPartenaires?: Partenaire[];
+  initialParametresMarche?: ParametresMarche;
 }) {
   const [s, setS] = useState<Settings>(profileToSettings(initialProfile));
   const [saved, setSaved] = useState(false);
@@ -370,7 +377,7 @@ export default function SettingsForm({
   const [savingProfile, startSaveProfile] = useTransition();
 
   // Onglet actif du hub Paramètres.
-  const [tab, setTab] = useState<"sgo" | "fonds" | "partenaires" | "general">("sgo");
+  const [tab, setTab] = useState<"sgo" | "fonds" | "partenaires" | "marche" | "general">("sgo");
 
   // Fonds gérés : liste persistée en base (managed_funds via RLS).
   const [funds, setFunds] = useState<FundRecord[]>(initialFunds);
@@ -555,6 +562,10 @@ export default function SettingsForm({
     // Les partenaires viennent APRÈS les fonds et avant les paramètres
     // généraux : ce sont des tiers avec qui l'on traite, pas un réglage.
     ["partenaires", "Partenaires"],
+    // Juste apres les partenaires : courtage et TPS vivent sur leur fiche,
+    // commissions de place et denouement ici. Les deux ecrans se lisent
+    // ensemble quand on revise des conditions.
+    ["marche", "Opérations de marché"],
     ["general", "Paramètres généraux"],
   ] as const;
 
@@ -581,6 +592,8 @@ export default function SettingsForm({
       {tab === "partenaires" && (
         <PartenairesPanel initialPartenaires={initialPartenaires} />
       )}
+
+      {tab === "marche" && <ParametresMarchePanel initial={initialParametresMarche} />}
 
       {tab === "sgo" && (
         <form onSubmit={onSubmit} className="space-y-4">
