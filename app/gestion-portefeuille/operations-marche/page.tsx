@@ -4,6 +4,7 @@ import { loadMyFunds } from "../data";
 import { loadToutesOperationsMarche } from "../operations-marche-data";
 import { construirePointTresorerie } from "../tresorerie-data";
 import { etatsMtp, titresMtp } from "../operations-marche-titres";
+import { listerPartenairesAction } from "../partenaires-actions";
 
 export const metadata = {
   title: "Opérations de marché — Gestion de portefeuille",
@@ -39,7 +40,16 @@ export default async function OperationsMarchePage() {
     nom: e.nom,
     pays: e.pays,
     sens: e.sens,
+    groupe: e.groupe,
   }));
+
+  // Les SGI servent aux operations MFR. Les BTCC, eux, ne sont pas des
+  // partenaires saisis : ce sont les banques du fonds, deja decrites par ses
+  // comptes de tresorerie, et qui arrivent donc avec `comptesInitiaux`.
+  const partenaires = await listerPartenairesAction();
+  const sgi = partenaires.ok
+    ? partenaires.data.filter((x) => x.kind === "sgi" && x.actif)
+    : [];
 
   // Le formulaire s'ouvre sur « Achats MTP réalisés » : ses États et les
   // titres du premier d'entre eux sont résolus ici, pour la même raison que
@@ -55,6 +65,7 @@ export default async function OperationsMarchePage() {
       comptesInitiaux={comptesInitiaux}
       etatsInitiaux={etatsInitiaux}
       titresInitiaux={titresInitiaux}
+      sgi={sgi}
     />
   );
 }

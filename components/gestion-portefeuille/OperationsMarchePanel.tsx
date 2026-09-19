@@ -40,6 +40,7 @@ import {
 } from "@/app/gestion-portefeuille/operations-marche-types";
 import type { OperationAvecFonds } from "@/app/gestion-portefeuille/operations-marche-data";
 import type { OptionTitre } from "@/app/gestion-portefeuille/operations-marche-titres";
+import type { Partenaire } from "@/app/gestion-portefeuille/partenaires-types";
 
 const fmt0 = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
 const montantFr = (v: number) => fmt0.format(Math.round(v));
@@ -59,7 +60,16 @@ const TAUX_ACTIONS = { courtage: 0.004, tps: 0.1, brvm: 0.003 };
  *  clef de résolution au retour. */
 const libelleOption = (t: OptionTitre) => `${t.libelle} · ${t.detail}`;
 
-type Compte = { cle: string; nom: string; pays: string; sens: string };
+type Compte = {
+  cle: string;
+  nom: string;
+  pays: string;
+  sens: string;
+  /** « Comptes dépositaires », « Comptes espèce » ou « Mobile Money ». Sert à
+   *  isoler les BANQUES : un BTCC tient un compte-titres, un opérateur de
+   *  monnaie électronique n'en tient pas. */
+  groupe: string;
+};
 type Etat = { code: string; nom: string };
 
 function Champ({
@@ -85,6 +95,7 @@ export default function OperationsMarchePanel({
   comptesInitiaux,
   etatsInitiaux,
   titresInitiaux,
+  sgi,
 }: {
   fonds: { id: string; nom: string }[];
   operations: OperationAvecFonds[];
@@ -97,6 +108,9 @@ export default function OperationsMarchePanel({
   etatsInitiaux: Etat[];
   /** Titres du marché présenté d'emblée (MTP, premier État). */
   titresInitiaux: OptionTitre[];
+  /** SGI actives, saisies dans Paramètres › Partenaires. Leur taux de
+   *  courtage standard se reporte au choix. */
+  sgi: Partenaire[];
 }) {
   const router = useRouter();
   const [enCours, demarrer] = useTransition();
@@ -114,7 +128,7 @@ export default function OperationsMarchePanel({
   const [libelle, setLibelle] = useState("");
   const [quantite, setQuantite] = useState("");
   const [prix, setPrix] = useState("");
-  const [sgi, setSgi] = useState("");
+  const [sgiNom, setSgi] = useState("");
   const [tauxCourtage, setTauxCourtage] = useState("0");
   const [tauxTps, setTauxTps] = useState("0");
   const [tauxBrvm, setTauxBrvm] = useState("0");
@@ -220,6 +234,10 @@ export default function OperationsMarchePanel({
     setTauxBrvm(actions ? String(TAUX_ACTIONS.brvm) : "0");
     setDenouementManuel(null);
     oublierTitre();
+    // L'intermédiaire change de nature avec le marché — une SGI d'un côté,
+    // une banque teneur de compte de l'autre. Garder celui d'avant laisserait
+    // une SGI sur une opération MTP, ce que rien ne rattraperait ensuite.
+    setSgi("");
     if (m === "mfr" || m === "mtp") chargerTitres(m, pays);
     else setTitres([]);
   };
@@ -333,7 +351,7 @@ export default function OperationsMarchePanel({
         libelle,
         quantite: n(quantite),
         prix: n(prix),
-        sgi,
+        sgi: sgiNom,
         tauxCourtage: n(tauxCourtage),
         tauxTps: n(tauxTps),
         tauxBrvm: n(tauxBrvm),
@@ -374,6 +392,50 @@ export default function OperationsMarchePanel({
   }
 
   const instrumentsAdmis = INSTRUMENTS_ADMIS[marche];
+
+  // L'INTERMÉDIAIRE DÉPEND DU MARCHÉ.
+  //
+  // MFR : une SGI, qui porte l'ordre en bourse — d'où les taux de courtage.
+  // MTP : un BTCC, la banque teneur de compte conservateur, qui est une
+  // BANQUE DU FONDS. On la prend donc dans les comptes de trésorerie plutôt
+  // que de la saisir une seconde fois ailleurs : deux saisies du même
+  // établissement finissent toujours par diverger. Le mobile money est
+  // exclu — un opérateur de monnaie électronique ne tient pas de
+  // compte-titres.
+  //
+  // DÉDUPLIQUÉ PAR NOM. Un BTCC est un ÉTABLISSEMENT, pas un compte : la même
+  // banque tient souvent plusieurs comptes du fonds, parfois dans deux pays,
+  // et chacun est une colonne du point de trésorerie. Les lister tels quels
+  // proposait deux fois « Wave » et faisait doublon de clef React.
+  const btcc = [
+    ...new Map(
+      comptes
+        .filter((c) => c.groupe !== "Mobile Money")
+        .map((c) => [c.nom, c] as const),
+    ).values(),
+  ];
+  const intermediaires: { cle: string; libelle: string }[] =
+    marche === "mtp"
+      ? btcc.map((c) => ({ cle: c.nom, libelle: c.nom }))
+      : sgi.map((p) => ({
+          cle: p.nom,
+          libelle: `${p.nom} · courtage ${(p.tauxCourtage * 100)
+            .toFixed(2)
+            .replace(".", ",")} %`,
+        }));
+
+  /** Choisir une SGI applique SES taux négociés : c'est la raison d'être de
+   *  la fiche partenaire. Un BTCC n'en porte pas — le marché des titres
+   *  publics ne supporte pas de courtage. */
+  const choisirIntermediaire = (nom: string) => {
+    setSgi(nom);
+    if (marche === "mtp") return;
+    const p = sgi.find((x) => x.nom === nom);
+    if (!p) return;
+    setTauxCourtage(String(p.tauxCourtage));
+    setTauxTps(String(p.tauxTps));
+    setTauxBrvm(String(p.tauxBrvm));
+  };
 
   // LA LISTE SUIT L'INSTRUMENT, SANS EXCEPTION.
   //
@@ -617,8 +679,32 @@ export default function OperationsMarchePanel({
             </span>
           </Champ>
 
-          <Champ label="SGI / BTCC">
-            <input value={sgi} onChange={(e) => setSgi(e.target.value)} className={champ} />
+          <Champ label={marche === "mtp" ? "BTCC" : "SGI"}>
+            <select
+              value={sgiNom}
+              onChange={(e) => choisirIntermediaire(e.target.value)}
+              className={champ}
+            >
+              <option value="">— Choisir —</option>
+              {intermediaires.map((i) => (
+                <option key={i.cle} value={i.cle}>
+                  {i.libelle}
+                </option>
+              ))}
+              {/* Une valeur héritée hors liste reste lisible : une opération
+                  ancienne ne doit pas perdre son intermédiaire parce que le
+                  partenaire a été retiré depuis. */}
+              {sgiNom && !intermediaires.some((i) => i.cle === sgiNom) && (
+                <option value={sgiNom}>{sgiNom} (hors liste)</option>
+              )}
+            </select>
+            <span className={aide}>
+              {marche === "mtp"
+                ? "Banque teneur de compte, prise dans les comptes du fonds"
+                : intermediaires.length === 0
+                  ? "Aucune SGI — ajoute-la dans Paramètres › Partenaires"
+                  : "Ses taux négociés se reportent ci-dessous"}
+            </span>
           </Champ>
 
           <Champ label="Quantité">

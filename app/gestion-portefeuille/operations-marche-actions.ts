@@ -78,7 +78,9 @@ async function autoriser(fundId: string): Promise<Acces> {
  */
 export async function comptesReglementAction(
   fundId: string,
-): Promise<ActionResult<{ cle: string; nom: string; pays: string; sens: string }[]>> {
+): Promise<
+  ActionResult<{ cle: string; nom: string; pays: string; sens: string; groupe: string }[]>
+> {
   const acces = await autoriser(fundId);
   if ("erreur" in acces) return { ok: false, error: acces.erreur };
 
@@ -96,6 +98,10 @@ export async function comptesReglementAction(
       nom: e.nom,
       pays: e.pays,
       sens: e.sens,
+      // Le groupe distingue les BANQUES du mobile money. Un BTCC est une
+      // banque : c'est lui qui tient le compte-titres, un opérateur de monnaie
+      // électronique n'en tient pas.
+      groupe: e.groupe,
     })),
   };
 }

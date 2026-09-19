@@ -19,6 +19,8 @@ import {
   GROUPES,
   ratiosReglementaires,
 } from "@/app/gestion-portefeuille/reglementation";
+import type { Partenaire } from "@/app/gestion-portefeuille/partenaires-types";
+import PartenairesPanel from "./PartenairesPanel";
 
 const CATEGORIES = [
   "Obligataire",
@@ -355,10 +357,12 @@ export default function SettingsForm({
   benchmarkOptions = [],
   initialFunds = [],
   initialProfile = null,
+  initialPartenaires = [],
 }: {
   benchmarkOptions?: BenchmarkOption[];
   initialFunds?: FundRecord[];
   initialProfile?: SgoProfile | null;
+  initialPartenaires?: Partenaire[];
 }) {
   const [s, setS] = useState<Settings>(profileToSettings(initialProfile));
   const [saved, setSaved] = useState(false);
@@ -366,7 +370,7 @@ export default function SettingsForm({
   const [savingProfile, startSaveProfile] = useTransition();
 
   // Onglet actif du hub Paramètres.
-  const [tab, setTab] = useState<"sgo" | "fonds" | "general">("sgo");
+  const [tab, setTab] = useState<"sgo" | "fonds" | "partenaires" | "general">("sgo");
 
   // Fonds gérés : liste persistée en base (managed_funds via RLS).
   const [funds, setFunds] = useState<FundRecord[]>(initialFunds);
@@ -548,6 +552,9 @@ export default function SettingsForm({
   const TABS = [
     ["sgo", "Société de gestion"],
     ["fonds", "Fonds gérés"],
+    // Les partenaires viennent APRÈS les fonds et avant les paramètres
+    // généraux : ce sont des tiers avec qui l'on traite, pas un réglage.
+    ["partenaires", "Partenaires"],
     ["general", "Paramètres généraux"],
   ] as const;
 
@@ -570,6 +577,10 @@ export default function SettingsForm({
           </button>
         ))}
       </div>
+
+      {tab === "partenaires" && (
+        <PartenairesPanel initialPartenaires={initialPartenaires} />
+      )}
 
       {tab === "sgo" && (
         <form onSubmit={onSubmit} className="space-y-4">
