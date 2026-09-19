@@ -344,6 +344,15 @@ export default function OperationsMarchePanel({
 
   const instrumentsAdmis = INSTRUMENTS_ADMIS[marche];
 
+  // LA LISTE SUIT L'INSTRUMENT.
+  //
+  // Sur le MFR, actions et obligations cotées viennent du même référentiel et
+  // arrivent dans la même réponse. Les présenter mêlées obligeait à retrouver
+  // une action parmi des dizaines d'obligations alors que la nature du titre
+  // est DÉJÀ choisie juste au-dessus. On filtre donc sur elle.
+  const titresAffiches =
+    marche === "mfr" ? titres.filter((t) => t.instrument === instrument) : titres;
+
   return (
     <div className="space-y-4">
       <div>
@@ -407,6 +416,10 @@ export default function OperationsMarchePanel({
               onChange={(e) => {
                 setInstrument(e.target.value as Instrument);
                 setDenouementManuel(null);
+                // Le titre choisi n'est plus dans la liste : le garder
+                // laisserait à l'écran un ISIN et des courus qui ne
+                // correspondent plus à la nature sélectionnée.
+                oublierTitre();
               }}
               className={champ}
             >
@@ -444,7 +457,16 @@ export default function OperationsMarchePanel({
 
           {/* MFR et MTP : le titre se choisit dans le référentiel. */}
           {(marche === "mfr" || marche === "mtp") && (
-            <Champ label={marche === "mtp" ? "Titre public" : "Titre"} large>
+            <Champ
+              label={
+                marche === "mtp"
+                  ? "Titre public"
+                  : instrument === "actions"
+                    ? "Action"
+                    : "Obligation cotée"
+              }
+              large
+            >
               <select
                 value={titreCle}
                 onChange={(e) => choisirTitre(e.target.value)}
@@ -454,9 +476,9 @@ export default function OperationsMarchePanel({
                 <option value="">
                   {titresEtat === "chargement"
                     ? "Chargement des titres…"
-                    : `— Choisir parmi ${titres.length} titres —`}
+                    : `— Choisir parmi ${titresAffiches.length} titres —`}
                 </option>
-                {titres.map((t) => (
+                {titresAffiches.map((t) => (
                   <option key={t.cle} value={t.cle}>
                     {t.libelle} · {t.detail}
                   </option>
