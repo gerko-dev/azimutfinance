@@ -19,6 +19,8 @@ export type SourceLigne =
   | "inventaire"
   /** Calculée à partir des autres lignes, selon les formules du classeur. */
   | "calcul"
+  /** Saisi par le gérant dans l'écran « Opérations de marché ». */
+  | "operations"
   /** Poste qui attend encore sa source : affiché à zéro, pas deviné. */
   | "a_alimenter";
 
@@ -57,17 +59,17 @@ export type DefinitionLigne = {
 export const LIGNES_POINT_TRESORERIE: DefinitionLigne[] = [
   { libelle: "SOLDE", nature: "poste" , source: "inventaire" },
 
-  { libelle: "ACHATS MFR VALIDES", nature: "poste" , source: "a_alimenter" },
-  { libelle: "ACHATS MTP VALIDES", nature: "poste" , source: "a_alimenter" },
-  { libelle: "ACHATS A RÉMÉRÉ VALIDES", nature: "poste" , source: "a_alimenter" },
+  { libelle: "ACHATS MFR VALIDES", nature: "poste" , source: "operations" },
+  { libelle: "ACHATS MTP VALIDES", nature: "poste" , source: "operations" },
+  { libelle: "ACHATS A RÉMÉRÉ VALIDES", nature: "poste" , source: "operations" },
   { libelle: "ACHATS VALIDES", nature: "total" , source: "calcul" },
 
-  { libelle: "ACHATS MFR REALISES", nature: "poste" , source: "a_alimenter" },
-  { libelle: "ACHATS MTP REALISES", nature: "poste" , source: "a_alimenter" },
+  { libelle: "ACHATS MFR REALISES", nature: "poste" , source: "operations" },
+  { libelle: "ACHATS MTP REALISES", nature: "poste" , source: "operations" },
   { libelle: "ACHATS REALISES", nature: "total" , source: "calcul" },
 
-  { libelle: "VENTES MFR REALISEES", nature: "poste" , source: "a_alimenter" },
-  { libelle: "VENTES MTP REALISEES", nature: "poste" , source: "a_alimenter" },
+  { libelle: "VENTES MFR REALISEES", nature: "poste" , source: "operations" },
+  { libelle: "VENTES MTP REALISEES", nature: "poste" , source: "operations" },
   { libelle: "VENTES REALISEES", nature: "total" , source: "calcul" },
 
   { libelle: "OPERATIONS MARCHÉ PRIMAIRE", nature: "poste" , source: "a_alimenter" },
@@ -154,4 +156,13 @@ export type PointTresorerie = {
   comptesNonRattaches: { libelle: string; montant: number }[];
   /** Date du dernier jeu de soldes saisi, ou null si rien n'a été saisi. */
   soldesSaisisLe: string | null;
+  /** Opérations de marché dont le compte de règlement ne correspond à AUCUNE
+   *  colonne du tableau. Leur montant n'entre nulle part : sans cette liste il
+   *  disparaîtrait en silence, et le gérant chercherait longtemps pourquoi un
+   *  poste ne bouge pas. */
+  operationsSansColonne: { libelle: string; compte: string; montant: number }[];
+  /** Opérations négociées mais PAS ENCORE DÉNOUÉES à la date d'arrêté. Elles
+   *  ne comptent pas — la trésorerie n'a pas bougé — mais elle bougera, et le
+   *  trésorier doit les voir venir. */
+  operationsNonDenouees: { libelle: string; dateDenouement: string; montant: number }[];
 };

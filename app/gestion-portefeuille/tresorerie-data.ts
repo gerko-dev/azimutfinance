@@ -27,6 +27,7 @@ import {
   type Etablissement,
 } from "./tresorerie-comptes";
 import { normName } from "./portfolio-match";
+import { agregerParPoste, loadOperationsMarche } from "./operations-marche-data";
 import {
   LIGNES_POINT_TRESORERIE,
   type LigneTresorerie,
@@ -155,6 +156,44 @@ export async function construirePointTresorerie(
   const soldeInitial = valeurs.get("SOLDE")!;
   for (const b of banques) soldeInitial[b] = soldes.get(b) ?? 0;
 
+  // ── Achats et ventes, depuis les operations de marche ────────────────────
+  //
+  // La date d'arrete est celle du dernier jeu de soldes saisi ; a defaut,
+  // celle de l'inventaire. C'est la cellule « DATE FIN » du classeur, et elle
+  // decide de ce qui compte : une operation denouee APRES cette date n'a pas
+  // encore bouge la tresorerie.
+  const dateArrete = saisie?.as_of_date ?? actuel.asOfDate ?? null;
+  const operations = await loadOperationsMarche(fundId);
+  const parPoste = agregerParPoste(operations, dateArrete);
+
+  const colonnes = new Set(banques);
+  // UNE OPERATION QUI NE TOMBE DANS AUCUNE COLONNE NE DOIT PAS DISPARAITRE.
+  //
+  // Son compte de reglement peut ne plus figurer dans l'inventaire de fin —
+  // compte ferme, ou simplement absent de l'arrete. Le montant n'a alors nulle
+  // part ou aller. L'ecarter en silence donnerait un poste qui ne bouge pas
+  // sans raison visible ; on le remonte a part.
+  const sansColonne: { libelle: string; compte: string; montant: number }[] = [];
+  for (const [poste, parCompte] of parPoste) {
+    const cible = valeurs.get(poste);
+    if (!cible) continue;
+    for (const [compte, m] of parCompte) {
+      if (colonnes.has(compte)) cible[compte] += m;
+      else sansColonne.push({ libelle: poste, compte, montant: m });
+    }
+  }
+
+  // Negociees, pas encore denouees : elles ne comptent pas aujourd'hui, mais
+  // le tresorier doit les voir venir.
+  const nonDenouees = operations
+    .filter((o) => o.statut !== "annule" && dateArrete !== null && o.dateDenouement > dateArrete)
+    .map((o) => ({
+      libelle: `${o.libelle || o.code || "Opération"} — ${o.compteReglement}`,
+      dateDenouement: o.dateDenouement,
+      montant: o.montant,
+    }))
+    .sort((a, b) => a.dateDenouement.localeCompare(b.dateDenouement));
+
   const v = (libelle: string, banque: string): number => valeurs.get(libelle)?.[banque] ?? 0;
   const somme = (libelles: string[], banque: string): number =>
     libelles.reduce((s, l) => s + v(l, banque), 0);
@@ -246,5 +285,9 @@ export async function construirePointTresorerie(
       .map(([libelle, montant]) => ({ libelle, montant }))
       .sort((a, b) => Math.abs(b.montant) - Math.abs(a.montant)),
     soldesSaisisLe: saisie?.as_of_date ?? null,
+    operationsSansColonne: sansColonne.sort(
+      (a, b) => Math.abs(b.montant) - Math.abs(a.montant),
+    ),
+    operationsNonDenouees: nonDenouees,
   };
 }

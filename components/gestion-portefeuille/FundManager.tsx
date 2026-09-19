@@ -14,7 +14,9 @@ import PropositionPanel from "./PropositionPanel";
 import OperationsPanel from "./OperationsPanel";
 import AnticipationPanel from "./AnticipationPanel";
 import TresoreriePanel from "./TresoreriePanel";
+import OperationsMarchePanel from "./OperationsMarchePanel";
 import type { PointTresorerie } from "@/app/gestion-portefeuille/tresorerie-types";
+import type { OperationMarche } from "@/app/gestion-portefeuille/operations-marche-types";
 import type { TableauAllocation } from "@/app/gestion-portefeuille/allocation-types";
 import type { PlanOperations } from "@/app/gestion-portefeuille/operations-types";
 import type { TableauProposition } from "@/app/gestion-portefeuille/proposition-types";
@@ -37,6 +39,7 @@ const MANAGE_TABS = [
   "Portefeuille",
   "Anticipations de cours",
   "Référentiel titres",
+  "Opérations de marché",
   "Gestion de trésorerie",
   "Valeur liquidative",
   "Analyse de performance",
@@ -61,6 +64,7 @@ export default function FundManager({
   initialAnticipations,
   initialProposition,
   initialTresorerie,
+  initialOperationsMarche = [],
 }: {
   fund: FundRecord;
   initialPortfolios?: PortfolioSnapshot[];
@@ -70,6 +74,7 @@ export default function FundManager({
   initialAnticipations?: TableauAnticipation;
   initialProposition?: TableauProposition;
   initialTresorerie?: PointTresorerie | null;
+  initialOperationsMarche?: OperationMarche[];
 }) {
   const [tab, setTab] = useState<(typeof MANAGE_TABS)[number]>("Vue d'ensemble");
   const [sousOnglet, setSousOnglet] =
@@ -265,6 +270,15 @@ export default function FundManager({
 
       {/* Référentiel titres (propre à ce fonds) */}
       {tab === "Référentiel titres" && <SecuritiesReferential fundId={fund.id} />}
+
+      {/* Achats et ventes : la source des postes du point de trésorerie */}
+      {tab === "Opérations de marché" && (
+        <OperationsMarchePanel
+          fondsId={fund.id}
+          point={initialTresorerie ?? null}
+          operations={initialOperationsMarche}
+        />
+      )}
 
       {/* Point de trésorerie : soldes bancaires, engagements et flux attendus */}
       {tab === "Gestion de trésorerie" && (
