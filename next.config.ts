@@ -54,8 +54,8 @@ const SECURITY_HEADERS = [
 // et échouaient là-bas seulement, puisqu'en local Chrome est trouvé sur le
 // disque et les fichiers lus depuis le dépôt.
 //
-// Une constante partagée plutôt que cinq copies : la prochaine route Chromium
-// n'a qu'à s'ajouter à ROUTES_CHROMIUM.
+// Une clef unique plutôt que cinq : la prochaine route Chromium s'ajoute à
+// CLE_ROUTES_CHROMIUM, sans créer de fonction serverless de plus.
 // Motifs en « /**/* » et NON en « /** » : c'est la forme qui désigne des
 // FICHIERS, la seule que le traceur retienne. Le dépôt en porte déjà la trace
 // plus haut — « une première tentative en /** n'avait rien embarqué du tout ».
@@ -69,17 +69,26 @@ const ACTIFS_CHROMIUM = [
   "./lib/reports/assets/**/*",
 ];
 
-const ROUTES_CHROMIUM = [
-  "/admin/rapports/cotation/pdf",
-  "/admin/rapports/commodities/pdf",
-  "/admin/rapports/mtp/pdf",
-  "/admin/magazine/articles/[id]/flash",
-  "/gestion-portefeuille/reporting/pdf",
-];
-
-const TRACE_CHROMIUM = Object.fromEntries(
-  ROUTES_CHROMIUM.map((r) => [r, ACTIFS_CHROMIUM]),
-);
+// UNE SEULE CLEF POUR LES CINQ ROUTES, ET NON CINQ.
+//
+// Les clefs sont des GLOBS de route (picomatch), pas des chemins exacts. Les
+// declarer une par une a fait echouer le deploiement :
+//
+//   No more than 12 Serverless Functions can be added on the Hobby plan.
+//
+// Le depot compte une vingtaine de route handlers : ils ne tiennent sous le
+// plafond que parce que Vercel les regroupe, et un jeu de fichiers traces
+// propre a une route l'isole dans sa propre fonction. Cinq entrees valaient
+// donc cinq fonctions supplementaires.
+//
+// Un glob unique couvre les cinq routes et n'en isole qu'une seule — soit
+// MOINS de fonctions qu'avant ce correctif, qui en declarait deja deux.
+// Le « [id] » de la route flash est echappe : entre crochets, picomatch y
+// verrait une classe de caracteres.
+const CLE_ROUTES_CHROMIUM =
+  "/{admin/rapports/{cotation,commodities,mtp}/pdf," +
+  "admin/magazine/articles/\\[id\\]/flash," +
+  "gestion-portefeuille/reporting/pdf}";
 
 const nextConfig: NextConfig = {
   // Bundle the brvm.org TLS intermediate with serverless functions so
@@ -122,7 +131,7 @@ const nextConfig: NextConfig = {
     // lit, le fichier ne pesant que sur celle-la.
     "/api/gestion-portefeuille/propositions": ["./template_propositions.xlsx"],
     // Toutes les routes qui lancent Chromium, binaire et visuels compris.
-    ...TRACE_CHROMIUM,
+    [CLE_ROUTES_CHROMIUM]: ACTIFS_CHROMIUM,
   },
   // pdfjs-dist spawns a worker that resolves its sibling pdf.worker.mjs by
   // relative path. Turbopack/webpack hoist the bundle into .next/, which
