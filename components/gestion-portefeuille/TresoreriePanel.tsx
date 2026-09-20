@@ -260,6 +260,47 @@ function Contenu({
             </ul>
           </div>
         )}
+
+        {/* CE QUI N'EST PAS ENCORE COMPTÉ, ET POURQUOI.
+            Le point ne retient que les opérations DÉNOUÉES à la date
+            d'arrêté — la règle du classeur. Sans cet encart, une opération
+            saisie le jour même semblait s'être perdue : elle est simplement
+            en attente de règlement, et le dire vaut mieux que de laisser
+            chercher. */}
+        {point.operationsNonDenouees.length > 0 && (
+          <div className="text-[11px] text-slate-700 bg-slate-50 border border-slate-200 rounded px-3 py-2 mt-2">
+            <strong>
+              {point.operationsNonDenouees.length} opération(s) négociée(s) mais pas
+              encore dénouée(s)
+            </strong>{" "}
+            au {point.dateFin ?? point.dateInventaire ?? "—"} : elles ne comptent pas
+            encore dans les soldes ci-dessous.
+            <ul className="mt-1 space-y-0.5">
+              {point.operationsNonDenouees.map((o, i) => (
+                <li key={i} className="tabular-nums">
+                  dénouement {o.dateDenouement} · {o.libelle} — {montant(o.montant)} F
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {point.operationsSansColonne.length > 0 && (
+          <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2 mt-2">
+            <strong>
+              {point.operationsSansColonne.length} montant(s) sans colonne
+            </strong>{" "}
+            — leur compte de règlement ne figure pas dans l&apos;inventaire de fin, donc
+            le montant n&apos;entre nulle part :
+            <ul className="mt-1 space-y-0.5">
+              {point.operationsSansColonne.map((o) => (
+                <li key={`${o.libelle}-${o.compte}`} className="tabular-nums">
+                  {o.libelle} · {o.compte} — {montant(o.montant)} F
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
 
       <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
