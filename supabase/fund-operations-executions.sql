@@ -74,14 +74,38 @@ create policy fund_market_executions_delete on public.fund_market_executions
 -- Les lignes existantes migrent vers la nature correspondante, et leur date de
 -- denouement devient une premiere execution si elles portaient une quantite
 -- servie.
-insert into public.fund_market_executions
-  (owner_id, operation_id, date_execution, date_denouement, quantite)
-select o.owner_id, o.id, o.date_operation, o.date_denouement, o.quantite_executee
-from public.fund_market_operations o
-where coalesce(o.quantite_executee, 0) > 0
-  and not exists (
-    select 1 from public.fund_market_executions e where e.operation_id = o.id
-  );
+--
+-- ORDRE DES INSTRUCTIONS : la contrainte est retiree AVANT l'UPDATE.
+-- L'inverse echoue — la ligne mise a jour porte deja la nouvelle valeur, que
+-- l'ancienne contrainte refuse :
+--   new row violates check constraint "fund_market_operations_description_chk"
+-- Une contrainte se leve avant de changer ce qu'elle garde, pas apres.
+alter table public.fund_market_operations
+  drop constraint if exists fund_market_operations_description_chk;
+
+-- `quantite_executee` et `date_denouement` peuvent avoir deja ete supprimees
+-- par une execution precedente de ce script : on ne reprend les lignes que si
+-- les colonnes sont encore la.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'fund_market_operations'
+      and column_name = 'quantite_executee'
+  ) then
+    execute $mig$
+      insert into public.fund_market_executions
+        (owner_id, operation_id, date_execution, date_denouement, quantite)
+      select o.owner_id, o.id, o.date_operation, o.date_denouement, o.quantite_executee
+      from public.fund_market_operations o
+      where coalesce(o.quantite_executee, 0) > 0
+        and not exists (
+          select 1 from public.fund_market_executions e where e.operation_id = o.id
+        )
+    $mig$;
+  end if;
+end $$;
 
 update public.fund_market_operations set description = case
   when description like 'ACHATS_MFR%' then 'ACHAT_MFR'
@@ -94,8 +118,6 @@ update public.fund_market_operations set description = case
 end
 where description not in ('ACHAT_MFR', 'ACHAT_MTP', 'VENTE_MFR', 'VENTE_MTP');
 
-alter table public.fund_market_operations
-  drop constraint if exists fund_market_operations_description_chk;
 alter table public.fund_market_operations
   add constraint fund_market_operations_description_chk
   check (description in ('ACHAT_MFR', 'ACHAT_MTP', 'VENTE_MFR', 'VENTE_MTP'));
