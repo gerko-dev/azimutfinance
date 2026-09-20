@@ -24,19 +24,27 @@ import {
   comptesReglementAction,
   enregistrerOperationMarcheAction,
   listerTitresAction,
+  modifierOperationMarcheAction,
   supprimerOperationMarcheAction,
 } from "@/app/gestion-portefeuille/operations-marche-actions";
 import {
   DESCRIPTIONS,
   INSTRUMENTS_ADMIS,
   LIBELLES_INSTRUMENT,
+  LIBELLES_STATUT,
+  LIBELLES_VALIDITE,
   dateDenouement,
+  dateLimiteOrdre,
+  estOrdreValide,
   marcheDe,
   montantOperation,
   posteDe,
   sensDe,
+  quantiteRestante,
   type DescriptionOperation,
   type Instrument,
+  type StatutOperation,
+  type Validite,
 } from "@/app/gestion-portefeuille/operations-marche-types";
 import type { OperationAvecFonds } from "@/app/gestion-portefeuille/operations-marche-data";
 import type { OptionTitre } from "@/app/gestion-portefeuille/operations-marche-titres";
@@ -152,6 +160,11 @@ export default function OperationsMarchePanel({
   const [tauxDcbr, setTauxDcbr] = useState("0");
   const [compteReglement, setCompteReglement] = useState("");
   const [note, setNote] = useState("");
+  const [quantiteExecutee, setQuantiteExecutee] = useState("0");
+  const [validite, setValidite] = useState<Validite>("jour");
+  const [statut, setStatut] = useState<StatutOperation>("en_cours");
+  /** Opération en cours de modification, ou null pour une création. */
+  const [editionId, setEditionId] = useState<string | null>(null);
   // Le dénouement est CALCULÉ mais reste modifiable : un règlement peut
   // déraper, et la liste des jours fériés s'arrête à début 2027.
   const [denouementManuel, setDenouementManuel] = useState<string | null>(null);
@@ -365,7 +378,7 @@ export default function OperationsMarchePanel({
       return;
     }
     demarrer(async () => {
-      const res = await enregistrerOperationMarcheAction(fondsId, {
+      const saisie = {
         dateOperation,
         dateDenouement: denouement,
         description,
@@ -373,6 +386,8 @@ export default function OperationsMarchePanel({
         code,
         libelle,
         quantite: n(quantite),
+        quantiteExecutee: n(quantiteExecutee),
+        validite,
         prix: n(prix),
         sgi: sgiNom,
         tauxCourtage: n(tauxCourtage),
@@ -381,22 +396,76 @@ export default function OperationsMarchePanel({
         tauxDcbr: n(tauxDcbr),
         interetsCourus,
         compteReglement,
-        statut: "ok",
+        statut,
         note,
-      });
+      };
+      const res = editionId
+        ? await modifierOperationMarcheAction(fondsId, editionId, saisie)
+        : await enregistrerOperationMarcheAction(fondsId, saisie);
       if (!res.ok) {
         setErreur(res.error);
         return;
       }
       setOk(true);
-      // Le fonds, la date et le type RESTENT : on saisit un bordereau, pas une
-      // opération isolée, et les lignes qui se suivent partagent l'essentiel.
-      setQuantite("");
-      setPrix("");
-      setNote("");
-      oublierTitre();
+      if (editionId) {
+        // Après une correction, on referme : rester dans le formulaire
+        // laisserait croire qu'une seconde validation créerait un doublon.
+        annulerEdition();
+      } else {
+        // Le fonds, la date et le type RESTENT : on saisit un bordereau, pas
+        // une opération isolée, et les lignes qui se suivent partagent
+        // l'essentiel.
+        setQuantite("");
+        setPrix("");
+        setNote("");
+        setQuantiteExecutee("0");
+        oublierTitre();
+      }
       router.refresh();
     });
+  };
+
+  /** Recharge une opération dans le formulaire pour la corriger. */
+  const modifier = (o: OperationAvecFonds) => {
+    setErreur(null);
+    setOk(false);
+    setEditionId(o.id);
+    setFondsId(o.fondsId);
+    setDateOperation(o.dateOperation);
+    setDenouementManuel(o.dateDenouement);
+    setDescription(o.description);
+    setInstrument(o.instrument);
+    setCode(o.code);
+    setLibelle(o.libelle);
+    setSaisieTitre(o.libelle);
+    setTitreCle("");
+    setQuantite(String(o.quantite));
+    setQuantiteExecutee(String(o.quantiteExecutee));
+    setValidite(o.validite);
+    setStatut(o.statut);
+    setPrix(String(o.prix));
+    setSgi(o.sgi);
+    setTauxCourtage(String(o.tauxCourtage));
+    setTauxTps(String(o.tauxTps));
+    setTauxBrvm(String(o.tauxBrvm));
+    setTauxDcbr(String(o.tauxDcbr));
+    // Les courus repris tels quels : ceux de l'opération font foi, pas un
+    // recalcul qui pourrait diverger de l'avis d'opéré déjà reçu.
+    setCouruManuel(String(Math.round(o.interetsCourus)));
+    setCompteReglement(o.compteReglement);
+    setNote(o.note);
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const annulerEdition = () => {
+    setEditionId(null);
+    setQuantite("");
+    setPrix("");
+    setNote("");
+    setQuantiteExecutee("0");
+    setStatut("en_cours");
+    setCouruManuel(null);
+    oublierTitre();
   };
 
   const supprimer = (op: OperationAvecFonds) => {
@@ -527,7 +596,20 @@ export default function OperationsMarchePanel({
 
       {/* ── Formulaire ───────────────────────────────────────────────────── */}
       <div className="bg-white border border-slate-200 rounded-lg p-4">
-        <h2 className="text-sm font-semibold text-slate-900">Saisir une opération</h2>
+        <div className="flex flex-wrap items-baseline justify-between gap-3">
+          <h2 className="text-sm font-semibold text-slate-900">
+            {editionId ? "Modifier l'opération" : "Saisir une opération"}
+          </h2>
+          {editionId && (
+            <button
+              type="button"
+              onClick={annulerEdition}
+              className="text-[11px] text-slate-500 hover:text-slate-900"
+            >
+              Abandonner la modification
+            </button>
+          )}
+        </div>
         <p className="text-[11px] text-slate-500 mt-0.5">
           Elle alimente le poste «&nbsp;{posteDe(description)}&nbsp;» du point de
           trésorerie, sur le compte de règlement choisi, à sa date de dénouement.
@@ -748,6 +830,68 @@ export default function OperationsMarchePanel({
             />
           </Champ>
 
+          {/* CYCLE DE VIE — n'a de sens que sur un ordre VALIDÉ.
+              Un achat déjà réalisé ou une vente n'ont rien à exécuter, et
+              afficher ces champs sur eux inviterait à les remplir. */}
+          {estOrdreValide(description) && (
+            <>
+              <Champ label="Quantité exécutée">
+                <input
+                  value={quantiteExecutee}
+                  onChange={(e) => setQuantiteExecutee(e.target.value)}
+                  inputMode="numeric"
+                  className={`${champ} text-right tabular-nums`}
+                />
+                <span className={aide}>
+                  {marche === "mtp"
+                    ? "Servi en totalité ou pas du tout"
+                    : `Reste ${fmt0.format(
+                        Math.max(0, n(quantite) - n(quantiteExecutee)),
+                      )} à servir`}
+                </span>
+              </Champ>
+
+              <Champ label="Statut">
+                <select
+                  value={statut}
+                  onChange={(e) => setStatut(e.target.value as StatutOperation)}
+                  className={champ}
+                >
+                  {(Object.keys(LIBELLES_STATUT) as StatutOperation[]).map((k) => (
+                    <option key={k} value={k}>
+                      {LIBELLES_STATUT[k]}
+                    </option>
+                  ))}
+                </select>
+                <span className={aide}>
+                  Un ordre annulé ne pèse plus sur la trésorerie
+                </span>
+              </Champ>
+
+              {/* La validité ne concerne que le marché financier : une
+                  adjudication de titres publics est servie ou ne l'est pas. */}
+              {marche === "mfr" && (
+                <Champ label="Validité de l'ordre">
+                  <select
+                    value={validite}
+                    onChange={(e) => setValidite(e.target.value as Validite)}
+                    className={champ}
+                  >
+                    {(Object.keys(LIBELLES_VALIDITE) as Validite[]).map((k) => (
+                      <option key={k} value={k}>
+                        {LIBELLES_VALIDITE[k]}
+                      </option>
+                    ))}
+                  </select>
+                  <span className={aide}>
+                    Sort du point après le{" "}
+                    {dateLimiteOrdre({ dateOperation, validite })}
+                  </span>
+                </Champ>
+              )}
+            </>
+          )}
+
           <Champ label="Prix unitaire">
             <input
               value={prix}
@@ -899,7 +1043,11 @@ export default function OperationsMarchePanel({
             disabled={enCours}
             className="px-4 py-1.5 text-xs font-medium bg-blue-700 text-white rounded hover:bg-blue-800 disabled:opacity-50"
           >
-            {enCours ? "Enregistrement…" : "Enregistrer l'opération"}
+            {enCours
+              ? "Enregistrement…"
+              : editionId
+                ? "Enregistrer la correction"
+                : "Enregistrer l'opération"}
           </button>
         </div>
 
@@ -928,6 +1076,8 @@ export default function OperationsMarchePanel({
                 <th className="text-left px-3 py-2 font-medium">Poste</th>
                 <th className="text-left px-3 py-2 font-medium">Titre</th>
                 <th className="text-right px-3 py-2 font-medium">Quantité</th>
+                <th className="text-right px-3 py-2 font-medium">Servie</th>
+                <th className="text-left px-3 py-2 font-medium">État</th>
                 <th className="text-right px-3 py-2 font-medium">Prix</th>
                 <th className="text-right px-3 py-2 font-medium">Courus</th>
                 <th className="text-right px-3 py-2 font-medium">Montant</th>
@@ -938,7 +1088,7 @@ export default function OperationsMarchePanel({
             <tbody className="divide-y divide-slate-100">
               {operations.length === 0 && (
                 <tr>
-                  <td colSpan={11} className="px-3 py-6 text-center text-slate-400">
+                  <td colSpan={13} className="px-3 py-6 text-center text-slate-400">
                     Aucune opération saisie.
                   </td>
                 </tr>
@@ -963,6 +1113,46 @@ export default function OperationsMarchePanel({
                     {fmt0.format(o.quantite)}
                   </td>
                   <td className="px-3 py-1.5 text-right tabular-nums">
+                    {estOrdreValide(o.description) ? (
+                      o.quantiteExecutee > 0 ? (
+                        <>
+                          {fmt0.format(o.quantiteExecutee)}
+                          {quantiteRestante(o) > 0 && (
+                            <span className="block text-[9px] text-amber-700">
+                              reste {fmt0.format(quantiteRestante(o))}
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )
+                    ) : (
+                      <span className="text-slate-300">s.o.</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-1.5 whitespace-nowrap">
+                    <span
+                      className={
+                        o.statut === "annule"
+                          ? "text-slate-400 line-through"
+                          : o.statut === "realise"
+                            ? "text-emerald-700"
+                            : "text-slate-700"
+                      }
+                    >
+                      {LIBELLES_STATUT[o.statut]}
+                    </span>
+                    {/* La date de péremption d'un ordre encore vivant : c'est
+                        elle qui décide de sa sortie du point de trésorerie. */}
+                    {estOrdreValide(o.description) &&
+                      o.statut === "en_cours" &&
+                      o.instrument !== "mtp" && (
+                        <span className="block text-[9px] text-slate-400">
+                          jusqu&apos;au {dateLimiteOrdre(o)}
+                        </span>
+                      )}
+                  </td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">
                     {fmt0.format(o.prix)}
                   </td>
                   <td className="px-3 py-1.5 text-right tabular-nums text-slate-500">
@@ -973,6 +1163,13 @@ export default function OperationsMarchePanel({
                   </td>
                   <td className="px-3 py-1.5 text-slate-600">{o.compteReglement}</td>
                   <td className="px-3 py-1.5 text-right">
+                    <button
+                      onClick={() => modifier(o)}
+                      disabled={enCours}
+                      className="text-[10px] text-blue-700 hover:text-blue-900 disabled:opacity-50 mr-3"
+                    >
+                      Modifier
+                    </button>
                     <button
                       onClick={() => supprimer(o)}
                       disabled={enCours}

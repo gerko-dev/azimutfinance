@@ -12,8 +12,12 @@ import { cache } from "react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 import {
+  dateLimiteOrdre,
+  estOrdreValide,
   montantOperation,
   posteDe,
+  posteRealisePour,
+  quantiteRestante,
   type DescriptionOperation,
   type Instrument,
   type OperationMarche,
@@ -29,6 +33,8 @@ type Ligne = {
   code: string;
   libelle: string;
   quantite: number | string;
+  quantite_executee: number | string;
+  validite: string;
   prix: number | string;
   sgi: string;
   taux_courtage: number | string;
@@ -64,6 +70,8 @@ function versOperation(l: Ligne): OperationMarche {
     dateOperation: l.date_operation,
     dateDenouement: l.date_denouement,
     instrument: l.instrument as Instrument,
+    quantiteExecutee: nb(l.quantite_executee),
+    validite: l.validite === "revocation90" ? "revocation90" : "jour",
     code: l.code ?? "",
     libelle: l.libelle ?? "",
     sgi: l.sgi ?? "",
@@ -88,7 +96,8 @@ export const loadOperationsMarche = cache(
       .from("fund_market_operations")
       .select(
         "id, date_operation, date_denouement, description, instrument, code, libelle, " +
-          "quantite, prix, sgi, taux_courtage, taux_tps, taux_brvm, taux_dcbr, interets_courus, " +
+          "quantite, quantite_executee, validite, prix, sgi, taux_courtage, taux_tps, taux_brvm, " +
+          "taux_dcbr, interets_courus, " +
           "compte_reglement, statut, note",
       )
       .eq("fund_id", fundId)
@@ -125,7 +134,8 @@ export const loadToutesOperationsMarche = cache(
       .from("fund_market_operations")
       .select(
         "id, fund_id, date_operation, date_denouement, description, instrument, code, libelle, " +
-          "quantite, prix, sgi, taux_courtage, taux_tps, taux_brvm, taux_dcbr, interets_courus, " +
+          "quantite, quantite_executee, validite, prix, sgi, taux_courtage, taux_tps, taux_brvm, " +
+          "taux_dcbr, interets_courus, " +
           "compte_reglement, statut, note, managed_funds(nom)",
       )
       .order("date_operation", { ascending: false })
@@ -162,17 +172,52 @@ export function agregerParPoste(
   dateArrete: string | null,
 ): Map<string, Map<string, number>> {
   const parPoste = new Map<string, Map<string, number>>();
-  for (const o of operations) {
-    if (o.statut === "annule") continue;
-    if (dateArrete && o.dateDenouement > dateArrete) continue;
-    const poste = posteDe(o.description);
-    if (!poste) continue;
+
+  const ajouter = (poste: string, compte: string, montant: number) => {
+    if (!poste || montant === 0) return;
     let parCompte = parPoste.get(poste);
     if (!parCompte) {
       parCompte = new Map<string, number>();
       parPoste.set(poste, parCompte);
     }
-    parCompte.set(o.compteReglement, (parCompte.get(o.compteReglement) ?? 0) + o.montant);
+    parCompte.set(compte, (parCompte.get(compte) ?? 0) + montant);
+  };
+
+  for (const o of operations) {
+    if (o.statut === "annule") continue;
+    if (dateArrete && o.dateDenouement > dateArrete) continue;
+
+    const poste = posteDe(o.description);
+    if (!poste) continue;
+
+    // Une opération qui n'est pas un ordre validé — un achat déjà réalisé,
+    // une vente — compte pour sa totalité : il n'y a rien à exécuter.
+    if (!estOrdreValide(o.description)) {
+      ajouter(poste, o.compteReglement, o.montant);
+      continue;
+    }
+
+    // ── Un ordre validé se partage en deux ───────────────────────────────
+    //
+    // La part SERVIE n'est plus un engagement : elle bascule sur le poste
+    // réalisé correspondant. La part restante continue de peser, mais
+    // seulement tant que l'ordre est encore au carnet.
+    const executee = Math.min(Math.max(0, o.quantiteExecutee), o.quantite);
+    const restante = quantiteRestante(o);
+    const parTitre = o.quantite > 0 ? o.montant / o.quantite : 0;
+
+    if (executee > 0) {
+      const posteRealise = posteRealisePour(o.description);
+      if (posteRealise) ajouter(posteRealise, o.compteReglement, parTitre * executee);
+    }
+
+    // Un ordre entièrement servi n'a plus de part restante ; un ordre périmé
+    // n'en a plus l'usage. Dans les deux cas il quitte les engagements.
+    const perime = dateArrete !== null && dateLimiteOrdre(o) < dateArrete;
+    if (restante > 0 && o.statut !== "realise" && !perime) {
+      ajouter(poste, o.compteReglement, parTitre * restante);
+    }
   }
+
   return parPoste;
 }

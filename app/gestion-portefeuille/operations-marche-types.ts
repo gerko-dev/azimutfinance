@@ -21,7 +21,33 @@ export type DescriptionOperation =
 /** Nature du titre. Gouverne le délai de dénouement. */
 export type Instrument = "actions" | "obligations" | "mtp";
 
-export type StatutOperation = "en_cours" | "ok" | "annule";
+/** État d'un ordre.
+ *
+ *  « en_cours » : l'ordre vit, sa part non exécutée pèse sur la trésorerie.
+ *  « realise »  : servi en totalité.
+ *  « annule »   : retiré — il ne pèse plus rien, et n'a rien exécuté. */
+export type StatutOperation = "en_cours" | "realise" | "annule";
+
+export const LIBELLES_STATUT: Record<StatutOperation, string> = {
+  en_cours: "En cours",
+  realise: "Réalisé",
+  annule: "Annulé",
+};
+
+/** Durée de vie d'un ordre au carnet. Marché financier uniquement : une
+ *  adjudication de titres publics est servie ou ne l'est pas. */
+export type Validite = "jour" | "revocation90";
+
+export const LIBELLES_VALIDITE: Record<Validite, string> = {
+  jour: "Jour — tombe le lendemain",
+  revocation90: "Révocation 90 jours",
+};
+
+/** Nombre de jours calendaires pendant lesquels un ordre reste au carnet. */
+export const JOURS_VALIDITE: Record<Validite, number> = {
+  jour: 1,
+  revocation90: 90,
+};
 
 export type OperationMarche = {
   id: string;
@@ -32,6 +58,11 @@ export type OperationMarche = {
   code: string;
   libelle: string;
   quantite: number;
+  /** Quantité DÉJÀ SERVIE. Sur le marché financier un ordre peut être exécuté
+   *  par morceaux ; sur les titres publics il l'est en totalité ou pas du
+   *  tout, et ce champ ne prend alors que 0 ou la quantité entière. */
+  quantiteExecutee: number;
+  validite: Validite;
   prix: number;
   sgi: string;
   tauxCourtage: number;
@@ -46,9 +77,58 @@ export type OperationMarche = {
   compteReglement: string;
   statut: StatutOperation;
   note: string;
-  /** Calculé, jamais stocké — cf. la migration SQL. */
+  /** Calculé, jamais stocké — cf. la migration SQL. Porte la quantité
+   *  ORDONNÉE, pas la part restante : c'est le montant de l'ordre. */
   montant: number;
 };
+
+/** Part d'un ordre qui n'a pas encore été servie. */
+export function quantiteRestante(o: {
+  quantite: number;
+  quantiteExecutee: number;
+}): number {
+  return Math.max(0, o.quantite - Math.min(o.quantiteExecutee, o.quantite));
+}
+
+/**
+ * Date au-delà de laquelle un ordre validé ne pèse plus sur la trésorerie.
+ *
+ * Un ordre « jour » tombe LE LENDEMAIN de sa saisie ; un ordre à révocation
+ * tient quatre-vingt-dix jours. Passé ce terme, sa part non servie disparaît
+ * du point : elle ne sera plus exécutée, donc elle n'engage plus rien.
+ *
+ * Ne vaut que pour les ordres VALIDÉS. Une opération déjà réalisée n'a plus de
+ * durée de vie, et une vente n'est pas un engagement de décaissement.
+ */
+export function dateLimiteOrdre(o: {
+  dateOperation: string;
+  validite: Validite;
+}): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(o.dateOperation)) return o.dateOperation;
+  const d = new Date(`${o.dateOperation}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return o.dateOperation;
+  d.setUTCDate(d.getUTCDate() + JOURS_VALIDITE[o.validite]);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Cette description désigne-t-elle un ordre VALIDÉ, donc un engagement ? */
+export function estOrdreValide(d: DescriptionOperation): boolean {
+  return d.endsWith("_VALIDES");
+}
+
+/**
+ * Poste sur lequel bascule la part EXÉCUTÉE d'un ordre validé.
+ *
+ * Le réméré n'en a pas : le classeur porte « ACHATS A RÉMÉRÉ VALIDES » sans
+ * contrepartie réalisée. Sa part exécutée quitte donc les engagements sans
+ * entrer ailleurs — c'est le classeur qui est ainsi, et le reproduire vaut
+ * mieux qu'inventer un poste qu'il ignore.
+ */
+export function posteRealisePour(d: DescriptionOperation): string | null {
+  if (d === "ACHATS_MFR_VALIDES") return "ACHATS MFR REALISES";
+  if (d === "ACHATS_MTP_VALIDES") return "ACHATS MTP REALISES";
+  return null;
+}
 
 export type SaisieOperation = Omit<OperationMarche, "id" | "montant">;
 

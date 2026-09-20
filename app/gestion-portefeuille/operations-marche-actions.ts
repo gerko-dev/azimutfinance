@@ -151,6 +151,47 @@ export async function caracteristiquesTitreAction(
   return { ok: true, data: c };
 }
 
+/**
+ * Contrôles PARTAGÉS par la création et la modification.
+ *
+ * Une correction ne doit pas pouvoir produire une ligne que la saisie initiale
+ * aurait refusée — c'est exactement par là que les données se dégradent.
+ *
+ * Ils portent sur ce qui rendrait la ligne INEXPLOITABLE : le montant se
+ * déduit de la quantité et du prix, et le compte de règlement décide de la
+ * colonne — sans lui, le montant n'a nulle part où tomber et disparaîtrait en
+ * silence.
+ *
+ * Renvoie le message d'erreur, ou null si tout va bien.
+ */
+function valider(saisie: SaisieOperation): string | null {
+  if (!EST_DATE.test(saisie.dateOperation)) return "Renseigne la date de l'opération.";
+  if (!DESCRIPTIONS_VALIDES.has(saisie.description)) return "Choisis le type d'opération.";
+  if (!INSTRUMENTS_VALIDES.has(saisie.instrument))
+    return "Choisis la nature de l'instrument.";
+  if (!(saisie.quantite > 0)) return "La quantité doit être strictement positive.";
+  if (!(saisie.prix > 0)) return "Le prix doit être strictement positif.";
+  if (!saisie.compteReglement.trim())
+    return "Choisis le compte de règlement : sans lui, le montant n'entre dans aucune colonne du point de trésorerie.";
+
+  // La part servie ne peut pas dépasser l'ordre. La base l'interdit aussi,
+  // mais son message parlerait de contrainte, pas de quantité.
+  if (saisie.quantiteExecutee < 0 || saisie.quantiteExecutee > saisie.quantite)
+    return `La quantité exécutée (${saisie.quantiteExecutee}) ne peut pas dépasser la quantité ordonnée (${saisie.quantite}).`;
+
+  // Sur le marché des titres publics, une adjudication est servie ou ne l'est
+  // pas : une exécution partielle y serait une saisie erronée, pas un cas de
+  // marché.
+  if (
+    saisie.instrument === "mtp" &&
+    saisie.quantiteExecutee > 0 &&
+    saisie.quantiteExecutee !== saisie.quantite
+  ) {
+    return "Sur le marché des titres publics, un ordre est servi en totalité ou pas du tout.";
+  }
+  return null;
+}
+
 export async function enregistrerOperationMarcheAction(
   fundId: string,
   saisie: SaisieOperation,
@@ -159,27 +200,8 @@ export async function enregistrerOperationMarcheAction(
   if ("erreur" in acces) return { ok: false, error: acces.erreur };
   const { supabase, userId } = acces;
 
-  // ── Contrôles. Ils portent sur ce qui rendrait la ligne INEXPLOITABLE ────
-  //
-  // Le montant se déduit de la quantité et du prix : sans eux, l'opération ne
-  // peut alimenter aucun poste. Le compte de règlement décide de la COLONNE :
-  // sans lui, le montant n'a nulle part où tomber et disparaîtrait en silence.
-  if (!EST_DATE.test(saisie.dateOperation))
-    return { ok: false, error: "Renseigne la date de l'opération." };
-  if (!DESCRIPTIONS_VALIDES.has(saisie.description))
-    return { ok: false, error: "Choisis le type d'opération." };
-  if (!INSTRUMENTS_VALIDES.has(saisie.instrument))
-    return { ok: false, error: "Choisis la nature de l'instrument." };
-  if (!(saisie.quantite > 0))
-    return { ok: false, error: "La quantité doit être strictement positive." };
-  if (!(saisie.prix > 0))
-    return { ok: false, error: "Le prix doit être strictement positif." };
-  if (!saisie.compteReglement.trim())
-    return {
-      ok: false,
-      error:
-        "Choisis le compte de règlement : sans lui, le montant n'entre dans aucune colonne du point de trésorerie.",
-    };
+  const invalide = valider(saisie);
+  if (invalide) return { ok: false, error: invalide };
 
   // Le client envoie deja la date calculee ; ce repli sert au cas ou elle
   // manque, et emploie la MEME convention que l'ecran — celle du gerant.
@@ -202,6 +224,8 @@ export async function enregistrerOperationMarcheAction(
       code: saisie.code.trim(),
       libelle: saisie.libelle.trim(),
       quantite: saisie.quantite,
+      quantite_executee: saisie.quantiteExecutee,
+      validite: saisie.validite,
       prix: saisie.prix,
       sgi: saisie.sgi.trim(),
       taux_courtage: saisie.tauxCourtage,
@@ -220,6 +244,66 @@ export async function enregistrerOperationMarcheAction(
 
   revalidatePath(`/gestion-portefeuille/fonds/${fundId}`);
   return { ok: true, data: { id: (data as { id: string }).id } };
+}
+
+/**
+ * Modifie une operation deja saisie.
+ *
+ * Meme validation que la creation : une correction ne doit pas pouvoir
+ * produire une ligne que la saisie initiale aurait refusee.
+ */
+export async function modifierOperationMarcheAction(
+  fundId: string,
+  operationId: string,
+  saisie: SaisieOperation,
+): Promise<ActionResult<{ id: string }>> {
+  const acces = await autoriser(fundId);
+  if ("erreur" in acces) return { ok: false, error: acces.erreur };
+  const { supabase, userId } = acces;
+
+  const invalide = valider(saisie);
+  if (invalide) return { ok: false, error: invalide };
+
+  const denouement = EST_DATE.test(saisie.dateDenouement)
+    ? saisie.dateDenouement
+    : dateDenouement(
+        saisie.dateOperation,
+        conventionDe(await chargerParametresMarche(), saisie.instrument),
+      );
+
+  const { error } = await supabase
+    .from("fund_market_operations")
+    .update({
+      date_operation: saisie.dateOperation,
+      date_denouement: denouement,
+      description: saisie.description as DescriptionOperation,
+      instrument: saisie.instrument,
+      code: saisie.code.trim(),
+      libelle: saisie.libelle.trim(),
+      quantite: saisie.quantite,
+      quantite_executee: saisie.quantiteExecutee,
+      validite: saisie.validite,
+      prix: saisie.prix,
+      sgi: saisie.sgi.trim(),
+      taux_courtage: saisie.tauxCourtage,
+      taux_tps: saisie.tauxTps,
+      taux_brvm: saisie.tauxBrvm,
+      taux_dcbr: saisie.tauxDcbr,
+      interets_courus: saisie.interetsCourus,
+      compte_reglement: saisie.compteReglement.trim(),
+      statut: saisie.statut,
+      note: saisie.note.trim(),
+    })
+    .eq("id", operationId)
+    .eq("fund_id", fundId)
+    .eq("owner_id", userId);
+
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath(`/gestion-portefeuille/fonds/${fundId}`);
+  revalidatePath("/gestion-portefeuille/operations-marche");
+  revalidatePath("/gestion-portefeuille/tresorerie");
+  return { ok: true, data: { id: operationId } };
 }
 
 export async function supprimerOperationMarcheAction(
