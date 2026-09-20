@@ -64,9 +64,14 @@ const aide = "text-[9px] text-slate-400";
 const TAUX_ACTIONS = { courtage: 0.004, tps: 0.1 };
 
 /** Libellé complet d'une option — c'est CE TEXTE que le navigateur recopie
- *  dans le champ quand on choisit une suggestion du `datalist`, et donc la
- *  clef de résolution au retour. */
-const libelleOption = (t: OptionTitre) => `${t.libelle} · ${t.detail}`;
+ *  dans le champ quand on choisit une suggestion du `datalist`, et donc à la
+ *  fois ce sur quoi la recherche porte et la clef de résolution au retour.
+ *
+ *  Le MNÉMONIQUE vient en tête : c'est par lui qu'un gérant désigne un titre
+ *  — « SNTS », pas « SONATEL SN » — et le `datalist` filtre sur tout le
+ *  texte, donc le placer devant le rend utilisable dès la première frappe. */
+const libelleOption = (t: OptionTitre) =>
+  `${t.symbole ? `${t.symbole} — ` : ""}${t.libelle} · ${t.detail}`;
 
 type Compte = {
   cle: string;
@@ -654,7 +659,7 @@ export default function OperationsMarchePanel({
                     Aucun titre ne correspond — choisis une suggestion.
                   </span>
                 ) : (
-                  "Le nom, le code ou l'échéance"
+                  "Le symbole, le nom, l'ISIN ou l'échéance"
                 )}
               </span>
             </Champ>

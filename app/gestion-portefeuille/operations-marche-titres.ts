@@ -23,6 +23,10 @@ import type { Instrument } from "./operations-marche-types";
 export type OptionTitre = {
   /** Clef de sélection : le mnémonique pour une action, l'ISIN sinon. */
   cle: string;
+  /** Mnémonique BRVM — SNTS, TPCI.O74. Vide pour un titre public, qui n'en a
+   *  pas d'autre que son ISIN. Il entre dans le libellé cherché : c'est par
+   *  lui que le gérant désigne un titre, pas par sa raison sociale. */
+  symbole: string;
   libelle: string;
   isin: string;
   instrument: Instrument;
@@ -60,6 +64,7 @@ const iso = (d: string) => (/^\d{4}-\d{2}-\d{2}$/.test(d) ? d : "");
 export function titresMfr(): OptionTitre[] {
   const actions: OptionTitre[] = loadStocks().map((s) => ({
     cle: s.code,
+    symbole: s.code,
     libelle: s.name,
     isin: s.isin ?? "",
     instrument: "actions",
@@ -73,12 +78,15 @@ export function titresMfr(): OptionTitre[] {
     .filter((b) => !b.maturityDate || b.maturityDate >= aujourdhui)
     .map((b) => ({
       cle: b.isin || b.code,
+      symbole: b.code ?? "",
       libelle: b.name,
       isin: b.isin ?? "",
       instrument: "obligations",
+      // L'ISIN entre dans le détail, donc dans le texte cherché : sur une
+      // obligation, c'est souvent lui qu'on a sous les yeux.
       detail: `Obligation cotée · ${(b.couponRate * 100).toFixed(2)} % · éch. ${
         b.maturityDate || "—"
-      }`,
+      }${b.isin ? ` · ${b.isin}` : ""}`,
     }));
 
   return [...actions, ...obligations].sort((a, b) =>
@@ -150,6 +158,9 @@ export function titresMtp(pays: string): OptionTitre[] {
     .sort((a, b) => a.echeance.localeCompare(b.echeance) || a.isin.localeCompare(b.isin))
     .map((t) => ({
       cle: t.isin,
+      // Un titre public n'a pas de mnémonique : son ISIN en tient lieu, et il
+      // est déjà le libellé.
+      symbole: "",
       libelle: t.isin,
       isin: t.isin,
       instrument: "mtp" as Instrument,
