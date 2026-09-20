@@ -13,37 +13,76 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useTransition } from "react";
 
+const EST_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
 export default function DateEngagements({ valeur }: { valeur: string }) {
   const router = useRouter();
   const params = useSearchParams();
   const [enCours, demarrer] = useTransition();
-  // Texte local : sans lui, chaque frappe dans un champ date partiellement
-  // rempli déclencherait une navigation, et le serveur recalculerait le point
-  // sur une date incomplète.
   const [texte, setTexte] = useState(valeur);
 
-  const appliquer = (v: string) => {
-    setTexte(v);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return;
+  /**
+   * LE CHANGEMENT SE CONFIRME, IL NE S'APPLIQUE PAS À LA FRAPPE.
+   *
+   * Un champ de date se remplit par morceaux, et chaque état intermédiaire est
+   * une date valide : taper 2026-09-30 passe par le 30 septembre 2026 mais
+   * aussi, selon la saisie, par des dates d'années entières. Recalculer à
+   * chaque frappe relançait donc plusieurs fois un calcul qui traverse tous les
+   * fonds, et faisait clignoter le tableau sur des dates que personne n'avait
+   * voulues.
+   *
+   * Le bouton dit aussi une chose utile : tant qu'il est actif, ce qu'on lit à
+   * l'écran ne correspond PAS à la date affichée dans le champ.
+   */
+  const appliquer = () => {
+    if (!EST_DATE.test(texte) || texte === valeur) return;
     const suivants = new URLSearchParams(params.toString());
-    suivants.set("engagements", v);
+    suivants.set("engagements", texte);
     demarrer(() => router.push(`?${suivants.toString()}`));
   };
 
+  const modifie = EST_DATE.test(texte) && texte !== valeur;
+
   return (
-    <label className="flex items-center gap-2 text-[11px] text-slate-600">
-      <span className="uppercase tracking-wider text-[10px] text-slate-500">
-        Engagements jusqu&apos;au
-      </span>
-      <input
-        type="date"
-        value={texte}
-        onChange={(e) => appliquer(e.target.value)}
-        disabled={enCours}
-        title="Les flux dénoués jusqu'à cette date sont comptés ; les suivants ne le sont pas."
-        className="text-xs border border-slate-300 rounded px-2 py-1.5 bg-white focus:border-blue-400 focus:outline-none disabled:opacity-60"
-      />
-      {enCours && <span className="text-slate-400">recalcul…</span>}
-    </label>
+    <div className="flex items-center gap-2 text-[11px] text-slate-600">
+      <label className="flex items-center gap-2">
+        <span className="uppercase tracking-wider text-[10px] text-slate-500">
+          Engagements jusqu&apos;au
+        </span>
+        <input
+          type="date"
+          value={texte}
+          onChange={(e) => setTexte(e.target.value)}
+          onKeyDown={(e) => {
+            // Entrée vaut confirmation : c'est le geste attendu quand on vient
+            // de taper une date, et l'exiger à la souris agacerait.
+            if (e.key === "Enter") {
+              e.preventDefault();
+              appliquer();
+            }
+          }}
+          disabled={enCours}
+          title="Les flux dénoués jusqu'à cette date sont comptés ; les suivants ne le sont pas."
+          className={`text-xs border rounded px-2 py-1.5 bg-white focus:outline-none disabled:opacity-60 ${
+            modifie ? "border-amber-400" : "border-slate-300 focus:border-blue-400"
+          }`}
+        />
+      </label>
+
+      <button
+        type="button"
+        onClick={appliquer}
+        disabled={!modifie || enCours}
+        className="px-3 py-1.5 text-xs font-medium rounded border border-blue-300 text-blue-700 hover:bg-blue-50 disabled:opacity-40 disabled:hover:bg-transparent transition"
+      >
+        {enCours ? "Recalcul…" : "Appliquer"}
+      </button>
+
+      {modifie && !enCours && (
+        <span className="text-amber-700">
+          le tableau montre encore le {valeur || "—"}
+        </span>
+      )}
+    </div>
   );
 }
