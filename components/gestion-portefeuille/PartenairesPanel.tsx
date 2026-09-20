@@ -19,6 +19,7 @@ import {
   supprimerPartenaireAction,
 } from "@/app/gestion-portefeuille/partenaires-actions";
 import { UEMOA_CODES, WORLD_COUNTRIES } from "@/lib/onboarding/countries";
+import ChampTaux from "./ChampTaux";
 import {
   LIBELLES_NATURE,
   REFERENTS_MAX,
@@ -49,15 +50,6 @@ const PAYS_PROPOSES: string[] = (() => {
 
 const ID_PAYS = "partenaires-pays";
 const etiquette = "text-[10px] uppercase tracking-wider text-slate-500";
-
-/** Les taux sont stockés en décimal et saisis en POURCENTAGE : personne ne
- *  pense « 0,004 », tout le monde pense « 0,4 % ». La conversion se fait ici,
- *  au bord de l'écran, pour que le reste du module n'ait qu'une convention. */
-const versPct = (v: number) => String(Number((v * 100).toFixed(4)));
-const depuisPct = (s: string) => {
-  const n = Number(s.replace(",", "."));
-  return Number.isFinite(n) ? n / 100 : 0;
-};
 
 /**
  * Un champ, large de `span` colonnes sur la grille de six.
@@ -350,21 +342,26 @@ export default function PartenairesPanel({
                   de place, identique pour toutes les SGI, et il se règle par
                   instrument à la saisie de l'opération. La faire figurer sur
                   une fiche partenaire laissait croire qu'elle se négocie. */}
+              {/* `ChampTaux` garde son propre texte : un champ contrôlé
+                  reconverti depuis un nombre à chaque frappe interdisait de
+                  taper « 0,4 » — la virgule disparaissait sous les doigts.
+                  La `key` liée à la fiche en cours le remonte quand on passe
+                  d'un partenaire à l'autre sans fermer le formulaire. */}
               <Champ label="Courtage (%)" span={2}>
-                <input
-                  value={versPct(saisie.tauxCourtage)}
-                  onChange={(e) => set("tauxCourtage", depuisPct(e.target.value))}
-                  inputMode="decimal"
+                <ChampTaux
+                  key={`courtage-${editionId ?? "nouveau"}`}
+                  valeur={saisie.tauxCourtage}
+                  onChange={(v) => set("tauxCourtage", v)}
                   className={`${champ} text-right tabular-nums`}
                 />
                 <span className="text-[9px] text-slate-400">Usuel : 0,4</span>
               </Champ>
 
               <Champ label="TPS sur courtage (%)" span={2}>
-                <input
-                  value={versPct(saisie.tauxTps)}
-                  onChange={(e) => set("tauxTps", depuisPct(e.target.value))}
-                  inputMode="decimal"
+                <ChampTaux
+                  key={`tps-${editionId ?? "nouveau"}`}
+                  valeur={saisie.tauxTps}
+                  onChange={(v) => set("tauxTps", v)}
                   className={`${champ} text-right tabular-nums`}
                 />
                 <span className="text-[9px] text-slate-400">Usuel : 10</span>

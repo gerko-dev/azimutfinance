@@ -19,17 +19,11 @@ import {
   type ParametresMarche,
 } from "@/app/gestion-portefeuille/parametres-marche-types";
 import { dateDenouement } from "@/app/gestion-portefeuille/operations-marche-types";
+import ChampTaux from "./ChampTaux";
 
 const champ =
   "w-full text-xs border border-slate-300 rounded px-2 py-1.5 focus:border-blue-400 focus:outline-none";
 const etiquette = "text-[10px] uppercase tracking-wider text-slate-500";
-
-/** Saisie en POURCENTAGE, stockage en décimal — personne ne pense « 0,003 ». */
-const versPct = (v: number) => String(Number((v * 100).toFixed(4)));
-const depuisPct = (s: string) => {
-  const n = Number(s.replace(",", "."));
-  return Number.isFinite(n) ? n / 100 : 0;
-};
 
 function Champ({
   label,
@@ -117,6 +111,9 @@ export default function ParametresMarchePanel({
   const [p, setP] = useState<ParametresMarche>(initial);
   const [erreur, setErreur] = useState<string | null>(null);
   const [ok, setOk] = useState(false);
+  // Incrémenté par « Rétablir » : sert de `key` aux champs de taux, qui
+  // gardent leur propre texte et ne se resynchronisent donc pas d'eux-mêmes.
+  const [generation, setGeneration] = useState(0);
 
   const enregistrer = () => {
     setErreur(null);
@@ -171,32 +168,22 @@ export default function ParametresMarchePanel({
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-2">
           <Champ label="Commission BRVM (%)" aide="Usuel : 0,3">
-            <input
-              value={versPct(p.tauxBrvm)}
-              onChange={(e) =>
-                setP((x) => ({ ...x, tauxBrvm: depuisPct(e.target.value) }))
-              }
-              inputMode="decimal"
+            <ChampTaux
+              key={`brvm-${generation}`}
+              valeur={p.tauxBrvm}
+              onChange={(v) => setP((x) => ({ ...x, tauxBrvm: v }))}
               className={`${champ} text-right tabular-nums`}
             />
           </Champ>
           <Champ label="Commission DC/BR (%)" aide="Dépositaire central">
-            <input
-              value={versPct(p.tauxDcbr)}
-              onChange={(e) =>
-                setP((x) => ({ ...x, tauxDcbr: depuisPct(e.target.value) }))
-              }
-              inputMode="decimal"
+            <ChampTaux
+              key={`dcbr-${generation}`}
+              valeur={p.tauxDcbr}
+              onChange={(v) => setP((x) => ({ ...x, tauxDcbr: v }))}
               className={`${champ} text-right tabular-nums`}
             />
           </Champ>
         </div>
-
-        <p className="text-[10px] text-slate-500 bg-slate-50 border border-slate-200 rounded px-3 py-2 mt-3">
-          Le <strong>courtage</strong> et la <strong>TPS</strong> ne se règlent pas
-          ici : ils se négocient avec chaque SGI et vivent sur sa fiche, dans
-          l&apos;onglet Partenaires.
-        </p>
 
         <div className="flex items-center gap-3 mt-4 pt-3 border-t border-slate-200">
           <button
@@ -209,7 +196,10 @@ export default function ParametresMarchePanel({
           </button>
           <button
             type="button"
-            onClick={() => setP(PARAMETRES_DEFAUT)}
+            onClick={() => {
+              setP(PARAMETRES_DEFAUT);
+              setGeneration((g) => g + 1);
+            }}
             className="px-4 py-1.5 text-xs border border-slate-300 rounded hover:bg-slate-50"
           >
             Rétablir les conventions de place
