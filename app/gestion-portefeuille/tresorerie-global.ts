@@ -37,9 +37,12 @@ function rangGroupe(groupe: string): number {
  */
 export async function construirePointGlobal(
   fonds: { id: string; nom: string }[],
+  dateEngagements?: string | null,
 ): Promise<PointTresorerie | null> {
   const points = (
-    await Promise.all(fonds.map((f) => construirePointTresorerie(f.id, f.nom)))
+    await Promise.all(
+      fonds.map((f) => construirePointTresorerie(f.id, f.nom, dateEngagements)),
+    )
   ).filter((p): p is PointTresorerie => p !== null);
 
   if (points.length === 0) return null;

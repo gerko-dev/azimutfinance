@@ -2,13 +2,14 @@
 
 import { useState } from "react";
 
-import { enregistrerSoldesTresorerieAction } from "@/app/gestion-portefeuille/tresorerie-actions";
 import {
   intitule,
   LIGNES_POINT_TRESORERIE,
   type LigneTresorerie,
   type PointTresorerie,
 } from "@/app/gestion-portefeuille/tresorerie-types";
+import type { GrilleSoldes } from "@/app/gestion-portefeuille/tresorerie-grille";
+import SaisieSoldesDialog from "./SaisieSoldesDialog";
 
 /**
  * Point de trésorerie — même disposition que la feuille du classeur, mais
@@ -31,51 +32,6 @@ const fmt2 = new Intl.NumberFormat("fr-FR", {
 });
 
 const montant = (v: number | null) => (v === null ? "—" : fmt0.format(Math.round(v)));
-
-/**
- * Met en forme ce que le trésorier tape dans une case de solde.
- *
- * Les soldes se comptent en centaines de millions de francs : sans
- * séparateurs, « 220180967 » ne se relit pas, et une erreur d'un facteur dix
- * passe inaperçue. On les pose donc À LA FRAPPE, et pas seulement à la
- * validation — l'erreur doit se voir au moment où elle se commet.
- *
- * Le signe est conservé : un compte peut être à découvert.
- *
- * Tout ce qui suit une virgule ou un point est COUPÉ, pas ignoré. Le franc CFA
- * n'a pas de subdivision, donc un solde n'a pas de décimales ; mais si l'on se
- * contentait de retirer les caractères non chiffrés, « 12,5 » collé depuis un
- * relevé deviendrait « 125 » — un facteur dix passé inaperçu, précisément
- * l'erreur que ces séparateurs sont censés rendre visible.
- *
- * `lu()` retire les espaces avant de convertir, y compris l'espace fine
- * insécable (U+202F) que produit le format fr-FR : `\s` la couvre.
- */
-function formaterSaisie(brut: string): string {
-  const negatif = brut.trimStart().startsWith("-");
-  const chiffres = brut.split(/[.,]/)[0].replace(/\D/g, "");
-  if (!chiffres) return negatif ? "-" : "";
-  return (negatif ? "-" : "") + fmt0.format(Number(chiffres));
-}
-
-/**
- * Position du curseur après remise en forme.
- *
- * Sans ce calcul, réécrire la valeur renvoie le curseur en fin de champ à
- * chaque touche : corriger un chiffre au milieu d'un montant devient
- * impossible. On compte les CHIFFRES situés avant le curseur — les
- * séparateurs ne comptent pas, puisqu'ils se déplacent — et on le repose
- * après le même nombre de chiffres dans la chaîne reformatée.
- */
-function positionApresFormatage(formate: string, chiffresAvant: number): number {
-  let i = 0;
-  let vus = 0;
-  while (i < formate.length && vus < chiffresAvant) {
-    if (/\d/.test(formate[i])) vus++;
-    i++;
-  }
-  return i;
-}
 const pourcent = (v: number | null) => (v === null ? "—" : fmt2.format(v * 100) + " %");
 
 function classeLigne(l: { nature: LigneTresorerie["nature"]; source: LigneTresorerie["source"] }) {
@@ -102,16 +58,13 @@ const LARGEUR_TOTAL = 128;
 
 export default function TresoreriePanel({
   point,
-  lectureSeule = false,
+  grille,
 }: {
   point: PointTresorerie | null;
-  /** Vue CONSOLIDÉE : les soldes ne s'y saisissent pas.
-   *
-   *  Ils se saisissent par fonds, parce qu'un relevé bancaire appartient à un
-   *  fonds. Laisser le champ actif sur la consolidation aurait laissé croire
-   *  qu'on peut corriger un total — et il aurait fallu décider, à
-   *  l'enregistrement, à quel fonds imputer l'écart. */
-  lectureSeule?: boolean;
+  /** Grille de saisie — banques en colonnes, fonds en lignes. Absente, le
+   *  bouton de saisie ne s'affiche pas : c'est le cas sur un écran qui ne la
+   *  charge pas. */
+  grille?: GrilleSoldes | null;
 }) {
   if (!point) {
     return (
@@ -122,63 +75,43 @@ export default function TresoreriePanel({
     );
   }
 
-  return <Contenu point={point} lectureSeule={lectureSeule} />;
+  return <Contenu point={point} grille={grille ?? null} />;
 }
 
 function Contenu({
   point,
-  lectureSeule,
+  grille,
 }: {
   point: PointTresorerie;
-  lectureSeule: boolean;
+  grille: GrilleSoldes | null;
 }) {
+  const [saisieOuverte, setSaisieOuverte] = useState(false);
   const parLibelle = new Map(point.lignes.map((l) => [l.libelle, l]));
   const ligneSolde = parLibelle.get("SOLDE");
 
-  const [saisie, setSaisie] = useState<Record<string, string>>(() =>
-    Object.fromEntries(
-      point.banques.map((b) => [
-        b,
-        formaterSaisie(String(Math.round(ligneSolde?.parBanque[b] ?? 0))),
-      ]),
-    ),
-  );
-  const [dateArrete, setDateArrete] = useState(
-    point.soldesSaisisLe ?? new Date().toISOString().slice(0, 10),
-  );
-  const [etat, setEtat] = useState<"repos" | "envoi" | "ok">("repos");
-  const [erreur, setErreur] = useState<string | null>(null);
-
-  const lu = (b: string): number => {
-    const n = Number((saisie[b] ?? "").replace(/\s/g, "").replace(",", "."));
-    return Number.isFinite(n) ? n : 0;
+  // Les soldes viennent DU SERVEUR, plus d'un état local.
+  //
+  // Ils étaient recalculés à la frappe tant que la saisie vivait dans le
+  // tableau ; maintenant qu'elle se fait dans une grille à part, la page se
+  // rafraîchit à l'enregistrement et les valeurs affichées sont celles
+  // enregistrées. Un état local n'aurait fait que dupliquer la source, avec
+  // le risque qu'ils divergent après un échec d'écriture.
+  const soldeDe = (b: string): number => {
+    const v = ligneSolde?.parBanque[b];
+    return typeof v === "number" ? v : 0;
   };
 
-  // Les soldes saisis recalculent les deux soldes d'arrivee SANS aller-retour
-  // serveur : tous les autres postes valent zero tant qu'ils n'ont pas de
-  // source, donc le solde reel se reduit au solde bancaire. Le jour ou ces
-  // postes seront alimentes, ce calcul repassera cote serveur.
-  const soldeReel = point.banques.reduce((s, b) => s + lu(b), 0);
+  // Tous les autres postes valent zéro tant qu'ils n'ont pas de source, donc
+  // le solde réel se réduit au solde bancaire. Le jour où ils seront
+  // alimentés, ce calcul repassera côté serveur.
+  const soldeReel = point.banques.reduce((s, b) => s + soldeDe(b), 0);
   const soldeTheorique = soldeReel;
-
-  const enregistrer = async () => {
-    setEtat("envoi");
-    setErreur(null);
-    const res = await enregistrerSoldesTresorerieAction(
-      point.fondsId,
-      dateArrete,
-      Object.fromEntries(point.banques.map((b) => [b, lu(b)])),
-    );
-    if (!res.ok) {
-      setEtat("repos");
-      setErreur(res.error);
-      return;
-    }
-    setEtat("ok");
-  };
 
   return (
     <div className="space-y-4">
+      {saisieOuverte && grille && (
+        <SaisieSoldesDialog grille={grille} onFermer={() => setSaisieOuverte(false)} />
+      )}
       <div className="bg-white border border-slate-200 rounded-lg p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <h2 className="text-sm font-semibold text-slate-900">Point de trésorerie</h2>
@@ -205,37 +138,29 @@ function Contenu({
           </div>
         </div>
 
-        <div className={`flex flex-wrap items-center gap-2 mt-3 ${lectureSeule ? "hidden" : ""}`}>
-          <label className="text-[11px] text-slate-600">
-            Date du point
-            <input
-              type="date"
-              value={dateArrete}
-              onChange={(e) => setDateArrete(e.target.value)}
-              className="ml-1.5 px-2 py-1 rounded border border-slate-300 text-[11px]"
-            />
-          </label>
-          <button
-            type="button"
-            onClick={enregistrer}
-            disabled={etat === "envoi"}
-            className="px-3 py-1 rounded text-[11px] font-medium border border-blue-300 text-blue-700 hover:bg-blue-50 disabled:opacity-50 transition"
-          >
-            {etat === "envoi" ? "Enregistrement…" : "Enregistrer les soldes"}
-          </button>
-          {etat === "ok" && <span className="text-[11px] text-emerald-700">Enregistré.</span>}
+        <div className="flex flex-wrap items-center gap-3 mt-3">
+          {/* LA SAISIE SORT DU TABLEAU.
+              Le tableau est une RESTITUTION : y mêler des champs rendait
+              chaque cellule ambiguë — celle-ci se corrige, celle-là se
+              calcule, et rien ne les distinguait qu'une bordure. Elle se fait
+              désormais dans une grille dédiée, banques en colonnes et fonds en
+              lignes, qui est la forme d'un relevé bancaire. */}
+          {grille && (
+            <button
+              type="button"
+              onClick={() => setSaisieOuverte(true)}
+              className="px-3 py-1 rounded text-[11px] font-medium border border-blue-300 text-blue-700 hover:bg-blue-50 transition"
+            >
+              Saisir les soldes
+            </button>
+          )}
           {point.soldesSaisisLe && (
             <span className="text-[11px] text-slate-500">
-              Dernière saisie : {point.soldesSaisisLe}
+              Derniers soldes saisis : {point.soldesSaisisLe}
             </span>
           )}
         </div>
 
-        {erreur && (
-          <p className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded px-3 py-2 mt-2">
-            {erreur}
-          </p>
-        )}
 
         <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 mt-3">
           Les soldes se <strong>saisissent</strong> : le solde bancaire diffère presque
@@ -434,29 +359,14 @@ function Contenu({
                       )}
                     </td>
                     {point.banques.map((b) =>
-                      def.libelle === "SOLDE" && !lectureSeule ? (
-                        <td key={b} className="px-1 py-1 bg-white">
-                          <input
-                            value={saisie[b] ?? ""}
-                            onChange={(e) => {
-                              const champ = e.currentTarget;
-                              const chiffresAvant = champ.value
-                                .slice(0, champ.selectionStart ?? champ.value.length)
-                                .replace(/\D/g, "").length;
-                              const formate = formaterSaisie(champ.value);
-                              setSaisie((s) => ({ ...s, [b]: formate }));
-                              // Après le rendu, sinon React remet le curseur
-                              // en fin de champ.
-                              requestAnimationFrame(() => {
-                                const pos = positionApresFormatage(formate, chiffresAvant);
-                                champ.setSelectionRange(pos, pos);
-                              });
-                            }}
-                            inputMode="numeric"
-                            className="w-full text-right px-1.5 py-1 rounded border border-slate-300 tabular-nums focus:border-blue-400 focus:outline-none"
-                          />
+                      def.libelle === "SOLDE" ? (
+                        <td key={b} className="px-2 py-1.5 text-right tabular-nums whitespace-nowrap">
+                          {montant(l ? (l.parBanque[b] ?? null) : null)}
+                          {/* Le solde COMPTABLE de l'inventaire reste en
+                              regard : l'écart entre les deux est
+                              l'information utile du tableau. */}
                           <span
-                            className="block text-right text-[9px] text-slate-400 mt-0.5 tabular-nums"
+                            className="block text-[9px] text-slate-400 mt-0.5 tabular-nums"
                             title="Solde comptable à l'inventaire, pour comparaison"
                           >
                             inv. {montant(point.soldesInventaire[b] ?? 0)}

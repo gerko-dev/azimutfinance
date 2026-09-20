@@ -66,5 +66,41 @@ export async function enregistrerSoldesTresorerieAction(
   if (error) return { ok: false, error: `Enregistrement impossible : ${error.message}` };
 
   revalidatePath(`/gestion-portefeuille/fonds/${fundId}`);
+  revalidatePath("/gestion-portefeuille/tresorerie");
   return { ok: true, data: { as_of_date: dateArrete } };
+}
+
+/**
+ * Enregistre les soldes de PLUSIEURS fonds à une même date.
+ *
+ * C'est le geste réel du trésorier : il ouvre le relevé d'une banque, y trouve
+ * les comptes de tous les fonds, et les saisit d'un coup. Une action par fonds
+ * l'aurait obligé à valider autant de fois qu'il a de portefeuilles, avec le
+ * risque d'en oublier un en route et de laisser un point à demi corrigé.
+ *
+ * Les fonds sont traités EN SÉRIE et non en parallèle : chacun est un upsert
+ * indépendant, et une erreur sur l'un ne doit ni empêcher les suivants ni
+ * passer inaperçue. On rend la liste de ceux qui ont échoué plutôt qu'un
+ * unique « ça n'a pas marché ».
+ */
+export async function enregistrerSoldesMultiFondsAction(
+  dateArrete: string,
+  parFonds: Record<string, Record<string, number>>,
+): Promise<ActionResult<{ as_of_date: string; enregistres: number; echecs: string[] }>> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateArrete))
+    return { ok: false, error: "Renseigne la date du point de trésorerie." };
+
+  const echecs: string[] = [];
+  let enregistres = 0;
+  for (const [fundId, soldes] of Object.entries(parFonds)) {
+    const res = await enregistrerSoldesTresorerieAction(fundId, dateArrete, soldes);
+    if (res.ok) enregistres++;
+    else echecs.push(`${fundId} : ${res.error}`);
+  }
+
+  if (enregistres === 0 && echecs.length > 0)
+    return { ok: false, error: echecs.join(" · ") };
+
+  revalidatePath("/gestion-portefeuille/tresorerie");
+  return { ok: true, data: { as_of_date: dateArrete, enregistres, echecs } };
 }

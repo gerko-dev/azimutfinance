@@ -47,6 +47,22 @@ const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v)
 export async function construirePointTresorerie(
   fundId: string,
   nomFonds: string,
+  /**
+   * Date de PRISE EN COMPTE DES ENGAGEMENTS.
+   *
+   * Elle ne se confond pas avec la date des soldes. Les soldes disent ce qu'il
+   * y a en banque à un instant ; cette date-ci dit jusqu'où l'on regarde les
+   * flux à venir. Le classeur les distingue déjà — sa cellule « DATE FIN » est
+   * au 30 septembre quand les soldes sont d'un autre jour.
+   *
+   * Les confondre interdisait de répondre à la question qui compte pour un
+   * trésorier : « de quoi vais-je disposer à telle date, une fois tout ce qui
+   * est engagé passé ? »
+   *
+   * À défaut, on retombe sur la date des soldes saisis : c'est le comportement
+   * d'avant, donc rien ne change tant que personne ne choisit.
+   */
+  dateEngagements?: string | null,
 ): Promise<PointTresorerie | null> {
   // L'inventaire de FIN fait foi.
   //
@@ -162,7 +178,13 @@ export async function construirePointTresorerie(
   // celle de l'inventaire. C'est la cellule « DATE FIN » du classeur, et elle
   // decide de ce qui compte : une operation denouee APRES cette date n'a pas
   // encore bouge la tresorerie.
-  const dateArrete = saisie?.as_of_date ?? actuel.asOfDate ?? null;
+  const dateArrete =
+    (dateEngagements && /^\d{4}-\d{2}-\d{2}$/.test(dateEngagements)
+      ? dateEngagements
+      : null) ??
+    saisie?.as_of_date ??
+    actuel.asOfDate ??
+    null;
   const operations = await loadOperationsMarche(fundId);
   const parPoste = agregerParPoste(operations, dateArrete);
 
@@ -267,7 +289,8 @@ export async function construirePointTresorerie(
   return {
     fondsId: fundId,
     fonds: nomFonds,
-    dateFin: saisie?.as_of_date ?? null,
+    // « DATE FIN » du classeur : jusqu'ou les engagements sont pris en compte.
+    dateFin: dateArrete,
     banques,
     actifNet: actifNet > 0 ? actifNet : null,
     dateInventaire: actuel.asOfDate,
