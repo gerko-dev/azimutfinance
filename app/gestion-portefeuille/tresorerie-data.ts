@@ -29,6 +29,12 @@ import {
 import { normName } from "./portfolio-match";
 import { agregerParPoste, loadOperationsMarche } from "./operations-marche-data";
 import {
+  dateLimiteOrdre,
+  montantRestant,
+  posteEngage,
+  quantiteRestante,
+} from "./operations-marche-types";
+import {
   LIGNES_POINT_TRESORERIE,
   type LigneTresorerie,
   type PointTresorerie,
@@ -224,6 +230,22 @@ export async function construirePointTresorerie(
     )
     .sort((a, b) => a.dateDenouement.localeCompare(b.dateDenouement));
 
+  // Ordres dont la part non servie a expiré : ils ne pèsent plus, mais leur
+  // disparition doit se voir. Sans cette liste, un engagement s'évaporait du
+  // point sans qu'aucun écran ne dise pourquoi.
+  const perimes = operations
+    .filter((o) => {
+      if (quantiteRestante(o) <= 0) return false;
+      if (!posteEngage(o.description)) return false;
+      return dateArrete !== null && dateLimiteOrdre(o) < dateArrete;
+    })
+    .map((o) => ({
+      libelle: `${o.libelle || o.code || "Ordre"} — ${o.compteReglement}`,
+      dateLimite: dateLimiteOrdre(o),
+      montant: montantRestant(o),
+    }))
+    .sort((a, b) => b.dateLimite.localeCompare(a.dateLimite));
+
   const v = (libelle: string, banque: string): number => valeurs.get(libelle)?.[banque] ?? 0;
   const somme = (libelles: string[], banque: string): number =>
     libelles.reduce((s, l) => s + v(l, banque), 0);
@@ -320,5 +342,6 @@ export async function construirePointTresorerie(
       (a, b) => Math.abs(b.montant) - Math.abs(a.montant),
     ),
     operationsNonDenouees: nonDenouees,
+    ordresPerimes: perimes,
   };
 }

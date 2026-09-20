@@ -155,5 +155,8 @@ export async function construirePointGlobal(
     operationsNonDenouees: points.flatMap((p) =>
       p.operationsNonDenouees.map((o) => ({ ...o, libelle: `${p.fonds} · ${o.libelle}` })),
     ),
+    ordresPerimes: points.flatMap((p) =>
+      p.ordresPerimes.map((o) => ({ ...o, libelle: `${p.fonds} · ${o.libelle}` })),
+    ),
   };
 }

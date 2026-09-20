@@ -66,6 +66,13 @@ export type Execution = {
   dateExecution: string;
   dateDenouement: string;
   quantite: number;
+  /** Prix RÉELLEMENT servi. Un ordre à cours limité est rarement exécuté au
+   *  centime près à sa limite, et un ordre servi en plusieurs fois l'est
+   *  souvent à plusieurs prix.
+   *
+   *  Zéro signifie « prix de l'ordre » : c'est ce que valent les exécutions
+   *  enregistrées avant que ce champ n'existe. */
+  prix: number;
   note: string;
 };
 
@@ -218,6 +225,62 @@ export function montantOperation(o: {
     o.tauxCourtage + o.tauxCourtage * o.tauxTps + o.tauxBrvm + (o.tauxDcbr ?? 0);
   const signe = sensDe(o.description) === "achat" ? 1 : -1;
   return brut * (1 + signe * frais) + o.interetsCourus;
+}
+
+/**
+ * Montant d'une EXÉCUTION, au prix réellement servi.
+ *
+ * Les taux sont ceux de l'ordre — ils se négocient avec la SGI, pas séance par
+ * séance. Les intérêts courus, eux, sont portés par l'ordre pour sa totalité :
+ * on en prend la part correspondant à la quantité servie, sans quoi un ordre
+ * servi en trois fois compterait trois fois ses courus.
+ */
+export function montantExecution(
+  o: Pick<
+    OperationMarche,
+    | "description"
+    | "quantite"
+    | "prix"
+    | "tauxCourtage"
+    | "tauxTps"
+    | "tauxBrvm"
+    | "tauxDcbr"
+    | "interetsCourus"
+  >,
+  e: { quantite: number; prix: number },
+): number {
+  return montantOperation({
+    description: o.description,
+    quantite: e.quantite,
+    prix: e.prix > 0 ? e.prix : o.prix,
+    tauxCourtage: o.tauxCourtage,
+    tauxTps: o.tauxTps,
+    tauxBrvm: o.tauxBrvm,
+    tauxDcbr: o.tauxDcbr,
+    interetsCourus:
+      o.quantite > 0 ? (o.interetsCourus * e.quantite) / o.quantite : 0,
+  });
+}
+
+/**
+ * Montant de la part NON SERVIE, au prix de l'ordre.
+ *
+ * C'est le bon prix pour un engagement : tant que rien n'est servi, c'est au
+ * cours ordonné que le gérant s'attend à payer.
+ */
+export function montantRestant(o: OperationMarche): number {
+  const reste = quantiteRestante(o);
+  if (reste <= 0) return 0;
+  return montantOperation({
+    description: o.description,
+    quantite: reste,
+    prix: o.prix,
+    tauxCourtage: o.tauxCourtage,
+    tauxTps: o.tauxTps,
+    tauxBrvm: o.tauxBrvm,
+    tauxDcbr: o.tauxDcbr,
+    interetsCourus: o.quantite > 0 ? (o.interetsCourus * reste) / o.quantite : 0,
+  });
 }
 
 /** Quantité servie, toutes exécutions confondues. */

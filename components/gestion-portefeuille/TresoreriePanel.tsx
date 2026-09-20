@@ -210,6 +210,29 @@ function Contenu({
           </div>
         )}
 
+        {/* UN ENGAGEMENT QUI S'EVAPORE DOIT SE VOIR.
+            La part non servie d'un ordre sort du point dès que sa validité est
+            passée — c'est la règle. Mais sans ce bandeau, le gérant constatait
+            seulement qu'un montant n'était plus là, sans rien pour lui dire
+            que c'était voulu ni depuis quand. */}
+        {point.ordresPerimes.length > 0 && (
+          <div className="text-[11px] text-slate-700 bg-slate-50 border border-slate-200 rounded px-3 py-2 mt-2">
+            <strong>
+              {point.ordresPerimes.length} ordre(s) non servi(s) et périmé(s)
+            </strong>{" "}
+            au {point.dateFin ?? point.dateInventaire ?? "—"} : leur validité est
+            passée, ils ne comptent plus dans les engagements.
+            <ul className="mt-1 space-y-0.5">
+              {point.ordresPerimes.map((o, i) => (
+                <li key={i} className="tabular-nums">
+                  valable jusqu&apos;au {o.dateLimite} · {o.libelle} —{" "}
+                  {montant(o.montant)} F
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {point.operationsSansColonne.length > 0 && (
           <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2 mt-2">
             <strong>

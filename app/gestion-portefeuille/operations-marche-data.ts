@@ -19,7 +19,9 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 import {
   dateLimiteOrdre,
+  montantExecution,
   montantOperation,
+  montantRestant,
   posteEngage,
   posteRealise,
   quantiteRestante,
@@ -36,6 +38,7 @@ type LigneExecution = {
   date_execution: string;
   date_denouement: string;
   quantite: number | string;
+  prix: number | string;
   note: string;
 };
 
@@ -72,7 +75,7 @@ const COLS_OPERATION =
   "interets_courus, compte_reglement, note";
 
 const COLS_EXECUTION =
-  "id, operation_id, date_execution, date_denouement, quantite, note";
+  "id, operation_id, date_execution, date_denouement, quantite, prix, note";
 
 function versExecution(l: LigneExecution): Execution {
   return {
@@ -80,6 +83,7 @@ function versExecution(l: LigneExecution): Execution {
     dateExecution: l.date_execution,
     dateDenouement: l.date_denouement,
     quantite: nb(l.quantite),
+    prix: nb(l.prix),
     note: l.note ?? "",
   };
 }
@@ -235,15 +239,15 @@ export function agregerParPoste(
   };
 
   for (const o of operations) {
-    // Montant unitaire, frais et courus compris au prorata : c'est ce qui
-    // permet de répartir un ordre partiellement servi sans recalculer les
-    // frais sur chaque morceau.
-    const parTitre = o.quantite > 0 ? o.montant / o.quantite : 0;
-
     // ── La part servie, exécution par exécution ──────────────────────────
+    //
+    // Chaque exécution est valorisée à SON prix : un ordre à cours limité est
+    // rarement servi au centime près à sa limite, et un ordre servi en
+    // plusieurs fois l'est souvent à plusieurs prix. Reprendre le prix de
+    // l'ordre faussait le montant réellement réglé.
     for (const e of o.executions) {
       if (dateArrete && e.dateDenouement > dateArrete) continue;
-      ajouter(posteRealise(o.description), o.compteReglement, parTitre * e.quantite);
+      ajouter(posteRealise(o.description), o.compteReglement, montantExecution(o, e));
     }
 
     // ── La part non servie, tant que l'ordre est au carnet ───────────────
@@ -259,7 +263,7 @@ export function agregerParPoste(
       if (o.dateOperation > dateArrete) continue;
       if (dateLimiteOrdre(o) < dateArrete) continue;
     }
-    ajouter(poste, o.compteReglement, parTitre * restante);
+    ajouter(poste, o.compteReglement, montantRestant(o));
   }
 
   return parPoste;

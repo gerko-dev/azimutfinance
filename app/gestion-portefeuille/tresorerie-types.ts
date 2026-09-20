@@ -165,4 +165,8 @@ export type PointTresorerie = {
    *  ne comptent pas — la trésorerie n'a pas bougé — mais elle bougera, et le
    *  trésorier doit les voir venir. */
   operationsNonDenouees: { libelle: string; dateDenouement: string; montant: number }[];
+  /** Ordres dont la part non servie a EXPIRÉ avant la date d'arrêté. Ils ne
+   *  pèsent plus — ils ne seront plus servis — mais leur disparition doit se
+   *  voir : un engagement qui s'évapore en silence se cherche longtemps. */
+  ordresPerimes: { libelle: string; dateLimite: string; montant: number }[];
 };

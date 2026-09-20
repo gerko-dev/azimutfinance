@@ -16,6 +16,7 @@ import {
   LIBELLES_ETAT,
   dateDenouement,
   dateLimiteOrdre,
+  montantExecution,
   type EtatOrdre,
 } from "@/app/gestion-portefeuille/operations-marche-types";
 import type { OperationAvecFonds } from "@/app/gestion-portefeuille/operations-marche-data";
@@ -60,6 +61,7 @@ export default function LigneOrdre({
     dateExecution: string;
     dateDenouement: string;
     quantite: number;
+    prix: number;
   }) => void;
   onSupprimerExecution: (id: string) => void;
 }) {
@@ -70,11 +72,16 @@ export default function LigneOrdre({
   // proposée d'office plutôt que laissée à retaper.
   const [quantite, setQuantite] = useState(o.instrument === "mtp" ? String(reste) : "");
   const [denouementManuel, setDenouementManuel] = useState<string | null>(null);
+  // Pré-rempli au prix de l'ordre, qui est le cas le plus fréquent sur un
+  // ordre au marché. Il reste modifiable : un ordre à cours limité est rarement
+  // servi au centime près à sa limite.
+  const [prix, setPrix] = useState(String(o.prix));
 
   const calcule = dateDenouement(dateExecution, conventionDe(parametres, o.instrument));
   const denouement = denouementManuel ?? calcule;
   const q = Number(quantite.replace(/\s/g, "").replace(",", ".")) || 0;
-  const parTitre = o.quantite > 0 ? o.montant / o.quantite : 0;
+  const p = Number(prix.replace(/\s/g, "").replace(",", ".")) || 0;
+  const montantSaisi = montantExecution(o, { quantite: q, prix: p });
 
   const couleurEtat =
     etat === "realise"
@@ -157,8 +164,10 @@ export default function LigneOrdre({
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-slate-600">
               {o.executions.map((e) => (
                 <span key={e.id} className="tabular-nums">
-                  {fmt0.format(e.quantite)} servis le {e.dateExecution} · règlement{" "}
-                  {e.dateDenouement} · {montantFr(parTitre * e.quantite)} F
+                  {fmt0.format(e.quantite)} servis à{" "}
+                  {fmt0.format(e.prix > 0 ? e.prix : o.prix)} le {e.dateExecution} ·
+                  règlement{" "}
+                  {e.dateDenouement} · {montantFr(montantExecution(o, e))} F
                   <button
                     onClick={() => onSupprimerExecution(e.id)}
                     disabled={enCours}
@@ -195,6 +204,21 @@ export default function LigneOrdre({
               </label>
 
               <label className="flex flex-col gap-1">
+                <span className={etiquette}>Prix d&apos;exécution</span>
+                <input
+                  value={prix}
+                  onChange={(e) => setPrix(e.target.value)}
+                  inputMode="numeric"
+                  className={`${champ} w-32 text-right tabular-nums`}
+                />
+                <span className={aide}>
+                  {p !== o.prix
+                    ? `ordonné à ${fmt0.format(o.prix)}`
+                    : "prix de l'ordre"}
+                </span>
+              </label>
+
+              <label className="flex flex-col gap-1">
                 <span className={etiquette}>Date d&apos;exécution</span>
                 <input
                   type="date"
@@ -224,15 +248,20 @@ export default function LigneOrdre({
               <div className="text-[11px] text-slate-600 mb-1.5">
                 Montant{" "}
                 <span className="font-semibold tabular-nums text-slate-900">
-                  {montantFr(parTitre * q)} F
+                  {montantFr(montantSaisi)} F
                 </span>
               </div>
 
               <button
                 onClick={() =>
-                  onExecuter({ dateExecution, dateDenouement: denouement, quantite: q })
+                  onExecuter({
+                    dateExecution,
+                    dateDenouement: denouement,
+                    quantite: q,
+                    prix: p,
+                  })
                 }
-                disabled={enCours || q <= 0}
+                disabled={enCours || q <= 0 || p <= 0}
                 className="mb-1.5 px-3 py-1.5 text-xs font-medium bg-emerald-700 text-white rounded hover:bg-emerald-800 disabled:opacity-50"
               >
                 Enregistrer l&apos;exécution

@@ -281,7 +281,14 @@ export async function modifierOperationMarcheAction(
 export async function ajouterExecutionAction(
   fundId: string,
   operationId: string,
-  saisie: { dateExecution: string; dateDenouement?: string; quantite: number; note?: string },
+  saisie: {
+    dateExecution: string;
+    dateDenouement?: string;
+    quantite: number;
+    /** Prix REELLEMENT servi. Zero signifie « prix de l'ordre ». */
+    prix?: number;
+    note?: string;
+  },
 ): Promise<ActionResult<{ id: string }>> {
   const acces = await autoriser(fundId);
   if ("erreur" in acces) return { ok: false, error: acces.erreur };
@@ -351,6 +358,7 @@ export async function ajouterExecutionAction(
       date_execution: saisie.dateExecution,
       date_denouement: denouement,
       quantite: saisie.quantite,
+      prix: Number.isFinite(saisie.prix) && (saisie.prix ?? 0) > 0 ? saisie.prix : 0,
       note: (saisie.note ?? "").trim(),
     })
     .select("id")
