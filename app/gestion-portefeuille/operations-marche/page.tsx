@@ -49,9 +49,12 @@ export default async function OperationsMarchePage() {
   // partenaires saisis : ce sont les banques du fonds, deja decrites par ses
   // comptes de tresorerie, et qui arrivent donc avec `comptesInitiaux`.
   const partenaires = await listerPartenairesAction();
-  const sgi = partenaires.ok
-    ? partenaires.data.filter((x) => x.kind === "sgi" && x.actif)
-    : [];
+  const actifs = partenaires.ok ? partenaires.data.filter((x) => x.actif) : [];
+  const sgi = actifs.filter((x) => x.kind === "sgi");
+  // Les contreparties de remere viennent du meme referentiel, sous leur propre
+  // nature : ce sont celles qu'on retrouve en face d'une cession temporaire, et
+  // les retaper a chaque remere les aurait fait diverger d'une ligne a l'autre.
+  const contrepartiesRemere = actifs.filter((x) => x.kind === "remere");
 
   // Le formulaire s'ouvre sur « Achats MTP réalisés » : ses États et les
   // titres du premier d'entre eux sont résolus ici, pour la même raison que
@@ -68,6 +71,7 @@ export default async function OperationsMarchePage() {
       etatsInitiaux={etatsInitiaux}
       titresInitiaux={titresInitiaux}
       sgi={sgi}
+      contrepartiesRemere={contrepartiesRemere}
       parametres={parametres}
     />
   );

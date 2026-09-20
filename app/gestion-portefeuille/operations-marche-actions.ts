@@ -16,6 +16,7 @@ import type { ActionResult } from "@/lib/admin/types";
 import { estNiveau1, MSG_NIVEAU1 } from "./guard";
 import { construirePointTresorerie } from "./tresorerie-data";
 import {
+  adjudicationsOuvertes,
   caracteristiques,
   etatsMtp,
   titresMfr,
@@ -26,10 +27,17 @@ import {
 import {
   DESCRIPTIONS,
   dateDenouement,
+  marcheDe,
+  sensDe,
   type DescriptionOperation,
   type Instrument,
   type SaisieOperation,
 } from "./operations-marche-types";
+import {
+  disponibiliteCession,
+  refusCession,
+  titresCessibles,
+} from "./operations-marche-disponibilite";
 import { chargerParametresMarche } from "./parametres-marche-data";
 import { conventionDe } from "./parametres-marche-types";
 
@@ -120,16 +128,45 @@ export async function comptesReglementAction(
  * le portail. Le niveau 1 du layout suffit.
  */
 export async function listerTitresAction(
-  marche: "mfr" | "mtp",
+  marche: "mfr" | "mtp" | "primaire",
   pays: string,
+  /** Renseigné pour une VENTE : la liste se restreint alors à ce que le fonds
+   *  peut réellement céder. Absent pour un achat — on achète ce qu'on veut. */
+  cession?: { fundId: string; exclureOperationId: string | null },
 ): Promise<
   ActionResult<{ etats: { code: string; nom: string }[]; titres: OptionTitre[] }>
 > {
   if (!(await estNiveau1())) return { ok: false, error: MSG_NIVEAU1 };
-  if (marche === "mfr") return { ok: true, data: { etats: [], titres: titresMfr() } };
-  const etats = etatsMtp();
-  const choisi = pays || etats[0]?.code || "";
-  return { ok: true, data: { etats, titres: choisi ? titresMtp(choisi) : [] } };
+
+  // LE PRIMAIRE NE SE CÈDE PAS ET NE SE FILTRE PAS PAR ÉTAT : on souscrit à
+  // une émission à venir, tous émetteurs confondus. Les deux calendriers
+  // UMOA-Titres y sont réunis — cf. `adjudicationsOuvertes`.
+  if (marche === "primaire") {
+    const aujourdhui = new Date().toISOString().slice(0, 10);
+    return { ok: true, data: { etats: [], titres: adjudicationsOuvertes(aujourdhui) } };
+  }
+
+  const etats = marche === "mtp" ? etatsMtp() : [];
+
+  if (!cession) {
+    if (marche === "mfr") return { ok: true, data: { etats: [], titres: titresMfr() } };
+    const choisi = pays || etats[0]?.code || "";
+    return { ok: true, data: { etats, titres: choisi ? titresMtp(choisi) : [] } };
+  }
+
+  // POUR UNE VENTE, L'ÉTAT NE FILTRE PAS. Un fonds détient souvent des titres
+  // de plusieurs émetteurs, et lui demander de retrouver lequel a émis celui
+  // qu'il veut vendre, c'est lui faire chercher ce que l'inventaire sait déjà.
+  // On balaie donc tous les États et on ne garde que le cessible.
+  const gisement =
+    marche === "mfr" ? titresMfr() : etats.flatMap((e) => titresMtp(e.code));
+
+  const titres = await titresCessibles(
+    cession.fundId,
+    gisement,
+    cession.exclureOperationId,
+  );
+  return { ok: true, data: { etats, titres } };
 }
 
 /**
@@ -174,7 +211,148 @@ function valider(saisie: SaisieOperation): string | null {
   if (!(saisie.prix > 0)) return "Le prix doit être strictement positif.";
   if (!saisie.compteReglement.trim())
     return "Choisis le compte de règlement : sans lui, le montant n'entre dans aucune colonne du point de trésorerie.";
+
+  // LES VOLETS SONT PROPRES AU MTP, et cela se vérifie ici aussi : l'écran
+  // masque les cases sur un ordre de bourse, mais un formulaire qui a changé
+  // de type après coup pourrait encore les porter.
+  if ((saisie.remere || saisie.pret) && marcheDe(saisie.description) !== "mtp")
+    return "Un réméré ou un prêt de titres ne se noue que sur une opération MTP.";
+  if (saisie.remere && saisie.pret)
+    return "Un même ordre ne peut pas être à la fois un réméré et un prêt de titres.";
+  // Prêter, c'est faire SORTIR des titres : cela se saisit sur une vente MTP,
+  // jamais sur un achat.
+  if (saisie.pret && saisie.description !== "VENTE_MTP")
+    return "Un prêt de titres ne se saisit que sur une vente MTP.";
+  if (saisie.remere) {
+    if (!EST_DATE.test(saisie.remere.dateFin))
+      return "Renseigne la date de fin du réméré : c'est elle qui porte le remboursement.";
+    if (!(saisie.remere.prixSortie > 0))
+      return "Le prix de sortie du réméré doit être strictement positif.";
+  }
+
+  // UNE SOUSCRIPTION A UNE MODALITÉ, et elle seule. C'est la modalité qui dit
+  // comment le titre a été désigné ; l'omettre laisserait une ligne qu'on ne
+  // saurait plus rattacher ni à un calendrier ni à un placement.
+  if (saisie.description === "SOUSCRIPTION_MP") {
+    if (saisie.modalite === null)
+      return "Choisis la modalité : adjudication ou syndication.";
+    if (saisie.remere || saisie.pret)
+      return "Une souscription au marché primaire ne porte ni réméré ni prêt de titres.";
+  } else if (saisie.modalite !== null) {
+    return "La modalité ne concerne que les souscriptions au marché primaire.";
+  }
+
+  // Une opération de dénouement SOLDE un réméré, elle n'en ouvre pas un
+  // nouveau : la laisser porter un volet enchaînerait les cessions temporaires
+  // sans que rien ne les distingue.
+  if (saisie.denoueRemereDe) {
+    if (marcheDe(saisie.description) !== "mtp")
+      return "Le dénouement d'un réméré est une opération MTP.";
+    if (saisie.remere || saisie.pret)
+      return "Une opération de dénouement ne porte ni réméré ni prêt de titres.";
+  }
   return null;
+}
+
+/**
+ * Écrit — ou efface — les volets réméré et prêt d'un ordre.
+ *
+ * DÉCOCHER DOIT EFFACER. Sans le `delete`, un ordre dont on retire la case
+ * garderait sa ligne satellite, continuerait de peser dans le poste Rémérés et
+ * de ne plus alimenter les achats MTP, sans que rien ne l'affiche.
+ *
+ * L'ordre importe : on supprime le volet qui n'est plus, puis on écrit celui
+ * qui est. Un ordre ne peut porter que l'un des deux.
+ */
+async function enregistrerVolets(
+  supabase: ClientServeur,
+  userId: string,
+  operationId: string,
+  saisie: SaisieOperation,
+): Promise<string | null> {
+  const { remere, pret } = saisie;
+
+  if (!remere) await supabase.from("fund_market_repos").delete().eq("operation_id", operationId);
+  if (!pret) await supabase.from("fund_market_loans").delete().eq("operation_id", operationId);
+
+  // LE LIEN DE DÉNOUEMENT SE RÉÉCRIT ENTIÈREMENT, à chaque enregistrement.
+  //
+  // On détache d'abord ce que cette opération dénouait : sans cela, la
+  // corriger pour qu'elle solde un autre réméré — ou plus aucun — en laisserait
+  // deux qui se croient soldés par elle. Le lien n'étant stocké que d'un côté,
+  // c'est le seul endroit où cette incohérence peut naître.
+  await supabase
+    .from("fund_market_repos")
+    .update({ denoue_par: null })
+    .eq("denoue_par", operationId)
+    .eq("owner_id", userId);
+
+  if (saisie.denoueRemereDe) {
+    const { error } = await supabase
+      .from("fund_market_repos")
+      .update({ denoue_par: operationId })
+      .eq("operation_id", saisie.denoueRemereDe)
+      .eq("owner_id", userId);
+    if (error) return error.message;
+  }
+
+  if (remere) {
+    const { error } = await supabase.from("fund_market_repos").upsert(
+      {
+        operation_id: operationId,
+        owner_id: userId,
+        date_fin: remere.dateFin,
+        contrepartie: remere.contrepartie.trim(),
+        prix_sortie: remere.prixSortie,
+        denoue_par: remere.denouePar,
+      },
+      { onConflict: "operation_id" },
+    );
+    if (error) return error.message;
+  }
+
+  if (pret) {
+    const { error } = await supabase.from("fund_market_loans").upsert(
+      {
+        operation_id: operationId,
+        owner_id: userId,
+        contrepartie: pret.contrepartie.trim(),
+        date_fin: pret.dateFin,
+        taux_commission: pret.tauxCommission,
+        date_reprise: pret.dateReprise,
+      },
+      { onConflict: "operation_id" },
+    );
+    if (error) return error.message;
+  }
+
+  return null;
+}
+
+/**
+ * ON NE VEND PAS CE QU'ON N'A PAS.
+ *
+ * Contrôle asynchrone, donc à part de `valider` : il faut lire l'inventaire du
+ * fonds et ses autres ordres. Il ne porte que sur les VENTES — un achat
+ * n'épuise aucun stock.
+ *
+ * Il couvre du même coup la contrainte des prêts de titres : un titre prêté
+ * reste à l'inventaire, mais il est dehors, et il ne peut pas être cédé tant
+ * qu'il n'est pas repris.
+ */
+async function validerCession(
+  fundId: string,
+  saisie: SaisieOperation,
+  exclureOperationId: string | null,
+): Promise<string | null> {
+  if (sensDe(saisie.description) !== "vente") return null;
+  const dispo = await disponibiliteCession(
+    fundId,
+    saisie.code,
+    saisie.libelle,
+    exclureOperationId,
+  );
+  return refusCession(dispo, saisie.quantite);
 }
 
 export async function enregistrerOperationMarcheAction(
@@ -188,6 +366,8 @@ export async function enregistrerOperationMarcheAction(
   const invalide = valider(saisie);
   if (invalide) return { ok: false, error: invalide };
 
+  const cessionRefusee = await validerCession(fundId, saisie, null);
+  if (cessionRefusee) return { ok: false, error: cessionRefusee };
 
   const { data, error } = await supabase
     .from("fund_market_operations")
@@ -209,6 +389,7 @@ export async function enregistrerOperationMarcheAction(
       taux_dcbr: saisie.tauxDcbr,
       interets_courus: saisie.interetsCourus,
       compte_reglement: saisie.compteReglement.trim(),
+      modalite: saisie.modalite,
       note: saisie.note.trim(),
     })
     .select("id")
@@ -216,8 +397,14 @@ export async function enregistrerOperationMarcheAction(
 
   if (error) return { ok: false, error: error.message };
 
+  const id = (data as { id: string }).id;
+  const erreurVolets = await enregistrerVolets(supabase, userId, id, saisie);
+  if (erreurVolets) return { ok: false, error: erreurVolets };
+
   revalidatePath(`/gestion-portefeuille/fonds/${fundId}`);
-  return { ok: true, data: { id: (data as { id: string }).id } };
+  revalidatePath("/gestion-portefeuille/operations-marche");
+  revalidatePath("/gestion-portefeuille/tresorerie");
+  return { ok: true, data: { id } };
 }
 
 /**
@@ -238,6 +425,10 @@ export async function modifierOperationMarcheAction(
   const invalide = valider(saisie);
   if (invalide) return { ok: false, error: invalide };
 
+  // On s'exclut soi-même : un ordre de vente qu'on corrige ne doit pas compter
+  // sa propre quantité parmi celles déjà engagées.
+  const cessionRefusee = await validerCession(fundId, saisie, operationId);
+  if (cessionRefusee) return { ok: false, error: cessionRefusee };
 
   const { error } = await supabase
     .from("fund_market_operations")
@@ -257,6 +448,7 @@ export async function modifierOperationMarcheAction(
       taux_dcbr: saisie.tauxDcbr,
       interets_courus: saisie.interetsCourus,
       compte_reglement: saisie.compteReglement.trim(),
+      modalite: saisie.modalite,
       note: saisie.note.trim(),
     })
     .eq("id", operationId)
@@ -264,6 +456,9 @@ export async function modifierOperationMarcheAction(
     .eq("owner_id", userId);
 
   if (error) return { ok: false, error: error.message };
+
+  const erreurVolets = await enregistrerVolets(supabase, userId, operationId, saisie);
+  if (erreurVolets) return { ok: false, error: erreurVolets };
 
   revalidatePath(`/gestion-portefeuille/fonds/${fundId}`);
   revalidatePath("/gestion-portefeuille/operations-marche");
@@ -401,6 +596,52 @@ export async function cloturerOrdreAction(
 
   revalidatePath("/gestion-portefeuille/operations-marche");
   revalidatePath("/gestion-portefeuille/tresorerie");
+  return { ok: true, data: { id: operationId } };
+}
+
+/**
+ * REPREND un pret de titres : les titres sont revenus.
+ *
+ * La date ne se saisit pas dans le formulaire du pret — elle n'y aurait ete
+ * qu'une promesse. Elle se pose au moment ou la reprise a lieu, d'un bouton
+ * sur la ligne, et c'est elle qui fait basculer le statut : un pret est repris
+ * parce qu'il a une date de reprise, jamais l'inverse.
+ *
+ * `null` annule la reprise et rouvre le pret, pour corriger une fausse
+ * manoeuvre.
+ */
+export async function reprendrePretAction(
+  fundId: string,
+  operationId: string,
+  dateReprise: string | null,
+): Promise<ActionResult<{ id: string }>> {
+  const acces = await autoriser(fundId);
+  if ("erreur" in acces) return { ok: false, error: acces.erreur };
+  const { supabase, userId } = acces;
+
+  if (dateReprise !== null && !EST_DATE.test(dateReprise))
+    return { ok: false, error: "Renseigne la date de reprise." };
+
+  // Le filtre sur l'operation ET sur le fonds : la table des prets ne porte
+  // pas le fonds, on passe donc par l'ordre pour verifier qu'il est bien a ce
+  // gerant avant d'ecrire.
+  const { data: ordre } = await supabase
+    .from("fund_market_operations")
+    .select("id")
+    .eq("id", operationId)
+    .eq("fund_id", fundId)
+    .eq("owner_id", userId)
+    .maybeSingle();
+  if (!ordre) return { ok: false, error: "Opération introuvable." };
+
+  const { error } = await supabase
+    .from("fund_market_loans")
+    .update({ date_reprise: dateReprise })
+    .eq("operation_id", operationId)
+    .eq("owner_id", userId);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/gestion-portefeuille/operations-marche");
   return { ok: true, data: { id: operationId } };
 }
 

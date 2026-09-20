@@ -129,7 +129,9 @@ export default function LigneOrdre({
               le {o.clotureLe}
             </span>
           )}
-          {reste > 0 && etat !== "perime" && etat !== "cloture" && (
+          {/* Un ordre MTP n'a pas de date limite : ne rien afficher plutôt
+              qu'une échéance inventée. */}
+          {reste > 0 && etat !== "perime" && etat !== "cloture" && dateLimiteOrdre(o) && (
             <span className="block text-[9px] text-slate-400">
               jusqu&apos;au {dateLimiteOrdre(o)}
             </span>

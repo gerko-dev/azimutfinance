@@ -68,11 +68,28 @@ export const LIGNES_POINT_TRESORERIE: DefinitionLigne[] = [
   { libelle: "ACHATS MTP REALISES", nature: "poste" , source: "operations" },
   { libelle: "ACHATS REALISES", nature: "total" , source: "calcul" },
 
+  // LES VENTES VALIDÉES, que le classeur n'avait pas. Une vente passée et non
+  // encore servie est un encaissement annoncé : ne pas la montrer laissait le
+  // trésorier aveugle sur la moitié de ses ordres en cours.
+  //
+  // Elles N'ENTRENT PAS dans les soldes — ni réel ni théorique. Les achats
+  // validés, eux, s'y retranchent : le point compte les sorties engagées et
+  // ignore les entrées encore incertaines, ce qui est la prudence d'usage.
+  // Les y ajouter changerait des soldes vérifiés ligne à ligne contre le
+  // classeur, ce qui demande l'arbitrage du gérant.
+  { libelle: "VENTES MFR VALIDES", nature: "poste" , source: "operations" },
+  { libelle: "VENTES MTP VALIDES", nature: "poste" , source: "operations" },
+  { libelle: "VENTES A RÉMÉRÉ VALIDES", nature: "poste" , source: "operations" },
+  { libelle: "VENTES VALIDES", nature: "total" , source: "calcul" },
+
   { libelle: "VENTES MFR REALISEES", nature: "poste" , source: "operations" },
   { libelle: "VENTES MTP REALISEES", nature: "poste" , source: "operations" },
   { libelle: "VENTES REALISEES", nature: "total" , source: "calcul" },
 
-  { libelle: "OPERATIONS MARCHÉ PRIMAIRE", nature: "poste" , source: "a_alimenter" },
+  // Alimentée par les SOUSCRIPTIONS au marché primaire — adjudications et
+  // syndications — tant qu'elles ne sont pas servies. Le classeur prévoyait la
+  // ligne ; rien ne la remplissait.
+  { libelle: "OPERATIONS MARCHÉ PRIMAIRE", nature: "poste" , source: "operations" },
   { libelle: "RACHAT", nature: "poste" , source: "a_alimenter" },
   { libelle: "FRAIS DE GESTION", nature: "poste" , source: "a_alimenter" },
   { libelle: "REMERES_CASH_IN", affichage: "Rémérés — encaissements", nature: "poste" , source: "a_alimenter" },

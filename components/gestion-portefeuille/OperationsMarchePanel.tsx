@@ -28,6 +28,7 @@ import {
   listerTitresAction,
   modifierOperationMarcheAction,
   rapprocherExecutionAction,
+  reprendrePretAction,
   supprimerExecutionAction,
   supprimerOperationMarcheAction,
 } from "@/app/gestion-portefeuille/operations-marche-actions";
@@ -38,17 +39,26 @@ import {
   LIBELLES_VALIDITE,
   dateLimiteOrdre,
   etatOrdre,
+  LIBELLES_MODALITE,
   marcheDe,
   montantOperation,
   posteEngage,
   posteRealise,
+  remereNoue,
   quantiteExecutee,
   quantiteRestante,
   sensDe,
   type DescriptionOperation,
   type Instrument,
+  type ModaliteSouscription,
+  descriptionDenouement,
+  sensRemereDe,
+  type SaisiePret,
+  type SaisieRemere,
   type Validite,
 } from "@/app/gestion-portefeuille/operations-marche-types";
+import VoletsMtp, { type EtatVolets } from "./VoletsMtp";
+import { RecapPrets, RecapRemeres } from "./RecapVolets";
 import type { OperationAvecFonds } from "@/app/gestion-portefeuille/operations-marche-data";
 import type { OptionTitre } from "@/app/gestion-portefeuille/operations-marche-titres";
 import type { Partenaire } from "@/app/gestion-portefeuille/partenaires-types";
@@ -70,6 +80,34 @@ const aide = "text-[9px] text-slate-400";
  *  nombres ne servent donc qu'à ne pas laisser le formulaire à zéro sur une
  *  opération d'actions. */
 const TAUX_ACTIONS = { courtage: 0.004, tps: 0.1 };
+
+/** Onglets de l'écran. Les deux derniers sont des RÉCAPITULATIFS : rien ne s'y
+ *  saisit, tout se corrige sur l'ordre. */
+type Onglet = "operations" | "saisie" | "remeres" | "prets";
+const ONGLETS: { cle: Onglet; libelle: string }[] = [
+  { cle: "operations", libelle: "Opérations" },
+  { cle: "saisie", libelle: "Saisir un ordre" },
+  { cle: "remeres", libelle: "Rémérés" },
+  { cle: "prets", libelle: "Prêts de titres" },
+];
+
+/** Volets réméré et prêt au repos. Un ordre ordinaire n'en porte aucun. */
+const VOLETS_VIDES: EtatVolets = {
+  estRemere: false,
+  estPret: false,
+  remere: {
+    dateFin: "",
+    contrepartie: "",
+    prixSortie: 10000,
+    denouePar: null,
+  },
+  pret: {
+    contrepartie: "",
+    dateFin: null,
+    tauxCommission: 0.005,
+    dateReprise: null,
+  },
+};
 
 /** Libellé complet d'une option — c'est CE TEXTE que le navigateur recopie
  *  dans le champ quand on choisit une suggestion du `datalist`, et donc à la
@@ -117,6 +155,7 @@ export default function OperationsMarchePanel({
   etatsInitiaux,
   titresInitiaux,
   sgi,
+  contrepartiesRemere,
   parametres,
 }: {
   fonds: { id: string; nom: string }[];
@@ -133,6 +172,7 @@ export default function OperationsMarchePanel({
   /** SGI actives, saisies dans Paramètres › Partenaires. Leur taux de
    *  courtage standard se reporte au choix. */
   sgi: Partenaire[];
+  contrepartiesRemere: Partenaire[];
   /** Conventions de denouement et commissions de place, configurees dans
    *  Parametres › Operations de marche. */
   parametres: ParametresMarche;
@@ -160,6 +200,36 @@ export default function OperationsMarchePanel({
   const [compteReglement, setCompteReglement] = useState("");
   const [note, setNote] = useState("");
   const [validite, setValidite] = useState<Validite>("jour");
+  /** Modalité d'une souscription au primaire. Null hors souscription. */
+  const [modalite, setModalite] = useState<ModaliteSouscription>("adjudication");
+
+  // ── Volets réméré et prêt ───────────────────────────────────────────────
+  //
+  // MTP UNIQUEMENT. Un réméré se noue de gré à gré sur un titre public, et un
+  // prêt de titres porte sur le même gisement : les proposer sur un ordre de
+  // bourse n'aurait pas de sens.
+  //
+  // Les deux s'excluent : un même ordre ne peut pas être à la fois une cession
+  // temporaire et un prêt.
+  const [onglet, setOnglet] = useState<Onglet>("operations");
+  /** Réméré que l'opération en cours de saisie vient dénouer, ou null.
+   *  Ne se choisit pas : il vient du bouton « Dénouer » de l'onglet Rémérés. */
+  const [denoueRemereDe, setDenoueRemereDe] = useState<string | null>(null);
+  /** Onglet où revenir une fois la correction enregistrée ou abandonnée. */
+  const [retour, setRetour] = useState<Onglet>("operations");
+  const [volets, setVolets] = useState<EtatVolets>(VOLETS_VIDES);
+  // `ChampTaux` garde son propre texte et ne se resynchronise pas tout seul :
+  // on le remonte en changeant la clé du volet quand on charge une autre
+  // opération, sinon le taux affiché resterait celui de la précédente.
+  const [cleVolets, setCleVolets] = useState(0);
+
+  const remere: SaisieRemere | null = volets.estRemere ? volets.remere : null;
+  const pret: SaisiePret | null = volets.estPret ? volets.pret : null;
+
+  const reinitialiserVolets = (e: EtatVolets = VOLETS_VIDES) => {
+    setVolets(e);
+    setCleVolets((k) => k + 1);
+  };
   /** Opération en cours de modification, ou null pour une création. */
   const [editionId, setEditionId] = useState<string | null>(null);
   /** Ordre dont la ligne d'exécution est dépliée. Un seul à la fois : deux
@@ -167,6 +237,9 @@ export default function OperationsMarchePanel({
   const [executionOuverte, setExecutionOuverte] = useState<string | null>(null);
 
   const marche = marcheDe(description);
+  /** Une syndication se décrit à la main : ni liste, ni caractéristiques
+   *  reprises d'un référentiel qui ne la connaît pas. */
+  const syndication = marche === "primaire" && modalite === "syndication";
 
   // ── Choix du titre ───────────────────────────────────────────────────────
   const [etats] = useState<Etat[]>(etatsInitiaux);
@@ -211,6 +284,13 @@ export default function OperationsMarchePanel({
   const changerFonds = (id: string) => {
     setFondsId(id);
     setCompteReglement("");
+    // LE CESSIBLE DÉPEND DU FONDS. Sur une vente, changer de portefeuille
+    // change la liste des titres : garder celle d'avant aurait proposé les
+    // titres d'un fonds pour en vendre d'un autre.
+    if (sensDe(description) === "vente" && marche !== "primaire") {
+      oublierTitre();
+      chargerTitres(marche, pays, true, id);
+    }
     setComptesEtat("chargement");
     setComptesErreur(null);
     demarrer(async () => {
@@ -239,10 +319,28 @@ export default function OperationsMarchePanel({
     setCouruManuel(null);
   };
 
-  const chargerTitres = (m: "mfr" | "mtp", p: string) => {
+  /**
+   * Charge les titres proposables.
+   *
+   * POUR UNE VENTE, LA LISTE SE RESTREINT AU CESSIBLE du fonds : on ne propose
+   * pas ce qu'on ne peut pas vendre. Le sens et le fonds se passent en
+   * paramètre plutôt que d'être lus dans l'état — `changerDescription` et
+   * `changerFonds` appellent cette fonction AVANT que React n'ait appliqué
+   * leur propre `setState`, et lire l'état y aurait donné la valeur d'avant.
+   */
+  const chargerTitres = (
+    m: "mfr" | "mtp" | "primaire",
+    p: string,
+    vente: boolean,
+    fonds: string,
+  ) => {
     setTitresEtat("chargement");
     demarrer(async () => {
-      const res = await listerTitresAction(m, p);
+      const res = await listerTitresAction(
+        m,
+        p,
+        vente && fonds ? { fundId: fonds, exclureOperationId: editionId } : undefined,
+      );
       setTitres(res.ok ? res.data.titres : []);
       setTitresEtat("pret");
     });
@@ -268,14 +366,38 @@ export default function OperationsMarchePanel({
     // une banque teneur de compte de l'autre. Garder celui d'avant laisserait
     // une SGI sur une opération MTP, ce que rien ne rattraperait ensuite.
     setSgi("");
-    if (m === "mfr" || m === "mtp") chargerTitres(m, pays);
+    // Les volets sont propres au MTP. En passant au marché financier on les
+    // DÉCROCHE, sinon un réméré resterait attaché à un ordre de bourse sans
+    // que le formulaire n'en montre plus rien.
+    if (m !== "mtp") reinitialiserVolets();
+    // Un prêt ne se noue que sur une VENTE MTP. Passer à l'achat doit donc
+    // décrocher la case, sinon elle resterait cochée sans plus rien afficher.
+    else if (d !== "VENTE_MTP") setVolets((v) => (v.estPret ? { ...v, estPret: false } : v));
+    if (m === "mfr" || m === "mtp") chargerTitres(m, pays, sensDe(d) === "vente", fondsId);
+    // Au primaire, seule l'adjudication a une liste ; la syndication se décrit.
+    else if (m === "primaire" && modalite === "adjudication")
+      chargerTitres("primaire", "", false, fondsId);
+    else setTitres([]);
+  };
+
+  /** Changer de modalité invalide le titre : on ne passe pas d'une
+   *  adjudication du calendrier à un titre décrit à la main sans repartir de
+   *  zéro. */
+  const changerModalite = (m: ModaliteSouscription) => {
+    setModalite(m);
+    oublierTitre();
+    // L'intermédiaire change de nature avec la modalité — une banque du fonds
+    // au guichet, une SGI au placement. Garder celui d'avant laisserait une
+    // SGI sur une adjudication, ce que rien ne rattraperait ensuite.
+    setSgi("");
+    if (m === "adjudication") chargerTitres("primaire", "", false, fondsId);
     else setTitres([]);
   };
 
   const changerPays = (p: string) => {
     setPays(p);
     oublierTitre();
-    chargerTitres("mtp", p);
+    chargerTitres("mtp", p, sensDe(description) === "vente", fondsId);
   };
 
   const choisirTitre = (cle: string) => {
@@ -294,6 +416,19 @@ export default function OperationsMarchePanel({
       setInstrument(opt.instrument);
     }
     setCouruManuel(null);
+
+    // UNE ADJUDICATION N'A PAS ENCORE DE TITRE. Le sien naîtra de
+    // l'adjudication : ni ISIN, ni taux facial, ni dernier détachement, donc
+    // aucun couru à calculer — on souscrit au pair, à la date de valeur.
+    // Interroger le référentiel n'aurait ramené qu'un « titre introuvable »
+    // parfaitement exact et parfaitement inutile.
+    if (marche === "primaire") {
+      setCouruParTitre(0);
+      setCouruDetail(null);
+      setCouruAvertissement(null);
+      return;
+    }
+
     demarrer(async () => {
       const res = await caracteristiquesTitreAction(
         marche === "mtp" ? "mtp" : "mfr",
@@ -383,6 +518,10 @@ export default function OperationsMarchePanel({
         interetsCourus,
         compteReglement,
         note,
+        modalite: description === "SOUSCRIPTION_MP" ? modalite : null,
+        remere,
+        pret,
+        denoueRemereDe,
       };
       const res = editionId
         ? await modifierOperationMarcheAction(fondsId, editionId, saisie)
@@ -403,6 +542,8 @@ export default function OperationsMarchePanel({
         setQuantite("");
         setPrix("");
         setNote("");
+        setDenoueRemereDe(null);
+        reinitialiserVolets();
         oublierTitre();
       }
       router.refresh();
@@ -444,6 +585,63 @@ export default function OperationsMarchePanel({
     setCouruManuel(String(Math.round(o.interetsCourus)));
     setCompteReglement(o.compteReglement);
     setNote(o.note);
+    setDenoueRemereDe(o.denoueRemereDe);
+    reinitialiserVolets({
+      estRemere: o.remere !== null,
+      estPret: o.pret !== null,
+      remere: o.remere ?? VOLETS_VIDES.remere,
+      pret: o.pret ?? VOLETS_VIDES.pret,
+    });
+    // Le formulaire vit dans son propre onglet : corriger depuis la liste — ou
+    // depuis un récapitulatif — doit y amener, sinon le clic n'aurait l'air de
+    // rien faire. On note d'où l'on vient pour y revenir une fois corrigé.
+    setRetour(onglet === "saisie" ? "operations" : onglet);
+    setOnglet("saisie");
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  /**
+   * Ouvre l'opération qui DÉNOUE un réméré.
+   *
+   * Ce n'est pas un bouton d'état : dénouer, c'est passer une vraie opération
+   * MTP de sens inverse — on rachète ce qu'on a vendu à réméré. Le formulaire
+   * s'ouvre donc prérempli du même titre, de la même quantité et du compte de
+   * règlement du réméré, au PRIX DE SORTIE qui avait été convenu. Le gérant
+   * n'a plus qu'à confirmer la date, puis à l'exécuter.
+   *
+   * Le réméré devient dénoué à ce moment-là seulement — pas à la saisie, qui
+   * ne règle rien — et sa date de dénouement est celle de l'exécution.
+   */
+  const denouer = (o: OperationAvecFonds) => {
+    if (!o.remere) return;
+    setErreur(null);
+    setOk(false);
+    setEditionId(null);
+    setDenoueRemereDe(o.id);
+    setFondsId(o.fondsId);
+    setDateOperation(new Date().toISOString().slice(0, 10));
+    setDescription(descriptionDenouement(o.description));
+    setInstrument(o.instrument);
+    setCode(o.code);
+    setLibelle(o.libelle);
+    setSaisieTitre(`${o.code ? `${o.code} — ` : ""}${o.libelle}`);
+    setTitreCle(o.code || o.libelle);
+    setQuantite(String(o.quantite));
+    setValidite(o.validite);
+    // Le prix de SORTIE, pas celui d'entrée : c'est ce qui a été convenu au
+    // dénouement, et c'est lui qui fait le montant du poste Rémérés.
+    setPrix(String(o.remere.prixSortie));
+    setSgi(o.sgi);
+    setTauxCourtage(String(o.tauxCourtage));
+    setTauxTps(String(o.tauxTps));
+    setTauxBrvm(String(o.tauxBrvm));
+    setTauxDcbr(String(o.tauxDcbr));
+    setCouruManuel(String(Math.round(o.interetsCourus)));
+    setCompteReglement(o.compteReglement);
+    setNote(`Dénouement du réméré du ${o.dateOperation}`);
+    reinitialiserVolets();
+    setRetour("remeres");
+    setOnglet("saisie");
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -453,7 +651,10 @@ export default function OperationsMarchePanel({
     setPrix("");
     setNote("");
     setCouruManuel(null);
+    setDenoueRemereDe(null);
+    reinitialiserVolets();
     oublierTitre();
+    setOnglet(retour);
   };
 
   const executer = (
@@ -484,6 +685,16 @@ export default function OperationsMarchePanel({
     setErreur(null);
     demarrer(async () => {
       const res = await cloturerOrdreAction(o.fondsId, o.id, date);
+      if (!res.ok) setErreur(res.error);
+      else router.refresh();
+    });
+  };
+
+  /** Pose — ou retire — la date de reprise d'un prêt. Le statut suit. */
+  const reprendre = (o: OperationAvecFonds, date: string | null) => {
+    setErreur(null);
+    demarrer(async () => {
+      const res = await reprendrePretAction(o.fondsId, o.id, date);
       if (!res.ok) setErreur(res.error);
       else router.refresh();
     });
@@ -537,15 +748,27 @@ export default function OperationsMarchePanel({
         .map((c) => [c.nom, c] as const),
     ).values(),
   ];
-  const intermediaires: { cle: string; libelle: string }[] =
-    marche === "mtp"
-      ? btcc.map((c) => ({ cle: c.nom, libelle: c.nom }))
-      : sgi.map((p) => ({
-          cle: p.nom,
-          libelle: `${p.nom} · courtage ${(p.tauxCourtage * 100)
-            .toFixed(2)
-            .replace(".", ",")} %`,
-        }));
+  /**
+   * PAR QUI L'OPÉRATION PASSE, et c'est la nature de l'opération qui le dit.
+   *
+   *  MTP             — une banque teneur de compte du fonds.
+   *  ADJUDICATION    — une banque du fonds également : au primaire, c'est elle
+   *                    qui soumissionne auprès de l'Agence UMOA-Titres. Une
+   *                    SGI n'a pas accès au guichet.
+   *  SYNDICATION     — une SGI partenaire : le placement est de gré à gré, et
+   *                    c'est le chef de file qui le distribue.
+   *  MFR             — une SGI, seule habilitée à négocier en bourse.
+   */
+  const parBanque = marche === "mtp" || (marche === "primaire" && !syndication);
+
+  const intermediaires: { cle: string; libelle: string }[] = parBanque
+    ? btcc.map((c) => ({ cle: c.nom, libelle: c.nom }))
+    : sgi.map((p) => ({
+        cle: p.nom,
+        libelle: `${p.nom} · courtage ${(p.tauxCourtage * 100)
+          .toFixed(2)
+          .replace(".", ",")} %`,
+      }));
 
   /**
    * Choisir une SGI applique SES taux NÉGOCIÉS : courtage et TPS. C'est la
@@ -561,7 +784,7 @@ export default function OperationsMarchePanel({
    */
   const choisirIntermediaire = (nom: string) => {
     setSgi(nom);
-    if (marche === "mtp") return;
+    if (parBanque) return;
     const p = sgi.find((x) => x.nom === nom);
     if (!p) return;
     setTauxCourtage(String(p.tauxCourtage));
@@ -583,7 +806,11 @@ export default function OperationsMarchePanel({
   // ou après un aller-retour, des options qui n'ont rien à y faire. Le filtre
   // s'applique maintenant à tous les marchés, ce qui rend le cas impossible
   // plutôt qu'improbable.
-  const titresAffiches = titres.filter((t) => t.instrument === instrument);
+  // Au primaire, la liste est déjà celle des adjudications ouvertes : la
+  // filtrer par instrument n'aurait rien à quoi se raccrocher, le titre
+  // n'existant pas encore.
+  const titresAffiches =
+    marche === "primaire" ? titres : titres.filter((t) => t.instrument === instrument);
 
   /**
    * Ce que le gérant tape se résout en titre par comparaison au libellé
@@ -624,8 +851,57 @@ export default function OperationsMarchePanel({
         </p>
       </div>
 
+      {/* ── Onglets ──────────────────────────────────────────────────────── */}
+      <nav className="flex flex-wrap gap-1 border-b border-slate-200">
+        {ONGLETS.map((t) => {
+          // Le décompte dit tout de suite si l'onglet a quelque chose à
+          // montrer : sans lui, on y va pour rien.
+          const n =
+            t.cle === "remeres"
+              ? operations.filter(remereNoue).length
+              : t.cle === "prets"
+                ? operations.filter((o) => o.pret).length
+                : t.cle === "operations"
+                  ? operations.length
+                  : 0;
+          const actif = onglet === t.cle;
+          return (
+            <button
+              key={t.cle}
+              type="button"
+              onClick={() => setOnglet(t.cle)}
+              className={`px-3 py-2 text-xs font-medium border-b-2 -mb-px transition ${
+                actif
+                  ? "border-blue-700 text-blue-800"
+                  : "border-transparent text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              {t.libelle}
+              {t.cle !== "saisie" && (
+                <span className="ml-1.5 text-[10px] text-slate-400">{n}</span>
+              )}
+            </button>
+          );
+        })}
+      </nav>
+
+      {onglet === "remeres" && (
+        <RecapRemeres
+          operations={operations}
+          onModifier={modifier}
+          onDenouer={denouer}
+        />
+      )}
+      {onglet === "prets" && (
+        <RecapPrets
+          operations={operations}
+          onModifier={modifier}
+          onReprendre={reprendre}
+        />
+      )}
+
       {/* ── Formulaire ───────────────────────────────────────────────────── */}
-      <div className="bg-white border border-slate-200 rounded-lg p-4">
+      <div className={`bg-white border border-slate-200 rounded-lg p-4 ${onglet === "saisie" ? "" : "hidden"}`}>
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <h2 className="text-sm font-semibold text-slate-900">
             {editionId ? "Modifier l'opération" : "Saisir une opération"}
@@ -735,7 +1011,7 @@ export default function OperationsMarchePanel({
                 ))}
               </select>
               <span className={aide}>
-                Pèse jusqu&apos;au {dateLimiteOrdre({ dateOperation, validite })}
+                Pèse jusqu&apos;au {dateLimiteOrdre({ dateOperation, validite, description })}
               </span>
             </Champ>
           )}
@@ -757,15 +1033,59 @@ export default function OperationsMarchePanel({
             </Champ>
           )}
 
-          {/* MFR et MTP : le titre se choisit dans le référentiel. */}
-          {(marche === "mfr" || marche === "mtp") && (
+          {/* LA MODALITÉ D'UNE SOUSCRIPTION décide de tout ce qui suit : au
+              calendrier pour une adjudication, à la main pour une
+              syndication. */}
+          {marche === "primaire" && (
+            <Champ label="Modalité" large>
+              <select
+                value={modalite}
+                onChange={(e) => changerModalite(e.target.value as ModaliteSouscription)}
+                disabled={editionId !== null}
+                className={`${champ} disabled:bg-slate-50 disabled:text-slate-600`}
+              >
+                {(Object.keys(LIBELLES_MODALITE) as ModaliteSouscription[]).map((k) => (
+                  <option key={k} value={k}>
+                    {LIBELLES_MODALITE[k]}
+                  </option>
+                ))}
+              </select>
+              <span className={aide}>
+                {modalite === "adjudication"
+                  ? "L'émission se choisit au calendrier UMOA-Titres."
+                  : "Le titre n'est à aucun calendrier : décris-le."}
+              </span>
+            </Champ>
+          )}
+
+          {/* SYNDICATION : rien à choisir, le titre se décrit. Une émission
+              placée de gré à gré ne figure à aucun référentiel, et l'attendre
+              aurait rendu la saisie impossible. */}
+          {marche === "primaire" && modalite === "syndication" && (
+            <Champ label="Titre souscrit" large>
+              <input
+                value={libelle}
+                onChange={(e) => setLibelle(e.target.value)}
+                placeholder="Ex. Obligation TPCI 6,25 % 2026-2033"
+                className={champ}
+              />
+              <span className={aide}>Le nom sous lequel l&apos;émission est placée</span>
+            </Champ>
+          )}
+
+          {/* MFR, MTP et adjudication : le titre se choisit dans une liste. */}
+          {(marche === "mfr" ||
+            marche === "mtp" ||
+            (marche === "primaire" && modalite === "adjudication")) && (
             <Champ
               label={
-                marche === "mtp"
-                  ? "Titre public"
-                  : instrument === "actions"
-                    ? "Action"
-                    : "Obligation cotée"
+                marche === "primaire"
+                  ? "Adjudication"
+                  : marche === "mtp"
+                    ? "Titre public"
+                    : instrument === "actions"
+                      ? "Action"
+                      : "Obligation cotée"
               }
               large
             >
@@ -824,15 +1144,22 @@ export default function OperationsMarchePanel({
             <input
               value={code}
               onChange={(e) => setCode(e.target.value)}
-              readOnly
-              tabIndex={-1}
-              className={`${champ} bg-slate-50 text-slate-600 cursor-default`}
+              readOnly={!syndication}
+              tabIndex={syndication ? undefined : -1}
+              placeholder={syndication ? "ISIN, s'il est déjà attribué" : ""}
+              className={
+                syndication ? champ : `${champ} bg-slate-50 text-slate-600 cursor-default`
+              }
             />
-            <span className={aide}>Repris du titre choisi.</span>
+            <span className={aide}>
+              {syndication
+                ? "Saisi à la main : une syndication n'est à aucun référentiel."
+                : "Repris du titre choisi."}
+            </span>
           </Champ>
 
 
-          <Champ label={marche === "mtp" ? "BTCC" : "SGI"}>
+          <Champ label={parBanque ? "BTCC" : "SGI"}>
             <select
               value={sgiNom}
               onChange={(e) => choisirIntermediaire(e.target.value)}
@@ -852,11 +1179,15 @@ export default function OperationsMarchePanel({
               )}
             </select>
             <span className={aide}>
-              {marche === "mtp"
-                ? "Banque teneur de compte, prise dans les comptes du fonds"
+              {parBanque
+                ? marche === "primaire"
+                  ? "C'est elle qui soumissionne au guichet UMOA-Titres"
+                  : "Banque teneur de compte, prise dans les comptes du fonds"
                 : intermediaires.length === 0
                   ? "Aucune SGI — ajoute-la dans Paramètres › Partenaires"
-                  : "Ses taux négociés se reportent ci-dessous"}
+                  : syndication
+                    ? "Le chef de file qui place l'émission. Ses taux se reportent ci-dessous."
+                    : "Ses taux négociés se reportent ci-dessous"}
             </span>
           </Champ>
 
@@ -990,6 +1321,25 @@ export default function OperationsMarchePanel({
             />
           </Champ>
 
+          {/* Réméré et prêt de titres ALLONGENT l'ordre, ils n'en font pas un
+              autre : mêmes titre, quantité et prix, plus les quelques champs
+              propres à la cession temporaire. Réservé au MTP. */}
+          {marche === "mtp" && (
+            <VoletsMtp
+              key={cleVolets}
+              etat={volets}
+              onChange={setVolets}
+              quantite={n(quantite)}
+              prixOrdre={n(prix)}
+              interetsCourus={interetsCourus}
+              dateOperation={dateOperation}
+              sens={sensRemereDe(description)}
+              pretPossible={description === "VENTE_MTP"}
+              contreparties={contrepartiesRemere}
+              verrouille={denoueRemereDe !== null}
+            />
+          )}
+
           <Champ label="Note" large>
             <input value={note} onChange={(e) => setNote(e.target.value)} className={champ} />
           </Champ>
@@ -1043,7 +1393,16 @@ export default function OperationsMarchePanel({
       </div>
 
       {/* ── Liste ────────────────────────────────────────────────────────── */}
-      <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
+      {/* MASQUÉS, PAS DÉMONTÉS. Le formulaire et les lignes d'exécution
+          portent leur saisie en cours : les démonter en changeant d'onglet
+          jetterait un bordereau à moitié tapé, et le `ChampTaux` de chaque
+          volet reviendrait à sa valeur d'origine. Les récapitulatifs, eux,
+          n'ont rien à perdre et se montent à la demande. */}
+      <div
+        className={`border border-slate-200 rounded-lg overflow-hidden bg-white ${
+          onglet === "operations" ? "" : "hidden"
+        }`}
+      >
         <div className="overflow-x-auto">
           <table className="w-full text-[11px] border-collapse">
             <thead className="bg-slate-100 text-slate-600">

@@ -251,7 +251,7 @@ export default function PartenairesPanel({
                 {/* Pas de BTCC ici : ce sont les banques du fonds, déjà
                     décrites par ses comptes de trésorerie. Les saisir une
                     seconde fois les ferait diverger. */}
-                {(["sgi", "autre"] as NaturePartenaire[]).map((k) => (
+                {(["sgi", "remere", "autre"] as NaturePartenaire[]).map((k) => (
                   <option key={k} value={k}>
                     {LIBELLES_NATURE[k]}
                   </option>
@@ -334,10 +334,24 @@ export default function PartenairesPanel({
             </Champ>
           </div>
 
-          {/* Conditions négociées */}
+          {/* Conditions négociées — SGI SEULEMENT.
+              Le courtage et sa TPS sont les conditions d'un INTERMÉDIAIRE de
+              bourse. Une contrepartie de réméré n'intermédie rien : elle est
+              en face, et ce qui se négocie avec elle — le prix de sortie — se
+              saisit sur l'opération, réméré par réméré. Laisser les deux
+              champs ici aurait laissé croire qu'un taux standard s'applique. */}
           <div className="mt-3 pt-3 border-t border-slate-100">
-            <h4 className="text-xs font-semibold text-slate-800">Conditions négociées</h4>
+            <h4 className="text-xs font-semibold text-slate-800">
+              {saisie.kind === "sgi" ? "Conditions négociées" : "Complément"}
+            </h4>
             <div className="grid grid-cols-1 sm:grid-cols-6 gap-3 mt-2">
+              {saisie.kind === "remere" && (
+                <p className="sm:col-span-6 text-[10px] text-slate-500">
+                  Une contrepartie de réméré se choisit sur l&apos;opération MTP,
+                  quand la case «&nbsp;Réméré&nbsp;» est cochée. Le prix de sortie s&apos;y
+                  saisit aussi : il se négocie réméré par réméré.
+                </p>
+              )}
               {/* La commission BRVM / DC-BR ne figure PAS ici : c'est un tarif
                   de place, identique pour toutes les SGI, et il se règle par
                   instrument à la saisie de l'opération. La faire figurer sur
@@ -347,27 +361,31 @@ export default function PartenairesPanel({
                   taper « 0,4 » — la virgule disparaissait sous les doigts.
                   La `key` liée à la fiche en cours le remonte quand on passe
                   d'un partenaire à l'autre sans fermer le formulaire. */}
-              <Champ label="Courtage (%)" span={2}>
-                <ChampTaux
-                  key={`courtage-${editionId ?? "nouveau"}`}
-                  valeur={saisie.tauxCourtage}
-                  onChange={(v) => set("tauxCourtage", v)}
-                  className={`${champ} text-right tabular-nums`}
-                />
-                <span className="text-[9px] text-slate-400">Usuel : 0,4</span>
-              </Champ>
+              {saisie.kind === "sgi" && (
+                <>
+                  <Champ label="Courtage (%)" span={2}>
+                    <ChampTaux
+                      key={`courtage-${editionId ?? "nouveau"}`}
+                      valeur={saisie.tauxCourtage}
+                      onChange={(v) => set("tauxCourtage", v)}
+                      className={`${champ} text-right tabular-nums`}
+                    />
+                    <span className="text-[9px] text-slate-400">Usuel : 0,4</span>
+                  </Champ>
 
-              <Champ label="TPS sur courtage (%)" span={2}>
-                <ChampTaux
-                  key={`tps-${editionId ?? "nouveau"}`}
-                  valeur={saisie.tauxTps}
-                  onChange={(v) => set("tauxTps", v)}
-                  className={`${champ} text-right tabular-nums`}
-                />
-                <span className="text-[9px] text-slate-400">Usuel : 10</span>
-              </Champ>
+                  <Champ label="TPS sur courtage (%)" span={2}>
+                    <ChampTaux
+                      key={`tps-${editionId ?? "nouveau"}`}
+                      valeur={saisie.tauxTps}
+                      onChange={(v) => set("tauxTps", v)}
+                      className={`${champ} text-right tabular-nums`}
+                    />
+                    <span className="text-[9px] text-slate-400">Usuel : 10</span>
+                  </Champ>
+                </>
+              )}
 
-              <Champ label="Note" span={2}>
+              <Champ label="Note" span={saisie.kind === "sgi" ? 2 : 6}>
                 <input
                   value={saisie.note}
                   onChange={(e) => set("note", e.target.value)}
@@ -500,14 +518,20 @@ export default function PartenairesPanel({
                 const referents = p.referents.filter((r) => r.nom.trim());
                 return (
                   <tr key={p.id} className="hover:bg-slate-50">
-                    <td className="px-3 py-1.5 uppercase text-slate-500">{p.kind}</td>
+                    <td className="px-3 py-1.5 text-slate-500">
+                      {p.kind === "remere" ? "Contrepartie réméré" : p.kind.toUpperCase()}
+                    </td>
                     <td className="px-3 py-1.5 font-medium text-slate-900">{p.nom}</td>
                     <td className="px-3 py-1.5 text-slate-600">{p.agrement || "—"}</td>
                     <td className="px-3 py-1.5 text-right tabular-nums">
-                      {(p.tauxCourtage * 100).toFixed(2).replace(".", ",")} %
+                      {p.kind === "sgi"
+                        ? `${(p.tauxCourtage * 100).toFixed(2).replace(".", ",")} %`
+                        : "—"}
                     </td>
                     <td className="px-3 py-1.5 text-right tabular-nums">
-                      {(p.tauxTps * 100).toFixed(2).replace(".", ",")} %
+                      {p.kind === "sgi"
+                        ? `${(p.tauxTps * 100).toFixed(2).replace(".", ",")} %`
+                        : "—"}
                     </td>
                     <td
                       className="px-3 py-1.5 text-slate-600"

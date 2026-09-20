@@ -31,7 +31,6 @@ import { agregerParPoste, loadOperationsMarche } from "./operations-marche-data"
 import {
   dateLimiteOrdre,
   montantRestant,
-  posteEngage,
   quantiteRestante,
 } from "./operations-marche-types";
 import {
@@ -234,20 +233,24 @@ export async function construirePointTresorerie(
   // disparition doit se voir. Sans cette liste, un engagement s'évaporait du
   // point sans qu'aucun écran ne dise pourquoi.
   const perimes = operations
-    .filter((o) => {
-      if (quantiteRestante(o) <= 0) return false;
-      if (!posteEngage(o.description)) return false;
+    .flatMap((o) => {
+      if (quantiteRestante(o) <= 0) return [];
       // Un ordre CLOS a sa propre raison de ne plus peser, et le gérant la
       // connaît : c'est lui qui l'a posée. L'annoncer comme « périmé »
       // brouillerait les deux.
-      if (o.clotureLe) return false;
-      return dateArrete !== null && dateLimiteOrdre(o) < dateArrete;
+      if (o.clotureLe) return [];
+      // Un ordre MTP n'a pas de date limite : il ne périme jamais.
+      const dateLimite = dateLimiteOrdre(o);
+      if (dateLimite === null) return [];
+      if (dateArrete === null || dateLimite >= dateArrete) return [];
+      return [
+        {
+          libelle: `${o.libelle || o.code || "Ordre"} — ${o.compteReglement}`,
+          dateLimite,
+          montant: montantRestant(o),
+        },
+      ];
     })
-    .map((o) => ({
-      libelle: `${o.libelle || o.code || "Ordre"} — ${o.compteReglement}`,
-      dateLimite: dateLimiteOrdre(o),
-      montant: montantRestant(o),
-    }))
     .sort((a, b) => b.dateLimite.localeCompare(a.dateLimite));
 
   const v = (libelle: string, banque: string): number => valeurs.get(libelle)?.[banque] ?? 0;
@@ -269,6 +272,8 @@ export async function construirePointTresorerie(
       ["ACHATS MFR VALIDES", "ACHATS MTP VALIDES", "ACHATS A RÉMÉRÉ VALIDES"], b);
     valeurs.get("ACHATS REALISES")![b] = somme(
       ["ACHATS MFR REALISES", "ACHATS MTP REALISES"], b);
+    valeurs.get("VENTES VALIDES")![b] = somme(
+      ["VENTES MFR VALIDES", "VENTES MTP VALIDES", "VENTES A RÉMÉRÉ VALIDES"], b);
     valeurs.get("VENTES REALISEES")![b] = somme(
       ["VENTES MFR REALISEES", "VENTES MTP REALISEES"], b);
     valeurs.get("AUTRES ENGAGEMENTS")![b] = somme(

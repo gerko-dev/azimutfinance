@@ -12,7 +12,12 @@ import "server-only";
 // ressaisir à la main était la porte ouverte à un zéro oublié sur un montant à
 // neuf chiffres.
 
-import { loadListedBonds, loadStocks, loadUmoaEmissions } from "@/lib/dataLoader";
+import {
+  loadListedBonds,
+  loadStocks,
+  loadUmoaEmissions,
+  loadUmoaEmissionsAVenir,
+} from "@/lib/dataLoader";
 import { calculateAccruedInterest } from "@/lib/bondMath";
 import type { Bond, BondCountry } from "@/lib/bondsUEMOA";
 import { computeCurrentNominalPerTitre } from "@/lib/listedBondsTypes";
@@ -307,4 +312,39 @@ export function caracteristiques(
           "déduit des dates d'amortissement. Vérifie-les contre l'avis d'opéré."
         : null,
   };
+}
+
+
+/**
+ * Adjudications OUVERTES à la souscription, tous États confondus.
+ *
+ * SEULEMENT LES ÉMISSIONS ANNONCÉES — le calendrier annuel n'y entre pas. Une
+ * ligne du calendrier annuel n'est qu'une intention : ni date de valeur, ni
+ * maturité, ni instrument. On ne souscrit pas à une intention, et la proposer
+ * aurait laissé saisir une opération sur une émission dont rien n'est encore
+ * arrêté.
+ *
+ * `aujourdhui` est passé par l'appelant : une adjudication déjà tenue ne se
+ * souscrit plus.
+ */
+export function adjudicationsOuvertes(aujourdhui: string): OptionTitre[] {
+  return loadUmoaEmissionsAVenir()
+    .filter((e) => e.dateOperation >= aujourdhui)
+    .sort((a, b) => a.dateOperation.localeCompare(b.dateOperation))
+    .map((e) => {
+      const maturite = e.maturityMonths > 0 ? `${e.maturityMonths} mois` : "";
+      const montant = e.amount > 0 ? `${e.amount} M` : "";
+      return {
+        // Une adjudication n'a pas encore d'ISIN : le titre naîtra de
+        // l'adjudication. La clef est donc celle du calendrier.
+        cle: `ADJ|${e.country}|${e.dateOperation}|${e.instrument}`,
+        symbole: e.titreES || e.instrument,
+        libelle: `${e.instrument || "Émission"} ${e.countryName} du ${e.dateOperation}`,
+        isin: "",
+        instrument: "mtp" as Instrument,
+        detail: [maturite, montant, `valeur ${e.dateValeur || "—"}`]
+          .filter(Boolean)
+          .join(" · "),
+      };
+    });
 }

@@ -16,20 +16,40 @@ export type DescriptionOperation =
   | "ACHAT_MFR"
   | "ACHAT_MTP"
   | "VENTE_MFR"
-  | "VENTE_MTP";
+  | "VENTE_MTP"
+  | "SOUSCRIPTION_MP";
 
 /** Nature du titre. Gouverne le délai de dénouement. */
 export type Instrument = "actions" | "obligations" | "mtp";
 
 /** Marché sur lequel l'ordre se traite. Décide de la façon dont le titre se
  *  choisit, et des instruments admis. */
-export type Marche = "mfr" | "mtp";
+export type Marche = "mfr" | "mtp" | "primaire";
 
 /** Instruments admis selon le marché. Un ordre MFR porte sur une action ou une
  *  obligation cotée, jamais sur un titre public — et réciproquement. */
 export const INSTRUMENTS_ADMIS: Record<Marche, Instrument[]> = {
   mfr: ["actions", "obligations"],
   mtp: ["mtp"],
+  // Le marché primaire émet les deux : une adjudication porte sur des titres
+  // publics, une syndication souvent sur une obligation.
+  primaire: ["mtp", "obligations"],
+};
+
+/**
+ * Modalité d'une souscription au marché PRIMAIRE. Elle décide de la façon
+ * dont le titre se désigne, et de rien d'autre.
+ *
+ *  - ADJUDICATION : le titre existe déjà au calendrier UMOA-Titres. On choisit
+ *    l'émission, et ses caractéristiques suivent.
+ *  - SYNDICATION : l'émission ne figure à aucun calendrier — elle se place de
+ *    gré à gré. Le gérant décrit donc le titre lui-même.
+ */
+export type ModaliteSouscription = "adjudication" | "syndication";
+
+export const LIBELLES_MODALITE: Record<ModaliteSouscription, string> = {
+  adjudication: "Adjudication — émission au calendrier UMOA-Titres",
+  syndication: "Syndication — placement de gré à gré",
 };
 
 /** Durée de vie d'un ordre au carnet. Marché financier uniquement : une
@@ -60,6 +80,175 @@ export const LIBELLES_ETAT: Record<EtatOrdre, string> = {
   perime: "Périmé",
   cloture: "Clôturé",
 };
+
+// ── Rémérés et prêts de titres ────────────────────────────────────────────
+//
+// Un réméré et un prêt sont des ordres MTP AUGMENTÉS, pas des objets à part :
+// ils portent déjà un fonds, un ISIN, une quantité, un prix et un compte de
+// règlement. Seul ce qui leur est propre vit ici.
+
+/** Sens du PREMIER flux d'un réméré. */
+export type SensRemere = "cash_in" | "cash_out";
+
+export const LIBELLES_SENS_REMERE: Record<SensRemere, string> = {
+  cash_in: "Cash-in — le fonds encaisse et devra rembourser",
+  cash_out: "Cash-out — le fonds décaisse et sera remboursé",
+};
+
+/**
+ * Le sens d'un réméré DÉCOULE du sens de l'ordre : il ne se choisit pas.
+ *
+ * Acheter à réméré, c'est décaisser aujourd'hui contre un titre qu'on rendra :
+ * le fonds sera remboursé, donc cash-out. Vendre à réméré, c'est encaisser
+ * aujourd'hui contre un titre qu'on rachètera : le fonds devra rembourser,
+ * donc cash-in.
+ *
+ * Le demander au gérant, c'était lui demander de répéter une information déjà
+ * donnée deux champs plus haut — et lui offrir la possibilité de se
+ * contredire.
+ *
+ * Le sens ne décide plus d'aucun poste : un ordre à réméré pèse dans
+ * « ACHATS / VENTES A RÉMÉRÉ VALIDES » selon son SENS D'ORDRE, puis dans les
+ * réalisés. Il reste une indication de lecture, utile au gérant.
+ */
+export function sensRemereDe(d: DescriptionOperation): SensRemere {
+  return sensDe(d) === "achat" ? "cash_out" : "cash_in";
+}
+
+/** Description de l'opération qui DÉNOUE un réméré : le sens inverse, sur le
+ *  même marché. On rachète ce qu'on a vendu à réméré, et réciproquement. */
+export function descriptionDenouement(d: DescriptionOperation): DescriptionOperation {
+  return sensDe(d) === "achat" ? "VENTE_MTP" : "ACHAT_MTP";
+}
+
+export type StatutRemere = "en_cours" | "denoue";
+export const LIBELLES_STATUT_REMERE: Record<StatutRemere, string> = {
+  en_cours: "En cours",
+  denoue: "Dénoué",
+};
+
+export type StatutPret = "en_cours" | "repris";
+export const LIBELLES_STATUT_PRET: Record<StatutPret, string> = {
+  en_cours: "En cours",
+  repris: "Repris",
+};
+
+/** Ce qui se SAISIT d'un réméré. Trois champs, et un lien.
+ *
+ *  Le sens n'y est pas : il découle du sens de l'ordre. Le statut et la date
+ *  de dénouement non plus : ils découlent de l'opération de dénouement et de
+ *  son exécution. Un statut qu'on saisit à la main est un statut qui ment. */
+export type SaisieRemere = {
+  dateFin: string;
+  contrepartie: string;
+  /** Prix de rachat, par titre. Le prix d'entrée est celui de l'ordre. */
+  prixSortie: number;
+  /** Opération MTP de sens inverse qui dénoue ce réméré, ou null tant qu'elle
+   *  n'a pas été saisie. */
+  denouePar: string | null;
+};
+
+/** Un réméré tel qu'il se LIT : sa saisie, plus ce qui s'en déduit. */
+export type Remere = SaisieRemere & {
+  /** Déduit du sens de l'ordre — cf. `sensRemereDe`. */
+  sens: SensRemere;
+  /** Déduit : dénoué dès que l'opération de dénouement a été EXÉCUTÉE. */
+  statut: StatutRemere;
+  /** Déduit : la date de dénouement de l'exécution qui a soldé le réméré. */
+  dateDenouement: string | null;
+  /** L'opération de dénouement est saisie mais pas encore exécutée. Le réméré
+   *  pèse toujours : rien n'a été réglé. */
+  denouementEnAttente: boolean;
+};
+
+/** Ce qui se SAISIT d'un prêt de titres. Trois champs.
+ *
+ *  Ni statut ni intérêt : le premier découle de la reprise, le second du taux
+ *  et de la durée. Même règle que pour le réméré — ce qui se déduit ne se
+ *  saisit pas, sinon la colonne finit par contredire les faits. */
+export type SaisiePret = {
+  dateFin: string | null;
+  /** Établissement emprunteur, choisi parmi les banques agréées de l'UMOA. */
+  contrepartie: string;
+  /** Taux du prêt, en DÉCIMAL. Rémunère le prêteur sur la durée. */
+  tauxCommission: number;
+  /** Date à laquelle les titres sont revenus, ou null tant qu'ils sont dehors. */
+  dateReprise: string | null;
+};
+
+/** Un prêt tel qu'il se LIT : sa saisie, plus ce qui s'en déduit. */
+export type Pret = SaisiePret & {
+  /** Déduit : repris dès que la date de reprise est renseignée. */
+  statut: StatutPret;
+  /** Déduit du taux et de la durée, base 360 — cf. `interetPret`. */
+  interetARecevoir: number;
+};
+
+/** Nombre de jours CALENDAIRES entre deux dates ISO. */
+function joursEntre(debut: string, fin: string): number {
+  const a = new Date(`${debut}T00:00:00Z`).getTime();
+  const b = new Date(`${fin}T00:00:00Z`).getTime();
+  if (Number.isNaN(a) || Number.isNaN(b)) return 0;
+  return Math.round((b - a) / 86_400_000);
+}
+
+/**
+ * Intérêt à recevoir sur un prêt de titres. BASE 360.
+ *
+ *   valeur des titres prêtés × taux × jours / 360
+ *
+ * La valeur retenue est celle de l'ordre — quantité × prix — et non son
+ * montant tous frais compris : on rémunère le prêt des titres, pas les
+ * commissions payées pour les acquérir.
+ *
+ * La durée court de la date du prêt à sa FIN PRÉVUE, ou à la date de REPRISE
+ * quand les titres sont déjà revenus : rendus plus tôt, ils n'ont pas à être
+ * payés jusqu'au terme.
+ *
+ * Le saisir à la main, c'était accepter qu'il diverge du taux affiché juste
+ * au-dessus.
+ */
+export function interetPret(
+  o: { dateOperation: string; quantite: number; prix: number },
+  p: { dateFin: string | null; tauxCommission: number; dateReprise: string | null },
+): number {
+  const fin = p.dateReprise ?? p.dateFin;
+  if (!fin) return 0;
+  const jours = joursEntre(o.dateOperation, fin);
+  if (jours <= 0) return 0;
+  return (o.quantite * o.prix * p.tauxCommission * jours) / 360;
+}
+
+/** Statut d'un prêt, DÉDUIT : les titres sont revenus, ou ils ne le sont pas. */
+export function statutPretDe(p: { dateReprise: string | null }): StatutPret {
+  return p.dateReprise ? "repris" : "en_cours";
+}
+
+/**
+ * UN RÉMÉRÉ N'EXISTE QU'UNE FOIS SON ORDRE EXÉCUTÉ.
+ *
+ * Tant que l'ordre d'entrée n'est pas servi, la cession temporaire n'a pas eu
+ * lieu : les titres n'ont pas bougé, aucun cash n'a changé de mains, et il n'y
+ * a donc rien à rembourser au terme. Ce n'est encore qu'un ordre MTP au
+ * carnet, et il pèse comme tel.
+ *
+ * C'est aussi ce qui interdit de le dénouer trop tôt : on ne solde pas ce qui
+ * ne s'est pas noué.
+ */
+export function remereNoue(o: {
+  remere: Remere | null;
+  executions: Execution[];
+}): boolean {
+  return o.remere !== null && o.executions.length > 0;
+}
+
+/** Montant d'un réméré : ce qui sera remboursé ou encaissé au terme. */
+export function montantRemere(
+  o: { quantite: number; interetsCourus: number },
+  r: { prixSortie: number },
+): number {
+  return o.quantite * r.prixSortie + o.interetsCourus;
+}
 
 /** Une part servie d'un ordre, à sa date. */
 export type Execution = {
@@ -112,6 +301,20 @@ export type OperationMarche = {
   note: string;
   /** Les parts servies, de la plus ancienne à la plus récente. */
   executions: Execution[];
+  /** Volet réméré, si l'ordre en est un. MTP uniquement. */
+  remere: Remere | null;
+  /** Modalité d'une SOUSCRIPTION au marché primaire, null pour toute autre
+   *  opération. Elle décide de la façon dont le titre se désigne : choisi au
+   *  calendrier pour une adjudication, décrit à la main pour une syndication. */
+  modalite: ModaliteSouscription | null;
+  /** Volet prêt de titres, si l'ordre en est un. MTP uniquement. */
+  pret: Pret | null;
+  /** Identifiant du réméré que cette opération dénoue, ou null.
+   *
+   *  DÉDUIT à la lecture : c'est le réméré dont le `denouePar` désigne cette
+   *  opération. Un seul lien stocké, donc pas de risque que les deux bouts se
+   *  contredisent. */
+  denoueRemereDe: string | null;
   /** Calculé, jamais stocké — cf. la migration SQL. Porte la quantité
    *  ORDONNÉE : c'est le montant de l'ordre, pas de ce qui en a été servi. */
   montant: number;
@@ -122,8 +325,33 @@ export type OperationMarche = {
  *  permis de clore un ordre par inadvertance en corrigeant son prix. */
 export type SaisieOperation = Omit<
   OperationMarche,
-  "id" | "montant" | "executions" | "clotureLe"
->;
+  "id" | "montant" | "executions" | "clotureLe" | "remere" | "pret" | "denoueRemereDe"
+> & {
+  /** Le volet prêt tel qu'il se saisit : sans le statut ni l'intérêt, qui se
+   *  déduisent. */
+  pret: SaisiePret | null;
+  /** Le volet réméré tel qu'il se saisit : sans le sens ni le statut, qui se
+   *  déduisent. */
+  remere: SaisieRemere | null;
+  /** Réméré que cette opération vient dénouer. Ne se choisit pas dans le
+   *  formulaire : il vient du bouton « Dénouer » de l'onglet Rémérés. */
+  denoueRemereDe: string | null;
+};
+
+/**
+ * Seul le PRÊT DE TITRES n'alimente aucun poste du point.
+ *
+ * Il ne déplace pas de cash au moment où il se noue : c'est un registre, pas
+ * un flux, et le classeur n'a pas de ligne pour lui.
+ *
+ * Un ordre à réméré, lui, alimente bien le point — simplement sur sa ligne
+ * propre tant qu'il est validé (cf. `posteEngageDe`), puis sur les achats et
+ * ventes réalisés une fois servi. Et une opération de dénouement se comporte
+ * exactement comme un achat ou une vente MTP ordinaire.
+ */
+export function alimenteAchatsVentes(o: { pret: Pret | null }): boolean {
+  return !o.pret;
+}
 
 /**
  * Libellés d'écran, et LIBELLÉS DES POSTES du point de trésorerie.
@@ -131,16 +359,18 @@ export type SaisieOperation = Omit<
  * Deux postes par nature : celui qui porte l'engagement tant que l'ordre n'est
  * pas servi, celui qui porte le règlement une fois qu'il l'est.
  *
- * Une VENTE n'a pas de poste d'engagement : le classeur n'en a pas. Une vente
- * non exécutée ne fait rien entrer en caisse, donc elle n'a rien à y annoncer.
+ * UNE VENTE A DÉSORMAIS SON POSTE D'ENGAGEMENT, elle aussi. Le classeur n'en
+ * avait pas, mais une vente passée et non encore servie est un encaissement
+ * annoncé : ne pas la montrer laissait le trésorier aveugle sur la moitié de
+ * ses ordres en cours.
  */
 export const DESCRIPTIONS: {
   valeur: DescriptionOperation;
   libelle: string;
   marche: Marche;
   sens: "achat" | "vente";
-  /** Poste portant la part NON servie. Null pour une vente. */
-  posteEngage: string | null;
+  /** Poste portant la part NON servie. */
+  posteEngage: string;
   /** Poste portant la part servie. */
   posteRealise: string;
   instrumentSuggere: Instrument;
@@ -168,7 +398,7 @@ export const DESCRIPTIONS: {
     libelle: "Vente MFR",
     marche: "mfr",
     sens: "vente",
-    posteEngage: null,
+    posteEngage: "VENTES MFR VALIDES",
     posteRealise: "VENTES MFR REALISEES",
     instrumentSuggere: "actions",
   },
@@ -177,8 +407,24 @@ export const DESCRIPTIONS: {
     libelle: "Vente MTP",
     marche: "mtp",
     sens: "vente",
-    posteEngage: null,
+    posteEngage: "VENTES MTP VALIDES",
     posteRealise: "VENTES MTP REALISEES",
+    instrumentSuggere: "mtp",
+  },
+  {
+    // SOUSCRIRE, C'EST ACHETER — au primaire, donc à l'émission plutôt qu'à
+    // un vendeur. Le sens décide du signe des frais : une souscription les
+    // ajoute au montant, comme un achat.
+    //
+    // Son engagement a sa propre ligne au point, « OPERATIONS MARCHÉ
+    // PRIMAIRE », que le classeur prévoyait et que rien n'alimentait. Une fois
+    // servie, elle se règle comme un achat de titres publics.
+    valeur: "SOUSCRIPTION_MP",
+    libelle: "Souscription marché primaire",
+    marche: "primaire",
+    sens: "achat",
+    posteEngage: "OPERATIONS MARCHÉ PRIMAIRE",
+    posteRealise: "ACHATS MTP REALISES",
     instrumentSuggere: "mtp",
   },
 ];
@@ -202,8 +448,28 @@ export function sensDe(d: DescriptionOperation): "achat" | "vente" {
 }
 
 /** Poste portant la part non servie, ou null pour une vente. */
-export function posteEngage(d: DescriptionOperation): string | null {
-  return PAR_DESCRIPTION.get(d)?.posteEngage ?? null;
+export function posteEngage(d: DescriptionOperation): string {
+  return PAR_DESCRIPTION.get(d)?.posteEngage ?? "";
+}
+
+/**
+ * Poste d'engagement d'un ordre À RÉMÉRÉ, non encore exécuté.
+ *
+ * Une cession temporaire a sa propre ligne au point : le classeur distingue
+ * « ACHATS A RÉMÉRÉ VALIDES » des achats ordinaires, et le trésorier veut
+ * pouvoir les lire séparément — l'engagement est le même, mais la nature de
+ * l'opération ne l'est pas.
+ */
+export function posteRemereValide(d: DescriptionOperation): string {
+  return sensDe(d) === "achat" ? "ACHATS A RÉMÉRÉ VALIDES" : "VENTES A RÉMÉRÉ VALIDES";
+}
+
+/** Poste portant la part non servie d'un ordre, réméré compris. */
+export function posteEngageDe(o: {
+  description: DescriptionOperation;
+  remere: unknown | null;
+}): string {
+  return o.remere ? posteRemereValide(o.description) : posteEngage(o.description);
 }
 
 /** Poste portant la part servie. */
@@ -326,7 +592,14 @@ export function quantiteRestante(o: {
 export function dateLimiteOrdre(o: {
   dateOperation: string;
   validite: Validite;
-}): string {
+  description: DescriptionOperation;
+}): string | null {
+  // UN ORDRE MTP NE PÉRIME PAS. La validité est une notion de carnet : une
+  // adjudication de titres publics est servie ou ne l'est pas, et un réméré se
+  // négocie de gré à gré. Le formulaire masque d'ailleurs le champ hors MFR —
+  // mais l'état par défaut restait « jour », si bien qu'un achat MTP validé
+  // sortait du point dès le lendemain, sans que rien ne l'explique.
+  if (marcheDe(o.description) === "mtp") return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(o.dateOperation)) return o.dateOperation;
   const d = new Date(`${o.dateOperation}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return o.dateOperation;
@@ -348,6 +621,7 @@ export function etatOrdre(
     quantite: number;
     dateOperation: string;
     validite: Validite;
+    description: DescriptionOperation;
     clotureLe: string | null;
     executions: Execution[];
   },
@@ -359,7 +633,8 @@ export function etatOrdre(
   // l'afficher comme « périmé » effacerait ce choix.
   if (o.clotureLe) return "cloture";
   const jour = aLaDate ?? new Date().toISOString().slice(0, 10);
-  if (dateLimiteOrdre(o) < jour) return "perime";
+  const limite = dateLimiteOrdre(o);
+  if (limite !== null && limite < jour) return "perime";
   return servie > 0 ? "partiel" : "en_cours";
 }
 
@@ -373,6 +648,7 @@ export function partRestantePese(
   o: {
     dateOperation: string;
     validite: Validite;
+    description: DescriptionOperation;
     clotureLe: string | null;
     quantite: number;
     executions: Execution[];
@@ -385,8 +661,9 @@ export function partRestantePese(
   if (o.dateOperation > dateArrete) return false;
   // Clôturé à cette date-là, ou avant.
   if (o.clotureLe && o.clotureLe <= dateArrete) return false;
-  // Périmé.
-  if (dateLimiteOrdre(o) < dateArrete) return false;
+  // Périmé. Un ordre MTP n'a pas de limite : il attend d'être servi ou clos.
+  const limite = dateLimiteOrdre(o);
+  if (limite !== null && limite < dateArrete) return false;
   return true;
 }
 

@@ -18,16 +18,22 @@ import { cache } from "react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 import {
+  alimenteAchatsVentes,
   montantExecution,
   montantOperation,
   montantRestant,
   partRestantePese,
-  posteEngage,
+  interetPret,
+  posteEngageDe,
   posteRealise,
+  sensRemereDe,
+  statutPretDe,
   type DescriptionOperation,
   type Execution,
   type Instrument,
   type OperationMarche,
+  type SaisiePret,
+  type SaisieRemere,
   type Validite,
 } from "./operations-marche-types";
 
@@ -60,6 +66,7 @@ type Ligne = {
   interets_courus: number | string;
   compte_reglement: string;
   cloture_le: string | null;
+  modalite: string | null;
   note: string;
 };
 
@@ -73,7 +80,7 @@ const nb = (v: number | string | null | undefined): number => {
 const COLS_OPERATION =
   "id, fund_id, date_operation, description, instrument, validite, code, libelle, " +
   "quantite, prix, sgi, taux_courtage, taux_tps, taux_brvm, taux_dcbr, " +
-  "interets_courus, compte_reglement, cloture_le, note";
+  "interets_courus, compte_reglement, cloture_le, modalite, note";
 
 const COLS_EXECUTION =
   "id, operation_id, date_execution, date_denouement, quantite, prix, rapproche_le, note";
@@ -90,7 +97,88 @@ function versExecution(l: LigneExecution): Execution {
   };
 }
 
-function versOperation(l: Ligne, executions: Execution[]): OperationMarche {
+type LigneRepo = {
+  operation_id: string;
+  date_fin: string;
+  contrepartie: string;
+  prix_sortie: number | string;
+  denoue_par: string | null;
+};
+
+type LignePret = {
+  operation_id: string;
+  contrepartie: string;
+  date_fin: string | null;
+  taux_commission: number | string;
+  date_reprise: string | null;
+};
+
+function versRemere(l: LigneRepo): SaisieRemere {
+  return {
+    dateFin: l.date_fin,
+    contrepartie: l.contrepartie ?? "",
+    prixSortie: nb(l.prix_sortie),
+    denouePar: l.denoue_par ?? null,
+  };
+}
+
+function versPret(l: LignePret): SaisiePret {
+  return {
+    dateFin: l.date_fin ?? null,
+    contrepartie: l.contrepartie ?? "",
+    tauxCommission: nb(l.taux_commission),
+    dateReprise: l.date_reprise ?? null,
+  };
+}
+
+/**
+ * DÉDUIT l'état des rémérés, une fois toutes les opérations chargées.
+ *
+ * Trois choses se déduisent, et aucune ne se saisit :
+ *
+ *  - le SENS, du sens de l'ordre (acheter à réméré décaisse, vendre encaisse) ;
+ *  - le STATUT : dénoué dès que l'opération de dénouement a été EXÉCUTÉE.
+ *    Saisie seulement, elle ne solde rien — rien n'a encore été réglé ;
+ *  - la DATE de dénouement, qui est celle du règlement de cette exécution.
+ *
+ * Le lien n'est stocké qu'une fois, sur le réméré. Le sens inverse — « cette
+ * opération dénoue tel réméré » — se reconstruit ici, ce qui interdit aux deux
+ * bouts de se contredire.
+ */
+function resoudreRemeres(operations: OperationMarche[]): OperationMarche[] {
+  const parId = new Map(operations.map((o) => [o.id, o]));
+  const denoueDe = new Map<string, string>();
+  for (const o of operations) {
+    if (o.remere?.denouePar) denoueDe.set(o.remere.denouePar, o.id);
+  }
+
+  for (const o of operations) {
+    o.denoueRemereDe = denoueDe.get(o.id) ?? null;
+    if (!o.remere) continue;
+
+    const cloture = o.remere.denouePar ? parId.get(o.remere.denouePar) : undefined;
+    // La dernière exécution fait foi : un dénouement servi en plusieurs fois
+    // n'est soldé qu'une fois la dernière part réglée.
+    const dates = (cloture?.executions ?? []).map((e) => e.dateDenouement).sort();
+    const derniere = dates.length > 0 ? dates[dates.length - 1] : null;
+
+    o.remere = {
+      ...o.remere,
+      sens: sensRemereDe(o.description),
+      statut: derniere ? "denoue" : "en_cours",
+      dateDenouement: derniere,
+      denouementEnAttente: cloture !== undefined && derniere === null,
+    };
+  }
+  return operations;
+}
+
+function versOperation(
+  l: Ligne,
+  executions: Execution[],
+  remere: SaisieRemere | null = null,
+  pret: SaisiePret | null = null,
+): OperationMarche {
   const base = {
     description: l.description as DescriptionOperation,
     quantite: nb(l.quantite),
@@ -111,8 +199,35 @@ function versOperation(l: Ligne, executions: Execution[]): OperationMarche {
     sgi: l.sgi ?? "",
     compteReglement: l.compte_reglement ?? "",
     clotureLe: l.cloture_le ?? null,
+    modalite:
+      l.modalite === "adjudication" || l.modalite === "syndication" ? l.modalite : null,
     note: l.note ?? "",
     executions,
+    // Les champs déduits sont posés provisoirement : `resoudreRemeres` les
+    // remplit quand toutes les opérations sont là — l'opération de dénouement
+    // est ailleurs dans la même liste.
+    remere: remere
+      ? {
+          ...remere,
+          sens: sensRemereDe(l.description as DescriptionOperation),
+          statut: "en_cours",
+          dateDenouement: null,
+          denouementEnAttente: false,
+        }
+      : null,
+    // Statut et intérêt sont DÉDUITS : le premier de la reprise, le second du
+    // taux et de la durée, base 360.
+    pret: pret
+      ? {
+          ...pret,
+          statut: statutPretDe(pret),
+          interetARecevoir: interetPret(
+            { dateOperation: l.date_operation, quantite: base.quantite, prix: base.prix },
+            pret,
+          ),
+        }
+      : null,
+    denoueRemereDe: null,
     ...base,
     montant: montantOperation(base),
   };
@@ -146,6 +261,35 @@ async function chargerExecutions(
   return parOperation;
 }
 
+/** Volets réméré et prêt d'un lot d'ordres. Un ordre en a AU PLUS un. */
+async function chargerVolets(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  operationIds: string[],
+): Promise<{ repos: Map<string, SaisieRemere>; prets: Map<string, SaisiePret> }> {
+  const repos = new Map<string, SaisieRemere>();
+  const prets = new Map<string, SaisiePret>();
+  if (operationIds.length === 0) return { repos, prets };
+
+  const [r, p] = await Promise.all([
+    supabase
+      .from("fund_market_repos")
+      .select("operation_id, date_fin, contrepartie, prix_sortie, denoue_par")
+      .in("operation_id", operationIds),
+    supabase
+      .from("fund_market_loans")
+      .select("operation_id, contrepartie, date_fin, taux_commission, date_reprise")
+      .in("operation_id", operationIds),
+  ]);
+
+  for (const l of (r.data ?? []) as unknown as LigneRepo[]) {
+    repos.set(l.operation_id, versRemere(l));
+  }
+  for (const l of (p.data ?? []) as unknown as LignePret[]) {
+    prets.set(l.operation_id, versPret(l));
+  }
+  return { repos, prets };
+}
+
 /**
  * Opérations d'un fonds, les plus récentes d'abord.
  *
@@ -163,11 +307,21 @@ export const loadOperationsMarche = cache(
       .order("created_at", { ascending: false });
 
     const lignes = (data ?? []) as unknown as Ligne[];
-    const executions = await chargerExecutions(
-      supabase,
-      lignes.map((l) => l.id),
+    const ids = lignes.map((l) => l.id);
+    const [executions, volets] = await Promise.all([
+      chargerExecutions(supabase, ids),
+      chargerVolets(supabase, ids),
+    ]);
+    return resoudreRemeres(
+      lignes.map((l) =>
+        versOperation(
+          l,
+          executions.get(l.id) ?? [],
+          volets.repos.get(l.id) ?? null,
+          volets.prets.get(l.id) ?? null,
+        ),
+      ),
     );
-    return lignes.map((l) => versOperation(l, executions.get(l.id) ?? []));
   },
 );
 
@@ -195,21 +349,28 @@ export const loadToutesOperationsMarche = cache(
       managed_funds: { nom: string } | { nom: string }[] | null;
     };
     const lignes = (data ?? []) as unknown as LigneJointe[];
-    const executions = await chargerExecutions(
-      supabase,
-      lignes.map((l) => l.id),
-    );
+    const ids = lignes.map((l) => l.id);
+    const [executions, volets] = await Promise.all([
+      chargerExecutions(supabase, ids),
+      chargerVolets(supabase, ids),
+    ]);
 
-    return lignes.map((l) => {
+    const avecFonds = lignes.map((l) => {
       // PostgREST renvoie la jointure tantôt en objet, tantôt en tableau selon
       // qu'il la juge unique : les deux formes se rencontrent, on les couvre.
       const f = Array.isArray(l.managed_funds) ? l.managed_funds[0] : l.managed_funds;
       return {
-        ...versOperation(l, executions.get(l.id) ?? []),
+        ...versOperation(
+          l,
+          executions.get(l.id) ?? [],
+          volets.repos.get(l.id) ?? null,
+          volets.prets.get(l.id) ?? null,
+        ),
         fondsId: l.fund_id,
         fondsNom: f?.nom ?? "—",
       };
     });
+    return resoudreRemeres(avecFonds) as OperationAvecFonds[];
   },
 );
 
@@ -242,6 +403,21 @@ export function agregerParPoste(
   };
 
   for (const o of operations) {
+    // UN ORDRE À RÉMÉRÉ EST UN ORDRE COMME UN AUTRE, à un poste près.
+    //
+    // Validé et non encore servi, il pèse dans « ACHATS / VENTES A RÉMÉRÉ
+    // VALIDES » — sa ligne propre au point, que le classeur distingue déjà des
+    // achats ordinaires. Une fois exécuté, il rejoint les achats et ventes
+    // réalisés : le cash a bougé comme pour n'importe quelle opération.
+    //
+    // Le DÉNOUEMENT, lui, n'a rien de particulier : c'est une opération MTP de
+    // sens inverse, qui pèse et se règle comme telle.
+    //
+    // Un PRÊT DE TITRES n'alimente aucun poste : il ne déplace pas de cash au
+    // moment où il se noue. C'est un registre, pas un flux — le classeur n'a
+    // d'ailleurs pas de poste pour lui.
+    if (!alimenteAchatsVentes(o)) continue;
+
     // ── La part servie, exécution par exécution ──────────────────────────
     //
     // Chaque exécution est valorisée à SON prix : un ordre à cours limité est
@@ -261,11 +437,11 @@ export function agregerParPoste(
     // Trois façons de cesser de peser — servie, close, périmée — et une seule
     // fonction pour les dire, partagée avec l'écran : sinon le calcul et
     // l'affichage finissent par ne plus être d'accord sur ce qui compte.
-    const poste = posteEngage(o.description);
-    if (!poste) continue; // une vente non servie n'annonce rien en caisse
+    // Les ventes ont désormais leur poste d'engagement, elles aussi : une
+    // vente passée et non servie est un encaissement annoncé.
     if (!partRestantePese(o, dateArrete)) continue;
 
-    ajouter(poste, o.compteReglement, montantRestant(o));
+    ajouter(posteEngageDe(o), o.compteReglement, montantRestant(o));
   }
 
   return parPoste;

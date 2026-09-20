@@ -9,11 +9,12 @@
 // ses comptes de trésorerie au référentiel ; les saisir une seconde fois les
 // ferait diverger.
 
-export type NaturePartenaire = "sgi" | "btcc" | "autre";
+export type NaturePartenaire = "sgi" | "btcc" | "remere" | "autre";
 
 export const LIBELLES_NATURE: Record<NaturePartenaire, string> = {
   sgi: "SGI — société de gestion et d'intermédiation",
   btcc: "BTCC — banque teneur de compte conservateur",
+  remere: "Contrepartie réméré",
   autre: "Autre partenaire",
 };
 
@@ -130,7 +131,7 @@ export function versPartenaire(l: LignePartenaire): Partenaire {
 
   return {
     id: l.id,
-    kind: (["sgi", "btcc", "autre"].includes(l.kind) ? l.kind : "autre") as NaturePartenaire,
+    kind: (["sgi", "btcc", "remere", "autre"].includes(l.kind) ? l.kind : "autre") as NaturePartenaire,
     nom: l.nom ?? "",
     agrement: l.agrement ?? "",
     pays: l.pays ?? "",
