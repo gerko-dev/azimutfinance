@@ -31,6 +31,11 @@ const ITEMS: Item[] = [
   { label: "Vue d'ensemble", href: "/gestion-portefeuille", icone: "◧" },
   { label: "Fonds gérés", href: "/gestion-portefeuille/fonds", icone: "▦" },
   {
+    label: "Gestion de trésorerie",
+    href: "/gestion-portefeuille/tresorerie",
+    icone: "◱",
+  },
+  {
     label: "Opérations de marché",
     href: "/gestion-portefeuille/operations-marche",
     icone: "⇄",

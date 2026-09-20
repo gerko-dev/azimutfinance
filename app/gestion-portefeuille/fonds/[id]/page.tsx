@@ -8,7 +8,6 @@ import { construireTableauAllocation } from "../../allocation-data";
 import { construirePlanOperations } from "../../operations-data";
 import { construireAnticipations } from "../../anticipation-data";
 import { construireProposition } from "../../proposition-data";
-import { construirePointTresorerie } from "../../tresorerie-data";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +45,6 @@ export default async function FundManagePage({
     initialOperations,
     initialAnticipations,
     initialProposition,
-    initialTresorerie,
   ] = await Promise.all([
     loadFundPortfolios(id),
     loadNavHistory(id),
@@ -54,7 +52,6 @@ export default async function FundManagePage({
     construirePlanOperations(id),
     construireAnticipations(id, fund.objectifPerf),
     construireProposition(id, {}, { ratios: fund.ratios }),
-    construirePointTresorerie(id, fund.nom),
   ]);
 
   return (
@@ -66,7 +63,6 @@ export default async function FundManagePage({
       initialOperations={initialOperations}
       initialAnticipations={initialAnticipations}
       initialProposition={initialProposition}
-      initialTresorerie={initialTresorerie}
     />
   );
 }

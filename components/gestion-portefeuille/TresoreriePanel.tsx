@@ -100,7 +100,19 @@ const LARGEUR_POSTE = 256;
 const LARGEUR_COLONNE = 120;
 const LARGEUR_TOTAL = 128;
 
-export default function TresoreriePanel({ point }: { point: PointTresorerie | null }) {
+export default function TresoreriePanel({
+  point,
+  lectureSeule = false,
+}: {
+  point: PointTresorerie | null;
+  /** Vue CONSOLIDÉE : les soldes ne s'y saisissent pas.
+   *
+   *  Ils se saisissent par fonds, parce qu'un relevé bancaire appartient à un
+   *  fonds. Laisser le champ actif sur la consolidation aurait laissé croire
+   *  qu'on peut corriger un total — et il aurait fallu décider, à
+   *  l'enregistrement, à quel fonds imputer l'écart. */
+  lectureSeule?: boolean;
+}) {
   if (!point) {
     return (
       <p className="text-sm text-slate-500 text-center py-10 bg-white border border-slate-200 rounded-lg">
@@ -110,10 +122,16 @@ export default function TresoreriePanel({ point }: { point: PointTresorerie | nu
     );
   }
 
-  return <Contenu point={point} />;
+  return <Contenu point={point} lectureSeule={lectureSeule} />;
 }
 
-function Contenu({ point }: { point: PointTresorerie }) {
+function Contenu({
+  point,
+  lectureSeule,
+}: {
+  point: PointTresorerie;
+  lectureSeule: boolean;
+}) {
   const parLibelle = new Map(point.lignes.map((l) => [l.libelle, l]));
   const ligneSolde = parLibelle.get("SOLDE");
 
@@ -187,7 +205,7 @@ function Contenu({ point }: { point: PointTresorerie }) {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 mt-3">
+        <div className={`flex flex-wrap items-center gap-2 mt-3 ${lectureSeule ? "hidden" : ""}`}>
           <label className="text-[11px] text-slate-600">
             Date du point
             <input
@@ -375,7 +393,7 @@ function Contenu({ point }: { point: PointTresorerie }) {
                       )}
                     </td>
                     {point.banques.map((b) =>
-                      def.libelle === "SOLDE" ? (
+                      def.libelle === "SOLDE" && !lectureSeule ? (
                         <td key={b} className="px-1 py-1 bg-white">
                           <input
                             value={saisie[b] ?? ""}
