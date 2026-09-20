@@ -22,38 +22,36 @@ import { useRouter } from "next/navigation";
 import {
   caracteristiquesTitreAction,
   comptesReglementAction,
+  ajouterExecutionAction,
   enregistrerOperationMarcheAction,
   listerTitresAction,
   modifierOperationMarcheAction,
+  supprimerExecutionAction,
   supprimerOperationMarcheAction,
 } from "@/app/gestion-portefeuille/operations-marche-actions";
 import {
   DESCRIPTIONS,
   INSTRUMENTS_ADMIS,
   LIBELLES_INSTRUMENT,
-  LIBELLES_STATUT,
   LIBELLES_VALIDITE,
-  dateDenouement,
   dateLimiteOrdre,
-  estOrdreValide,
+  etatOrdre,
   marcheDe,
   montantOperation,
-  posteDe,
-  sensDe,
+  posteEngage,
+  posteRealise,
+  quantiteExecutee,
   quantiteRestante,
+  sensDe,
   type DescriptionOperation,
   type Instrument,
-  type StatutOperation,
   type Validite,
 } from "@/app/gestion-portefeuille/operations-marche-types";
 import type { OperationAvecFonds } from "@/app/gestion-portefeuille/operations-marche-data";
 import type { OptionTitre } from "@/app/gestion-portefeuille/operations-marche-titres";
 import type { Partenaire } from "@/app/gestion-portefeuille/partenaires-types";
-import {
-  LIBELLES_BASE,
-  conventionDe,
-  type ParametresMarche,
-} from "@/app/gestion-portefeuille/parametres-marche-types";
+import LigneOrdre from "./LigneOrdre";
+import type { ParametresMarche } from "@/app/gestion-portefeuille/parametres-marche-types";
 
 const fmt0 = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
 const montantFr = (v: number) => fmt0.format(Math.round(v));
@@ -146,8 +144,7 @@ export default function OperationsMarchePanel({
   const [dateOperation, setDateOperation] = useState(() =>
     new Date().toISOString().slice(0, 10),
   );
-  const [description, setDescription] =
-    useState<DescriptionOperation>("ACHATS_MTP_REALISES");
+  const [description, setDescription] = useState<DescriptionOperation>("ACHAT_MTP");
   const [instrument, setInstrument] = useState<Instrument>("mtp");
   const [code, setCode] = useState("");
   const [libelle, setLibelle] = useState("");
@@ -160,14 +157,12 @@ export default function OperationsMarchePanel({
   const [tauxDcbr, setTauxDcbr] = useState("0");
   const [compteReglement, setCompteReglement] = useState("");
   const [note, setNote] = useState("");
-  const [quantiteExecutee, setQuantiteExecutee] = useState("0");
   const [validite, setValidite] = useState<Validite>("jour");
-  const [statut, setStatut] = useState<StatutOperation>("en_cours");
   /** Opération en cours de modification, ou null pour une création. */
   const [editionId, setEditionId] = useState<string | null>(null);
-  // Le dénouement est CALCULÉ mais reste modifiable : un règlement peut
-  // déraper, et la liste des jours fériés s'arrête à début 2027.
-  const [denouementManuel, setDenouementManuel] = useState<string | null>(null);
+  /** Ordre dont la ligne d'exécution est dépliée. Un seul à la fois : deux
+   *  formulaires ouverts sur deux ordres inviteraient à se tromper de ligne. */
+  const [executionOuverte, setExecutionOuverte] = useState<string | null>(null);
 
   const marche = marcheDe(description);
 
@@ -266,7 +261,6 @@ export default function OperationsMarchePanel({
     // qu'au marche financier : les titres publics n'en supportent aucune.
     setTauxBrvm(actions ? String(parametres.tauxBrvm) : "0");
     setTauxDcbr(actions ? String(parametres.tauxDcbr) : "0");
-    setDenouementManuel(null);
     oublierTitre();
     // L'intermédiaire change de nature avec le marché — une SGI d'un côté,
     // une banque teneur de compte de l'autre. Garder celui d'avant laisserait
@@ -296,7 +290,6 @@ export default function OperationsMarchePanel({
       // L'instrument découle du titre : une action ne peut pas être saisie
       // comme obligation, et l'inverse fausserait le délai de dénouement.
       setInstrument(opt.instrument);
-      setDenouementManuel(null);
     }
     setCouruManuel(null);
     demarrer(async () => {
@@ -327,7 +320,6 @@ export default function OperationsMarchePanel({
   // déjà choisi, au lieu de laisser à l'écran une valeur devenue fausse.
   const changerDate = (d: string) => {
     setDateOperation(d);
-    setDenouementManuel(null);
     if (!titreCle) return;
     demarrer(async () => {
       const res = await caracteristiquesTitreAction(
@@ -348,12 +340,6 @@ export default function OperationsMarchePanel({
     });
   };
 
-  const convention = conventionDe(parametres, instrument);
-  const denouementCalcule = useMemo(
-    () => dateDenouement(dateOperation, conventionDe(parametres, instrument)),
-    [dateOperation, instrument, parametres],
-  );
-  const denouement = denouementManuel ?? denouementCalcule;
 
   const montant = useMemo(
     () =>
@@ -380,13 +366,11 @@ export default function OperationsMarchePanel({
     demarrer(async () => {
       const saisie = {
         dateOperation,
-        dateDenouement: denouement,
         description,
         instrument,
         code,
         libelle,
         quantite: n(quantite),
-        quantiteExecutee: n(quantiteExecutee),
         validite,
         prix: n(prix),
         sgi: sgiNom,
@@ -396,7 +380,6 @@ export default function OperationsMarchePanel({
         tauxDcbr: n(tauxDcbr),
         interetsCourus,
         compteReglement,
-        statut,
         note,
       };
       const res = editionId
@@ -418,7 +401,6 @@ export default function OperationsMarchePanel({
         setQuantite("");
         setPrix("");
         setNote("");
-        setQuantiteExecutee("0");
         oublierTitre();
       }
       router.refresh();
@@ -432,7 +414,6 @@ export default function OperationsMarchePanel({
     setEditionId(o.id);
     setFondsId(o.fondsId);
     setDateOperation(o.dateOperation);
-    setDenouementManuel(o.dateDenouement);
     setDescription(o.description);
     setInstrument(o.instrument);
     setCode(o.code);
@@ -440,9 +421,7 @@ export default function OperationsMarchePanel({
     setSaisieTitre(o.libelle);
     setTitreCle("");
     setQuantite(String(o.quantite));
-    setQuantiteExecutee(String(o.quantiteExecutee));
     setValidite(o.validite);
-    setStatut(o.statut);
     setPrix(String(o.prix));
     setSgi(o.sgi);
     setTauxCourtage(String(o.tauxCourtage));
@@ -462,10 +441,32 @@ export default function OperationsMarchePanel({
     setQuantite("");
     setPrix("");
     setNote("");
-    setQuantiteExecutee("0");
-    setStatut("en_cours");
     setCouruManuel(null);
     oublierTitre();
+  };
+
+  const executer = (
+    o: OperationAvecFonds,
+    saisie: { dateExecution: string; dateDenouement: string; quantite: number },
+  ) => {
+    setErreur(null);
+    demarrer(async () => {
+      const res = await ajouterExecutionAction(o.fondsId, o.id, saisie);
+      if (!res.ok) setErreur(res.error);
+      else {
+        setExecutionOuverte(null);
+        router.refresh();
+      }
+    });
+  };
+
+  const retirerExecution = (o: OperationAvecFonds, executionId: string) => {
+    setErreur(null);
+    demarrer(async () => {
+      const res = await supprimerExecutionAction(o.fondsId, executionId);
+      if (!res.ok) setErreur(res.error);
+      else router.refresh();
+    });
   };
 
   const supprimer = (op: OperationAvecFonds) => {
@@ -611,7 +612,7 @@ export default function OperationsMarchePanel({
           )}
         </div>
         <p className="text-[11px] text-slate-500 mt-0.5">
-          Elle alimente le poste «&nbsp;{posteDe(description)}&nbsp;» du point de
+          Elle alimente le poste «&nbsp;{posteEngage(description) ?? posteRealise(description)}&nbsp;» du point de
           trésorerie, sur le compte de règlement choisi, à sa date de dénouement.
         </p>
 
@@ -658,7 +659,6 @@ export default function OperationsMarchePanel({
               value={instrument}
               onChange={(e) => {
                 setInstrument(e.target.value as Instrument);
-                setDenouementManuel(null);
                 // Le titre choisi n'est plus dans la liste : le garder
                 // laisserait à l'écran un ISIN et des courus qui ne
                 // correspondent plus à la nature sélectionnée.
@@ -675,11 +675,33 @@ export default function OperationsMarchePanel({
             <span className={aide}>
               {marche === "mfr"
                 ? "MFR : actions et obligations cotées"
-                : marche === "mtp"
-                  ? "MTP : OAT, OTAR et BAT"
-                  : "Hors marché coté"}
+                : "MTP : OAT et BAT"}
             </span>
           </Champ>
+
+          {/* La validité appartient à l'ORDRE, pas à ses exécutions : c'est
+              elle qui dit combien de temps il reste au carnet, donc combien de
+              temps sa part non servie pèse sur la trésorerie.
+              Le marché des titres publics l'ignore — une adjudication est
+              servie ou ne l'est pas. */}
+          {marche === "mfr" && (
+            <Champ label="Validité de l'ordre">
+              <select
+                value={validite}
+                onChange={(e) => setValidite(e.target.value as Validite)}
+                className={champ}
+              >
+                {(Object.keys(LIBELLES_VALIDITE) as Validite[]).map((k) => (
+                  <option key={k} value={k}>
+                    {LIBELLES_VALIDITE[k]}
+                  </option>
+                ))}
+              </select>
+              <span className={aide}>
+                Pèse jusqu&apos;au {dateLimiteOrdre({ dateOperation, validite })}
+              </span>
+            </Champ>
+          )}
 
           {/* MTP : l'État d'abord, puis ses titres. */}
           {marche === "mtp" && (
@@ -759,39 +781,13 @@ export default function OperationsMarchePanel({
             <input
               value={code}
               onChange={(e) => setCode(e.target.value)}
-              readOnly={marche !== "autre"}
-              tabIndex={marche !== "autre" ? -1 : undefined}
-              className={`${champ} ${
-                marche !== "autre" ? "bg-slate-50 text-slate-600 cursor-default" : ""
-              }`}
+              readOnly
+              tabIndex={-1}
+              className={`${champ} bg-slate-50 text-slate-600 cursor-default`}
             />
-            <span className={aide}>
-              {marche !== "autre" ? "Repris du titre choisi." : "Saisie libre."}
-            </span>
+            <span className={aide}>Repris du titre choisi.</span>
           </Champ>
 
-          {marche === "autre" && (
-            <Champ label="Titre" large>
-              <input
-                value={libelle}
-                onChange={(e) => setLibelle(e.target.value)}
-                className={champ}
-              />
-            </Champ>
-          )}
-
-          <Champ label="Dénouement">
-            <input
-              type="date"
-              value={denouement}
-              onChange={(e) => setDenouementManuel(e.target.value)}
-              className={champ}
-            />
-            <span className={aide}>
-              J+{convention.jours} {LIBELLES_BASE[convention.base]}
-              {denouementManuel && denouementManuel !== denouementCalcule && " · forcé"}
-            </span>
-          </Champ>
 
           <Champ label={marche === "mtp" ? "BTCC" : "SGI"}>
             <select
@@ -830,67 +826,6 @@ export default function OperationsMarchePanel({
             />
           </Champ>
 
-          {/* CYCLE DE VIE — n'a de sens que sur un ordre VALIDÉ.
-              Un achat déjà réalisé ou une vente n'ont rien à exécuter, et
-              afficher ces champs sur eux inviterait à les remplir. */}
-          {estOrdreValide(description) && (
-            <>
-              <Champ label="Quantité exécutée">
-                <input
-                  value={quantiteExecutee}
-                  onChange={(e) => setQuantiteExecutee(e.target.value)}
-                  inputMode="numeric"
-                  className={`${champ} text-right tabular-nums`}
-                />
-                <span className={aide}>
-                  {marche === "mtp"
-                    ? "Servi en totalité ou pas du tout"
-                    : `Reste ${fmt0.format(
-                        Math.max(0, n(quantite) - n(quantiteExecutee)),
-                      )} à servir`}
-                </span>
-              </Champ>
-
-              <Champ label="Statut">
-                <select
-                  value={statut}
-                  onChange={(e) => setStatut(e.target.value as StatutOperation)}
-                  className={champ}
-                >
-                  {(Object.keys(LIBELLES_STATUT) as StatutOperation[]).map((k) => (
-                    <option key={k} value={k}>
-                      {LIBELLES_STATUT[k]}
-                    </option>
-                  ))}
-                </select>
-                <span className={aide}>
-                  Un ordre annulé ne pèse plus sur la trésorerie
-                </span>
-              </Champ>
-
-              {/* La validité ne concerne que le marché financier : une
-                  adjudication de titres publics est servie ou ne l'est pas. */}
-              {marche === "mfr" && (
-                <Champ label="Validité de l'ordre">
-                  <select
-                    value={validite}
-                    onChange={(e) => setValidite(e.target.value as Validite)}
-                    className={champ}
-                  >
-                    {(Object.keys(LIBELLES_VALIDITE) as Validite[]).map((k) => (
-                      <option key={k} value={k}>
-                        {LIBELLES_VALIDITE[k]}
-                      </option>
-                    ))}
-                  </select>
-                  <span className={aide}>
-                    Sort du point après le{" "}
-                    {dateLimiteOrdre({ dateOperation, validite })}
-                  </span>
-                </Champ>
-              )}
-            </>
-          )}
 
           <Champ label="Prix unitaire">
             <input
@@ -1071,15 +1006,12 @@ export default function OperationsMarchePanel({
             <thead className="bg-slate-100 text-slate-600">
               <tr>
                 <th className="text-left px-3 py-2 font-medium">Date</th>
-                <th className="text-left px-3 py-2 font-medium">Dénouement</th>
                 <th className="text-left px-3 py-2 font-medium">Fonds</th>
-                <th className="text-left px-3 py-2 font-medium">Poste</th>
+                <th className="text-left px-3 py-2 font-medium">Nature</th>
                 <th className="text-left px-3 py-2 font-medium">Titre</th>
-                <th className="text-right px-3 py-2 font-medium">Quantité</th>
+                <th className="text-right px-3 py-2 font-medium">Ordonnée</th>
                 <th className="text-right px-3 py-2 font-medium">Servie</th>
                 <th className="text-left px-3 py-2 font-medium">État</th>
-                <th className="text-right px-3 py-2 font-medium">Prix</th>
-                <th className="text-right px-3 py-2 font-medium">Courus</th>
                 <th className="text-right px-3 py-2 font-medium">Montant</th>
                 <th className="text-left px-3 py-2 font-medium">Règlement</th>
                 <th className="px-3 py-2" />
@@ -1088,98 +1020,34 @@ export default function OperationsMarchePanel({
             <tbody className="divide-y divide-slate-100">
               {operations.length === 0 && (
                 <tr>
-                  <td colSpan={13} className="px-3 py-6 text-center text-slate-400">
+                  <td colSpan={10} className="px-3 py-6 text-center text-slate-400">
                     Aucune opération saisie.
                   </td>
                 </tr>
               )}
-              {operations.map((o) => (
-                <tr key={o.id} className="hover:bg-slate-50">
-                  <td className="px-3 py-1.5 tabular-nums whitespace-nowrap">
-                    {o.dateOperation}
-                  </td>
-                  <td className="px-3 py-1.5 tabular-nums whitespace-nowrap">
-                    {o.dateDenouement}
-                  </td>
-                  <td className="px-3 py-1.5">{o.fondsNom}</td>
-                  <td className="px-3 py-1.5 whitespace-nowrap">{posteDe(o.description)}</td>
-                  <td className="px-3 py-1.5">
-                    {o.libelle || o.code || "—"}
-                    {o.code && o.libelle && (
-                      <span className="text-slate-400 ml-1">({o.code})</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-1.5 text-right tabular-nums">
-                    {fmt0.format(o.quantite)}
-                  </td>
-                  <td className="px-3 py-1.5 text-right tabular-nums">
-                    {estOrdreValide(o.description) ? (
-                      o.quantiteExecutee > 0 ? (
-                        <>
-                          {fmt0.format(o.quantiteExecutee)}
-                          {quantiteRestante(o) > 0 && (
-                            <span className="block text-[9px] text-amber-700">
-                              reste {fmt0.format(quantiteRestante(o))}
-                            </span>
-                          )}
-                        </>
-                      ) : (
-                        <span className="text-slate-400">—</span>
-                      )
-                    ) : (
-                      <span className="text-slate-300">s.o.</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-1.5 whitespace-nowrap">
-                    <span
-                      className={
-                        o.statut === "annule"
-                          ? "text-slate-400 line-through"
-                          : o.statut === "realise"
-                            ? "text-emerald-700"
-                            : "text-slate-700"
-                      }
-                    >
-                      {LIBELLES_STATUT[o.statut]}
-                    </span>
-                    {/* La date de péremption d'un ordre encore vivant : c'est
-                        elle qui décide de sa sortie du point de trésorerie. */}
-                    {estOrdreValide(o.description) &&
-                      o.statut === "en_cours" &&
-                      o.instrument !== "mtp" && (
-                        <span className="block text-[9px] text-slate-400">
-                          jusqu&apos;au {dateLimiteOrdre(o)}
-                        </span>
-                      )}
-                  </td>
-                  <td className="px-3 py-1.5 text-right tabular-nums">
-                    {fmt0.format(o.prix)}
-                  </td>
-                  <td className="px-3 py-1.5 text-right tabular-nums text-slate-500">
-                    {o.interetsCourus ? montantFr(o.interetsCourus) : "—"}
-                  </td>
-                  <td className="px-3 py-1.5 text-right tabular-nums font-medium">
-                    {montantFr(o.montant)}
-                  </td>
-                  <td className="px-3 py-1.5 text-slate-600">{o.compteReglement}</td>
-                  <td className="px-3 py-1.5 text-right">
-                    <button
-                      onClick={() => modifier(o)}
-                      disabled={enCours}
-                      className="text-[10px] text-blue-700 hover:text-blue-900 disabled:opacity-50 mr-3"
-                    >
-                      Modifier
-                    </button>
-                    <button
-                      onClick={() => supprimer(o)}
-                      disabled={enCours}
-                      className="text-[10px] text-rose-600 hover:text-rose-800 disabled:opacity-50"
-                    >
-                      Supprimer
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {operations.map((o) => {
+                const servie = quantiteExecutee(o);
+                const reste = quantiteRestante(o);
+                const etat = etatOrdre(o);
+                const ouvert = executionOuverte === o.id;
+                return (
+                  <LigneOrdre
+                    key={o.id}
+                    o={o}
+                    servie={servie}
+                    reste={reste}
+                    etat={etat}
+                    ouvert={ouvert}
+                    enCours={enCours}
+                    parametres={parametres}
+                    onBasculer={() => setExecutionOuverte(ouvert ? null : o.id)}
+                    onModifier={() => modifier(o)}
+                    onSupprimer={() => supprimer(o)}
+                    onExecuter={(saisie) => executer(o, saisie)}
+                    onSupprimerExecution={(id) => retirerExecution(o, id)}
+                  />
+                );
+              })}
             </tbody>
           </table>
         </div>

@@ -2,10 +2,16 @@ import "server-only";
 
 // === Opérations de marché : lecture et agrégation ===
 //
-// Le point de trésorerie somme les opérations par (poste, compte de règlement)
-// en ne retenant que celles DÉJÀ DÉNOUÉES à la date d'arrêté. C'est la règle du
-// classeur (`Tableau4[Date de dénouement] <= $C$2`) et elle a un sens : une
-// opération négociée mais pas encore réglée n'a pas bougé la trésorerie.
+// Le point de trésorerie distingue deux choses qu'un même ordre porte à la
+// fois quand il est partiellement servi :
+//
+//   la part NON SERVIE  pèse comme ENGAGEMENT, tant que l'ordre est au carnet.
+//                       Elle ne se dénoue pas : rien n'est encore à régler.
+//   la part SERVIE      pèse comme RÈGLEMENT, à la date de dénouement de son
+//                       exécution.
+//
+// C'est la règle du classeur, étendue à l'exécution partielle : il ne
+// connaissait que des lignes entièrement validées ou entièrement réalisées.
 
 import { cache } from "react";
 
@@ -13,28 +19,35 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 import {
   dateLimiteOrdre,
-  estOrdreValide,
   montantOperation,
-  posteDe,
-  posteRealisePour,
+  posteEngage,
+  posteRealise,
   quantiteRestante,
   type DescriptionOperation,
+  type Execution,
   type Instrument,
   type OperationMarche,
-  type StatutOperation,
+  type Validite,
 } from "./operations-marche-types";
+
+type LigneExecution = {
+  id: string;
+  operation_id: string;
+  date_execution: string;
+  date_denouement: string;
+  quantite: number | string;
+  note: string;
+};
 
 type Ligne = {
   id: string;
   date_operation: string;
-  date_denouement: string;
   description: string;
   instrument: string;
+  validite: string;
   code: string;
   libelle: string;
   quantite: number | string;
-  quantite_executee: number | string;
-  validite: string;
   prix: number | string;
   sgi: string;
   taux_courtage: number | string;
@@ -43,7 +56,6 @@ type Ligne = {
   taux_dcbr: number | string;
   interets_courus: number | string;
   compte_reglement: string;
-  statut: string;
   note: string;
 };
 
@@ -54,7 +66,25 @@ const nb = (v: number | string | null | undefined): number => {
   return Number.isFinite(n) ? n : 0;
 };
 
-function versOperation(l: Ligne): OperationMarche {
+const COLS_OPERATION =
+  "id, fund_id, date_operation, description, instrument, validite, code, libelle, " +
+  "quantite, prix, sgi, taux_courtage, taux_tps, taux_brvm, taux_dcbr, " +
+  "interets_courus, compte_reglement, note";
+
+const COLS_EXECUTION =
+  "id, operation_id, date_execution, date_denouement, quantite, note";
+
+function versExecution(l: LigneExecution): Execution {
+  return {
+    id: l.id,
+    dateExecution: l.date_execution,
+    dateDenouement: l.date_denouement,
+    quantite: nb(l.quantite),
+    note: l.note ?? "",
+  };
+}
+
+function versOperation(l: Ligne, executions: Execution[]): OperationMarche {
   const base = {
     description: l.description as DescriptionOperation,
     quantite: nb(l.quantite),
@@ -68,19 +98,45 @@ function versOperation(l: Ligne): OperationMarche {
   return {
     id: l.id,
     dateOperation: l.date_operation,
-    dateDenouement: l.date_denouement,
     instrument: l.instrument as Instrument,
-    quantiteExecutee: nb(l.quantite_executee),
-    validite: l.validite === "revocation90" ? "revocation90" : "jour",
+    validite: (l.validite === "revocation90" ? "revocation90" : "jour") as Validite,
     code: l.code ?? "",
     libelle: l.libelle ?? "",
     sgi: l.sgi ?? "",
     compteReglement: l.compte_reglement ?? "",
-    statut: (l.statut ?? "en_cours") as StatutOperation,
     note: l.note ?? "",
+    executions,
     ...base,
     montant: montantOperation(base),
   };
+}
+
+/** Une opération, augmentée du fonds auquel elle appartient. */
+export type OperationAvecFonds = OperationMarche & {
+  fondsId: string;
+  fondsNom: string;
+};
+
+/** Exécutions d'un lot d'ordres, groupées par ordre et triées par date. */
+async function chargerExecutions(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  operationIds: string[],
+): Promise<Map<string, Execution[]>> {
+  const parOperation = new Map<string, Execution[]>();
+  if (operationIds.length === 0) return parOperation;
+
+  const { data } = await supabase
+    .from("fund_market_executions")
+    .select(COLS_EXECUTION)
+    .in("operation_id", operationIds)
+    .order("date_execution");
+
+  for (const brut of (data ?? []) as unknown as LigneExecution[]) {
+    const liste = parOperation.get(brut.operation_id) ?? [];
+    liste.push(versExecution(brut));
+    parOperation.set(brut.operation_id, liste);
+  }
+  return parOperation;
 }
 
 /**
@@ -94,35 +150,26 @@ export const loadOperationsMarche = cache(
     const supabase = await createSupabaseServerClient();
     const { data } = await supabase
       .from("fund_market_operations")
-      .select(
-        "id, date_operation, date_denouement, description, instrument, code, libelle, " +
-          "quantite, quantite_executee, validite, prix, sgi, taux_courtage, taux_tps, taux_brvm, " +
-          "taux_dcbr, interets_courus, " +
-          "compte_reglement, statut, note",
-      )
+      .select(COLS_OPERATION)
       .eq("fund_id", fundId)
       .order("date_operation", { ascending: false })
       .order("created_at", { ascending: false });
-    // Double conversion : la table n'est pas connue du typage genere du
-    // client Supabase, qui renvoie alors un type d'erreur plutot que des
-    // lignes. Le schema reel est celui de la migration.
-    return ((data ?? []) as unknown as Ligne[]).map(versOperation);
+
+    const lignes = (data ?? []) as unknown as Ligne[];
+    const executions = await chargerExecutions(
+      supabase,
+      lignes.map((l) => l.id),
+    );
+    return lignes.map((l) => versOperation(l, executions.get(l.id) ?? []));
   },
 );
-
-/** Une opération, augmentée du fonds auquel elle appartient. */
-export type OperationAvecFonds = OperationMarche & {
-  fondsId: string;
-  fondsNom: string;
-};
 
 /**
  * Toutes les opérations du gérant, tous fonds confondus.
  *
  * L'écran de saisie est INTERFONDS : le gérant y passe ses opérations de la
  * journée, qui portent souvent sur plusieurs fonds à la fois — une même
- * adjudication se répartit entre les portefeuilles. Les séparer par fonds
- * l'obligerait à changer d'écran entre deux lignes du même bordereau.
+ * adjudication se répartit entre les portefeuilles.
  *
  * La RLS restreint déjà la lecture aux fonds du gérant : pas de filtre à
  * ajouter ici, et surtout pas de liste d'identifiants à tenir à jour.
@@ -132,12 +179,7 @@ export const loadToutesOperationsMarche = cache(
     const supabase = await createSupabaseServerClient();
     const { data } = await supabase
       .from("fund_market_operations")
-      .select(
-        "id, fund_id, date_operation, date_denouement, description, instrument, code, libelle, " +
-          "quantite, quantite_executee, validite, prix, sgi, taux_courtage, taux_tps, taux_brvm, " +
-          "taux_dcbr, interets_courus, " +
-          "compte_reglement, statut, note, managed_funds(nom)",
-      )
+      .select(`${COLS_OPERATION}, managed_funds(nom)`)
       .order("date_operation", { ascending: false })
       .order("created_at", { ascending: false });
 
@@ -145,12 +187,18 @@ export const loadToutesOperationsMarche = cache(
       fund_id: string;
       managed_funds: { nom: string } | { nom: string }[] | null;
     };
-    return ((data ?? []) as unknown as LigneJointe[]).map((l) => {
+    const lignes = (data ?? []) as unknown as LigneJointe[];
+    const executions = await chargerExecutions(
+      supabase,
+      lignes.map((l) => l.id),
+    );
+
+    return lignes.map((l) => {
       // PostgREST renvoie la jointure tantôt en objet, tantôt en tableau selon
       // qu'il la juge unique : les deux formes se rencontrent, on les couvre.
       const f = Array.isArray(l.managed_funds) ? l.managed_funds[0] : l.managed_funds;
       return {
-        ...versOperation(l),
+        ...versOperation(l, executions.get(l.id) ?? []),
         fondsId: l.fund_id,
         fondsNom: f?.nom ?? "—",
       };
@@ -161,11 +209,14 @@ export const loadToutesOperationsMarche = cache(
 /**
  * Montants par POSTE puis par COMPTE DE RÈGLEMENT, à une date d'arrêté.
  *
- * Deux filtres, tous deux repris du classeur :
- *  - le dénouement doit être intervenu au plus tard à la date d'arrêté ;
- *  - une opération annulée ne compte pas. Le classeur n'a pas ce cas — il
- *    supprime la ligne — mais garder la trace d'une annulation vaut mieux que
- *    l'effacer, et il faut alors l'écarter du calcul.
+ * Deux contributions par ordre, et deux règles de date différentes :
+ *
+ *  - la part NON SERVIE pèse dès la date de l'ordre et jusqu'à sa péremption.
+ *    Elle ne se dénoue pas : un ordre non exécuté n'a rien à régler, et lui
+ *    inventer une date de règlement l'aurait fait entrer ou sortir du point
+ *    pour de mauvaises raisons.
+ *  - chaque EXÉCUTION pèse à la date de dénouement qui lui est propre. Un
+ *    ordre servi en trois fois se règle en trois fois, à trois dates.
  */
 export function agregerParPoste(
   operations: OperationMarche[],
@@ -173,7 +224,7 @@ export function agregerParPoste(
 ): Map<string, Map<string, number>> {
   const parPoste = new Map<string, Map<string, number>>();
 
-  const ajouter = (poste: string, compte: string, montant: number) => {
+  const ajouter = (poste: string | null, compte: string, montant: number) => {
     if (!poste || montant === 0) return;
     let parCompte = parPoste.get(poste);
     if (!parCompte) {
@@ -184,39 +235,31 @@ export function agregerParPoste(
   };
 
   for (const o of operations) {
-    if (o.statut === "annule") continue;
-    if (dateArrete && o.dateDenouement > dateArrete) continue;
-
-    const poste = posteDe(o.description);
-    if (!poste) continue;
-
-    // Une opération qui n'est pas un ordre validé — un achat déjà réalisé,
-    // une vente — compte pour sa totalité : il n'y a rien à exécuter.
-    if (!estOrdreValide(o.description)) {
-      ajouter(poste, o.compteReglement, o.montant);
-      continue;
-    }
-
-    // ── Un ordre validé se partage en deux ───────────────────────────────
-    //
-    // La part SERVIE n'est plus un engagement : elle bascule sur le poste
-    // réalisé correspondant. La part restante continue de peser, mais
-    // seulement tant que l'ordre est encore au carnet.
-    const executee = Math.min(Math.max(0, o.quantiteExecutee), o.quantite);
-    const restante = quantiteRestante(o);
+    // Montant unitaire, frais et courus compris au prorata : c'est ce qui
+    // permet de répartir un ordre partiellement servi sans recalculer les
+    // frais sur chaque morceau.
     const parTitre = o.quantite > 0 ? o.montant / o.quantite : 0;
 
-    if (executee > 0) {
-      const posteRealise = posteRealisePour(o.description);
-      if (posteRealise) ajouter(posteRealise, o.compteReglement, parTitre * executee);
+    // ── La part servie, exécution par exécution ──────────────────────────
+    for (const e of o.executions) {
+      if (dateArrete && e.dateDenouement > dateArrete) continue;
+      ajouter(posteRealise(o.description), o.compteReglement, parTitre * e.quantite);
     }
 
-    // Un ordre entièrement servi n'a plus de part restante ; un ordre périmé
-    // n'en a plus l'usage. Dans les deux cas il quitte les engagements.
-    const perime = dateArrete !== null && dateLimiteOrdre(o) < dateArrete;
-    if (restante > 0 && o.statut !== "realise" && !perime) {
-      ajouter(poste, o.compteReglement, parTitre * restante);
+    // ── La part non servie, tant que l'ordre est au carnet ───────────────
+    const restante = quantiteRestante(o);
+    if (restante <= 0) continue;
+
+    const poste = posteEngage(o.description);
+    if (!poste) continue; // une vente non servie n'annonce rien en caisse
+
+    if (dateArrete) {
+      // Un ordre passé APRÈS la date d'arrêté n'existe pas encore pour elle ;
+      // un ordre périmé ne sera plus servi.
+      if (o.dateOperation > dateArrete) continue;
+      if (dateLimiteOrdre(o) < dateArrete) continue;
     }
+    ajouter(poste, o.compteReglement, parTitre * restante);
   }
 
   return parPoste;

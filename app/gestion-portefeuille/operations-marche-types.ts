@@ -1,37 +1,35 @@
 // === Opérations de marché : types et calculs ===
 //
-// Reprend la feuille « Opérations de marché » du classeur de gestion. Une
-// ligne = une opération ; le point de trésorerie les somme par poste, par
-// compte de règlement et par date de dénouement.
+// Un ORDRE, et ses EXÉCUTIONS.
+//
+// L'ordre porte une intention : acheter ou vendre tant de titres, à tel prix,
+// sur tel marché. Il pèse sur la trésorerie tant qu'il peut être servi. Chaque
+// exécution en sert une part, à sa date, et c'est elle qui se dénoue — un
+// ordre non servi n'a rien à régler.
 //
 // Les formules du classeur sont reproduites TELLES QUELLES, y compris leurs
 // particularités : c'est la référence du gérant, et un écart silencieux entre
 // le site et le classeur serait pire qu'un écart assumé.
 
-/** Poste du point de trésorerie alimenté par l'opération. */
+/** Nature d'un ordre : un sens, un marché. */
 export type DescriptionOperation =
-  | "ACHATS_MFR_VALIDES"
-  | "ACHATS_MTP_VALIDES"
-  | "ACHATS_A_REMERE_VALIDES"
-  | "ACHATS_MFR_REALISES"
-  | "ACHATS_MTP_REALISES"
-  | "VENTES_MFR_REALISEES"
-  | "VENTES_MTP_REALISEES";
+  | "ACHAT_MFR"
+  | "ACHAT_MTP"
+  | "VENTE_MFR"
+  | "VENTE_MTP";
 
 /** Nature du titre. Gouverne le délai de dénouement. */
 export type Instrument = "actions" | "obligations" | "mtp";
 
-/** État d'un ordre.
- *
- *  « en_cours » : l'ordre vit, sa part non exécutée pèse sur la trésorerie.
- *  « realise »  : servi en totalité.
- *  « annule »   : retiré — il ne pèse plus rien, et n'a rien exécuté. */
-export type StatutOperation = "en_cours" | "realise" | "annule";
+/** Marché sur lequel l'ordre se traite. Décide de la façon dont le titre se
+ *  choisit, et des instruments admis. */
+export type Marche = "mfr" | "mtp";
 
-export const LIBELLES_STATUT: Record<StatutOperation, string> = {
-  en_cours: "En cours",
-  realise: "Réalisé",
-  annule: "Annulé",
+/** Instruments admis selon le marché. Un ordre MFR porte sur une action ou une
+ *  obligation cotée, jamais sur un titre public — et réciproquement. */
+export const INSTRUMENTS_ADMIS: Record<Marche, Instrument[]> = {
+  mfr: ["actions", "obligations"],
+  mtp: ["mtp"],
 };
 
 /** Durée de vie d'un ordre au carnet. Marché financier uniquement : une
@@ -39,179 +37,121 @@ export const LIBELLES_STATUT: Record<StatutOperation, string> = {
 export type Validite = "jour" | "revocation90";
 
 export const LIBELLES_VALIDITE: Record<Validite, string> = {
-  jour: "Jour — tombe le lendemain",
+  jour: "Jour — sort le jour même",
   revocation90: "Révocation 90 jours",
 };
 
-/** Nombre de jours calendaires pendant lesquels un ordre reste au carnet. */
+/** Nombre de jours calendaires pendant lesquels l'ordre reste au carnet.
+ *
+ *  Zéro pour un ordre « jour » : il vaut pour la séance et sort du point le
+ *  jour même — passé ce jour, il ne sera plus servi et n'engage plus rien. */
 export const JOURS_VALIDITE: Record<Validite, number> = {
-  jour: 1,
+  jour: 0,
   revocation90: 90,
 };
+
+/** État d'un ordre. DÉDUIT des quantités servies, jamais saisi. */
+export type EtatOrdre = "en_cours" | "partiel" | "realise" | "perime";
+
+export const LIBELLES_ETAT: Record<EtatOrdre, string> = {
+  en_cours: "En cours",
+  partiel: "Partiellement servi",
+  realise: "Réalisé",
+  perime: "Périmé",
+};
+
+/** Une part servie d'un ordre, à sa date. */
+export type Execution = {
+  id: string;
+  dateExecution: string;
+  dateDenouement: string;
+  quantite: number;
+  note: string;
+};
+
+export type SaisieExecution = Omit<Execution, "id">;
 
 export type OperationMarche = {
   id: string;
   dateOperation: string;
-  dateDenouement: string;
   description: DescriptionOperation;
   instrument: Instrument;
+  validite: Validite;
   code: string;
   libelle: string;
   quantite: number;
-  /** Quantité DÉJÀ SERVIE. Sur le marché financier un ordre peut être exécuté
-   *  par morceaux ; sur les titres publics il l'est en totalité ou pas du
-   *  tout, et ce champ ne prend alors que 0 ou la quantité entière. */
-  quantiteExecutee: number;
-  validite: Validite;
   prix: number;
   sgi: string;
   tauxCourtage: number;
   tauxTps: number;
   tauxBrvm: number;
-  /** Commission du dépositaire central. Séparée de la commission BRVM depuis
-   *  que les deux se configurent indépendamment ; leur SOMME entre dans le
-   *  montant, donc une opération ancienne qui porte tout sur `tauxBrvm` garde
-   *  exactement la même valeur. */
   tauxDcbr: number;
   interetsCourus: number;
   compteReglement: string;
-  statut: StatutOperation;
   note: string;
+  /** Les parts servies, de la plus ancienne à la plus récente. */
+  executions: Execution[];
   /** Calculé, jamais stocké — cf. la migration SQL. Porte la quantité
-   *  ORDONNÉE, pas la part restante : c'est le montant de l'ordre. */
+   *  ORDONNÉE : c'est le montant de l'ordre, pas de ce qui en a été servi. */
   montant: number;
 };
 
-/** Part d'un ordre qui n'a pas encore été servie. */
-export function quantiteRestante(o: {
-  quantite: number;
-  quantiteExecutee: number;
-}): number {
-  return Math.max(0, o.quantite - Math.min(o.quantiteExecutee, o.quantite));
-}
+export type SaisieOperation = Omit<OperationMarche, "id" | "montant" | "executions">;
 
 /**
- * Date au-delà de laquelle un ordre validé ne pèse plus sur la trésorerie.
+ * Libellés d'écran, et LIBELLÉS DES POSTES du point de trésorerie.
  *
- * Un ordre « jour » tombe LE LENDEMAIN de sa saisie ; un ordre à révocation
- * tient quatre-vingt-dix jours. Passé ce terme, sa part non servie disparaît
- * du point : elle ne sera plus exécutée, donc elle n'engage plus rien.
+ * Deux postes par nature : celui qui porte l'engagement tant que l'ordre n'est
+ * pas servi, celui qui porte le règlement une fois qu'il l'est.
  *
- * Ne vaut que pour les ordres VALIDÉS. Une opération déjà réalisée n'a plus de
- * durée de vie, et une vente n'est pas un engagement de décaissement.
+ * Une VENTE n'a pas de poste d'engagement : le classeur n'en a pas. Une vente
+ * non exécutée ne fait rien entrer en caisse, donc elle n'a rien à y annoncer.
  */
-export function dateLimiteOrdre(o: {
-  dateOperation: string;
-  validite: Validite;
-}): string {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(o.dateOperation)) return o.dateOperation;
-  const d = new Date(`${o.dateOperation}T00:00:00Z`);
-  if (Number.isNaN(d.getTime())) return o.dateOperation;
-  d.setUTCDate(d.getUTCDate() + JOURS_VALIDITE[o.validite]);
-  return d.toISOString().slice(0, 10);
-}
-
-/** Cette description désigne-t-elle un ordre VALIDÉ, donc un engagement ? */
-export function estOrdreValide(d: DescriptionOperation): boolean {
-  return d.endsWith("_VALIDES");
-}
-
-/**
- * Poste sur lequel bascule la part EXÉCUTÉE d'un ordre validé.
- *
- * Le réméré n'en a pas : le classeur porte « ACHATS A RÉMÉRÉ VALIDES » sans
- * contrepartie réalisée. Sa part exécutée quitte donc les engagements sans
- * entrer ailleurs — c'est le classeur qui est ainsi, et le reproduire vaut
- * mieux qu'inventer un poste qu'il ignore.
- */
-export function posteRealisePour(d: DescriptionOperation): string | null {
-  if (d === "ACHATS_MFR_VALIDES") return "ACHATS MFR REALISES";
-  if (d === "ACHATS_MTP_VALIDES") return "ACHATS MTP REALISES";
-  return null;
-}
-
-export type SaisieOperation = Omit<OperationMarche, "id" | "montant">;
-
-/**
- * Libellés d'écran, et LIBELLÉ DU POSTE correspondant dans le point de
- * trésorerie — qui est la clef de rapprochement, d'où l'orthographe exacte du
- * classeur, accent compris.
- */
-/** Marché sur lequel l'opération se traite. Décide de la façon dont le titre
- *  se choisit : référentiel BRVM pour le MFR, titres publics par État pour le
- *  MTP, saisie libre pour le reste. */
-export type Marche = "mfr" | "mtp" | "autre";
-
-/** Instruments admis selon le marché. Un achat MFR porte sur une action ou une
- *  obligation cotée, jamais sur un titre public — et réciproquement. */
-export const INSTRUMENTS_ADMIS: Record<Marche, Instrument[]> = {
-  mfr: ["actions", "obligations"],
-  mtp: ["mtp"],
-  autre: ["actions", "obligations", "mtp"],
-};
-
 export const DESCRIPTIONS: {
   valeur: DescriptionOperation;
   libelle: string;
-  poste: string;
-  sens: "achat" | "vente";
   marche: Marche;
+  sens: "achat" | "vente";
+  /** Poste portant la part NON servie. Null pour une vente. */
+  posteEngage: string | null;
+  /** Poste portant la part servie. */
+  posteRealise: string;
   instrumentSuggere: Instrument;
 }[] = [
   {
-    valeur: "ACHATS_MFR_VALIDES",
-    libelle: "Achats MFR validés",
-    poste: "ACHATS MFR VALIDES",
-    sens: "achat",
+    valeur: "ACHAT_MFR",
+    libelle: "Achat MFR",
     marche: "mfr",
+    sens: "achat",
+    posteEngage: "ACHATS MFR VALIDES",
+    posteRealise: "ACHATS MFR REALISES",
     instrumentSuggere: "actions",
   },
   {
-    valeur: "ACHATS_MTP_VALIDES",
-    libelle: "Achats MTP validés",
-    poste: "ACHATS MTP VALIDES",
-    sens: "achat",
+    valeur: "ACHAT_MTP",
+    libelle: "Achat MTP",
     marche: "mtp",
+    sens: "achat",
+    posteEngage: "ACHATS MTP VALIDES",
+    posteRealise: "ACHATS MTP REALISES",
     instrumentSuggere: "mtp",
   },
   {
-    valeur: "ACHATS_A_REMERE_VALIDES",
-    libelle: "Achats à réméré validés",
-    poste: "ACHATS A RÉMÉRÉ VALIDES",
-    sens: "achat",
-    marche: "autre",
-    instrumentSuggere: "obligations",
-  },
-  {
-    valeur: "ACHATS_MFR_REALISES",
-    libelle: "Achats MFR réalisés",
-    poste: "ACHATS MFR REALISES",
-    sens: "achat",
+    valeur: "VENTE_MFR",
+    libelle: "Vente MFR",
     marche: "mfr",
+    sens: "vente",
+    posteEngage: null,
+    posteRealise: "VENTES MFR REALISEES",
     instrumentSuggere: "actions",
   },
   {
-    valeur: "ACHATS_MTP_REALISES",
-    libelle: "Achats MTP réalisés",
-    poste: "ACHATS MTP REALISES",
-    sens: "achat",
+    valeur: "VENTE_MTP",
+    libelle: "Vente MTP",
     marche: "mtp",
-    instrumentSuggere: "mtp",
-  },
-  {
-    valeur: "VENTES_MFR_REALISEES",
-    libelle: "Ventes MFR réalisées",
-    poste: "VENTES MFR REALISEES",
     sens: "vente",
-    marche: "mfr",
-    instrumentSuggere: "actions",
-  },
-  {
-    valeur: "VENTES_MTP_REALISEES",
-    libelle: "Ventes MTP réalisées",
-    poste: "VENTES MTP REALISEES",
-    sens: "vente",
-    marche: "mtp",
+    posteEngage: null,
+    posteRealise: "VENTES MTP REALISEES",
     instrumentSuggere: "mtp",
   },
 ];
@@ -224,14 +164,9 @@ export const LIBELLES_INSTRUMENT: Record<Instrument, string> = {
 
 const PAR_DESCRIPTION = new Map(DESCRIPTIONS.map((d) => [d.valeur, d]));
 
-/** Poste du point de trésorerie visé par cette description. */
-export function posteDe(d: DescriptionOperation): string {
-  return PAR_DESCRIPTION.get(d)?.poste ?? "";
-}
-
-/** Marché de l'opération : décide de la façon dont le titre se choisit. */
+/** Marché de l'ordre : décide de la façon dont le titre se choisit. */
 export function marcheDe(d: DescriptionOperation): Marche {
-  return PAR_DESCRIPTION.get(d)?.marche ?? "autre";
+  return PAR_DESCRIPTION.get(d)?.marche ?? "mfr";
 }
 
 /** Achat ou vente — c'est ce qui décide du SENS des frais. */
@@ -239,11 +174,21 @@ export function sensDe(d: DescriptionOperation): "achat" | "vente" {
   return PAR_DESCRIPTION.get(d)?.sens ?? "achat";
 }
 
+/** Poste portant la part non servie, ou null pour une vente. */
+export function posteEngage(d: DescriptionOperation): string | null {
+  return PAR_DESCRIPTION.get(d)?.posteEngage ?? null;
+}
+
+/** Poste portant la part servie. */
+export function posteRealise(d: DescriptionOperation): string {
+  return PAR_DESCRIPTION.get(d)?.posteRealise ?? "";
+}
+
 /**
  * Montant de l'opération, formule du classeur à l'identique.
  *
- *   achat : Q × P × (1 + tc + tc × tps + tbrvm) + courus
- *   vente : Q × P × (1 − tc − tc × tps − tbrvm) + courus
+ *   achat : Q × P × (1 + tc + tc × tps + tbrvm + tdcbr) + courus
+ *   vente : Q × P × (1 − tc − tc × tps − tbrvm − tdcbr) + courus
  *
  * DEUX POINTS QUI SURPRENNENT, ET QUI SONT VOULUS :
  *
@@ -267,12 +212,63 @@ export function montantOperation(o: {
 }): number {
   const brut = o.quantite * o.prix;
   // Les deux commissions de place s'AJOUTENT, comme le faisait le champ unique
-  // du classeur : les separer ne change aucun montant, seulement la facon de
-  // les reviser.
+  // du classeur : les séparer ne change aucun montant, seulement la façon de
+  // les réviser.
   const frais =
     o.tauxCourtage + o.tauxCourtage * o.tauxTps + o.tauxBrvm + (o.tauxDcbr ?? 0);
   const signe = sensDe(o.description) === "achat" ? 1 : -1;
   return brut * (1 + signe * frais) + o.interetsCourus;
+}
+
+/** Quantité servie, toutes exécutions confondues. */
+export function quantiteExecutee(o: { executions: Execution[] }): number {
+  return o.executions.reduce((s, e) => s + e.quantite, 0);
+}
+
+/** Part de l'ordre qui n'a pas encore été servie. */
+export function quantiteRestante(o: {
+  quantite: number;
+  executions: Execution[];
+}): number {
+  return Math.max(0, o.quantite - quantiteExecutee(o));
+}
+
+/**
+ * Date au-delà de laquelle un ordre ne pèse plus sur la trésorerie.
+ *
+ * Un ordre « jour » sort le jour même — passé cette date, il ne sera plus
+ * servi et n'engage plus rien. Un ordre à révocation tient quatre-vingt-dix
+ * jours.
+ */
+export function dateLimiteOrdre(o: {
+  dateOperation: string;
+  validite: Validite;
+}): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(o.dateOperation)) return o.dateOperation;
+  const d = new Date(`${o.dateOperation}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return o.dateOperation;
+  d.setUTCDate(d.getUTCDate() + JOURS_VALIDITE[o.validite]);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * État d'un ordre, DÉDUIT de ses exécutions.
+ *
+ * Le saisir à la main aurait créé un troisième état : celui où la colonne dit
+ * une chose et les quantités une autre.
+ *
+ * `aLaDate` permet de juger la péremption au jour où l'on regarde — le point
+ * de trésorerie se lit à une date d'arrêté, pas forcément aujourd'hui.
+ */
+export function etatOrdre(
+  o: { quantite: number; dateOperation: string; validite: Validite; executions: Execution[] },
+  aLaDate?: string | null,
+): EtatOrdre {
+  const servie = quantiteExecutee(o);
+  if (servie >= o.quantite) return "realise";
+  const jour = aLaDate ?? new Date().toISOString().slice(0, 10);
+  if (dateLimiteOrdre(o) < jour) return "perime";
+  return servie > 0 ? "partiel" : "en_cours";
 }
 
 /**
@@ -280,8 +276,8 @@ export function montantOperation(o: {
  *
  * Liste FIGÉE et datée : elle couvre 2026 et le 1er janvier 2027. Au-delà, le
  * calcul du dénouement ne les connaîtra plus et proposera une date d'un jour
- * trop tôt. C'est pour cela que la date de dénouement reste MODIFIABLE dans le
- * formulaire — le calcul assiste la saisie, il n'en décide pas.
+ * trop tôt. C'est pour cela que la date de dénouement reste MODIFIABLE à la
+ * saisie d'une exécution — le calcul assiste, il ne décide pas.
  */
 export const JOURS_FERIES: readonly string[] = [
   "2026-01-01",
@@ -310,30 +306,28 @@ function estOuvre(d: Date): boolean {
 }
 
 /**
- * Date de dénouement, selon la convention du marché.
+ * Date de dénouement d'une EXÉCUTION, selon la convention du marché.
  *
- * La règle N'EST PLUS ÉCRITE ICI : elle vient des paramètres du gérant, qui
- * la configure par marché (Paramètres › Opérations de marché). Les conventions
- * de place changent par décision de la BRVM ou du DC/BR, et le gérant
- * l'apprend avant nous.
+ * La règle n'est pas écrite ici : elle vient des paramètres du gérant, qui la
+ * configure par marché (Paramètres › Opérations de marché). Les conventions de
+ * place changent par décision de la BRVM ou du DC/BR, et le gérant l'apprend
+ * avant nous.
  *
  * Deux bases de comptage. En jours OUVRÉS, on avance d'abord puis on compte :
- * le jour de négociation ne compte pas, et les samedis, dimanches et jours
- * fériés sont sautés. En jours CALENDAIRES, on ajoute simplement les jours —
- * y compris zéro, qui rend alors la date de négociation telle quelle. C'est ce
- * que fait le classeur pour les titres publics, vérifié sur ses propres
- * lignes, y compris une opération du 30 avril 2026, qui est férié.
+ * le jour d'exécution ne compte pas, et les samedis, dimanches et jours fériés
+ * sont sautés. En jours CALENDAIRES, on ajoute simplement les jours — y
+ * compris zéro, qui rend alors la date d'exécution telle quelle.
  */
 export function dateDenouement(
-  dateOperation: string,
+  dateExecution: string,
   convention: { jours: number; base: "ouvres" | "calendaires" },
 ): string {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateOperation)) return dateOperation;
-  const d = new Date(`${dateOperation}T00:00:00Z`);
-  if (Number.isNaN(d.getTime())) return dateOperation;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateExecution)) return dateExecution;
+  const d = new Date(`${dateExecution}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return dateExecution;
 
   const jours = Number.isFinite(convention.jours) ? Math.max(0, convention.jours) : 0;
-  if (jours === 0) return dateOperation;
+  if (jours === 0) return dateExecution;
 
   if (convention.base === "calendaires") {
     d.setUTCDate(d.getUTCDate() + jours);

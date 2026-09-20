@@ -27,6 +27,7 @@ import {
   DESCRIPTIONS,
   dateDenouement,
   type DescriptionOperation,
+  type Instrument,
   type SaisieOperation,
 } from "./operations-marche-types";
 import { chargerParametresMarche } from "./parametres-marche-data";
@@ -173,22 +174,6 @@ function valider(saisie: SaisieOperation): string | null {
   if (!(saisie.prix > 0)) return "Le prix doit être strictement positif.";
   if (!saisie.compteReglement.trim())
     return "Choisis le compte de règlement : sans lui, le montant n'entre dans aucune colonne du point de trésorerie.";
-
-  // La part servie ne peut pas dépasser l'ordre. La base l'interdit aussi,
-  // mais son message parlerait de contrainte, pas de quantité.
-  if (saisie.quantiteExecutee < 0 || saisie.quantiteExecutee > saisie.quantite)
-    return `La quantité exécutée (${saisie.quantiteExecutee}) ne peut pas dépasser la quantité ordonnée (${saisie.quantite}).`;
-
-  // Sur le marché des titres publics, une adjudication est servie ou ne l'est
-  // pas : une exécution partielle y serait une saisie erronée, pas un cas de
-  // marché.
-  if (
-    saisie.instrument === "mtp" &&
-    saisie.quantiteExecutee > 0 &&
-    saisie.quantiteExecutee !== saisie.quantite
-  ) {
-    return "Sur le marché des titres publics, un ordre est servi en totalité ou pas du tout.";
-  }
   return null;
 }
 
@@ -203,14 +188,6 @@ export async function enregistrerOperationMarcheAction(
   const invalide = valider(saisie);
   if (invalide) return { ok: false, error: invalide };
 
-  // Le client envoie deja la date calculee ; ce repli sert au cas ou elle
-  // manque, et emploie la MEME convention que l'ecran — celle du gerant.
-  const denouement = EST_DATE.test(saisie.dateDenouement)
-    ? saisie.dateDenouement
-    : dateDenouement(
-        saisie.dateOperation,
-        conventionDe(await chargerParametresMarche(), saisie.instrument),
-      );
 
   const { data, error } = await supabase
     .from("fund_market_operations")
@@ -218,14 +195,12 @@ export async function enregistrerOperationMarcheAction(
       owner_id: userId,
       fund_id: fundId,
       date_operation: saisie.dateOperation,
-      date_denouement: denouement,
       description: saisie.description as DescriptionOperation,
       instrument: saisie.instrument,
+      validite: saisie.validite,
       code: saisie.code.trim(),
       libelle: saisie.libelle.trim(),
       quantite: saisie.quantite,
-      quantite_executee: saisie.quantiteExecutee,
-      validite: saisie.validite,
       prix: saisie.prix,
       sgi: saisie.sgi.trim(),
       taux_courtage: saisie.tauxCourtage,
@@ -234,7 +209,6 @@ export async function enregistrerOperationMarcheAction(
       taux_dcbr: saisie.tauxDcbr,
       interets_courus: saisie.interetsCourus,
       compte_reglement: saisie.compteReglement.trim(),
-      statut: saisie.statut,
       note: saisie.note.trim(),
     })
     .select("id")
@@ -264,25 +238,17 @@ export async function modifierOperationMarcheAction(
   const invalide = valider(saisie);
   if (invalide) return { ok: false, error: invalide };
 
-  const denouement = EST_DATE.test(saisie.dateDenouement)
-    ? saisie.dateDenouement
-    : dateDenouement(
-        saisie.dateOperation,
-        conventionDe(await chargerParametresMarche(), saisie.instrument),
-      );
 
   const { error } = await supabase
     .from("fund_market_operations")
     .update({
       date_operation: saisie.dateOperation,
-      date_denouement: denouement,
       description: saisie.description as DescriptionOperation,
       instrument: saisie.instrument,
+      validite: saisie.validite,
       code: saisie.code.trim(),
       libelle: saisie.libelle.trim(),
       quantite: saisie.quantite,
-      quantite_executee: saisie.quantiteExecutee,
-      validite: saisie.validite,
       prix: saisie.prix,
       sgi: saisie.sgi.trim(),
       taux_courtage: saisie.tauxCourtage,
@@ -291,7 +257,6 @@ export async function modifierOperationMarcheAction(
       taux_dcbr: saisie.tauxDcbr,
       interets_courus: saisie.interetsCourus,
       compte_reglement: saisie.compteReglement.trim(),
-      statut: saisie.statut,
       note: saisie.note.trim(),
     })
     .eq("id", operationId)
@@ -304,6 +269,117 @@ export async function modifierOperationMarcheAction(
   revalidatePath("/gestion-portefeuille/operations-marche");
   revalidatePath("/gestion-portefeuille/tresorerie");
   return { ok: true, data: { id: operationId } };
+}
+
+/**
+ * Enregistre une EXECUTION : une part servie, a sa date.
+ *
+ * Le denouement est calcule depuis la date d'execution selon la convention du
+ * marche, et non depuis la date de l'ordre : un ordre passe lundi et servi
+ * jeudi se regle a partir de jeudi.
+ */
+export async function ajouterExecutionAction(
+  fundId: string,
+  operationId: string,
+  saisie: { dateExecution: string; dateDenouement?: string; quantite: number; note?: string },
+): Promise<ActionResult<{ id: string }>> {
+  const acces = await autoriser(fundId);
+  if ("erreur" in acces) return { ok: false, error: acces.erreur };
+  const { supabase, userId } = acces;
+
+  if (!EST_DATE.test(saisie.dateExecution))
+    return { ok: false, error: "Renseigne la date d'exécution." };
+  if (!(saisie.quantite > 0))
+    return { ok: false, error: "La quantité exécutée doit être strictement positive." };
+
+  // L'ordre, et ce qui en a deja ete servi. On relit plutot que de faire
+  // confiance au client : deux onglets ouverts sur le meme ordre pourraient
+  // sinon le sur-executer chacun de leur cote.
+  const { data: ordre } = await supabase
+    .from("fund_market_operations")
+    .select("id, quantite, instrument")
+    .eq("id", operationId)
+    .eq("fund_id", fundId)
+    .eq("owner_id", userId)
+    .maybeSingle();
+  if (!ordre) return { ok: false, error: "Ordre introuvable." };
+
+  const o = ordre as unknown as { quantite: number | string; instrument: string };
+  const ordonnee = Number(o.quantite) || 0;
+
+  const { data: deja } = await supabase
+    .from("fund_market_executions")
+    .select("quantite")
+    .eq("operation_id", operationId);
+  const servie = ((deja ?? []) as unknown as { quantite: number | string }[]).reduce(
+    (s, x) => s + (Number(x.quantite) || 0),
+    0,
+  );
+
+  if (servie + saisie.quantite > ordonnee) {
+    return {
+      ok: false,
+      error:
+        `Cet ordre porte sur ${ordonnee} titres, dont ${servie} déjà servis : ` +
+        `il n'en reste que ${ordonnee - servie}.`,
+    };
+  }
+
+  // Sur le marche des titres publics, une adjudication est servie ou ne l'est
+  // pas : une execution partielle y serait une saisie erronee, pas un cas de
+  // marche.
+  if (o.instrument === "mtp" && saisie.quantite !== ordonnee) {
+    return {
+      ok: false,
+      error: "Sur le marché des titres publics, un ordre est servi en totalité ou pas du tout.",
+    };
+  }
+
+  const denouement =
+    saisie.dateDenouement && EST_DATE.test(saisie.dateDenouement)
+      ? saisie.dateDenouement
+      : dateDenouement(
+          saisie.dateExecution,
+          conventionDe(await chargerParametresMarche(), o.instrument as Instrument),
+        );
+
+  const { data, error } = await supabase
+    .from("fund_market_executions")
+    .insert({
+      owner_id: userId,
+      operation_id: operationId,
+      date_execution: saisie.dateExecution,
+      date_denouement: denouement,
+      quantite: saisie.quantite,
+      note: (saisie.note ?? "").trim(),
+    })
+    .select("id")
+    .single();
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/gestion-portefeuille/operations-marche");
+  revalidatePath("/gestion-portefeuille/tresorerie");
+  return { ok: true, data: { id: (data as { id: string }).id } };
+}
+
+export async function supprimerExecutionAction(
+  fundId: string,
+  executionId: string,
+): Promise<ActionResult<{ id: string }>> {
+  const acces = await autoriser(fundId);
+  if ("erreur" in acces) return { ok: false, error: acces.erreur };
+  const { supabase, userId } = acces;
+
+  const { error } = await supabase
+    .from("fund_market_executions")
+    .delete()
+    .eq("id", executionId)
+    .eq("owner_id", userId);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/gestion-portefeuille/operations-marche");
+  revalidatePath("/gestion-portefeuille/tresorerie");
+  return { ok: true, data: { id: executionId } };
 }
 
 export async function supprimerOperationMarcheAction(

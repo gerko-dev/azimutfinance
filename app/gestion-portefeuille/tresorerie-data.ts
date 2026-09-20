@@ -207,13 +207,21 @@ export async function construirePointTresorerie(
 
   // Negociees, pas encore denouees : elles ne comptent pas aujourd'hui, mais
   // le tresorier doit les voir venir.
+  // Ce sont les EXÉCUTIONS qui se dénouent, pas les ordres : on liste donc
+  // celles dont le règlement tombe après la date d'arrêté. Un ordre non servi
+  // n'y figure pas — il n'a rien à régler, il pèse déjà comme engagement.
   const nonDenouees = operations
-    .filter((o) => o.statut !== "annule" && dateArrete !== null && o.dateDenouement > dateArrete)
-    .map((o) => ({
-      libelle: `${o.libelle || o.code || "Opération"} — ${o.compteReglement}`,
-      dateDenouement: o.dateDenouement,
-      montant: o.montant,
-    }))
+    .flatMap((o) =>
+      o.executions
+        .filter((e) => dateArrete !== null && e.dateDenouement > dateArrete)
+        .map((e) => ({
+          libelle:
+            `${o.libelle || o.code || "Opération"} — ${o.compteReglement}` +
+            (e.quantite < o.quantite ? ` (${e.quantite} / ${o.quantite})` : ""),
+          dateDenouement: e.dateDenouement,
+          montant: o.quantite > 0 ? (o.montant / o.quantite) * e.quantite : 0,
+        })),
+    )
     .sort((a, b) => a.dateDenouement.localeCompare(b.dateDenouement));
 
   const v = (libelle: string, banque: string): number => valeurs.get(libelle)?.[banque] ?? 0;
