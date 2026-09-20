@@ -46,6 +46,8 @@ export default function LigneOrdre({
   onSupprimer,
   onExecuter,
   onSupprimerExecution,
+  onCloturer,
+  onRapprocher,
 }: {
   o: OperationAvecFonds;
   servie: number;
@@ -64,6 +66,8 @@ export default function LigneOrdre({
     prix: number;
   }) => void;
   onSupprimerExecution: (id: string) => void;
+  onCloturer: (date: string | null) => void;
+  onRapprocher: (executionId: string, date: string | null) => void;
 }) {
   const [dateExecution, setDateExecution] = useState(() =>
     new Date().toISOString().slice(0, 10),
@@ -86,7 +90,7 @@ export default function LigneOrdre({
   const couleurEtat =
     etat === "realise"
       ? "text-emerald-700"
-      : etat === "perime"
+      : etat === "perime" || etat === "cloture"
         ? "text-slate-400"
         : etat === "partiel"
           ? "text-amber-700"
@@ -120,7 +124,12 @@ export default function LigneOrdre({
           <span className={couleurEtat}>{LIBELLES_ETAT[etat]}</span>
           {/* La date de péremption d'un ordre encore vivant : c'est elle qui
               décide de sa sortie du point de trésorerie. */}
-          {reste > 0 && etat !== "perime" && (
+          {reste > 0 && etat === "cloture" && o.clotureLe && (
+            <span className="block text-[9px] text-slate-400">
+              le {o.clotureLe}
+            </span>
+          )}
+          {reste > 0 && etat !== "perime" && etat !== "cloture" && (
             <span className="block text-[9px] text-slate-400">
               jusqu&apos;au {dateLimiteOrdre(o)}
             </span>
@@ -131,7 +140,10 @@ export default function LigneOrdre({
         </td>
         <td className="px-3 py-1.5 text-slate-600">{o.compteReglement}</td>
         <td className="px-3 py-1.5 text-right whitespace-nowrap">
-          {reste > 0 && (
+          {/* Un ordre clos ne s'exécute plus : le gérant a renoncé au reste.
+              Pour l'exécuter quand même, il faut d'abord le rouvrir — et ce
+              geste-là est explicite. */}
+          {reste > 0 && !o.clotureLe && (
             <button
               onClick={onBasculer}
               disabled={enCours}
@@ -140,6 +152,30 @@ export default function LigneOrdre({
               {ouvert ? "Fermer" : "Exécuter"}
             </button>
           )}
+          {/* CLÔTURER, même partiellement servi : le gérant renonce à faire
+              exécuter le reste. Ce qui a été servi demeure — il a été réglé,
+              ou le sera. La clôture date un renoncement, elle n'efface rien,
+              et se défait si elle a été posée par erreur. */}
+          {reste > 0 &&
+            (o.clotureLe ? (
+              <button
+                onClick={() => onCloturer(null)}
+                disabled={enCours}
+                className="text-[10px] text-slate-500 hover:text-slate-800 disabled:opacity-50 mr-3"
+                title={`Clôturé le ${o.clotureLe} — rouvrir`}
+              >
+                Rouvrir
+              </button>
+            ) : (
+              <button
+                onClick={() => onCloturer(new Date().toISOString().slice(0, 10))}
+                disabled={enCours}
+                className="text-[10px] text-amber-700 hover:text-amber-900 disabled:opacity-50 mr-3"
+                title="La part non servie cesse d'engager la trésorerie"
+              >
+                Clôturer
+              </button>
+            ))}
           <button
             onClick={onModifier}
             disabled={enCours}
@@ -168,6 +204,31 @@ export default function LigneOrdre({
                   {fmt0.format(e.prix > 0 ? e.prix : o.prix)} le {e.dateExecution} ·
                   règlement{" "}
                   {e.dateDenouement} · {montantFr(montantExecution(o, e))} F
+                  {/* RAPPROCHER : le règlement est passé sur le relevé, donc
+                      le solde bancaire saisi le contient déjà. L'exécution
+                      sort alors des postes de flux — l'y laisser la compterait
+                      deux fois. C'est un lettrage, pas une annulation. */}
+                  {e.rapprocheLe ? (
+                    <button
+                      onClick={() => onRapprocher(e.id, null)}
+                      disabled={enCours}
+                      className="ml-1.5 text-emerald-700 hover:text-emerald-900 disabled:opacity-50"
+                      title={`Rapproché le ${e.rapprocheLe} — défaire`}
+                    >
+                      ✓ rapproché
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() =>
+                        onRapprocher(e.id, new Date().toISOString().slice(0, 10))
+                      }
+                      disabled={enCours}
+                      className="ml-1.5 text-blue-700 hover:text-blue-900 disabled:opacity-50"
+                      title="Constaté sur le relevé : sort des flux, le solde le contient déjà"
+                    >
+                      rapprocher
+                    </button>
+                  )}
                   <button
                     onClick={() => onSupprimerExecution(e.id)}
                     disabled={enCours}

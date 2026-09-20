@@ -18,13 +18,12 @@ import { cache } from "react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 import {
-  dateLimiteOrdre,
   montantExecution,
   montantOperation,
   montantRestant,
+  partRestantePese,
   posteEngage,
   posteRealise,
-  quantiteRestante,
   type DescriptionOperation,
   type Execution,
   type Instrument,
@@ -39,6 +38,7 @@ type LigneExecution = {
   date_denouement: string;
   quantite: number | string;
   prix: number | string;
+  rapproche_le: string | null;
   note: string;
 };
 
@@ -59,6 +59,7 @@ type Ligne = {
   taux_dcbr: number | string;
   interets_courus: number | string;
   compte_reglement: string;
+  cloture_le: string | null;
   note: string;
 };
 
@@ -72,10 +73,10 @@ const nb = (v: number | string | null | undefined): number => {
 const COLS_OPERATION =
   "id, fund_id, date_operation, description, instrument, validite, code, libelle, " +
   "quantite, prix, sgi, taux_courtage, taux_tps, taux_brvm, taux_dcbr, " +
-  "interets_courus, compte_reglement, note";
+  "interets_courus, compte_reglement, cloture_le, note";
 
 const COLS_EXECUTION =
-  "id, operation_id, date_execution, date_denouement, quantite, prix, note";
+  "id, operation_id, date_execution, date_denouement, quantite, prix, rapproche_le, note";
 
 function versExecution(l: LigneExecution): Execution {
   return {
@@ -84,6 +85,7 @@ function versExecution(l: LigneExecution): Execution {
     dateDenouement: l.date_denouement,
     quantite: nb(l.quantite),
     prix: nb(l.prix),
+    rapprocheLe: l.rapproche_le ?? null,
     note: l.note ?? "",
   };
 }
@@ -108,6 +110,7 @@ function versOperation(l: Ligne, executions: Execution[]): OperationMarche {
     libelle: l.libelle ?? "",
     sgi: l.sgi ?? "",
     compteReglement: l.compte_reglement ?? "",
+    clotureLe: l.cloture_le ?? null,
     note: l.note ?? "",
     executions,
     ...base,
@@ -247,22 +250,21 @@ export function agregerParPoste(
     // l'ordre faussait le montant réellement réglé.
     for (const e of o.executions) {
       if (dateArrete && e.dateDenouement > dateArrete) continue;
+      // RAPPROCHÉE : le solde bancaire saisi la contient déjà. L'y laisser la
+      // compterait une seconde fois — c'est un lettrage, pas une annulation.
+      if (e.rapprocheLe && (!dateArrete || e.rapprocheLe <= dateArrete)) continue;
       ajouter(posteRealise(o.description), o.compteReglement, montantExecution(o, e));
     }
 
-    // ── La part non servie, tant que l'ordre est au carnet ───────────────
-    const restante = quantiteRestante(o);
-    if (restante <= 0) continue;
-
+    // ── La part non servie, tant que l'ordre pèse ────────────────────────
+    //
+    // Trois façons de cesser de peser — servie, close, périmée — et une seule
+    // fonction pour les dire, partagée avec l'écran : sinon le calcul et
+    // l'affichage finissent par ne plus être d'accord sur ce qui compte.
     const poste = posteEngage(o.description);
     if (!poste) continue; // une vente non servie n'annonce rien en caisse
+    if (!partRestantePese(o, dateArrete)) continue;
 
-    if (dateArrete) {
-      // Un ordre passé APRÈS la date d'arrêté n'existe pas encore pour elle ;
-      // un ordre périmé ne sera plus servi.
-      if (o.dateOperation > dateArrete) continue;
-      if (dateLimiteOrdre(o) < dateArrete) continue;
-    }
     ajouter(poste, o.compteReglement, montantRestant(o));
   }
 

@@ -51,13 +51,14 @@ export const JOURS_VALIDITE: Record<Validite, number> = {
 };
 
 /** État d'un ordre. DÉDUIT des quantités servies, jamais saisi. */
-export type EtatOrdre = "en_cours" | "partiel" | "realise" | "perime";
+export type EtatOrdre = "en_cours" | "partiel" | "realise" | "perime" | "cloture";
 
 export const LIBELLES_ETAT: Record<EtatOrdre, string> = {
   en_cours: "En cours",
   partiel: "Partiellement servi",
   realise: "Réalisé",
   perime: "Périmé",
+  cloture: "Clôturé",
 };
 
 /** Une part servie d'un ordre, à sa date. */
@@ -66,6 +67,12 @@ export type Execution = {
   dateExecution: string;
   dateDenouement: string;
   quantite: number;
+  /** Date à laquelle le règlement a été constaté SUR LE RELEVÉ bancaire.
+   *
+   *  Une fois rapprochée, l'exécution sort des postes de flux : le solde
+   *  bancaire saisi la contient déjà, et l'y laisser la compterait deux fois.
+   *  C'est un lettrage, pas une annulation. */
+  rapprocheLe: string | null;
   /** Prix RÉELLEMENT servi. Un ordre à cours limité est rarement exécuté au
    *  centime près à sa limite, et un ordre servi en plusieurs fois l'est
    *  souvent à plusieurs prix.
@@ -95,6 +102,13 @@ export type OperationMarche = {
   tauxDcbr: number;
   interetsCourus: number;
   compteReglement: string;
+  /** Date de CLÔTURE manuelle, ou null tant que l'ordre est ouvert.
+   *
+   *  Un ordre partiellement servi que le gérant renonce à faire exécuter cesse
+   *  d'engager la trésorerie pour sa part restante. Ce qui a été servi reste :
+   *  il a été réglé, ou le sera. La péremption fait cela automatiquement ; la
+   *  clôture le fait à la main, avant terme. */
+  clotureLe: string | null;
   note: string;
   /** Les parts servies, de la plus ancienne à la plus récente. */
   executions: Execution[];
@@ -103,7 +117,13 @@ export type OperationMarche = {
   montant: number;
 };
 
-export type SaisieOperation = Omit<OperationMarche, "id" | "montant" | "executions">;
+/** Ce que le formulaire d'un ordre envoie. La CLÔTURE n'en fait pas partie :
+ *  elle a son propre geste, sur la ligne, et la mêler à la correction aurait
+ *  permis de clore un ordre par inadvertance en corrigeant son prix. */
+export type SaisieOperation = Omit<
+  OperationMarche,
+  "id" | "montant" | "executions" | "clotureLe"
+>;
 
 /**
  * Libellés d'écran, et LIBELLÉS DES POSTES du point de trésorerie.
@@ -324,14 +344,50 @@ export function dateLimiteOrdre(o: {
  * de trésorerie se lit à une date d'arrêté, pas forcément aujourd'hui.
  */
 export function etatOrdre(
-  o: { quantite: number; dateOperation: string; validite: Validite; executions: Execution[] },
+  o: {
+    quantite: number;
+    dateOperation: string;
+    validite: Validite;
+    clotureLe: string | null;
+    executions: Execution[];
+  },
   aLaDate?: string | null,
 ): EtatOrdre {
   const servie = quantiteExecutee(o);
   if (servie >= o.quantite) return "realise";
+  // La clôture prime sur la péremption : elle est un choix du gérant, et
+  // l'afficher comme « périmé » effacerait ce choix.
+  if (o.clotureLe) return "cloture";
   const jour = aLaDate ?? new Date().toISOString().slice(0, 10);
   if (dateLimiteOrdre(o) < jour) return "perime";
   return servie > 0 ? "partiel" : "en_cours";
+}
+
+/**
+ * La part non servie de cet ordre pèse-t-elle encore, à la date d'arrêté ?
+ *
+ * Trois façons de ne plus peser, et une seule fonction pour les dire : sinon
+ * l'écran et le calcul finissent par ne plus être d'accord sur ce qui compte.
+ */
+export function partRestantePese(
+  o: {
+    dateOperation: string;
+    validite: Validite;
+    clotureLe: string | null;
+    quantite: number;
+    executions: Execution[];
+  },
+  dateArrete: string | null,
+): boolean {
+  if (quantiteRestante(o) <= 0) return false;
+  if (!dateArrete) return true;
+  // Un ordre passé APRÈS la date d'arrêté n'existe pas encore pour elle.
+  if (o.dateOperation > dateArrete) return false;
+  // Clôturé à cette date-là, ou avant.
+  if (o.clotureLe && o.clotureLe <= dateArrete) return false;
+  // Périmé.
+  if (dateLimiteOrdre(o) < dateArrete) return false;
+  return true;
 }
 
 /**

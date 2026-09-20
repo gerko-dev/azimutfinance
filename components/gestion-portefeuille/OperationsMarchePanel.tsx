@@ -23,9 +23,11 @@ import {
   caracteristiquesTitreAction,
   comptesReglementAction,
   ajouterExecutionAction,
+  cloturerOrdreAction,
   enregistrerOperationMarcheAction,
   listerTitresAction,
   modifierOperationMarcheAction,
+  rapprocherExecutionAction,
   supprimerExecutionAction,
   supprimerOperationMarcheAction,
 } from "@/app/gestion-portefeuille/operations-marche-actions";
@@ -418,8 +420,17 @@ export default function OperationsMarchePanel({
     setInstrument(o.instrument);
     setCode(o.code);
     setLibelle(o.libelle);
-    setSaisieTitre(o.libelle);
-    setTitreCle("");
+    // LE TITRE D'UN ORDRE NE SE RECHERCHE PAS À LA MODIFICATION.
+    //
+    // On affichait son libellé dans le champ de recherche, où il ne
+    // correspondait à aucune suggestion — celles-ci portent le symbole en
+    // tête — d'où le « Aucun titre ne correspond » sur BANK OF AFRICA BN.
+    //
+    // Le champ est désormais VERROUILLÉ en modification, ce qui est de toute
+    // façon la bonne règle : des exécutions peuvent déjà référencer cet ordre,
+    // et changer son titre réécrirait leur histoire en silence.
+    setSaisieTitre(`${o.code ? `${o.code} — ` : ""}${o.libelle}`);
+    setTitreCle(o.code || o.libelle);
     setQuantite(String(o.quantite));
     setValidite(o.validite);
     setPrix(String(o.prix));
@@ -464,6 +475,24 @@ export default function OperationsMarchePanel({
     setErreur(null);
     demarrer(async () => {
       const res = await supprimerExecutionAction(o.fondsId, executionId);
+      if (!res.ok) setErreur(res.error);
+      else router.refresh();
+    });
+  };
+
+  const cloturer = (o: OperationAvecFonds, date: string | null) => {
+    setErreur(null);
+    demarrer(async () => {
+      const res = await cloturerOrdreAction(o.fondsId, o.id, date);
+      if (!res.ok) setErreur(res.error);
+      else router.refresh();
+    });
+  };
+
+  const rapprocher = (o: OperationAvecFonds, executionId: string, date: string | null) => {
+    setErreur(null);
+    demarrer(async () => {
+      const res = await rapprocherExecutionAction(o.fondsId, executionId, date);
       if (!res.ok) setErreur(res.error);
       else router.refresh();
     });
@@ -602,6 +631,12 @@ export default function OperationsMarchePanel({
             {editionId ? "Modifier l'opération" : "Saisir une opération"}
           </h2>
           {editionId && (
+            <span className="text-[11px] text-slate-500">
+              Fonds, nature, instrument et titre sont figés — des exécutions
+              peuvent déjà s&apos;y référer.
+            </span>
+          )}
+          {editionId && (
             <button
               type="button"
               onClick={annulerEdition}
@@ -621,7 +656,8 @@ export default function OperationsMarchePanel({
             <select
               value={fondsId}
               onChange={(e) => changerFonds(e.target.value)}
-              className={champ}
+              disabled={editionId !== null}
+              className={`${champ} disabled:bg-slate-50 disabled:text-slate-600`}
             >
               {fonds.map((f) => (
                 <option key={f.id} value={f.id}>
@@ -644,7 +680,8 @@ export default function OperationsMarchePanel({
             <select
               value={description}
               onChange={(e) => changerDescription(e.target.value as DescriptionOperation)}
-              className={champ}
+              disabled={editionId !== null}
+              className={`${champ} disabled:bg-slate-50 disabled:text-slate-600`}
             >
               {DESCRIPTIONS.map((d) => (
                 <option key={d.valeur} value={d.valeur}>
@@ -742,6 +779,7 @@ export default function OperationsMarchePanel({
                 value={saisieTitre}
                 onChange={(e) => saisirTitre(e.target.value)}
                 list={`titres-${marche}-${instrument}`}
+                readOnly={editionId !== null}
                 disabled={titresEtat === "chargement"}
                 placeholder={
                   titresEtat === "chargement"
@@ -756,7 +794,12 @@ export default function OperationsMarchePanel({
                 ))}
               </datalist>
               <span className={aide}>
-                {titreCle ? (
+                {editionId !== null ? (
+                  <span className="text-slate-500">
+                    Le titre d&apos;un ordre ne se change pas : des exécutions
+                    peuvent déjà s&apos;y référer.
+                  </span>
+                ) : titreCle ? (
                   <span className="text-emerald-700">Titre reconnu · {titreCle}</span>
                 ) : saisieTitre ? (
                   <span className="text-amber-700">
@@ -1045,6 +1088,8 @@ export default function OperationsMarchePanel({
                     onSupprimer={() => supprimer(o)}
                     onExecuter={(saisie) => executer(o, saisie)}
                     onSupprimerExecution={(id) => retirerExecution(o, id)}
+                    onCloturer={(date) => cloturer(o, date)}
+                    onRapprocher={(id, date) => rapprocher(o, id, date)}
                   />
                 );
               })}

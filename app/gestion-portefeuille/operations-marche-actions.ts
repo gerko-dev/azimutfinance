@@ -370,6 +370,73 @@ export async function ajouterExecutionAction(
   return { ok: true, data: { id: (data as { id: string }).id } };
 }
 
+/**
+ * Clot un ordre : sa part non servie cesse d'engager la tresorerie.
+ *
+ * Ce qui a ete servi RESTE — il a ete regle, ou le sera. La cloture ne
+ * supprime rien, elle date un renoncement.
+ *
+ * Passer `null` rouvre l'ordre : une cloture par erreur se corrige, et
+ * l'obliger a supprimer puis ressaisir aurait fait perdre les executions.
+ */
+export async function cloturerOrdreAction(
+  fundId: string,
+  operationId: string,
+  dateCloture: string | null,
+): Promise<ActionResult<{ id: string }>> {
+  const acces = await autoriser(fundId);
+  if ("erreur" in acces) return { ok: false, error: acces.erreur };
+  const { supabase, userId } = acces;
+
+  if (dateCloture !== null && !EST_DATE.test(dateCloture))
+    return { ok: false, error: "Renseigne la date de clôture." };
+
+  const { error } = await supabase
+    .from("fund_market_operations")
+    .update({ cloture_le: dateCloture })
+    .eq("id", operationId)
+    .eq("fund_id", fundId)
+    .eq("owner_id", userId);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/gestion-portefeuille/operations-marche");
+  revalidatePath("/gestion-portefeuille/tresorerie");
+  return { ok: true, data: { id: operationId } };
+}
+
+/**
+ * Rapproche une execution : le reglement a ete constate sur le releve.
+ *
+ * Elle sort alors des postes de flux, parce que le solde bancaire saisi la
+ * contient DEJA — l'y laisser la compterait deux fois. C'est un lettrage, pas
+ * une annulation : l'execution reste, avec sa date de rapprochement.
+ *
+ * `null` defait le lettrage.
+ */
+export async function rapprocherExecutionAction(
+  fundId: string,
+  executionId: string,
+  dateRapprochement: string | null,
+): Promise<ActionResult<{ id: string }>> {
+  const acces = await autoriser(fundId);
+  if ("erreur" in acces) return { ok: false, error: acces.erreur };
+  const { supabase, userId } = acces;
+
+  if (dateRapprochement !== null && !EST_DATE.test(dateRapprochement))
+    return { ok: false, error: "Renseigne la date de rapprochement." };
+
+  const { error } = await supabase
+    .from("fund_market_executions")
+    .update({ rapproche_le: dateRapprochement })
+    .eq("id", executionId)
+    .eq("owner_id", userId);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/gestion-portefeuille/operations-marche");
+  revalidatePath("/gestion-portefeuille/tresorerie");
+  return { ok: true, data: { id: executionId } };
+}
+
 export async function supprimerExecutionAction(
   fundId: string,
   executionId: string,

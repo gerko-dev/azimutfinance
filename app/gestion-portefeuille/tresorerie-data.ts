@@ -237,6 +237,10 @@ export async function construirePointTresorerie(
     .filter((o) => {
       if (quantiteRestante(o) <= 0) return false;
       if (!posteEngage(o.description)) return false;
+      // Un ordre CLOS a sa propre raison de ne plus peser, et le gérant la
+      // connaît : c'est lui qui l'a posée. L'annoncer comme « périmé »
+      // brouillerait les deux.
+      if (o.clotureLe) return false;
       return dateArrete !== null && dateLimiteOrdre(o) < dateArrete;
     })
     .map((o) => ({
