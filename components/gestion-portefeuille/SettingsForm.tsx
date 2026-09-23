@@ -19,8 +19,12 @@ import {
   GROUPES,
   ratiosReglementaires,
 } from "@/app/gestion-portefeuille/reglementation";
+import { comptesReglementAction } from "@/app/gestion-portefeuille/operations-marche-actions";
 import type { Partenaire } from "@/app/gestion-portefeuille/partenaires-types";
+import ChampMontant from "./ChampMontant";
+import ChampTaux from "./ChampTaux";
 import PartenairesPanel from "./PartenairesPanel";
+import SecuritiesReferential from "./SecuritiesReferential";
 import ParametresMarchePanel from "./ParametresMarchePanel";
 import {
   PARAMETRES_DEFAUT,
@@ -47,6 +51,13 @@ const CURRENCIES = [
 // construites à partir des séries que le site sait déjà récupérer
 // (indices BRVM, taux BCEAO, rendements souverains UMOA-Titres…).
 export type BenchmarkOption = { value: string; label: string; group?: string };
+
+/** Une COLONNE du point de trésorerie du fonds : c'est parmi elles que se
+ *  choisit le compte de prélèvement des frais de gestion. On passe par la même
+ *  action que la saisie d'une opération pour que les clefs soient IDENTIQUES
+ *  des deux côtés — un compte nommé autrement ici ne correspondrait à aucune
+ *  colonne, et le montant disparaîtrait. */
+type CompteFonds = { cle: string; nom: string; pays: string };
 
 type Settings = {
   sgoName: string;
@@ -108,6 +119,14 @@ function emptyFund(devise: string): FundInput {
     vlInitiale: "",
     devise,
     objectifPerf: "",
+    // Les usages du marche UEMOA : 2 % a l'entree, rien a la sortie, 1,5 % de
+    // gestion. Modifiables — ils se negocient fonds par fonds.
+    droitEntree: "0.02",
+    droitSortie: "0",
+    fraisGestion: "0.015",
+    // Aucun compte par defaut : il se choisit parmi les comptes du fonds, qui
+    // n'existent qu'apres son premier inventaire.
+    compteFraisGestion: "",
     benchmark: [{ weight: "", ref: "" }],
     ratios: [...buildRegRatios(categorie), ...buildCtrRatios()],
   };
@@ -130,6 +149,10 @@ function draftFromFund(f: FundRecord): FundInput {
     type: f.type,
     vlInitiale: f.vlInitiale,
     devise: f.devise,
+    droitEntree: f.droitEntree,
+    droitSortie: f.droitSortie,
+    fraisGestion: f.fraisGestion,
+    compteFraisGestion: f.compteFraisGestion,
     objectifPerf: f.objectifPerf,
     benchmark: f.benchmark.length ? f.benchmark : [{ weight: "", ref: "" }],
     ratios,
@@ -377,7 +400,9 @@ export default function SettingsForm({
   const [savingProfile, startSaveProfile] = useTransition();
 
   // Onglet actif du hub Paramètres.
-  const [tab, setTab] = useState<"sgo" | "fonds" | "partenaires" | "marche" | "general">("sgo");
+  const [tab, setTab] = useState<"sgo" | "fonds" | "partenaires" | "referentiel" | "marche" | "general">(
+      "sgo",
+    );
 
   // Fonds gérés : liste persistée en base (managed_funds via RLS).
   const [funds, setFunds] = useState<FundRecord[]>(initialFunds);
@@ -385,10 +410,16 @@ export default function SettingsForm({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [fundError, setFundError] = useState<string | null>(null);
+  /** Comptes de tresorerie du fonds en cours d'edition, pour le choix du
+   *  compte de prelevement des frais. Charges AU CLIC, jamais dans un effet. */
+  const [comptes, setComptes] = useState<CompteFonds[]>([]);
+  const [comptesEtat, setComptesEtat] = useState<"vide" | "chargement" | "pret">("vide");
   const [pending, startTransition] = useTransition();
 
   const startCreate = () => {
     setEditingId(null);
+    setComptes([]);
+    setComptesEtat("vide");
     setDraft(emptyFund(s.baseCurrency));
     setFundError(null);
     setFormOpen(true);
@@ -398,6 +429,15 @@ export default function SettingsForm({
     setEditingId(f.id);
     setDraft(draftFromFund(f));
     setFundError(null);
+    // Les colonnes du point de tresorerie de CE fonds : c'est parmi elles que
+    // se choisit le compte de prelevement des frais.
+    setComptes([]);
+    setComptesEtat("chargement");
+    startTransition(async () => {
+      const res = await comptesReglementAction(f.id);
+      setComptes(res.ok ? res.data : []);
+      setComptesEtat("pret");
+    });
     setFormOpen(true);
     setTab("fonds");
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
@@ -405,6 +445,8 @@ export default function SettingsForm({
 
   const cancelEdit = () => {
     setEditingId(null);
+    setComptes([]);
+    setComptesEtat("vide");
     setDraft(emptyFund(s.baseCurrency));
     setFundError(null);
     setFormOpen(false);
@@ -562,6 +604,11 @@ export default function SettingsForm({
     // Les partenaires viennent APRÈS les fonds et avant les paramètres
     // généraux : ce sont des tiers avec qui l'on traite, pas un réglage.
     ["partenaires", "Partenaires"],
+    // LE RÉFÉRENTIEL EST COMMUN À TOUS LES FONDS : un titre n'appartient pas
+    // à un portefeuille. Il vivait sur la fiche de chaque fonds, ce qui
+    // laissait croire le contraire et invitait à ressaisir les mêmes
+    // caractéristiques autant de fois qu'il y a de portefeuilles.
+    ["referentiel", "Référentiel titres"],
     // Juste apres les partenaires : courtage et TPS vivent sur leur fiche,
     // commissions de place et denouement ici. Les deux ecrans se lisent
     // ensemble quand on revise des conditions.
@@ -592,6 +639,8 @@ export default function SettingsForm({
       {tab === "partenaires" && (
         <PartenairesPanel initialPartenaires={initialPartenaires} />
       )}
+
+      {tab === "referentiel" && <SecuritiesReferential />}
 
       {tab === "marche" && <ParametresMarchePanel initial={initialParametresMarche} />}
 
@@ -809,11 +858,9 @@ export default function SettingsForm({
           <FieldGroup title="Valorisation & objectif">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <Field label="VL initiale" hint="Valeur liquidative de lancement (optionnel).">
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={draft.vlInitiale}
-                  onChange={(e) => setDraftField("vlInitiale", e.target.value)}
+                <ChampMontant
+                  valeur={draft.vlInitiale}
+                  onChange={(t) => setDraftField("vlInitiale", t)}
                   placeholder="Ex. 10 000"
                   className={inputCls}
                 />
@@ -839,6 +886,101 @@ export default function SettingsForm({
                   placeholder="Ex. 5,5 % net / an"
                   className={inputCls}
                 />
+              </Field>
+            </div>
+          </FieldGroup>
+
+          {/* Groupe : frais.
+              LES DROITS D'ENTRÉE ET DE SORTIE SE REPORTENT À LA SAISIE d'une
+              souscription ou d'un rachat — c'est leur raison d'être ici. Les
+              retaper à chaque ligne d'un bordereau de collecte était la porte
+              ouverte au taux d'un autre fonds. Ils restent modifiables ligne à
+              ligne : un gros souscripteur les négocie.
+
+              `ChampTaux` garde son propre texte : un champ contrôlé reconverti
+              depuis un nombre à chaque frappe interdisait de taper « 1,5 » —
+              la virgule disparaissait sous les doigts. */}
+          <FieldGroup title="Frais">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <Field
+                label="Droit d'entrée (%)"
+                hint="Repris par défaut sur chaque souscription."
+              >
+                <ChampTaux
+                  key={`de-${editingId ?? "nouveau"}`}
+                  valeur={Number(draft.droitEntree) || 0}
+                  onChange={(v) => setDraftField("droitEntree", String(v))}
+                  className={inputCls}
+                />
+              </Field>
+              <Field
+                label="Droit de sortie (%)"
+                hint="Repris par défaut sur chaque rachat."
+              >
+                <ChampTaux
+                  key={`ds-${editingId ?? "nouveau"}`}
+                  valeur={Number(draft.droitSortie) || 0}
+                  onChange={(v) => setDraftField("droitSortie", String(v))}
+                  className={inputCls}
+                />
+              </Field>
+              <Field label="Frais de gestion (%)" hint="Taux annuel, prélevé sur l'actif net.">
+                <ChampTaux
+                  key={`fg-${editingId ?? "nouveau"}`}
+                  valeur={Number(draft.fraisGestion) || 0}
+                  onChange={(v) => setDraftField("fraisGestion", String(v))}
+                  className={inputCls}
+                />
+              </Field>
+              {/* LE COMPTE DE PRÉLÈVEMENT, sans quoi les frais calculés
+                  n'entrent dans aucune colonne du point de trésorerie : sa
+                  colonne Total est la somme des colonnes, et un montant qui ne
+                  désigne aucune banque n'a nulle part où s'inscrire.
+
+                  Les comptes se chargent au CLIC sur « Modifier », pas dans un
+                  effet — le lint du projet l'interdit, et il a raison : ce
+                  serait un rendu en cascade pour une donnée qu'on sait produire
+                  au moment du geste. */}
+              <Field
+                label="Compte de prélèvement des frais"
+                hint="Colonne du point de trésorerie où les frais de gestion s'inscrivent."
+              >
+                {editingId === null ? (
+                  <p className="text-[11px] text-slate-400 py-2">
+                    Disponible une fois le fonds créé et son premier inventaire importé.
+                  </p>
+                ) : comptesEtat === "chargement" ? (
+                  <p className="text-[11px] text-slate-400 py-2">Chargement des comptes…</p>
+                ) : (
+                  <>
+                    <select
+                      className={inputCls}
+                      value={draft.compteFraisGestion}
+                      onChange={(e) => setDraftField("compteFraisGestion", e.target.value)}
+                    >
+                      <option value="">— aucun —</option>
+                      {comptes.map((c) => (
+                        <option key={c.cle} value={c.cle}>
+                          {c.nom} · {c.pays}
+                        </option>
+                      ))}
+                      {/* Un compte enregistré mais absent du dernier inventaire
+                          ne doit pas disparaître en silence du menu : il serait
+                          effacé au premier enregistrement. */}
+                      {draft.compteFraisGestion &&
+                        !comptes.some((c) => c.cle === draft.compteFraisGestion) && (
+                          <option value={draft.compteFraisGestion}>
+                            {draft.compteFraisGestion} (hors inventaire)
+                          </option>
+                        )}
+                    </select>
+                    {comptes.length === 0 && comptesEtat === "pret" && (
+                      <p className="text-[11px] text-amber-600 mt-1">
+                        Aucun compte de trésorerie : importe d&apos;abord un inventaire.
+                      </p>
+                    )}
+                  </>
+                )}
               </Field>
             </div>
           </FieldGroup>

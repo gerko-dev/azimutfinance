@@ -2,8 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import type { ActionResult } from "@/lib/admin/types";
+import type { ActionResult } from "@/lib/admin/types";
+
 import { estNiveau1, MSG_NIVEAU1 } from "./guard";
+import {
+  colonnesFonds,
+  sansColonnesAbsentes,
+  signalerColonneManquante,
+} from "./fonds-colonnes";
 import {
   rowToFundRecord,
   rowToSgoProfile,
@@ -20,12 +26,19 @@ const FUND_TYPES = ["FCP", "FCPE", "SICAV", "FCPR"];
 const CURRENCIES = ["XOF", "EUR", "USD"];
 
 function parseNum(s: string): number | null {
-  const v = Number((s ?? "").trim().replace(",", "."));
+  const t = (s ?? "").trim().replace(",", ".");
+  // UNE CASE VIDE N'EST PAS UN ZÉRO.
+  //
+  // `Number("")` vaut 0, et `Number.isFinite(0)` est vrai : tout seuil laissé
+  // blanc se stockait donc comme un plancher à 0 %. D'où des ratios affichés
+  // « 0 – 70 % » là où le catalogue ne prévoit qu'un plafond, et un minimum
+  // qui n'a aucun sens — aucune exposition ne peut être négative.
+  if (t === "") return null;
+  const v = Number(t);
   return Number.isFinite(v) ? v : null;
 }
 
-const ROW_COLS =
-  "id, nom, abreviation, categorie, type, vl_initiale, devise, objectif_perf, benchmark, ratios";
+// Les colonnes lues dependent de l'etat des migrations : cf. `fonds-colonnes`.
 
 // Normalise les ratios saisis (réglementaires + contractuels) pour le stockage
 // JSONB : seuils texte -> nombre|null, on ne conserve que les lignes ayant un
@@ -97,6 +110,10 @@ type FundColumns = {
   vl_initiale: number | null;
   devise: string;
   objectif_perf: string;
+  droit_entree: number | null;
+  droit_sortie: number | null;
+  frais_gestion: number | null;
+  compte_frais_gestion: string | null;
   benchmark: { weight: number; ref: string }[];
   ratios: ReturnType<typeof normalizeRatios>;
 };
@@ -114,6 +131,27 @@ function buildFundColumns(input: FundInput): { error: string } | { row: FundColu
     const v = parseNum(vlRaw);
     if (v == null || v <= 0) return { error: "La VL initiale doit être un nombre positif." };
     vlInitiale = v;
+  }
+
+  // LES FRAIS SONT DES DÉCIMAUX. Un 2 saisi pour 2 % multiplierait le droit
+  // d'entrée par cinquante sur toutes les souscriptions qui le reprennent : on
+  // refuse plutôt que d'avaler.
+  const frais: Record<"droit_entree" | "droit_sortie" | "frais_gestion", number | null> = {
+    droit_entree: null,
+    droit_sortie: null,
+    frais_gestion: null,
+  };
+  for (const [cle, brut, libelle] of [
+    ["droit_entree", input.droitEntree, "droit d'entrée"],
+    ["droit_sortie", input.droitSortie, "droit de sortie"],
+    ["frais_gestion", input.fraisGestion, "frais de gestion"],
+  ] as const) {
+    const t = (brut ?? "").trim();
+    if (t === "") continue;
+    const v = parseNum(t);
+    if (v == null || v < 0 || v > 1)
+      return { error: `Le ${libelle} se saisit en pourcentage, entre 0 et 100.` };
+    frais[cle] = v;
   }
 
   const benchmark = (input.benchmark ?? [])
@@ -134,6 +172,10 @@ function buildFundColumns(input: FundInput): { error: string } | { row: FundColu
       vl_initiale: vlInitiale,
       devise,
       objectif_perf: (input.objectifPerf ?? "").trim(),
+      ...frais,
+      // Vide vaut NULL : « aucun compte choisi » et « chaîne vide » diraient
+      // la même chose au tableau, autant n'en garder qu'une forme.
+      compte_frais_gestion: (input.compteFraisGestion ?? "").trim() || null,
       benchmark,
       ratios: normalizeRatios(input.ratios),
     },
@@ -151,17 +193,26 @@ export async function createFundAction(input: FundInput): Promise<ActionResult<F
   const built = buildFundColumns(input);
   if ("error" in built) return { ok: false, error: built.error };
 
-  const { data, error } = await supabase
-    .from("managed_funds")
-    .insert({ owner_id: user.id, ...built.row })
-    .select(ROW_COLS)
-    .single();
+  // UNE MIGRATION EN RETARD NE DOIT PAS INTERDIRE DE CREER UN FONDS : on ecrit
+  // sans la colonne que la base ne connait pas encore, et l'on reessaie si
+  // c'est elle qu'elle refuse. Cf. `fonds-colonnes`.
+  const ecrire = () =>
+    supabase
+      .from("managed_funds")
+      .insert({ owner_id: user.id, ...sansColonnesAbsentes(built.row) })
+      .select(colonnesFonds())
+      .single();
+
+  let { data, error } = await ecrire();
+  if (error && signalerColonneManquante(error.message)) {
+    ({ data, error } = await ecrire());
+  }
 
   if (error) return { ok: false, error: error.message };
 
   revalidatePath("/gestion-portefeuille/parametres");
   revalidatePath("/gestion-portefeuille");
-  return { ok: true, data: rowToFundRecord(data as ManagedFundRow) };
+  return { ok: true, data: rowToFundRecord(data as unknown as ManagedFundRow) };
 }
 
 export async function updateFundAction(
@@ -178,13 +229,19 @@ export async function updateFundAction(
   const built = buildFundColumns(input);
   if ("error" in built) return { ok: false, error: built.error };
 
-  const { data, error } = await supabase
-    .from("managed_funds")
-    .update(built.row)
-    .eq("id", id)
-    .eq("owner_id", user.id)
-    .select(ROW_COLS)
-    .single();
+  const ecrire = () =>
+    supabase
+      .from("managed_funds")
+      .update(sansColonnesAbsentes(built.row))
+      .eq("id", id)
+      .eq("owner_id", user.id)
+      .select(colonnesFonds())
+      .single();
+
+  let { data, error } = await ecrire();
+  if (error && signalerColonneManquante(error.message)) {
+    ({ data, error } = await ecrire());
+  }
 
   if (error) return { ok: false, error: error.message };
   if (!data) return { ok: false, error: "Fonds introuvable." };
@@ -192,7 +249,7 @@ export async function updateFundAction(
   revalidatePath("/gestion-portefeuille/parametres");
   revalidatePath("/gestion-portefeuille");
   revalidatePath(`/gestion-portefeuille/fonds/${id}`);
-  return { ok: true, data: rowToFundRecord(data as ManagedFundRow) };
+  return { ok: true, data: rowToFundRecord(data as unknown as ManagedFundRow) };
 }
 
 export async function deleteFundAction(id: string): Promise<ActionResult<null>> {

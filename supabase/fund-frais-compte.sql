@@ -1,0 +1,21 @@
+-- ============================================================
+-- AzimutFinance - Compte de prelevement des frais de gestion
+-- A executer dans : Supabase Dashboard > SQL Editor. Idempotent.
+-- ============================================================
+--
+-- LES FRAIS DE GESTION TOMBENT SUR UN COMPTE, et il faut dire lequel.
+--
+-- Le point de tresorerie raisonne par ETABLISSEMENT en colonnes : un montant
+-- qui n'en designe aucun n'a nulle part ou s'inscrire, et disparaitrait en
+-- silence. Le compte se choisit donc une fois, sur la fiche du fonds, plutot
+-- que d'etre redemande chaque mois.
+--
+-- On stocke la CLEF de l'etablissement telle que le point la construit, pas un
+-- identifiant de compte : c'est cette clef qui nomme les colonnes du tableau,
+-- et c'est sur elle que le rapprochement se fait.
+--
+-- Nul par defaut : tant que rien n'est choisi, les frais se calculent et
+-- s'affichent en colonne Total sans se poser sur une banque. Deviner la
+-- premiere venue aurait fausse le solde de cet etablissement-la.
+alter table public.managed_funds
+  add column if not exists compte_frais_gestion text;

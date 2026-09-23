@@ -31,6 +31,24 @@ export type FundInput = {
   vlInitiale: string;
   devise: string;
   objectifPerf: string;
+  /** Frais, en DÉCIMAL comme partout dans le module (0,02 = 2 %).
+   *
+   *  Les droits d'entrée et de sortie se reportent à la saisie d'une
+   *  souscription ou d'un rachat — c'est leur raison d'être ici : les retaper
+   *  à chaque ligne d'un bordereau de collecte était la porte ouverte au taux
+   *  d'un autre fonds. Ils restent modifiables ligne à ligne, car un gros
+   *  souscripteur les négocie. */
+  droitEntree: string;
+  droitSortie: string;
+  fraisGestion: string;
+  /** Établissement sur lequel les frais de gestion se prélèvent.
+   *
+   *  C'est la CLEF de colonne du point de trésorerie, pas un numéro de
+   *  compte : un montant qui ne désigne aucune colonne n'a nulle part où
+   *  s'inscrire. Vide tant que rien n'est choisi — les frais s'affichent
+   *  alors en Total seulement, plutôt que de grever la première banque
+   *  venue. */
+  compteFraisGestion: string;
   benchmark: BenchmarkComponent[];
   ratios: RatioLimite[];
 };
@@ -61,6 +79,10 @@ export type ManagedFundRow = {
   vl_initiale: number | null;
   devise: string;
   objectif_perf: string;
+  droit_entree: number | null;
+  droit_sortie: number | null;
+  frais_gestion: number | null;
+  compte_frais_gestion: string | null;
   benchmark: Array<{ weight: number | string; ref: string }> | null;
   ratios: RatioRow[] | null;
 };
@@ -127,6 +149,10 @@ export function rowToFundRecord(row: ManagedFundRow): FundRecord {
     vlInitiale: row.vl_initiale != null ? String(row.vl_initiale) : "",
     devise: row.devise,
     objectifPerf: row.objectif_perf ?? "",
+    droitEntree: row.droit_entree != null ? String(row.droit_entree) : "",
+    droitSortie: row.droit_sortie != null ? String(row.droit_sortie) : "",
+    fraisGestion: row.frais_gestion != null ? String(row.frais_gestion) : "",
+    compteFraisGestion: row.compte_frais_gestion ?? "",
     benchmark: (row.benchmark ?? []).map((c) => ({
       weight: c.weight != null ? String(c.weight) : "",
       ref: c.ref,
