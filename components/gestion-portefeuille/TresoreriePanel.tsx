@@ -3,13 +3,18 @@
 import { useState } from "react";
 
 import {
+  FONDS_GLOBAL,
   intitule,
   LIGNES_POINT_TRESORERIE,
   type LigneTresorerie,
   type PointTresorerie,
 } from "@/app/gestion-portefeuille/tresorerie-types";
+import { libelleMois } from "@/app/gestion-portefeuille/frais-gestion";
 import type { GrilleSoldes } from "@/app/gestion-portefeuille/tresorerie-grille";
 import SaisieSoldesDialog from "./SaisieSoldesDialog";
+import FluxSaisisDialog from "./FluxSaisisDialog";
+import SpotsDialog from "./SpotsDialog";
+import NivellementsDialog from "./NivellementsDialog";
 
 /**
  * Point de trésorerie — même disposition que la feuille du classeur, mais
@@ -86,6 +91,14 @@ function Contenu({
   grille: GrilleSoldes | null;
 }) {
   const [saisieOuverte, setSaisieOuverte] = useState(false);
+  const [fluxOuverts, setFluxOuverts] = useState(false);
+  const [spotsOuverts, setSpotsOuverts] = useState(false);
+  const [nivellementsOuverts, setNivellementsOuverts] = useState(false);
+  // LA SAISIE EST PAR FONDS. En vue consolidée, le tableau additionne les
+  // flux de tous les portefeuilles, mais il n'y a aucun fonds à qui
+  // attribuer une nouvelle ligne : les deux portes restent fermées plutôt
+  // que d'ouvrir sur un formulaire qui échouerait à l'enregistrement.
+  const parFonds = point.fondsId !== FONDS_GLOBAL;
   const parLibelle = new Map(point.lignes.map((l) => [l.libelle, l]));
   const ligneSolde = parLibelle.get("SOLDE");
 
@@ -111,6 +124,34 @@ function Contenu({
     <div className="space-y-4">
       {saisieOuverte && grille && (
         <SaisieSoldesDialog grille={grille} onFermer={() => setSaisieOuverte(false)} />
+      )}
+      {fluxOuverts && (
+        <FluxSaisisDialog
+          fondsId={point.fondsId}
+          fondsNom={point.fonds}
+          comptes={point.etablissements}
+          flux={point.fluxSaisis}
+          onFermer={() => setFluxOuverts(false)}
+        />
+      )}
+      {nivellementsOuverts && (
+        <NivellementsDialog
+          fondsId={point.fondsId}
+          fondsNom={point.fonds}
+          comptes={point.etablissements}
+          nivellements={point.nivellements}
+          onFermer={() => setNivellementsOuverts(false)}
+        />
+      )}
+      {spotsOuverts && (
+        <SpotsDialog
+          fondsId={point.fondsId}
+          fondsNom={point.fonds}
+          comptes={point.etablissements}
+          spots={point.spots}
+          contreparties={point.etablissements.map((e) => e.nom)}
+          onFermer={() => setSpotsOuverts(false)}
+        />
       )}
       <div className="bg-white border border-slate-200 rounded-lg p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
@@ -154,6 +195,60 @@ function Contenu({
               Saisir les soldes
             </button>
           )}
+          {/* LES FLUX QUI NE SE DEDUIRONT JAMAIS ont leur propre porte.
+              Quatre lignes du classeur ne viennent d'aucune source du site et
+              n'en viendront pas : appel de marge, regularisation, commission
+              exceptionnelle. Leur formulaire n'est pas un pis-aller en
+              attendant mieux, c'est leur place. */}
+          {parFonds && (
+          <button
+            type="button"
+            onClick={() => setFluxOuverts(true)}
+            className="px-3 py-1 rounded text-[11px] font-medium border border-slate-300 text-slate-700 hover:bg-slate-50 transition"
+          >
+            Flux saisis
+            {point.fluxSaisis.length > 0 && (
+              <span className="ml-1.5 text-slate-400">{point.fluxSaisis.length}</span>
+            )}
+          </button>
+          )}
+          {parFonds && (
+          <button
+            type="button"
+            onClick={() => setSpotsOuverts(true)}
+            className="px-3 py-1 rounded text-[11px] font-medium border border-slate-300 text-slate-700 hover:bg-slate-50 transition"
+          >
+            Opérations spot
+            {point.spots.filter((s) => !s.dateDenouement).length > 0 && (
+              <span className="ml-1.5 text-slate-400">
+                {point.spots.filter((s) => !s.dateDenouement).length}
+              </span>
+            )}
+          </button>
+          )}
+          {/* LE NIVELLEMENT NE DEPLACE PAS D'ARGENT HORS DU FONDS : ses deux
+              jambes se compensent au total. Il a pourtant sa propre porte,
+              parce qu'il se RAPPROCHE en deux fois - debit puis credit - et
+              qu'une ligne de flux isolee n'aurait pas su porter cela. */}
+          {parFonds && (
+          <button
+            type="button"
+            onClick={() => setNivellementsOuverts(true)}
+            className="px-3 py-1 rounded text-[11px] font-medium border border-slate-300 text-slate-700 hover:bg-slate-50 transition"
+          >
+            Nivellements
+            {point.nivellements.filter((n) => !n.rapprocheDebit || !n.rapprocheCredit)
+              .length > 0 && (
+              <span className="ml-1.5 text-slate-400">
+                {
+                  point.nivellements.filter(
+                    (n) => !n.rapprocheDebit || !n.rapprocheCredit,
+                  ).length
+                }
+              </span>
+            )}
+          </button>
+          )}
           {point.soldesSaisisLe && (
             <span className="text-[11px] text-slate-500">
               Derniers soldes saisis : {point.soldesSaisisLe}
@@ -162,27 +257,42 @@ function Contenu({
         </div>
 
 
-        <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 mt-3">
-          Les soldes se <strong>saisissent</strong> : le solde bancaire diffère presque
-          toujours du solde comptable, que l&apos;inventaire rappelle sous chaque cellule.
-          Les <strong>{point.postesAAlimenter} postes de flux</strong> — achats et ventes,
-          rachats, frais, rémérés, souscriptions, dividendes — n&apos;ont pas encore de
-          source et valent zéro ; ils sont grisés. Les deux soldes ne sont donc pas encore
-          exploitables tels quels.
-        </p>
-
-        {point.comptesNonRattaches.length > 0 && (
-          <div className="text-[11px] text-rose-700 bg-rose-50 border border-rose-200 rounded px-3 py-2 mt-2">
-            <strong>{point.comptesNonRattaches.length} compte(s) non rattaché(s)</strong> à
-            un établissement — leur libellé ne dit pas le pays, et les répartir au hasard
-            mettrait de l&apos;argent sur la mauvaise banque :
-            <ul className="mt-1 space-y-0.5">
-              {point.comptesNonRattaches.map((c) => (
-                <li key={c.libelle} className="tabular-nums">
-                  {c.libelle} — {montant(c.montant)} F
-                </li>
-              ))}
-            </ul>
+        {/* LES FRAIS DE GESTION SE RECOUPENT, OU ILS NE VALENT RIEN.
+            Un montant à huit chiffres calculé en coulisse ne se vérifie pas.
+            On donne donc le mois retenu, la moyenne d'actif net, le nombre de
+            valorisations qui la composent et le taux : moyenne × taux ÷ 12,
+            que le gérant refait de tête. */}
+        {(point.fraisGestion.montant > 0 || point.fraisGestion.indisponible) && (
+          <div
+            className={`text-[11px] rounded px-3 py-2 mt-2 border ${
+              point.fraisGestion.indisponible
+                ? "text-amber-800 bg-amber-50 border-amber-200"
+                : "text-slate-700 bg-slate-50 border-slate-200"
+            }`}
+          >
+            <strong>Frais de gestion — {libelleMois(point.fraisGestion.mois)}</strong>
+            {point.fraisGestion.provisoire && (
+              <span className="text-slate-500"> (mois en cours, provisoire)</span>
+            )}
+            {point.fraisGestion.montant > 0 && (
+              <span className="tabular-nums">
+                {" "}
+                : {montant(point.fraisGestion.montant)} F
+                {point.fraisGestion.points > 0 && (
+                  <span className="text-slate-500">
+                    {" "}
+                    — moyenne d&apos;actif net {montant(point.fraisGestion.actifNetMoyen)} F
+                    sur {point.fraisGestion.points} valorisation
+                    {point.fraisGestion.points > 1 ? "s" : ""} (du {point.fraisGestion.du} au{" "}
+                    {point.fraisGestion.au}) × {(point.fraisGestion.taux * 100).toFixed(2)} %
+                    ÷ 12
+                  </span>
+                )}
+              </span>
+            )}
+            {point.fraisGestion.indisponible && (
+              <span className="block mt-0.5">{point.fraisGestion.indisponible}</span>
+            )}
           </div>
         )}
 
@@ -210,29 +320,68 @@ function Contenu({
           </div>
         )}
 
-        {/* UN ENGAGEMENT QUI S'EVAPORE DOIT SE VOIR.
-            La part non servie d'un ordre sort du point dès que sa validité est
-            passée — c'est la règle. Mais sans ce bandeau, le gérant constatait
-            seulement qu'un montant n'était plus là, sans rien pour lui dire
-            que c'était voulu ni depuis quand. */}
-        {point.ordresPerimes.length > 0 && (
+        {/* LES SPOTS DONT L'ÉCHÉANCE EST ENCORE DEVANT. Même raison que les
+            rémérés : le flux est certain, il n'entre simplement pas dans
+            l'horizon de l'arrêté. */}
+        {point.spotsAVenir.length > 0 && (
           <div className="text-[11px] text-slate-700 bg-slate-50 border border-slate-200 rounded px-3 py-2 mt-2">
             <strong>
-              {point.ordresPerimes.length} ordre(s) non servi(s) et périmé(s)
+              {point.spotsAVenir.length} spot(s) à échoir après le{" "}
+              {point.dateFin ?? point.dateInventaire ?? "—"}
             </strong>{" "}
-            au {point.dateFin ?? point.dateInventaire ?? "—"} : leur validité est
-            passée, ils ne comptent plus dans les engagements.
+            : intérêts compris, ils ne comptent pas encore.
             <ul className="mt-1 space-y-0.5">
-              {point.ordresPerimes.map((o, i) => (
+              {point.spotsAVenir.map((s, i) => (
                 <li key={i} className="tabular-nums">
-                  valable jusqu&apos;au {o.dateLimite} · {o.libelle} —{" "}
-                  {montant(o.montant)} F
+                  échéance {s.dateEcheance} · {s.libelle} —{" "}
+                  <span
+                    className={
+                      s.sens === "placement" ? "text-emerald-700" : "text-rose-700"
+                    }
+                  >
+                    {s.sens === "placement" ? "encaissement" : "décaissement"} de{" "}
+                    {montant(s.montant)} F
+                  </span>
                 </li>
               ))}
             </ul>
           </div>
         )}
 
+        {/* LES RÉMÉRÉS DONT LE TERME EST ENCORE DEVANT.
+            Leur flux est certain — un réméré se dénoue toujours — mais il ne
+            tombe pas dans l'horizon de l'arrêté, donc il ne compte pas encore.
+            Sans ce bandeau, un remboursement à sept chiffres n'apparaissait
+            qu'au moment où il devenait exigible. */}
+        {point.remeresAVenir.length > 0 && (
+          <div className="text-[11px] text-slate-700 bg-slate-50 border border-slate-200 rounded px-3 py-2 mt-2">
+            <strong>
+              {point.remeresAVenir.length} réméré(s) à dénouer après le{" "}
+              {point.dateFin ?? point.dateInventaire ?? "—"}
+            </strong>{" "}
+            : leur terme est au-delà de l&apos;arrêté, ils ne comptent pas encore.
+            <ul className="mt-1 space-y-0.5">
+              {point.remeresAVenir.map((r, i) => (
+                <li key={i} className="tabular-nums">
+                  dénouement {r.dateFin} · {r.libelle} —{" "}
+                  <span
+                    className={
+                      r.sens === "encaissement" ? "text-emerald-700" : "text-rose-700"
+                    }
+                  >
+                    {r.sens} de {montant(r.montant)} F
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* UN ENGAGEMENT QUI S'EVAPORE DOIT SE VOIR.
+            La part non servie d'un ordre sort du point dès que sa validité est
+            passée — c'est la règle. Mais sans ce bandeau, le gérant constatait
+            seulement qu'un montant n'était plus là, sans rien pour lui dire
+            que c'était voulu ni depuis quand. */}
         {point.operationsSansColonne.length > 0 && (
           <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2 mt-2">
             <strong>

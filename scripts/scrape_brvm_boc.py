@@ -1278,6 +1278,208 @@ def write_fcp_csv(
 PAGES_TABLEAU_FCP = 2
 
 
+# ============================================================
+# CALENDRIER DE PAIEMENT DES DIVIDENDES
+# ============================================================
+#
+# LE BOC PORTE CE QUE PERSONNE D'AUTRE NE PUBLIE : le montant du dividende net
+# par action ET ses deux dates - l'ex-dividende et la mise en paiement. Le
+# calendrier Richbourse donne la date sans le montant ; les etats financiers
+# donnent le montant sans la date. Ici les deux sont sur la meme ligne, et ils
+# viennent de l'avis officiel de la Bourse.
+#
+# Forme du tableau, telle que pypdf la rend :
+#
+#   BOA BURKINA FASO 397 072-2026 BRVMDG 31/03/2026 22/04/2026 23/04/2026
+#   BOA COTE D'IVOIRE 594,528 102-2026 BRVMDG 17/04/2026 05/05/2026 06/05/2026
+#   ECOBANK CI (*) 888 128-2026 BRVMDG 08/05/2026 22/05/2026 26/05/2026
+#
+#   titre | montant | n-annee de l'avis | BRVMDG | publication | ex-div | paiement
+#
+# DEUX PIEGES.
+#
+# Le nom se REPLIE sur deux lignes quand il est long - « Ecobank Transnational
+# / Incorporated TG ». On recolle donc la ligne precedente quand elle ne porte
+# ni date ni avis : c'est une queue de nom, jamais une ligne de donnees.
+#
+# Le montant a des ESPACES DE MILLIERS, qui le rendent indiscernable du numero
+# d'avis si l'on decoupe par blancs : « SONATEL SENEGAL 1 740 111-2026 » porte
+# un dividende de 1 740, pas de 1 740 111. On s'ancre donc sur « <n>-<annee>
+# BRVMDG », qui ne peut pas etre autre chose, et le montant est le nombre qui
+# le precede immediatement.
+#
+# L'ASTERISQUE compte : « (*) » signale un dividende BRUT, sur lequel l'IRVM
+# s'applique - 12 % pour les personnes physiques, 10 % pour les morales. On ne
+# retranche rien, la fiscalite d'un OPCVM n'etant pas celle d'un particulier ;
+# on porte l'information, et le module ESV l'affiche en reserve.
+
+DIVIDENDE_LIGNE_RE = re.compile(
+    r"^(?P<tete>.+?)\s+(?P<avis>\d{1,4}-\d{4})\s+BRVMDG\s+"
+    r"(?P<publication>\d{2}/\d{2}/\d{4})\s+"
+    r"(?P<ex>\d{2}/\d{2}/\d{4})\s+"
+    r"(?P<paiement>\d{2}/\d{2}/\d{4})\s*$"
+)
+
+# Le montant est la queue numerique du bloc « titre + montant ». Non-greedy sur
+# le nom : le moteur essaie d'abord le nom le plus court, donc « SONATEL
+# SENEGAL » plutot que « SONATEL SENEGAL 1 ».
+DIVIDENDE_MONTANT_RE = re.compile(
+    r"^(?P<nom>.*?)\s*(?P<montant>\d{1,3}(?:[\s\u00a0]\d{3})*(?:[.,]\d+)?)$"
+)
+
+DIVIDENDE_EXERCICE_RE = re.compile(r"ANNEE\s*:\s*(?P<annee>\d{4})")
+
+# Le bulletin porte PLUSIEURS « ANNEE : ... » - celui des assemblees generales
+# comme celui des dividendes - et pypdf les rend dans un ordre qui n'est pas
+# celui de la page. Lire le dernier vu au fil des lignes datait donc le
+# calendrier avec l'exercice du tableau d'a cote. On le cherche au voisinage
+# immediat du titre, et on l'applique a tout le tableau.
+DIVIDENDE_TITRE_RE = re.compile(r"(?i)CALENDRIER\s+DE\s+PAIEMENT\s+DES\s+DIVIDENDES")
+
+
+def _exercice_du_calendrier(lignes: list[str]) -> str:
+    for i, l in enumerate(lignes):
+        if not DIVIDENDE_TITRE_RE.search(l):
+            continue
+        for j in range(max(0, i - 10), min(len(lignes), i + 10)):
+            m = DIVIDENDE_EXERCICE_RE.search(lignes[j])
+            if m:
+                return m.group("annee")
+    return ""
+
+
+# Fragments d'en-tete que pypdf rend sur leur propre ligne, juste avant la
+# premiere ligne de donnees : « T-1 T » coiffe les deux colonnes de dates. Les
+# prendre pour une queue de nom collait « T-1 T » devant BOA BURKINA FASO.
+DIVIDENDE_ENTETE_RE = re.compile(
+    r"(?i)^(t-1\s*t|titres?|montant|dividende|avis|boc|si.ge|action|num.ro|date|ex-dividende|paiement|"
+    r"annee|calendrier)\b|^[\W\d_]*$"
+)
+
+
+def extract_dividendes(text: str) -> list[dict[str, str]]:
+    """Lignes du calendrier de paiement des dividendes."""
+    lignes = [l.rstrip() for l in text.split("\n")]
+    exercice = _exercice_du_calendrier(lignes)
+    precedente = ""
+    out: list[dict[str, str]] = []
+    vus: set[str] = set()
+
+    for brut in lignes:
+        ligne = brut.strip()
+
+        m = DIVIDENDE_LIGNE_RE.match(ligne)
+        if not m:
+            # Queue de nom potentielle pour la ligne suivante. On ne garde que
+            # les lignes purement textuelles : une ligne qui porte une date ou
+            # un nombre long est autre chose.
+            candidate = (
+                ligne
+                and not re.search(r"\d{2}/\d{2}/\d{4}", ligne)
+                and not DIVIDENDE_ENTETE_RE.match(ligne)
+                and re.search(r"[A-Za-z\u00c0-\u00ff]{3,}", ligne)
+            )
+            precedente = ligne if candidate else ""
+            continue
+
+        m2 = DIVIDENDE_MONTANT_RE.match(m.group("tete").strip())
+        if not m2:
+            precedente = ""
+            continue
+
+        nom = m2.group("nom").strip()
+        # Recollage du nom replie : « Incorporated TG » precede de « Ecobank
+        # Transnational ». La ligne precedente ne doit pas etre un en-tete.
+        if precedente:
+            nom = f"{precedente} {nom}".strip()
+        precedente = ""
+
+        brut_flag = "(*)" in nom
+        nom = nom.replace("(*)", "").strip()
+        if not nom:
+            continue
+
+        montant = parse_french_number(m2.group("montant"))
+        if montant is None or montant <= 0:
+            continue
+
+        # Le meme avis peut figurer sur deux pages du bulletin.
+        clef = f"{nom}|{m.group('avis')}"
+        if clef in vus:
+            continue
+        vus.add(clef)
+
+        out.append(
+            {
+                "titre": nom,
+                "montant": f"{montant:g}",
+                "brut": "1" if brut_flag else "0",
+                "avis": m.group("avis"),
+                "datePublication": normalize_iso_date(m.group("publication")),
+                "exDividende": normalize_iso_date(m.group("ex")),
+                "datePaiement": normalize_iso_date(m.group("paiement")),
+                "exercice": exercice,
+            }
+        )
+
+    return out
+
+
+DIVIDENDES_CSV = DATA_DIR / "dividendes-boc.csv"
+DIVIDENDES_COLS = [
+    "titre",
+    "montant",
+    "brut",
+    "avis",
+    "datePublication",
+    "exDividende",
+    "datePaiement",
+    "exercice",
+    "bocDate",
+]
+
+
+def write_dividendes_csv(lignes: list[dict[str, str]], boc_date: date) -> None:
+    """Fusionne le calendrier du jour avec celui deja connu.
+
+    ON N'ECRASE PAS L'HISTORIQUE. Le tableau du BOC ne porte que l'exercice en
+    cours : ecrire le fichier a neuf chaque jour effacerait les exercices
+    precedents, et le module ESV perdrait les detachements passes sur lesquels
+    il s'appuie faute d'annonce.
+
+    La clef de fusion est (titre, avis) : un avis rectificatif porte un numero
+    different et doit donc coexister, l'ordre chronologique tranchant.
+    """
+    existantes: dict[str, dict[str, str]] = {}
+    if DIVIDENDES_CSV.exists():
+        with DIVIDENDES_CSV.open(encoding="utf-8", newline="") as f:
+            for row in csv.DictReader(f, delimiter=";"):
+                existantes[f"{row.get('titre','')}|{row.get('avis','')}"] = row
+
+    ajouts = 0
+    for l in lignes:
+        clef = f"{l['titre']}|{l['avis']}"
+        if clef not in existantes:
+            ajouts += 1
+        existantes[clef] = {**l, "bocDate": boc_date.isoformat()}
+
+    rows = sorted(
+        existantes.values(),
+        key=lambda r: (r.get("datePaiement", ""), r.get("titre", "")),
+    )
+    with DIVIDENDES_CSV.open("w", encoding="utf-8", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=DIVIDENDES_COLS, delimiter=";")
+        w.writeheader()
+        for r in rows:
+            w.writerow({c: r.get(c, "") for c in DIVIDENDES_COLS})
+
+    print(
+        f"\n{DIVIDENDES_CSV.name} : {len(rows)} dividendes connus "
+        f"({ajouts} nouveau(x) dans le BOC du {boc_date.isoformat()}).",
+        file=sys.stderr,
+    )
+
+
 def extract_last_page_text(pdf_bytes: bytes, pages: int = PAGES_TABLEAU_FCP) -> str:
     """
     Extrait le texte des DERNIERES pages du PDF (table FCP) en preservant la
@@ -1390,6 +1592,18 @@ def main() -> int:
     #  - "cotee"    ligne de cotation reelle (extract_bond_volumes) ;
     #  - "annoncee" avis de premiere cotation, donc AVANT le premier echange.
     # Le second donne de l'avance pour saisir la ligne au referentiel.
+    # === Calendrier de paiement des dividendes -> module ESV ===
+    # Le BOC est la seule source qui porte le MONTANT et la DATE sur la meme
+    # ligne. Elle alimente le calendrier des evenements sur valeurs.
+    try:
+        dividendes = extract_dividendes(text)
+        if dividendes:
+            write_dividendes_csv(dividendes, boc_date)
+        else:
+            print("Aucun dividende extrait du BOC.", file=sys.stderr)
+    except Exception as e:  # ne doit jamais faire echouer le reste du BOC
+        print(f"Calendrier des dividendes non extrait : {e}", file=sys.stderr)
+
     try:
         write_boc_status_csv(
             list(bond_volumes.keys()),

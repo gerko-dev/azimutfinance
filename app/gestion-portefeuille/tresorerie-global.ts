@@ -18,8 +18,15 @@ import {
 } from "./tresorerie-types";
 import { construirePointTresorerie } from "./tresorerie-data";
 
-/** Identifiant conventionnel de la vue consolidée. */
-export const FONDS_GLOBAL = "global";
+// L'identifiant de la vue consolidée vit dans `tresorerie-types`, qui ne lit
+// rien : les composants clients en ont besoin, et l'importer d'ici leur
+// faisait tirer le chargeur serveur tout entier dans leur bundle.
+//
+// Ré-exporté pour les appelants serveur déjà branchés ici. Un `export … from`
+// ne le met PAS dans la portée du module, d'où l'import qui suit — ce fichier
+// s'en sert pour lui-même.
+export { FONDS_GLOBAL } from "./tresorerie-types";
+import { FONDS_GLOBAL } from "./tresorerie-types";
 
 /** Rang d'affichage d'un groupe de colonnes, repris de `ordonnerEtablissements`. */
 function rangGroupe(groupe: string): number {
@@ -140,6 +147,25 @@ export async function construirePointGlobal(
     actifNet: actifNet > 0 ? actifNet : null,
     dateInventaire: plusRecente(points.map((p) => p.dateInventaire)),
     lignes,
+    // LA CONSOLIDATION SOMME LES MONTANTS, PAS LES CALCULS.
+    //
+    // Chaque fonds a son taux, son actif net et son compte de prélèvement :
+    // une « moyenne d'actif net consolidée » ne voudrait rien dire, et un taux
+    // commun encore moins. On additionne donc les montants et on efface le
+    // détail plutôt que d'afficher un recoupement qui ne se recoupe pas.
+    fraisGestion: {
+      mois: points[0].fraisGestion.mois,
+      taux: 0,
+      actifNetMoyen: 0,
+      points: 0,
+      du: "",
+      au: "",
+      montant: points.reduce((s, p) => s + p.fraisGestion.montant, 0),
+      provisoire: points.some((p) => p.fraisGestion.provisoire),
+      indisponible: null,
+      compte: "",
+      applique: points.every((p) => p.fraisGestion.applique),
+    },
     postesAAlimenter: points[0].postesAAlimenter,
     etablissements,
     soldesInventaire,
@@ -154,6 +180,32 @@ export async function construirePointGlobal(
     ),
     operationsNonDenouees: points.flatMap((p) =>
       p.operationsNonDenouees.map((o) => ({ ...o, libelle: `${p.fonds} · ${o.libelle}` })),
+    ),
+    remeresAVenir: points.flatMap((p) =>
+      p.remeresAVenir.map((o) => ({ ...o, libelle: `${p.fonds} · ${o.libelle}` })),
+    ),
+    // LA SAISIE RESTE PAR FONDS, même en consolidé : un flux appartient à un
+    // portefeuille, et les formulaires écrivent avec un `fundId`. La vue
+    // consolidée les additionne dans le tableau mais n'ouvre pas la saisie —
+    // d'où ces deux listes vides, qui referment les boutons.
+    fluxSaisis: [],
+    spots: [],
+    nivellements: [],
+    // Le calendrier ESV se lit fonds par fonds : le CUMULER perdrait la seule
+    // chose qui compte, quel depositaire doit encaisser quoi. On conserve les
+    // titres sans echeancier, qui sont une anomalie a corriger.
+    calendrierEsv: {
+      evenements: [],
+      dateInventaire: plusRecente(points.map((p) => p.calendrierEsv.dateInventaire)),
+      sansEcheancier: points.flatMap((p) =>
+        p.calendrierEsv.sansEcheancier.map((t) => `${p.fonds} · ${t}`),
+      ),
+      actionsSansAvis: points.flatMap((p) =>
+        p.calendrierEsv.actionsSansAvis.map((t) => `${p.fonds} · ${t}`),
+      ),
+    },
+    spotsAVenir: points.flatMap((p) =>
+      p.spotsAVenir.map((s) => ({ ...s, libelle: `${p.fonds} · ${s.libelle}` })),
     ),
     ordresPerimes: points.flatMap((p) =>
       p.ordresPerimes.map((o) => ({ ...o, libelle: `${p.fonds} · ${o.libelle}` })),

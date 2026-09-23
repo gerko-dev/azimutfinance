@@ -30,6 +30,24 @@ type Item = {
 const ITEMS: Item[] = [
   { label: "Vue d'ensemble", href: "/gestion-portefeuille", icone: "◧" },
   { label: "Fonds gérés", href: "/gestion-portefeuille/fonds", icone: "▦" },
+  // L'ORDRE SUIT LE CYCLE DE TRAVAIL : on importe, on décide, on exécute, on
+  // contrôle. Chaque module est INTERFONDS — le portefeuille se choisit dans
+  // l'écran, il n'en est plus le contexte.
+  {
+    label: "Importation",
+    href: "/gestion-portefeuille/importation",
+    icone: "▼",
+  },
+  {
+    label: "Analyse de marché",
+    href: "/gestion-portefeuille/analyse-marche",
+    icone: "◈",
+  },
+  {
+    label: "Allocation",
+    href: "/gestion-portefeuille/allocation",
+    icone: "◑",
+  },
   {
     label: "Gestion de trésorerie",
     href: "/gestion-portefeuille/tresorerie",
@@ -40,6 +58,13 @@ const ITEMS: Item[] = [
     href: "/gestion-portefeuille/operations-marche",
     icone: "⇄",
   },
+  {
+    label: "Souscriptions / rachats",
+    href: "/gestion-portefeuille/souscriptions-rachats",
+    icone: "⇅",
+  },
+  { label: "ESV", href: "/gestion-portefeuille/esv", icone: "◈" },
+  { label: "Ratios", href: "/gestion-portefeuille/ratios", icone: "◔" },
   { label: "Investisseurs", href: "/gestion-portefeuille/investisseurs", icone: "◍", bientot: true },
   { label: "Reporting", href: "/gestion-portefeuille/reporting", icone: "▤" },
   { label: "Paramètres", href: "/gestion-portefeuille/parametres", icone: "◎" },

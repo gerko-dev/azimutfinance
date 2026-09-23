@@ -15,6 +15,7 @@ import "server-only";
 // Tout le reste — achats et ventes validés ou réalisés, rachats, frais,
 // rémérés, souscriptions bureau, flux probables, dividendes — attend sa source.
 
+import { cache } from "react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 import { loadCustomSecurities, loadFundPortfolios } from "./portfolio-data";
@@ -28,10 +29,26 @@ import {
 } from "./tresorerie-comptes";
 import { normName } from "./portfolio-match";
 import { agregerParPoste, loadOperationsMarche } from "./operations-marche-data";
+import { agregerFluxParts, loadFluxParts } from "./parts-data";
+import { loadNavMois } from "./nav-data";
+import { loadMyFunds } from "./data";
+import { fraisGestionDuMois, moisDesFrais } from "./frais-gestion";
+import { agregerEsv, construireCalendrierEsv } from "./esv-data";
+import {
+  agregerFluxSaisis,
+  agregerNivellements,
+  loadFluxManuels,
+  loadNivellements,
+  loadSpots,
+  spotsAVenir,
+} from "./tresorerie-flux-data";
 import {
   dateLimiteOrdre,
+  montantDenouementRemere,
   montantRestant,
   quantiteRestante,
+  remereOuvertA,
+  sensDe,
 } from "./operations-marche-types";
 import {
   LIGNES_POINT_TRESORERIE,
@@ -49,7 +66,10 @@ const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v)
  * Renvoie null quand le fonds n'a aucun inventaire : il n'y a alors pas de
  * soldes bancaires, et un tableau entierement a zero ne dirait rien.
  */
-export async function construirePointTresorerie(
+/** Mémoïsé par requête : l'écran de trésorerie construit le point de chaque
+ *  fonds DEUX FOIS — une pour le tableau, une pour la grille de saisie des
+ *  soldes. Sans cela, chaque fonds payait quatre allers-retours en double. */
+export const construirePointTresorerie = cache(async function construirePoint(
   fundId: string,
   nomFonds: string,
   /**
@@ -78,7 +98,24 @@ export async function construirePointTresorerie(
   // fin, dont un DEPOSIT_OPCVM001 a -220 180 967 F que le gerant ne retrouvait
   // nulle part. Le slot est explicite : on s'y tient, et on ne retombe sur le
   // plus recent que si aucun arrete de fin n'existe encore.
-  const snapshots = await loadFundPortfolios(fundId);
+  // QUATRE LECTURES INDÉPENDANTES, menées de front.
+  //
+  // Enchaînées, elles faisaient payer quatre latences réseau bout à bout —
+  // près d'une seconde avant que le moindre calcul ne commence — alors
+  // qu'aucune n'attend le résultat des autres. Sur l'écran interfonds, ce
+  // délai se multipliait par le nombre de fonds.
+  const [snapshots, fiches, operations, fluxParts, fondsGeres, fluxSaisis, spots, nivellements, calendrierEsv] =
+    await Promise.all([
+      loadFundPortfolios(fundId),
+      loadCustomSecurities(),
+      loadOperationsMarche(fundId),
+      loadFluxParts(fundId),
+      loadMyFunds(),
+      loadFluxManuels(fundId),
+      loadSpots(fundId),
+      loadNivellements(fundId),
+      construireCalendrierEsv(fundId),
+    ]);
   const actuel =
     snapshots.find((s) => s.slot === "fin") ??
     [...snapshots].sort((a, b) => a.asOfDate.localeCompare(b.asOfDate)).pop() ??
@@ -93,7 +130,6 @@ export async function construirePointTresorerie(
   // referentiel (canal, pays, banque, nature du compte), et c'est de la qu'on
   // le lit. Un compte dont la fiche est incomplete remonte a part : la
   // correction se fait au referentiel, pas dans une table parallele.
-  const fiches = await loadCustomSecurities();
   const custom = new Map(fiches.map((c) => [c.id, c]));
   // Second recours : le NOM EXACT. L'appariement de l'import fige son resultat
   // dans la position ; une ligne importee avant la creation de sa fiche reste
@@ -162,6 +198,13 @@ export async function construirePointTresorerie(
   // revient pas.
   const ordonnes = ordonnerEtablissements([...etablissements.values()]);
   const banques = ordonnes.map((e) => e.cle);
+  // LE COMPTE DÉPOSITAIRE : la première colonne du groupe « Comptes
+  // dépositaires », dans l'ordre d'affichage déjà établi. C'est chez lui que
+  // les titres sont conservés, donc chez lui que leurs revenus tombent — et
+  // c'est une réalité de marché, pas une convention à paramétrer.
+  const compteDepositaire =
+    ordonnes.find((e) => groupeEtablissement(e) === "Comptes dépositaires")?.cle ?? "";
+
   const soldes = new Map<string, number>();
   for (const b of banques) soldes.set(b, soldesSaisis.get(b) ?? 0);
 
@@ -190,8 +233,43 @@ export async function construirePointTresorerie(
     saisie?.as_of_date ??
     actuel.asOfDate ??
     null;
-  const operations = await loadOperationsMarche(fundId);
   const parPoste = agregerParPoste(operations, dateArrete);
+
+  // DEUX SOURCES, UN SEUL TABLEAU. Les opérations de marché sont l'actif du
+  // fonds, les souscriptions et rachats son passif. Elles tombent dans des
+  // postes disjoints — rien ne peut donc s'écraser — mais elles partagent les
+  // colonnes, puisqu'un même compte bancaire reçoit les deux.
+  // TROIS SOURCES, UN SEUL TABLEAU. Les flux SAISIS rejoignent les deux
+  // autres : les quatre lignes « autres » et les dénouements de spot ne
+  // viennent d'aucune déduction possible — c'est leur définition —, et c'est
+  // pourquoi elles ont leur propre formulaire. Tous ces postes sont disjoints,
+  // rien ne peut donc s'écraser.
+  const apports = [
+    agregerFluxParts(fluxParts, dateArrete),
+    agregerFluxSaisis(fluxSaisis, spots, dateArrete),
+    // LES NIVELLEMENTS TOMBENT DANS LES MEMES DEUX LIGNES que les flux saisis
+    // - decaissements pour la jambe emettrice, encaissements pour la
+    // receveuse. On les AJOUTE, on ne les ecrase pas : un nivellement et une
+    // regularisation peuvent viser le meme compte le meme jour.
+    agregerNivellements(nivellements, dateArrete),
+    // LES REVENUS ET LES TOMBEES DE TITRES, du module ESV. Ils tombent sur le
+    // COMPTE DEPOSITAIRE : c'est lui qui encaisse coupons et dividendes, et
+    // c'est une realite de marche, pas une convention a parametrer.
+    //
+    // Sans compte depositaire a l'inventaire, rien ne s'inscrit : un montant
+    // qui ne designe aucune colonne n'a nulle part ou aller, et le poser sur
+    // la premiere banque venue fausserait son solde.
+    agregerEsv(calendrierEsv.evenements, compteDepositaire, dateArrete),
+  ];
+  for (const apport of apports) {
+    for (const [poste, parCompte] of apport) {
+      const cible = parPoste.get(poste) ?? new Map<string, number>();
+      for (const [compte, m] of parCompte) {
+        cible.set(compte, (cible.get(compte) ?? 0) + m);
+      }
+      parPoste.set(poste, cible);
+    }
+  }
 
   const colonnes = new Set(banques);
   // UNE OPERATION QUI NE TOMBE DANS AUCUNE COLONNE NE DOIT PAS DISPARAITRE.
@@ -209,6 +287,52 @@ export async function construirePointTresorerie(
       else sansColonne.push({ libelle: poste, compte, montant: m });
     }
   }
+
+  // ── Frais de gestion ──────────────────────────────────────────────────────
+  //
+  // Moyenne mensuelle de l'actif net × taux annuel ÷ 12. Ils ne viennent
+  // d'aucune saisie : le taux est sur la fiche du fonds, l'actif net dans
+  // l'historique de VL importé, et les redemander chaque mois n'aurait fait
+  // qu'ouvrir la porte à une faute de frappe sur un montant à huit chiffres.
+  //
+  // LE MOIS AFFICHÉ SUIT LA DATE D'ARRÊTÉ, pas l'horloge : le point se lit
+  // aussi bien sur une date passée, et y montrer les frais du mois courant
+  // aurait fait mentir un arrêté de septembre consulté en décembre.
+  const fondsGere = fondsGeres.find((f) => f.id === fundId) ?? null;
+  const dateFrais = dateArrete ?? new Date().toISOString().slice(0, 10);
+  // UN SEUL MOIS DE VL, pas l'historique entier. Il dépend de la date
+  // d'arrêté, donc il ne peut pas partir avec les lectures du début — mais
+  // c'est une vingtaine de lignes, là où l'historique complet en fait deux
+  // mille par fonds, et l'écran est interfonds.
+  const vl = await loadNavMois(fundId, moisDesFrais(dateFrais));
+  const frais = fraisGestionDuMois(vl, Number(fondsGere?.fraisGestion ?? "") || 0, dateFrais);
+  // SUR LA COLONNE CHOISIE, et sur elle seule.
+  //
+  // Le tableau n'a pas de place pour un montant qui ne désigne aucune banque :
+  // sa colonne Total est la somme des colonnes. Un montant sans compte ne peut
+  // donc pas s'y inscrire — et le répartir au hasard fausserait le solde d'un
+  // établissement. On le signale plutôt, comme on signale déjà les comptes non
+  // rattachés : le choix se fait dans les paramètres du fonds.
+  const compteFrais = (fondsGere?.compteFraisGestion ?? "").trim();
+  const compteFraisValide = compteFrais !== "" && banques.includes(compteFrais);
+  if (frais.montant > 0 && compteFraisValide) {
+    valeurs.get("FRAIS DE GESTION")![compteFrais] += frais.montant;
+  }
+  const fraisGestion =
+    frais.indisponible !== null
+      ? { ...frais, compte: compteFrais, applique: false }
+      : {
+          ...frais,
+          compte: compteFrais,
+          applique: compteFraisValide,
+          indisponible: compteFraisValide
+            ? null
+            : compteFrais === ""
+              ? "Aucun compte de prélèvement n'est choisi : les frais se calculent mais " +
+                "n'entrent dans aucune colonne. Choisis-le dans Paramètres › Fonds gérés."
+              : `Le compte « ${compteFrais} » ne figure pas dans l'inventaire de ce fonds : ` +
+                `les frais n'ont aucune colonne où s'inscrire.`,
+        };
 
   // Negociees, pas encore denouees : elles ne comptent pas aujourd'hui, mais
   // le tresorier doit les voir venir.
@@ -229,6 +353,27 @@ export async function construirePointTresorerie(
     )
     .sort((a, b) => a.dateDenouement.localeCompare(b.dateDenouement));
 
+  // Rémérés dont le TERME est au-delà de l'arrêté : leur flux ne compte pas
+  // encore, mais il est certain. Sans cette liste, un remboursement à sept
+  // chiffres n'apparaissait qu'au moment où il tombait.
+  const remeresAVenir = operations
+    .filter((o) => remereOuvertA(o, dateArrete))
+    .filter((o) => {
+      const terme = o.remere?.dateFin ?? "";
+      return dateArrete !== null && (!terme || terme > dateArrete);
+    })
+    .map((o) => ({
+      libelle: `${o.libelle || o.code || "Réméré"} — ${o.remere?.contrepartie || "contrepartie ?"}`,
+      dateFin: o.remere?.dateFin ?? "—",
+      montant: montantDenouementRemere(o, dateArrete),
+      // L'INVERSE DU SENS D'ENTRÉE : un achat à réméré se dénoue par une
+      // vente, donc par un encaissement.
+      sens: (sensDe(o.description) === "achat" ? "encaissement" : "décaissement") as
+        | "encaissement"
+        | "décaissement",
+    }))
+    .sort((a, b) => a.dateFin.localeCompare(b.dateFin));
+
   // Ordres dont la part non servie a expiré : ils ne pèsent plus, mais leur
   // disparition doit se voir. Sans cette liste, un engagement s'évaporait du
   // point sans qu'aucun écran ne dise pourquoi.
@@ -239,7 +384,7 @@ export async function construirePointTresorerie(
       // connaît : c'est lui qui l'a posée. L'annoncer comme « périmé »
       // brouillerait les deux.
       if (o.clotureLe) return [];
-      // Un ordre MTP n'a pas de date limite : il ne périme jamais.
+      // Hors bourse, pas de date limite : l'ordre ne périme jamais.
       const dateLimite = dateLimiteOrdre(o);
       if (dateLimite === null) return [];
       if (dateArrete === null || dateLimite >= dateArrete) return [];
@@ -282,19 +427,27 @@ export async function construirePointTresorerie(
     valeurs.get("CASH A RECEVOIR")![b] = somme(
       ["SOUSCRIPTION BUREAU CI", "SOUSCRIPTION BUREAU SN", "SOUSCRIPTION BUREAU BJ",
        "REMERES_CASH_OUT", "SPOT", "AUTRES_CASH_A_RECEVOIR"], b);
+    // « SOUSCRIPTION PRIMAIRE PROB. » a quitté le tableau : le classeur la
+    // prévoyait, rien ne l'a jamais alimentée, et une souscription primaire
+    // probable n'existe pas — on soumissionne ou on ne soumissionne pas.
     valeurs.get("FLUX THEORIQUES")![b] =
       somme(["SOUSCRIPTION PROB. BUREAU CI", "SOUSCRIPTION PROB. BUREAU SN",
-             "SOUSCRIPTION PROB. BUREAU BJ", "AUTRES_FLUX_ENTRANT", "DIVIDENDES/COUPONS"], b) -
-      somme(["SOUSCRIPTION PRIMAIRE PROB.", "RACHAT PROB.", "AUTRES_FLUX_SORTANT"], b);
+             "SOUSCRIPTION PROB. BUREAU BJ", "AUTRES_FLUX_ENTRANT",
+             "DIVIDENDES/COUPONS"], b) -
+      somme(["RACHAT PROB.", "AUTRES_FLUX_SORTANT"], b);
 
     valeurs.get("SOLDEREEL")![b] =
       v("SOLDE", b) + v("CASH A RECEVOIR", b) + v("VENTES MTP REALISEES", b) -
       v("ACHATS VALIDES", b) - v("ACHATS REALISES", b) - v("AUTRES ENGAGEMENTS", b);
 
+    // « ENGAGEMENTS PROBABLES » est parti de même. C'était un sous-total que
+    // rien ne calculait : ce qu'il aurait dû contenir — rachats et flux
+    // sortants probables — est déjà retranché par FLUX THEORIQUES, et l'y
+    // ajouter aurait compté ces sorties deux fois le jour où la ligne aurait
+    // trouvé une source.
     valeurs.get("SOLDETHEORIQUE")![b] =
       v("SOLDE", b) + v("VENTES REALISEES", b) + v("FLUX THEORIQUES", b) -
-      v("ACHATS VALIDES", b) - v("ACHATS REALISES", b) - v("AUTRES ENGAGEMENTS", b) -
-      v("ENGAGEMENTS PROBABLES", b);
+      v("ACHATS VALIDES", b) - v("ACHATS REALISES", b) - v("AUTRES ENGAGEMENTS", b);
   }
 
   // ── Mise en forme ─────────────────────────────────────────────────────────
@@ -334,6 +487,13 @@ export async function construirePointTresorerie(
     actifNet: actifNet > 0 ? actifNet : null,
     dateInventaire: actuel.asOfDate,
     lignes,
+    fraisGestion,
+    remeresAVenir,
+    fluxSaisis,
+    spots,
+    nivellements,
+    calendrierEsv,
+    spotsAVenir: spotsAVenir(spots, dateArrete),
     postesAAlimenter: LIGNES_POINT_TRESORERIE.filter((d) => d.source === "a_alimenter").length,
     etablissements: ordonnes.map((e) => ({
       cle: e.cle,
@@ -353,4 +513,4 @@ export async function construirePointTresorerie(
     operationsNonDenouees: nonDenouees,
     ordresPerimes: perimes,
   };
-}
+});

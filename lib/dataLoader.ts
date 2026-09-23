@@ -708,6 +708,78 @@ export function loadListedBondPrices(): ListedBondPrice[] {
  * generes par calcul (cf. generateBondLifecycleEvents) — plus aucune lecture
  * du CSV obligations-cotees-evenements.csv, qui n'a plus a etre maintenu.
  */
+/**
+ * Calendrier de paiement des DIVIDENDES, extrait du BOC.
+ *
+ * LA SEULE SOURCE QUI PORTE LE MONTANT ET LA DATE SUR LA MEME LIGNE. Le
+ * calendrier Richbourse donne la date sans le montant ; les etats financiers
+ * donnent le montant sans la date. L'avis officiel de la Bourse donne les
+ * deux, plus l'ex-dividende — et c'est lui qui fait foi.
+ *
+ * Produit par `scripts/scrape_brvm_boc.py`, qui FUSIONNE chaque jour : le
+ * tableau du BOC ne porte que l'exercice en cours, et reecrire le fichier a
+ * neuf effacerait les exercices precedents.
+ */
+export type BocDividende = {
+  /** Raison sociale telle que le BOC l'ecrit — pas un mnemonique. */
+  titre: string;
+  /** Dividende par action, en FCFA. */
+  montant: number;
+  /** Dividende BRUT : l'IRVM s'y applique — 12 % pour les personnes
+   *  physiques, 10 % pour les morales. On ne retranche rien ici, la fiscalite
+   *  d'un OPCVM n'etant pas celle d'un particulier ; l'information est portee,
+   *  l'arbitrage reste au lecteur. */
+  brut: boolean;
+  avis: string;
+  datePublication: string;
+  exDividende: string;
+  datePaiement: string;
+  /** Exercice au titre duquel le dividende est verse. */
+  exercice: string;
+};
+
+type BocDividendeRow = {
+  titre: string;
+  montant: string;
+  brut: string;
+  avis: string;
+  datePublication: string;
+  exDividende: string;
+  datePaiement: string;
+  exercice: string;
+  bocDate: string;
+};
+
+let _bocDividendesCache: BocDividende[] | null = null;
+
+export function loadBocDividendes(): BocDividende[] {
+  if (_bocDividendesCache) return _bocDividendesCache;
+
+  // Le fichier peut manquer tant que le scraper n'a pas tourne : une liste
+  // vide vaut mieux qu'une exception, le module appelant sachant retomber sur
+  // ses autres sources.
+  if (!existsSync(join(DATA_DIR, "dividendes-boc.csv"))) {
+    _bocDividendesCache = [];
+    return _bocDividendesCache;
+  }
+
+  _bocDividendesCache = parseCSV<BocDividendeRow>("dividendes-boc.csv")
+    .filter((r) => r.titre?.trim() && r.datePaiement?.trim())
+    .map((r) => ({
+      titre: r.titre.trim(),
+      montant: parseNum(r.montant) ?? 0,
+      brut: r.brut?.trim() === "1",
+      avis: r.avis?.trim() ?? "",
+      datePublication: r.datePublication?.trim() ?? "",
+      exDividende: r.exDividende?.trim() ?? "",
+      datePaiement: r.datePaiement.trim(),
+      exercice: r.exercice?.trim() ?? "",
+    }))
+    .filter((d) => d.montant > 0);
+
+  return _bocDividendesCache;
+}
+
 export function loadListedBondEvents(): ListedBondEvent[] {
   return generateAllListedBondEvents(loadListedBonds());
 }
