@@ -9,7 +9,6 @@ import {
   type LigneTresorerie,
   type PointTresorerie,
 } from "@/app/gestion-portefeuille/tresorerie-types";
-import { libelleMois } from "@/app/gestion-portefeuille/frais-gestion";
 import type { GrilleSoldes } from "@/app/gestion-portefeuille/tresorerie-grille";
 import SaisieSoldesDialog from "./SaisieSoldesDialog";
 import FluxSaisisDialog from "./FluxSaisisDialog";
@@ -257,44 +256,6 @@ function Contenu({
         </div>
 
 
-        {/* LES FRAIS DE GESTION SE RECOUPENT, OU ILS NE VALENT RIEN.
-            Un montant à huit chiffres calculé en coulisse ne se vérifie pas.
-            On donne donc le mois retenu, la moyenne d'actif net, le nombre de
-            valorisations qui la composent et le taux : moyenne × taux ÷ 12,
-            que le gérant refait de tête. */}
-        {(point.fraisGestion.montant > 0 || point.fraisGestion.indisponible) && (
-          <div
-            className={`text-[11px] rounded px-3 py-2 mt-2 border ${
-              point.fraisGestion.indisponible
-                ? "text-amber-800 bg-amber-50 border-amber-200"
-                : "text-slate-700 bg-slate-50 border-slate-200"
-            }`}
-          >
-            <strong>Frais de gestion — {libelleMois(point.fraisGestion.mois)}</strong>
-            {point.fraisGestion.provisoire && (
-              <span className="text-slate-500"> (mois en cours, provisoire)</span>
-            )}
-            {point.fraisGestion.montant > 0 && (
-              <span className="tabular-nums">
-                {" "}
-                : {montant(point.fraisGestion.montant)} F
-                {point.fraisGestion.points > 0 && (
-                  <span className="text-slate-500">
-                    {" "}
-                    — moyenne d&apos;actif net {montant(point.fraisGestion.actifNetMoyen)} F
-                    sur {point.fraisGestion.points} valorisation
-                    {point.fraisGestion.points > 1 ? "s" : ""} (du {point.fraisGestion.du} au{" "}
-                    {point.fraisGestion.au}) × {(point.fraisGestion.taux * 100).toFixed(2)} %
-                    ÷ 12
-                  </span>
-                )}
-              </span>
-            )}
-            {point.fraisGestion.indisponible && (
-              <span className="block mt-0.5">{point.fraisGestion.indisponible}</span>
-            )}
-          </div>
-        )}
 
         {/* CE QUI N'EST PAS ENCORE COMPTÉ, ET POURQUOI.
             Le point ne retient que les opérations DÉNOUÉES à la date

@@ -30,7 +30,7 @@ import {
 import { normName } from "./portfolio-match";
 import { agregerParPoste, loadOperationsMarche } from "./operations-marche-data";
 import { agregerFluxParts, loadFluxParts } from "./parts-data";
-import { loadNavMois } from "./nav-data";
+import { loadDernieresVl, loadNavMois } from "./nav-data";
 import { loadMyFunds } from "./data";
 import { fraisGestionDuMois, moisDesFrais } from "./frais-gestion";
 import { agregerEsv, construireCalendrierEsv } from "./esv-data";
@@ -208,7 +208,9 @@ export const construirePointTresorerie = cache(async function construirePoint(
   const soldes = new Map<string, number>();
   for (const b of banques) soldes.set(b, soldesSaisis.get(b) ?? 0);
 
-  const actifNet = actuel.positions.reduce((s, p) => s + num(p.valuation), 0);
+  // L'actif net de l'inventaire : la somme de ses lignes. Il sert de REPLI,
+  // et de lui seul — cf. `actifNet` plus bas.
+  const actifNetInventaire = actuel.positions.reduce((s, p) => s + num(p.valuation), 0);
 
   // ── Valeurs par poste ─────────────────────────────────────────────────────
   const valeurs = new Map<string, Record<string, number>>();
@@ -305,6 +307,22 @@ export const construirePointTresorerie = cache(async function construirePoint(
   // c'est une vingtaine de lignes, là où l'historique complet en fait deux
   // mille par fonds, et l'écran est interfonds.
   const vl = await loadNavMois(fundId, moisDesFrais(dateFrais));
+
+  // ── L'ACTIF NET QUI FAIT FOI ────────────────────────────────────────────
+  //
+  // Celui de l'HISTORIQUE DE VL, pas la somme des lignes de l'inventaire.
+  //
+  // Les deux divergeaient de 1,1 milliard sur le Diversifié — 3,3 % — et c'est
+  // l'historique qui a raison : son actif net recoupe exactement VL × nombre
+  // de parts, là où la somme des valorisations ignore le passif du fonds et
+  // les régularisations du dépositaire. Les ratios s'appuient déjà dessus ;
+  // le point de trésorerie divergeait d'eux sans raison.
+  //
+  // Borné à la date d'arrêté : un arrêté de septembre consulté en décembre
+  // doit rapporter ses pourcentages à l'actif net de septembre.
+  const derniereVl = (await loadDernieresVl(fundId, 1, dateArrete ?? undefined))[0] ?? null;
+  const actifNetHistorique = num(derniereVl?.actifNet);
+  const actifNet = actifNetHistorique > 0 ? actifNetHistorique : actifNetInventaire;
   const frais = fraisGestionDuMois(vl, Number(fondsGere?.fraisGestion ?? "") || 0, dateFrais);
   // SUR LA COLONNE CHOISIE, et sur elle seule.
   //
