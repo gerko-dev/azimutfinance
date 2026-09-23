@@ -410,6 +410,15 @@ export default function SettingsForm({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [fundError, setFundError] = useState<string | null>(null);
+  /** Ce que l'enregistrement a SILENCIEUSEMENT perdu, ou null.
+   *
+   *  Le module tolère une migration en retard : il écrit sans la colonne que
+   *  la base ne connaît pas encore, plutôt que d'interdire toute
+   *  modification. Mais il l'annonçait « enregistré » comme le reste, et le
+   *  gérant pouvait choisir dix fois son compte de prélèvement sans
+   *  comprendre pourquoi rien ne bougeait. Un champ qui ne se sauvegarde pas
+   *  doit le DIRE. */
+  const [fundAvertissement, setFundAvertissement] = useState<string | null>(null);
   /** Comptes de tresorerie du fonds en cours d'edition, pour le choix du
    *  compte de prelevement des frais. Charges AU CLIC, jamais dans un effet. */
   const [comptes, setComptes] = useState<CompteFonds[]>([]);
@@ -541,6 +550,25 @@ export default function SettingsForm({
       return;
     }
     setFundError(null);
+    setFundAvertissement(null);
+
+    // CE QUI REVIENT FAIT FOI. L'action renvoie le fonds tel que la base le
+    // porte désormais : un champ renseigné qui en revient vide n'a pas été
+    // écrit. L'écran ne suppose rien de la cause — il constate, et dit quoi
+    // faire.
+    const verifier = (enregistre: FundRecord) => {
+      if (draft.compteFraisGestion && !enregistre.compteFraisGestion) {
+        setFundAvertissement(
+          "Le compte de prélèvement des frais de gestion n'a PAS été enregistré : " +
+            "la colonne n'existe pas encore en base. Exécute " +
+            "supabase/fund-frais-compte.sql dans Supabase, puis rechoisis-le. " +
+            "Le reste de la fiche est bien enregistré.",
+        );
+        return false;
+      }
+      return true;
+    };
+
     startTransition(async () => {
       if (editingId) {
         const res = await updateFundAction(editingId, draft);
@@ -549,6 +577,9 @@ export default function SettingsForm({
           return;
         }
         setFunds((prev) => prev.map((f) => (f.id === editingId ? res.data : f)));
+        // LE FORMULAIRE RESTE OUVERT quand quelque chose s'est perdu : le
+        // refermer aurait emporté l'avertissement avec lui.
+        if (!verifier(res.data)) return;
         setEditingId(null);
         setDraft(emptyFund(s.baseCurrency));
         setFormOpen(false);
@@ -560,6 +591,7 @@ export default function SettingsForm({
         return;
       }
       setFunds((prev) => [...prev, res.data]);
+      if (!verifier(res.data)) return;
       setDraft(emptyFund(s.baseCurrency));
       setFormOpen(false);
     });
@@ -1198,6 +1230,9 @@ export default function SettingsForm({
                   : "+ Créer le fonds"}
             </button>
             {fundError && <span className="text-[12px] text-red-600">{fundError}</span>}
+            {fundAvertissement && (
+              <span className="text-[12px] text-amber-700">{fundAvertissement}</span>
+            )}
           </div>
         </div>
         )}
