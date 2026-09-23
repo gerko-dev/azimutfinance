@@ -3,13 +3,13 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
-  addSecurityToFundAction,
+  createCustomSecurityAction,
   getSecurityDefaultsAction,
   listFundReferentialAction,
-  listFundSecuritiesAction,
+  listCustomSecuritiesAction,
   lookupReferenceAction,
   resynchroniserReferentielAction,
-  unlinkSecurityFromFundAction,
+  deleteCustomSecurityAction,
   updateCustomSecurityAction,
   type BilanResync,
 } from "@/app/gestion-portefeuille/portfolio-actions";
@@ -92,12 +92,10 @@ function AttrField({
 // Éditeur d'un titre : création (security = null, rattaché au fonds) ou
 // modification (titre partagé au niveau utilisateur).
 function EditPanel({
-  fundId,
   security,
   onCancel,
   onSaved,
 }: {
-  fundId: string;
   security: CustomSecurity | null;
   onCancel: () => void;
   onSaved: (s: CustomSecurity, created: boolean) => void;
@@ -308,7 +306,7 @@ function EditPanel({
       start(async () => {
         const res = security
           ? await updateCustomSecurityAction(security.id, input)
-          : await addSecurityToFundAction(fundId, input);
+          : await createCustomSecurityAction(input);
         if (!res.ok) {
           setError(res.error);
           return;
@@ -346,7 +344,7 @@ function EditPanel({
         };
         const res = security
           ? await updateCustomSecurityAction(security.id, input)
-          : await addSecurityToFundAction(fundId, input);
+          : await createCustomSecurityAction(input);
         if (!res.ok) {
           setError(res.error);
           return;
@@ -365,7 +363,7 @@ function EditPanel({
     start(async () => {
       const res = security
         ? await updateCustomSecurityAction(security.id, input)
-        : await addSecurityToFundAction(fundId, input);
+        : await createCustomSecurityAction(input);
       if (!res.ok) {
         setError(res.error);
         return;
@@ -625,7 +623,15 @@ function EditPanel({
   );
 }
 
-export default function SecuritiesReferential({ fundId }: { fundId: string }) {
+/**
+ * Référentiel des titres — COMMUN À TOUS LES FONDS.
+ *
+ * Un titre n'appartient pas à un portefeuille : SONATEL est SONATEL, et son
+ * ISIN, son taux facial et son échéance valent pour tous les fonds qui le
+ * détiennent. Le tenir par fonds obligeait à ressaisir les mêmes
+ * caractéristiques autant de fois, puis à les voir diverger.
+ */
+export default function SecuritiesReferential() {
   const [items, setItems] = useState<CustomSecurity[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -637,7 +643,7 @@ export default function SecuritiesReferential({ fundId }: { fundId: string }) {
 
   useEffect(() => {
     let alive = true;
-    listFundSecuritiesAction(fundId).then((res) => {
+    listCustomSecuritiesAction().then((res) => {
       if (!alive) return;
       if (res.ok) setItems(res.data);
       else setError(res.error);
@@ -645,14 +651,18 @@ export default function SecuritiesReferential({ fundId }: { fundId: string }) {
     return () => {
       alive = false;
     };
-  }, [fundId]);
+  }, []);
 
   const remove = (id: string) => {
     const snapshot = items ?? [];
     setItems((prev) => (prev ?? []).filter((s) => s.id !== id));
     if (editingId === id) setEditingId(null);
     startDelete(async () => {
-      const res = await unlinkSecurityFromFundAction(fundId, id);
+      // SUPPRIMER, ET NON DÉLIER. Le référentiel est commun : il n'y a plus
+      // de rattachement à défaire, et « retirer » ne pouvait donc rien faire
+      // — la table de liaison était vide et le titre revenait au rendu
+      // suivant.
+      const res = await deleteCustomSecurityAction(id);
       if (!res.ok) {
         setItems(snapshot);
         setError(res.error);
@@ -692,14 +702,14 @@ export default function SecuritiesReferential({ fundId }: { fundId: string }) {
     startResync(async () => {
       setBilan(null);
       setError(null);
-      const res = await resynchroniserReferentielAction(fundId);
+      const res = await resynchroniserReferentielAction();
       if (!res.ok) {
         setError(res.error);
         return;
       }
       setBilan(res.data);
       // Le lot a modifié la base : on relit plutôt que de recomposer l'état.
-      const rafraichi = await listFundSecuritiesAction(fundId);
+      const rafraichi = await listCustomSecuritiesAction();
       if (rafraichi.ok) setItems(rafraichi.data);
       // Et les inventaires ont été reclassés côté serveur.
       router.refresh();
@@ -845,7 +855,6 @@ export default function SecuritiesReferential({ fundId }: { fundId: string }) {
 
         {creating && (
           <EditPanel
-            fundId={fundId}
             security={null}
             onCancel={() => setCreating(false)}
             onSaved={onSaved}
@@ -855,7 +864,6 @@ export default function SecuritiesReferential({ fundId }: { fundId: string }) {
         {editing && (
           <EditPanel
             key={editing.id}
-            fundId={fundId}
             security={editing}
             onCancel={() => setEditingId(null)}
             onSaved={onSaved}

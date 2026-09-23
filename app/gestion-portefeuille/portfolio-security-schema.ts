@@ -351,6 +351,13 @@ export const SECURITY_FIELDS: Record<PortfolioSection, FieldDef[]> = {
     COTE_FIELD,
     { key: "pays", label: "Pays", type: "select", options: PAYS_UEMOA },
     {
+      key: "groupe",
+      label: "Groupe émetteur",
+      type: "text",
+      placeholder: "Ex. Bank of Africa",
+      hint: "Maison mère, pour le cumul par groupe (Art. 41.5). Vide, il est déduit du nom.",
+    },
+    {
       key: "secteur",
       label: "Secteur (Damodaran)",
       type: "select",
@@ -362,6 +369,13 @@ export const SECURITY_FIELDS: Record<PortfolioSection, FieldDef[]> = {
     COTE_FIELD,
     { key: "isin", label: "ISIN", type: "text", placeholder: "CI0000000000" },
     { key: "issuer", label: "Émetteur", type: "text", placeholder: "Ex. État de Côte d'Ivoire" },
+    {
+      key: "groupe",
+      label: "Groupe émetteur",
+      type: "text",
+      placeholder: "Ex. Bank of Africa",
+      hint: "Maison mère, pour le cumul par groupe (Art. 41.5). Vide, il est déduit du nom.",
+    },
     { key: "issuerType", label: "Type d'émetteur", type: "select", options: BOND_ISSUER_TYPE },
     { key: "country", label: "Pays", type: "select", options: PAYS_UEMOA },
     { key: "sector", label: "Secteur", type: "select", options: BOND_SECTOR },

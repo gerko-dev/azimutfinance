@@ -574,17 +574,52 @@ export function matchPositions(
     // un compte déjà enregistré en titre — mêmes caractéristiques
     // structurelles qu'une ligne de trésorerie — serait classé « cash » et
     // jamais reconnu.
+    // UN COMPTE N'A NI QUANTITÉ NI PRIX UNITAIRE.
+    //
+    // Le référentiel du compte fait autorité — mais un ALIAS peut détourner
+    // une ligne vers une fiche qui n'a rien à voir. C'est arrivé : l'alias
+    // « boa ci », posé sur le compte dépositaire « E_BOA CI NFD », a capté la
+    // ligne d'actions BOA CI — 74 713 titres à 12 150 F. Neuf cents millions
+    // d'actions classés en trésorerie, absents des ratios d'exposition, et
+    // rien pour le signaler.
+    //
+    // La détection automatique des comptes, plus bas, sait déjà qu'un compte
+    // n'a « ni quantité ni cours ». On applique la même règle ici : une ligne
+    // qui porte les deux n'est pas un compte, quel que soit l'alias qui la
+    // désigne. Elle repart alors vers le référentiel de marché, où le titre
+    // se reconnaît pour ce qu'il est.
+    //
+    // La garde ne vise QUE la trésorerie : un DAT peut légitimement porter un
+    // nominal et un taux, et l'écarter aurait cassé son rapprochement.
+    const porteQuantiteEtPrix = raw.quantity != null && raw.price != null;
+    const compatible = (c: CustomSecurity | undefined): CustomSecurity | undefined =>
+      c && porteQuantiteEtPrix && c.kind === "tresorerie" ? undefined : c;
+
     const custom =
-      customByName.get(nomLigne) ??
-      customByName.get(nomCode) ??
-      premier((c) => customByCode.get(c));
+      compatible(customByName.get(nomLigne)) ??
+      compatible(customByName.get(nomCode)) ??
+      premier((c) => compatible(customByCode.get(c)));
     if (custom) {
       // Section : priorité au type du site (titre lié), puis au kind stocké s'il
       // est spécifique, sinon à la section de la ligne d'inventaire (ex. un titre
       // « autre » figurant dans la section Obligation du fichier).
-      const section =
-        sectionFromSource(custom.attributes?.source) ??
-        (custom.kind !== "autre" ? custom.kind : raw.section);
+      // UN COMPTE RESTE UN COMPTE, quelle que soit sa source.
+      //
+      // Treize fiches de trésorerie portent un attribut `source: "fund"` —
+      // souvenir d'un rapprochement par nom avec un OPC du site, « ORANGE CI
+      // OPCVM002 » ayant assez de mots communs avec un fonds pour s'y
+      // accrocher. Cette source l'emportait sur le type de la fiche, et le
+      // compte ressortait en parts d'OPC : de la trésorerie comptée comme un
+      // placement, dans les ratios comme au point de trésorerie.
+      //
+      // Le gérant a typé la fiche « trésorerie » ou « dépôt à terme » : c'est
+      // une décision, pas une déduction, et rien d'automatique ne doit la
+      // contredire.
+      const estUnCompte = custom.kind === "tresorerie" || custom.kind === "dat";
+      const section = estUnCompte
+        ? custom.kind
+        : (sectionFromSource(custom.attributes?.source) ??
+          (custom.kind !== "autre" ? custom.kind : raw.section));
 
       // NATURE affichée : un titre du référentiel LIÉ au site est une action
       // cotée, une obligation cotée ou un souverain — pas un « titre

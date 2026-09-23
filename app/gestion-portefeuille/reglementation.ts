@@ -75,6 +75,13 @@ export const RATIOS_COMMUNS: RatioCatalogEntry[] = [
 ];
 
 // Ratios définissant chaque type de fonds (Art. 18) — groupe Exposition.
+//
+// LE NOM DE LA MÉTRIQUE DIT CE QU'ELLE MESURE, et l'article 18.5 plafonne
+// CHAQUE exposition, pas leur somme : « actions ET/OU obligations, 70 % au
+// plus ». Les métriques s'appelaient « Total … + … », ce qui a suffi à faire
+// additionner ce qu'il fallait comparer — un fonds diversifié se serait alors
+// vu interdire de détenir plus de 70 % de titres toutes classes confondues,
+// donc de garder moins de 30 % en liquidités en permanence.
 // Clés = types Aurore ; le formulaire y accède via CATEGORIE_TO_TYPE.
 export const RATIOS_PAR_TYPE: Record<string, RatioCatalogEntry[]> = {
   Actions: [
@@ -89,8 +96,8 @@ export const RATIOS_PAR_TYPE: Record<string, RatioCatalogEntry[]> = {
     { groupe: G_EXPO, libelle: "Maturité ou maturité résiduelle des instruments détenus", metrique: "Maturité (résiduelle) par instrument", base: "—", seuilMin: null, seuilMax: 2, unite: "ans", article: "Art. 18.4" },
   ],
   Diversifié: [
-    { groupe: G_EXPO, libelle: "Exposition en actions et/ou obligations", metrique: "Total Actions + Obligations", base: "Actif net", seuilMin: null, seuilMax: 70, unite: "%", article: "Art. 18.5" },
-    { groupe: G_EXPO, libelle: "Exposition en obligations, titres du marché monétaire, OPCVM ou FCTC", metrique: "Total Obligations + MM + OPCVM + FCTC", base: "Actif net", seuilMin: null, seuilMax: 70, unite: "%", article: "Art. 18.5" },
+    { groupe: G_EXPO, libelle: "Exposition en actions et/ou obligations", metrique: "Actions ou Obligations — la plus élevée", base: "Actif net", seuilMin: null, seuilMax: 70, unite: "%", article: "Art. 18.5" },
+    { groupe: G_EXPO, libelle: "Exposition en obligations, titres du marché monétaire, OPCVM ou FCTC", metrique: "Obligations, MM, OPCVM ou FCTC — la plus élevée", base: "Actif net", seuilMin: null, seuilMax: 70, unite: "%", article: "Art. 18.5" },
   ],
   // Définis par la garantie / la formule, sans seuil de composition propre.
   Garanti: [],

@@ -44,7 +44,14 @@ function buildAttributes(
   // Conserve la provenance site + l'ISIN (hors schéma pour certains types comme
   // les actions) : nécessaires au rétablissement des paramètres d'origine et à
   // l'affichage du titre coté enregistré.
-  for (const k of ["source", "refId", "isin"]) {
+  //
+  // ET L'ALIAS, SURTOUT. Il ne figure dans aucun schéma de champs — ce n'est
+  // pas une caractéristique du titre mais la clef de son rapprochement au
+  // prochain import. Il était donc effacé à chaque passage ici : une simple
+  // resynchronisation des caractéristiques suffisait à faire perdre à cent
+  // soixante-dix-huit fiches le nom sous lequel l'inventaire les désigne, et
+  // l'import suivant ne les reconnaissait plus.
+  for (const k of ["source", "refId", "isin", "alias"]) {
     const v = (raw?.[k] ?? "").toString().trim();
     if (v && !out[k]) out[k] = v;
   }
@@ -587,6 +594,21 @@ export async function deleteCustomSecurityAction(id: string): Promise<ActionResu
 }
 
 // Liste les titres du référentiel rattachés à un fonds.
+/**
+ * LE RÉFÉRENTIEL EST COMMUN À TOUS LES FONDS — cf.
+ * `listCustomSecuritiesAction`, qui le sert sans filtre.
+ *
+ * UN TITRE N'APPARTIENT PAS À UN FONDS. SONATEL est SONATEL quel que soit le
+ * portefeuille qui le détient : son ISIN, son taux facial et son échéance
+ * sont les mêmes pour tous. Les tenir par fonds obligeait à ressaisir les
+ * mêmes caractéristiques autant de fois qu'il y a de portefeuilles, puis à
+ * les voir diverger — c'est exactement ce qu'un référentiel existe pour
+ * éviter.
+ *
+ * La table `fund_securities` matérialisait ce rattachement ; elle est VIDE,
+ * et la fonction ci-dessous retombait déjà sur les titres référencés par les
+ * inventaires. On acte la règle plutôt que de la subir.
+ */
 export async function listFundSecuritiesAction(
   fundId: string,
 ): Promise<ActionResult<CustomSecurity[]>> {
@@ -719,9 +741,18 @@ function relevrDoublons(titres: CustomSecurity[]): { nom: string; codes: string[
  * Les titres non liés sont laissés tels quels : il n'existe aucune source d'où
  * les compléter.
  */
-export async function resynchroniserReferentielAction(
-  fundId: string,
-): Promise<ActionResult<BilanResync>> {
+/**
+ * Complète les titres du référentiel avec ce que le site sait d'eux.
+ *
+ * PORTE SUR TOUT LE RÉFÉRENTIEL, plus sur un fonds : les titres sont communs,
+ * et n'en resynchroniser qu'une part laissait les autres incomplets sans que
+ * rien ne le dise. Les inventaires de TOUS les fonds sont reclassés ensuite —
+ * un titre complété peut reconnaître des lignes jusque-là non rapprochées,
+ * dans un portefeuille comme dans un autre.
+ */
+export async function resynchroniserReferentielAction(): Promise<
+  ActionResult<BilanResync>
+> {
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -729,7 +760,7 @@ export async function resynchroniserReferentielAction(
   if (!user) return { ok: false, error: "Tu dois être connecté." };
   if (!(await estNiveau1())) return { ok: false, error: MSG_NIVEAU1 };
 
-  const liste = await listFundSecuritiesAction(fundId);
+  const liste = await listCustomSecuritiesAction();
   if (!liste.ok) return { ok: false, error: liste.error };
 
   const bilan: BilanResync = {
@@ -813,8 +844,17 @@ export async function resynchroniserReferentielAction(
   // Les inventaires se reclassent : un titre qui gagne son secteur ou sa
   // maturité change de poste dans les ventilations.
   if (bilan.misAJour > 0) {
-    await reclassifyFund(supabase, user.id, fundId);
-    revalidatePath(`/gestion-portefeuille/fonds/${fundId}`);
+    // TOUS LES FONDS, pas seulement celui qu'on regardait : un titre complété
+    // vaut pour chaque portefeuille qui le détient.
+    const { data: fonds } = await supabase
+      .from("managed_funds")
+      .select("id")
+      .eq("owner_id", user.id);
+    for (const f of (fonds ?? []) as { id: string }[]) {
+      await reclassifyFund(supabase, user.id, f.id);
+      revalidatePath(`/gestion-portefeuille/fonds/${f.id}`);
+    }
+    revalidatePath("/gestion-portefeuille/parametres");
   }
 
   return { ok: true, data: bilan };
@@ -1168,8 +1208,25 @@ export async function savePortfolioAction(
         // actif au rapprochement.
         const nomInventaire = (p.rawLabel || p.matchLabel || "").trim();
         const nomSite = (p.matchLabel ?? "").trim();
+        // LA FICHE NAÎT COMPLÈTE, pas seulement liée.
+        //
+        // On n'y inscrivait que la référence — `source` et `refId` — en
+        // laissant vides le taux du coupon, l'échéance, l'émetteur, le pays,
+        // la notation. Le site les connaît pourtant, puisque la ligne vient
+        // de s'y rapprocher. Il fallait ensuite lancer une resynchronisation
+        // pour les obtenir, et rien à l'écran ne disait qu'ils manquaient :
+        // les ratios calculaient sur des caractéristiques absentes, et un
+        // titre sans émetteur ressortait comme son propre émetteur.
+        //
+        // On reprend donc les mêmes attributs que la resynchronisation, à la
+        // création. `source` et `refId` sont posés APRÈS : ils décrivent le
+        // lien, et rien du site ne doit les écraser.
         const attributs: Record<string, string> = known
-          ? { source: p.matchKind, refId: p.matchId ?? "" }
+          ? {
+              ...(siteSecurityAttributes(p.matchKind, p.matchId ?? "") ?? {}),
+              source: p.matchKind,
+              refId: p.matchId ?? "",
+            }
           : {};
         // L'ALIAS porte le nom d'inventaire — c'est LUI la clef de
         // rapprochement au prochain import, et il doit survivre a tout

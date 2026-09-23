@@ -34,6 +34,7 @@ import {
   SECURITY_FIELDS,
   type FieldDef,
 } from "@/app/gestion-portefeuille/portfolio-security-schema";
+import { coursDe, type CoursSite } from "@/app/gestion-portefeuille/cours-types";
 import TreasuryFields from "./TreasuryFields";
 
 const CURRENCIES = ["XOF", "EUR", "USD"] as const;
@@ -648,10 +649,13 @@ type RowLike = {
 
 function PositionRowView({
   row,
+  cours,
   resolveButton,
   customForm,
 }: {
   row: RowLike;
+  /** Dernier cours connu AU SITE, lu au rendu. Null hors cote. */
+  cours?: CoursSite | null;
   resolveButton?: React.ReactNode;
   customForm?: React.ReactNode;
 }) {
@@ -695,7 +699,33 @@ function PositionRowView({
         <td className="px-3 py-2 text-right font-mono text-slate-600">{fmt(row.quantity, 0)}</td>
         <td className="px-3 py-2 text-right font-mono text-slate-500">{fmt(row.pru, 2)}</td>
         <td className="px-3 py-2 text-right font-mono text-slate-500">{fmt(row.cost, 0)}</td>
+        {/* DEUX COURS, ET ILS NE DISENT PAS LA MÊME CHOSE. Celui de
+            l'inventaire vaut à la date d'arrêté et sert à recouper avec le
+            dépositaire ; celui du site est le dernier connu sur le marché.
+            Remplacer l'un par l'autre aurait cassé le rapprochement ; les
+            afficher côte à côte fait apparaître l'écart, qui est
+            précisément ce qu'on cherche. */}
         <td className="px-3 py-2 text-right font-mono text-slate-500">{fmt(row.price, 2)}</td>
+        <td className="px-3 py-2 text-right font-mono">
+          {cours ? (
+            <>
+              <span className="text-slate-700">{fmt(cours.prix, 2)}</span>
+              <div className="text-[9px] text-slate-400">{cours.date}</div>
+              {row.price != null && row.price > 0 && (
+                <div
+                  className={`text-[9px] ${
+                    cours.prix >= row.price ? "text-emerald-600" : "text-rose-600"
+                  }`}
+                >
+                  {cours.prix >= row.price ? "+" : ""}
+                  {(((cours.prix - row.price) / row.price) * 100).toFixed(1)} %
+                </div>
+              )}
+            </>
+          ) : (
+            <span className="text-slate-300">—</span>
+          )}
+        </td>
         <td className="px-3 py-2 text-right font-mono text-slate-500">{fmt(row.accruedInterest, 0)}</td>
         <td className="px-3 py-2 text-right font-mono text-slate-800">{fmt(row.valuation, 0)}</td>
         <td className="px-3 py-2 text-right">{resolveButton}</td>
@@ -729,7 +759,8 @@ function SectionTable({
               <th className="px-3 py-1.5 text-right font-medium">Quantité</th>
               <th className="px-3 py-1.5 text-right font-medium">PRU</th>
               <th className="px-3 py-1.5 text-right font-medium">Prix de revient</th>
-              <th className="px-3 py-1.5 text-right font-medium">Cours</th>
+              <th className="px-3 py-1.5 text-right font-medium">Cours inventaire</th>
+              <th className="px-3 py-1.5 text-right font-medium">Cours site</th>
               <th className="px-3 py-1.5 text-right font-medium">Int. courus</th>
               <th className="px-3 py-1.5 text-right font-medium">Valorisation</th>
               <th className="px-3 py-1.5"></th>
@@ -749,9 +780,14 @@ function subtotalOf(rows: { section: PortfolioSection; valuation: number | null 
 export default function PortfolioPanel({
   fundId,
   initialPortfolios = [],
+  cours = new Map(),
 }: {
   fundId: string;
   initialPortfolios?: PortfolioSnapshot[];
+  /** Derniers cours du site, indexés par désignation. Lus au SERVEUR et
+   *  passés en props : un cours change à chaque séance, il ne se stocke pas
+   *  au référentiel — et le lint interdit de le charger dans un effet. */
+  cours?: Map<string, CoursSite>;
 }) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -1072,6 +1108,7 @@ export default function PortfolioPanel({
                   <PositionRowView
                     key={i}
                     row={p}
+                    cours={coursDe(cours, p.matchIsin, p.matchCode, p.rawCode)}
                     resolveButton={
                       // Le bouton reste offert APRÈS reconnaissance : une
                       // reconnaissance automatique n'est pas une décision
@@ -1178,7 +1215,13 @@ export default function PortfolioPanel({
                 (sec) => (
                   <SectionTable key={sec} section={sec} subtotal={subtotalOf(viewed.positions, sec)}>
                     {viewed.positions.map((p) =>
-                      p.section === sec ? <PositionRowView key={p.id} row={p} /> : null,
+                      p.section === sec ? (
+                        <PositionRowView
+                          key={p.id}
+                          row={p}
+                          cours={coursDe(cours, p.matchIsin, p.matchCode, p.rawCode)}
+                        />
+                      ) : null,
                     )}
                   </SectionTable>
                 ),

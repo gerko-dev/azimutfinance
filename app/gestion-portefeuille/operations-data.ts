@@ -6,7 +6,6 @@ import "server-only";
 // arbitre, le comité valide.
 
 import {
-  getLatestSikaQuote,
   loadBonds,
   loadIssuances,
   loadListedBondPrices,
@@ -15,6 +14,8 @@ import {
   loadListedBonds,
   loadUmoaEmissions,
 } from "@/lib/dataLoader";
+import { coursDe } from "./cours-types";
+import { indexerCoursSite } from "./cours-data";
 import {
   calculateAverageYield3Months,
   calculateYTMFromCleanPrice,
@@ -304,14 +305,34 @@ export async function construirePlanOperations(
     positionsAction.set(custom ? (custom.code || cle).toUpperCase() : cle, p);
   }
 
+  // Les cours du site, bâtis UNE FOIS : les relire par ligne coûterait autant
+  // d'appels au fournisseur live qu'il y a de titres à traiter.
+  const coursSite = await indexerCoursSite();
+
   const achatsActions: OperationAction[] = [];
   const ventesActions: OperationAction[] = [];
 
   for (const l of parTitre.lignes) {
     if (l.montantARealiser === null || Math.abs(l.montantARealiser) < 1) continue;
     const pos = positionsAction.get(l.bucket) ?? null;
+    // LE COURS DU SITE, celui de l'inventaire à défaut.
+    //
+    // Deux corrections en une.
+    //
+    // L'ORDRE, d'abord : l'inventaire primait, et c'est une faute de
+    // raisonnement — on chiffre un ordre à passer AUJOURD'HUI, pas à la date
+    // d'arrêté. Entre l'arrêté de fin de mois et le comité qui lit le plan,
+    // un titre peut avoir bougé de dix pour cent, et les quantités calculées
+    // avec l'ancien cours sont fausses d'autant.
+    //
+    // LA SOURCE, ensuite : `indexerCoursSite` appelle la fonction même
+    // qu'emploient /marches/actions et la fiche de chaque titre. Le plan
+    // affiche donc EXACTEMENT le cours que le site affiche — un écart entre
+    // les deux écrans, sur un chiffre aussi simple, ruine la confiance dans
+    // tout le reste.
     const coursInventaire = num(pos?.price);
-    const cours = coursInventaire > 0 ? coursInventaire : num(getLatestSikaQuote(l.bucket)?.price);
+    const coursMarche = num(coursDe(coursSite, l.bucket)?.prix);
+    const cours = coursMarche > 0 ? coursMarche : coursInventaire;
     const quantiteDetenue = num(pos?.quantity);
 
     if (!(cours > 0)) {

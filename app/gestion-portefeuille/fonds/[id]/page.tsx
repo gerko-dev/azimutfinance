@@ -4,54 +4,34 @@ import FundManager from "@/components/gestion-portefeuille/FundManager";
 import { loadFundById } from "../../data";
 import { loadFundPortfolios } from "../../portfolio-data";
 import { loadNavHistory } from "../../nav-data";
-import { construireTableauAllocation } from "../../allocation-data";
-import { construirePlanOperations } from "../../operations-data";
-import { construireAnticipations } from "../../anticipation-data";
-import { construireProposition } from "../../proposition-data";
 
 export const dynamic = "force-dynamic";
 
-export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  const fund = await loadFundById(id);
-  return { title: fund ? `${fund.nom} — Fund management` : "Fonds introuvable — Fund management" };
-}
-
-export default async function FundManagePage({
+/**
+ * Fiche d'un fonds : son identité, et la performance de sa VL.
+ *
+ * QUATRE VOLETS ONT QUITTÉ CETTE PAGE pour des modules du menu de gauche —
+ * importation, allocation, analyse de marché, référentiel. Aucun n'était
+ * vraiment une affaire de fonds, et la page payait leurs calculs à chaque
+ * ouverture : allocation, plan d'opérations, proposition et anticipations
+ * étaient construits AVANT le premier rendu, même pour consulter une
+ * dénomination. Six lectures pour afficher une fiche.
+ *
+ * Il en reste deux, et elles servent les onglets restants.
+ */
+export default async function FundDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
+  await requireAdmin(1);
   const { id } = await params;
-
-  // La garde du layout ne suffit PAS ici : layout et page sont rendus en
-  // parallele. Si la session a expire, le `redirect()` du layout et le
-  // `notFound()` ci-dessous partent en meme temps, et c'est le 404 qui gagne
-  // la course — le gerant lit « Page introuvable » alors qu'il devait
-  // simplement se reconnecter. En repassant la garde AVANT toute lecture, la
-  // redirection est deterministe, et le retour se fait sur ce fonds precis.
-  await requireAdmin(1, `/gestion-portefeuille/fonds/${id}`);
-
   const fund = await loadFundById(id);
   if (!fund) notFound();
 
-  // L'allocation est calculee au SERVEUR et passee en props, comme les
-  // inventaires et la VL : le lint du projet interdit un setState dans un
-  // effet, donc aucun panneau ne charge ses donnees au montage.
-  const [
-    initialPortfolios,
-    initialNav,
-    initialAllocation,
-    initialOperations,
-    initialAnticipations,
-    initialProposition,
-  ] = await Promise.all([
+  const [initialPortfolios, initialNav] = await Promise.all([
     loadFundPortfolios(id),
     loadNavHistory(id),
-    construireTableauAllocation(id, "classe"),
-    construirePlanOperations(id),
-    construireAnticipations(id, fund.objectifPerf),
-    construireProposition(id, {}, { ratios: fund.ratios }),
   ]);
 
   return (
@@ -59,10 +39,6 @@ export default async function FundManagePage({
       fund={fund}
       initialPortfolios={initialPortfolios}
       initialNav={initialNav}
-      initialAllocation={initialAllocation}
-      initialOperations={initialOperations}
-      initialAnticipations={initialAnticipations}
-      initialProposition={initialProposition}
     />
   );
 }
