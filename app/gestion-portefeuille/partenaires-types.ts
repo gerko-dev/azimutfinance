@@ -9,12 +9,13 @@
 // ses comptes de trésorerie au référentiel ; les saisir une seconde fois les
 // ferait diverger.
 
-export type NaturePartenaire = "sgi" | "btcc" | "remere" | "autre";
+export type NaturePartenaire = "sgi" | "btcc" | "remere" | "client" | "autre";
 
 export const LIBELLES_NATURE: Record<NaturePartenaire, string> = {
   sgi: "SGI — société de gestion et d'intermédiation",
   btcc: "BTCC — banque teneur de compte conservateur",
   remere: "Contrepartie réméré",
+  client: "Client sensible",
   autre: "Autre partenaire",
 };
 
@@ -47,6 +48,11 @@ export type Partenaire = {
   kind: NaturePartenaire;
   nom: string;
   agrement: string;
+  /** Secteur d'activité, classification Damodaran. Ne concerne que les CLIENTS
+   *  SENSIBLES : c'est par lui qu'on mesure la concentration du passif sur une
+   *  branche — un fonds dont la moitié des encours vient de l'assurance n'a pas
+   *  le même risque de rachat qu'un fonds diversifié. */
+  secteur: string;
   pays: string;
   email: string;
   telephone: string;
@@ -71,6 +77,7 @@ export function partenaireVide(): SaisiePartenaire {
     kind: "sgi",
     nom: "",
     agrement: "",
+    secteur: "",
     pays: "",
     email: "",
     telephone: "",
@@ -95,6 +102,7 @@ export type LignePartenaire = {
   kind: string;
   nom: string;
   agrement: string;
+  secteur: string | null;
   pays: string;
   email: string;
   telephone: string;
@@ -131,9 +139,10 @@ export function versPartenaire(l: LignePartenaire): Partenaire {
 
   return {
     id: l.id,
-    kind: (["sgi", "btcc", "remere", "autre"].includes(l.kind) ? l.kind : "autre") as NaturePartenaire,
+    kind: (["sgi", "btcc", "remere", "client", "autre"].includes(l.kind) ? l.kind : "autre") as NaturePartenaire,
     nom: l.nom ?? "",
     agrement: l.agrement ?? "",
+    secteur: l.secteur ?? "",
     pays: l.pays ?? "",
     email: l.email ?? "",
     telephone: l.telephone ?? "",

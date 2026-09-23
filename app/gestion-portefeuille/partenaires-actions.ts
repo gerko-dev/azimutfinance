@@ -23,8 +23,7 @@ import {
 } from "./partenaires-types";
 
 const COLS =
-  "id, kind, nom, agrement, pays, email, telephone, adresse, " +
-  "taux_courtage, taux_tps, taux_brvm, referents, actif, note";
+  "id, kind, nom, agrement, secteur, pays, email, telephone, adresse, taux_courtage, taux_tps, taux_brvm, referents, actif, note";
 
 export async function listerPartenairesAction(
   kind?: NaturePartenaire,
@@ -73,7 +72,13 @@ function preparer(saisie: SaisiePartenaire): { erreur: string } | { valeurs: Rec
     valeurs: {
       kind: saisie.kind,
       nom,
-      agrement: saisie.agrement.trim(),
+      // L'AGRÉMENT NE CONCERNE PAS UN CLIENT. C'est le numéro d'un
+      // intermédiaire habilité par le CREPMF ; un souscripteur n'en a pas, et
+      // l'écran ne le lui demande plus. On l'efface donc plutôt que de laisser
+      // trainer la valeur d'un partenaire qui aurait changé de nature.
+      agrement: saisie.kind === "client" ? "" : saisie.agrement.trim(),
+      // Symétrique : le secteur ne vaut que pour un client.
+      secteur: saisie.kind === "client" ? saisie.secteur.trim() : "",
       pays: saisie.pays.trim(),
       email: saisie.email.trim(),
       telephone: saisie.telephone.trim(),

@@ -19,6 +19,7 @@ import {
   supprimerPartenaireAction,
 } from "@/app/gestion-portefeuille/partenaires-actions";
 import { UEMOA_CODES, WORLD_COUNTRIES } from "@/lib/onboarding/countries";
+import { DAMODARAN_SECTORS } from "@/app/gestion-portefeuille/portfolio-security-schema";
 import ChampTaux from "./ChampTaux";
 import {
   LIBELLES_NATURE,
@@ -49,6 +50,7 @@ const PAYS_PROPOSES: string[] = (() => {
 })();
 
 const ID_PAYS = "partenaires-pays";
+const ID_SECTEURS = "partenaires-secteurs";
 const etiquette = "text-[10px] uppercase tracking-wider text-slate-500";
 
 /**
@@ -90,6 +92,7 @@ function versSaisie(p: Partenaire): SaisiePartenaire {
     kind: reste.kind,
     nom: reste.nom,
     agrement: reste.agrement,
+    secteur: reste.secteur,
     pays: reste.pays,
     email: reste.email,
     telephone: reste.telephone,
@@ -251,7 +254,7 @@ export default function PartenairesPanel({
                 {/* Pas de BTCC ici : ce sont les banques du fonds, déjà
                     décrites par ses comptes de trésorerie. Les saisir une
                     seconde fois les ferait diverger. */}
-                {(["sgi", "remere", "autre"] as NaturePartenaire[]).map((k) => (
+                {(["sgi", "remere", "client", "autre"] as NaturePartenaire[]).map((k) => (
                   <option key={k} value={k}>
                     {LIBELLES_NATURE[k]}
                   </option>
@@ -268,13 +271,39 @@ export default function PartenairesPanel({
               />
             </Champ>
 
-            <Champ label="N° d'agrément" span={2}>
-              <input
-                value={saisie.agrement}
-                onChange={(e) => set("agrement", e.target.value)}
-                className={champ}
-              />
-            </Champ>
+            {/* L'AGRÉMENT EST CELUI D'UN INTERMÉDIAIRE, délivré par le CREPMF.
+                Un client n'en a pas ; le lui demander laissait un champ vide
+                et sans réponse possible. Il cède la place au SECTEUR, qui, lui,
+                dit quelque chose du passif : un fonds dont la moitié des
+                encours vient de l'assurance n'a pas le même risque de rachat
+                qu'un fonds diversifié. */}
+            {saisie.kind === "client" ? (
+              <Champ label="Secteur d'activité" span={2}>
+                <input
+                  value={saisie.secteur}
+                  onChange={(e) => set("secteur", e.target.value)}
+                  list={ID_SECTEURS}
+                  placeholder="Taper ou choisir…"
+                  className={champ}
+                />
+                <datalist id={ID_SECTEURS}>
+                  {DAMODARAN_SECTORS.map((o) => (
+                    <option key={o.value} value={o.label} />
+                  ))}
+                </datalist>
+                <span className="text-[9px] text-slate-400">
+                  Classification Damodaran
+                </span>
+              </Champ>
+            ) : (
+              <Champ label="N° d'agrément" span={2}>
+                <input
+                  value={saisie.agrement}
+                  onChange={(e) => set("agrement", e.target.value)}
+                  className={champ}
+                />
+              </Champ>
+            )}
 
             <Champ label="Pays" span={2}>
               {/* Saisissable ET listé : les huit UEMOA en tête, le reste du
@@ -345,6 +374,14 @@ export default function PartenairesPanel({
               {saisie.kind === "sgi" ? "Conditions négociées" : "Complément"}
             </h4>
             <div className="grid grid-cols-1 sm:grid-cols-6 gap-3 mt-2">
+              {saisie.kind === "client" && (
+                <p className="sm:col-span-6 text-[10px] text-slate-500">
+                  Un <strong>client sensible</strong> se retrouve ensuite dans la liste
+                  déroulante des souscriptions et rachats. L&apos;y inscrire une fois
+                  évite que son nom ne diverge d&apos;un bordereau à l&apos;autre — et
+                  c&apos;est cette divergence qui rend tout regroupement faux.
+                </p>
+              )}
               {saisie.kind === "remere" && (
                 <p className="sm:col-span-6 text-[10px] text-slate-500">
                   Une contrepartie de réméré se choisit sur l&apos;opération MTP,
@@ -498,7 +535,7 @@ export default function PartenairesPanel({
               <tr>
                 <th className="text-left px-3 py-2 font-medium">Nature</th>
                 <th className="text-left px-3 py-2 font-medium">Nom</th>
-                <th className="text-left px-3 py-2 font-medium">Agrément</th>
+                <th className="text-left px-3 py-2 font-medium">Agrément / secteur</th>
                 <th className="text-right px-3 py-2 font-medium">Courtage</th>
                 <th className="text-right px-3 py-2 font-medium">TPS</th>
                 <th className="text-left px-3 py-2 font-medium">Référents</th>
@@ -519,10 +556,12 @@ export default function PartenairesPanel({
                 return (
                   <tr key={p.id} className="hover:bg-slate-50">
                     <td className="px-3 py-1.5 text-slate-500">
-                      {p.kind === "remere" ? "Contrepartie réméré" : p.kind.toUpperCase()}
+                      {LIBELLES_NATURE[p.kind].split(" — ")[0]}
                     </td>
                     <td className="px-3 py-1.5 font-medium text-slate-900">{p.nom}</td>
-                    <td className="px-3 py-1.5 text-slate-600">{p.agrement || "—"}</td>
+                    <td className="px-3 py-1.5 text-slate-600">
+                      {p.kind === "client" ? p.secteur || "—" : p.agrement || "—"}
+                    </td>
                     <td className="px-3 py-1.5 text-right tabular-nums">
                       {p.kind === "sgi"
                         ? `${(p.tauxCourtage * 100).toFixed(2).replace(".", ",")} %`
