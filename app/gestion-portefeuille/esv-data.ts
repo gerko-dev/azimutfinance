@@ -13,7 +13,7 @@ import "server-only";
 // Seul le POINTAGE se stocke : qu'un flux ait été reçu, quand et pour combien.
 // Aucun calcul ne peut le deviner.
 //
-// TROIS GISEMENTS, TROIS DEGRÉS DE CERTITUDE :
+// CINQ GISEMENTS, TROIS DEGRÉS DE CERTITUDE :
 //
 //   obligations cotées — échéancier complet du référentiel BRVM, coupons,
 //                        amortissements et remboursement. C'est un contrat.
@@ -24,6 +24,15 @@ import "server-only";
 //                        publiés par la Bourse. Sans avis, pas de ligne — une
 //                        action détenue dont le dividende n'est pas annoncé
 //                        est signalée à part plutôt que devinée.
+//   NON COTÉS          — les titres du référentiel du gérant : obligations de
+//                        gré à gré, FCTC, emprunts non cotés. Leur échéancier
+//                        se reconstruit avec LE GÉNÉRATEUR DU SITE, celui des
+//                        obligations cotées, à partir des caractéristiques
+//                        saisies sur la fiche. Un calcul maison aurait fini
+//                        par diverger de celui de la cote.
+//   DÉPÔTS À TERME     — un seul flux : le nominal et ses intérêts, à
+//                        l'échéance. Base 360, comme le reste du monétaire
+//                        UEMOA.
 
 import { cache } from "react";
 
@@ -34,9 +43,16 @@ import {
   loadListedBondEvents,
 } from "@/lib/dataLoader";
 import { getFutureCashFlows, parseDate } from "@/lib/bondMath";
+import {
+  generateBondLifecycleEvents,
+  type AmortizationMode,
+  type AmortizationType,
+  type ListedBond,
+} from "@/lib/listedBondsTypes";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-import { loadFundPortfolios } from "./portfolio-data";
+import { loadCustomSecurities, loadFundPortfolios } from "./portfolio-data";
+import type { CustomSecurity } from "./portfolio-types";
 import type { PortfolioSnapshot, SavedPosition } from "./portfolio-types";
 import {
   cleEvenement,
@@ -77,14 +93,21 @@ type Detention = {
  * dépositaire l'a classée. Les deux divergent : un titre public figure souvent
  * en « obligation », et c'est pourtant le calendrier UMOA qui le paie.
  */
-function detentions(snapshot: PortfolioSnapshot): {
+function detentions(
+  snapshot: PortfolioSnapshot,
+  fiches: Map<string, CustomSecurity>,
+): {
   actions: Map<string, Detention>;
   obligations: Map<string, Detention>;
   souverains: Map<string, Detention>;
+  /** Titres du référentiel du gérant — non cotés, indexés par identifiant de
+   *  fiche. C'est la fiche, et non l'inventaire, qui porte l'échéancier. */
+  nonCotes: Map<string, Detention>;
 } {
   const actions = new Map<string, Detention>();
   const obligations = new Map<string, Detention>();
   const souverains = new Map<string, Detention>();
+  const nonCotes = new Map<string, Detention>();
 
   const ajouter = (m: Map<string, Detention>, k: string, d: Detention) => {
     const deja = m.get(k);
@@ -126,10 +149,33 @@ function detentions(snapshot: PortfolioSnapshot): {
         libelle,
         instrument: "mtp",
       });
+    } else if (p.customSecurityId) {
+      // LES NON COTÉS — mais SEULEMENT CEUX QUI PRODUISENT DES FLUX.
+      //
+      // Presque toute ligne d'inventaire porte une fiche du référentiel : les
+      // actions en ont une, les OPCVM aussi. Prendre toute ligne rattachée
+      // aurait versé ici les parts de FCP et les actions dont le mnémonique
+      // n'a pas été reconnu, pour les ressortir aussitôt comme « fiches
+      // incomplètes » — un bandeau de quarante lignes qui aurait noyé les
+      // cinq vraies.
+      //
+      // La NATURE DE LA FICHE tranche : une obligation de gré à gré et un
+      // dépôt à terme ont un échéancier, une part d'OPCVM n'en a pas. Ce
+      // qu'un OPCVM distribue, c'est sa VL qui le porte.
+      const fiche = fiches.get(p.customSecurityId);
+      if (fiche && (fiche.kind === "obligation" || fiche.kind === "dat")) {
+        ajouter(nonCotes, p.customSecurityId, {
+          quantite: q,
+          code: code || libelle,
+          isin,
+          libelle,
+          instrument: "obligations",
+        });
+      }
     }
   }
 
-  return { actions, obligations, souverains };
+  return { actions, obligations, souverains, nonCotes };
 }
 
 /** Événements des OBLIGATIONS COTÉES détenues. */
@@ -227,6 +273,201 @@ function evenementsSouverains(detenues: Map<string, Detention>): {
     }
   }
   return { evenements, sansEcheancier };
+}
+
+const nb = (v: string | undefined): number => {
+  const n = Number((v ?? "").replace(/\s/g, "").replace(",", "."));
+  return Number.isFinite(n) ? n : 0;
+};
+
+/**
+ * Une fiche du référentiel, vue comme une OBLIGATION du site.
+ *
+ * ON NE RÉÉCRIT PAS L'ÉCHÉANCIER. Le site sait déjà dérouler coupons,
+ * amortissements et remboursement final pour les quatre profils — in fine,
+ * constant, dégressif, échéancier saisi — et cette logique est délicate : le
+ * différé, le mode « sur titre » ou « sur nominal », l'index k/N des tranches.
+ * En écrire une seconde version pour les non cotés, c'était garantir que les
+ * deux divergeraient, et que personne ne saurait laquelle croire.
+ *
+ * On construit donc un `ListedBond` à partir de la fiche et l'on passe le
+ * générateur officiel dessus. Les champs que le référentiel du gérant n'a pas
+ * — notation, caractère vert, appel — ne servent pas au calcul des flux.
+ */
+function ficheEnObligation(c: CustomSecurity): ListedBond | null {
+  const a = c.attributes ?? {};
+  const taux = nb(a.couponRate) / 100;
+  const nominal = nb(a.nominalValue);
+  const echeance = (a.maturityDate ?? "").trim();
+  const emission = (a.issueDate ?? "").trim();
+
+  // Sans échéance ni nominal, aucun flux ne se déroule : mieux vaut signaler
+  // la fiche incomplète que produire un échéancier imaginaire.
+  if (!echeance || nominal <= 0) return null;
+
+  const freq = nb(a.couponFrequency);
+  return {
+    isin: c.isin || c.code || c.id,
+    code: c.code || c.isin || c.id,
+    name: c.name,
+    issuer: (a.issuer ?? a.emetteur ?? c.name) as string,
+    issuerType: (a.issuerType ?? "") as string,
+    country: (a.country ?? "") as string,
+    sector: (a.sector ?? "") as string,
+    currency: c.currency || "XOF",
+    nominalValue: nominal,
+    totalIssued: nb(a.totalIssued),
+    outstanding: nb(a.outstanding),
+    couponRate: taux,
+    couponFrequency: (freq === 2 || freq === 4 ? freq : 1) as 1 | 2 | 4,
+    issueDate: emission,
+    maturityDate: echeance,
+    firstAmortizationDate: (a.firstAmortizationDate ?? "").trim(),
+    amortizationType: ((a.amortizationType || "IF") as AmortizationType),
+    amortizationMode: ((a.amortizationMode === "T" ? "T" : "N") as AmortizationMode),
+    rating: "",
+    ratingAgency: "",
+    callable: false,
+    callDate: "",
+    greenBond: false,
+    description: "",
+    yearsToMaturity: 0,
+  };
+}
+
+/**
+ * Événements des TITRES NON COTÉS détenus.
+ *
+ * Deux natures dans le même référentiel, et deux traitements :
+ *
+ *   les OBLIGATIONS de gré à gré, FCTC et emprunts non cotés déroulent un
+ *   échéancier complet, par le générateur du site ;
+ *
+ *   les DÉPÔTS À TERME n'ont qu'un flux — le nominal et ses intérêts, à
+ *   l'échéance. Base 360, comme les prêts de titres et les spots : c'est la
+ *   convention du monétaire UEMOA, et en changer ici aurait fait diverger
+ *   trois calculs du même module.
+ *
+ * Une fiche trop incomplète pour dérouler quoi que ce soit est REMONTÉE, pas
+ * ignorée : c'est un titre détenu dont les flux n'apparaîtront nulle part, et
+ * la seule façon de le savoir est qu'on le dise.
+ */
+function evenementsNonCotes(
+  detenues: Map<string, Detention>,
+  fiches: Map<string, CustomSecurity>,
+): { evenements: EvenementEsv[]; incompletes: string[] } {
+  const evenements: EvenementEsv[] = [];
+  const incompletes: string[] = [];
+  if (detenues.size === 0) return { evenements, incompletes };
+
+  for (const [id, d] of detenues) {
+    const c = fiches.get(id);
+    if (!c) {
+      incompletes.push(`${d.libelle} — fiche introuvable au référentiel`);
+      continue;
+    }
+    const a = c.attributes ?? {};
+
+    // ── Dépôt à terme : un seul flux, à l'échéance ────────────────────
+    if (c.kind === "dat") {
+      const echeance = (a.dateEcheance ?? "").trim();
+      const debut = (a.dateValeur ?? "").trim();
+      const nominal = nb(a.montantNominal);
+      const taux = nb(a.tauxInteret) / 100;
+      if (!echeance || nominal <= 0) {
+        incompletes.push(
+          `${d.libelle} — dépôt à terme sans échéance ou sans nominal`,
+        );
+        continue;
+      }
+      const jours =
+        debut
+          ? Math.round(
+              (new Date(`${echeance}T00:00:00Z`).getTime() -
+                new Date(`${debut}T00:00:00Z`).getTime()) /
+                86_400_000,
+            )
+          : 0;
+      const interets = jours > 0 && taux > 0 ? (nominal * taux * jours) / 360 : 0;
+      evenements.push({
+        cle: cleEvenement(c.id, echeance, "remboursement"),
+        nature: "remboursement",
+        date: echeance,
+        code: c.code || d.code,
+        libelle: c.name || d.libelle,
+        isin: c.isin || d.isin,
+        instrument: "obligations",
+        // LE DAT NE SE COMPTE PAS EN TITRES : son montant est le nominal de
+        // la fiche, pas un prix unitaire multiplié par une quantité. On pose
+        // donc une quantité de 1 pour que le montant ne soit pas multiplié.
+        quantite: 1,
+        montantParTitre: nominal + interets,
+        montantAttendu: nominal + interets,
+        source: "echeancier",
+        reserve:
+          `Dépôt à terme ${a.contrepartie ? `chez ${a.contrepartie} ` : ""}` +
+          `au taux de ${(taux * 100).toFixed(2)} %` +
+          (jours > 0
+            ? ` sur ${jours} jours, base 360 — intérêts ${Math.round(
+                interets,
+              ).toLocaleString("fr-FR")} F.`
+            : " — date de valeur manquante, intérêts non calculés."),
+        reception: null,
+      });
+      continue;
+    }
+
+    // ── Obligation non cotée : l'échéancier du site ───────────────────
+    const bond = ficheEnObligation(c);
+    if (!bond) {
+      incompletes.push(
+        `${d.libelle} — échéance ou valeur nominale manquante sur la fiche`,
+      );
+      continue;
+    }
+
+    let flux;
+    try {
+      flux = generateBondLifecycleEvents(bond);
+    } catch {
+      incompletes.push(`${d.libelle} — échéancier non calculable`);
+      continue;
+    }
+
+    let retenus = 0;
+    for (const e of flux) {
+      if (e.eventType !== "coupon" && e.eventType !== "amortissement" && e.eventType !== "remboursement")
+        continue;
+      if (!(e.amount > 0)) continue;
+      retenus += 1;
+      const nature = e.eventType as NatureEsv;
+      evenements.push({
+        cle: cleEvenement(c.id, e.date, nature),
+        nature,
+        date: e.date,
+        code: c.code || d.code,
+        libelle: c.name || d.libelle,
+        isin: c.isin || d.isin,
+        instrument: "obligations",
+        quantite: d.quantite,
+        montantParTitre: e.amount,
+        montantAttendu: e.amount * d.quantite,
+        source: "echeancier",
+        // LA FICHE EST SAISIE À LA MAIN : son échéancier vaut ce que vaut ce
+        // qui y a été porté. Le dire sur chaque ligne évite de prendre un
+        // coupon reconstruit pour un coupon publié.
+        reserve:
+          "Titre non coté — échéancier reconstruit d'après les caractéristiques " +
+          "saisies au référentiel.",
+        reception: null,
+      });
+    }
+    if (retenus === 0) {
+      incompletes.push(`${d.libelle} — aucun flux restant à l'échéancier`);
+    }
+  }
+
+  return { evenements, incompletes };
 }
 
 /**
@@ -390,9 +631,10 @@ export type CalendrierEsv = {
  */
 export const construireCalendrierEsv = cache(
   async (fundId: string): Promise<CalendrierEsv> => {
-    const [snapshots, receptions] = await Promise.all([
+    const [snapshots, receptions, fichesRef] = await Promise.all([
       loadFundPortfolios(fundId),
       loadReceptions(fundId),
+      loadCustomSecurities(),
     ]);
     const actuel = snapshotDeReference(snapshots);
     if (!actuel) {
@@ -405,14 +647,17 @@ export const construireCalendrierEsv = cache(
     }
 
     const aujourdhui = new Date().toISOString().slice(0, 10);
-    const { actions, obligations, souverains } = detentions(actuel);
+    const parFiche = new Map(fichesRef.map((c) => [c.id, c]));
+    const { actions, obligations, souverains, nonCotes } = detentions(actuel, parFiche);
     const souv = evenementsSouverains(souverains);
     const div = evenementsDividendes(actions, aujourdhui);
+    const hors = evenementsNonCotes(nonCotes, parFiche);
 
     const evenements = [
       ...evenementsObligations(obligations),
       ...souv.evenements,
       ...div.evenements,
+      ...hors.evenements,
     ]
       // LE POINTAGE SE RACCROCHE ICI, par la clef. C'est la seule chose que la
       // base porte : tout le reste vient d'être recalculé.
@@ -422,7 +667,7 @@ export const construireCalendrierEsv = cache(
     return {
       evenements,
       dateInventaire: actuel.asOfDate,
-      sansEcheancier: souv.sansEcheancier,
+      sansEcheancier: [...souv.sansEcheancier, ...hors.incompletes],
       actionsSansAvis: div.sansAvis,
     };
   },
