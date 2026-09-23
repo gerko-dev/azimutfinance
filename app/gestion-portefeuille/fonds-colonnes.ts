@@ -24,17 +24,41 @@ const FIN = "benchmark, ratios";
 const COLONNE_COMPTE_FRAIS = "compte_frais_gestion";
 
 /**
- * Optimiste au démarrage : dans une base à jour — c'est-à-dire partout, une
- * fois le SQL passé — on ne paie aucune requête de découverte.
+ * LE REPLI DOIT POUVOIR SE RELEVER.
+ *
+ * Premier jet : un simple `let presente = false` une fois l'absence
+ * constatée. C'était un verrou à sens unique — le processus ayant vu la
+ * colonne manquer continuait de l'omettre POUR TOUJOURS. Le SQL passé, le
+ * serveur en cours d'exécution n'en savait rien : le gérant choisissait son
+ * compte de prélèvement, la fiche s'enregistrait sans lui, et il n'y avait
+ * qu'un redémarrage pour en sortir. On corrige un défaut en en créant un
+ * autre, plus difficile à voir que le premier.
+ *
+ * On retient donc QUAND l'absence a été vue, et l'on réessaie passé un délai.
+ * Le coût est d'une requête perdue par minute tant que la migration manque
+ * vraiment ; le gain est qu'elle prend effet d'elle-même, sans redémarrage.
  */
-let presente = true;
+let absenteDepuis: number | null = null;
+
+/** Délai avant de retenter la colonne. Court : une migration se passe et l'on
+ *  veut la voir agir dans la minute, pas au prochain déploiement. */
+const REESSAI_MS = 60_000;
+
+function presente(): boolean {
+  if (absenteDepuis === null) return true;
+  if (Date.now() - absenteDepuis < REESSAI_MS) return false;
+  // Le délai est écoulé : on redevient optimiste. Si la colonne manque
+  // toujours, la prochaine erreur remettra le compteur à zéro.
+  absenteDepuis = null;
+  return true;
+}
 
 /** Colonnes à demander, selon ce qu'on sait de la base. */
 export function colonnesFonds(): string {
-  return presente ? `${BASE}, ${COLONNE_COMPTE_FRAIS}, ${FIN}` : `${BASE}, ${FIN}`;
+  return presente() ? `${BASE}, ${COLONNE_COMPTE_FRAIS}, ${FIN}` : `${BASE}, ${FIN}`;
 }
 
-export const compteFraisDisponible = (): boolean => presente;
+export const compteFraisDisponible = (): boolean => presente();
 
 /**
  * L'erreur dit-elle que la colonne manque ? Si oui, on le retient et
@@ -47,20 +71,21 @@ export const compteFraisDisponible = (): boolean => presente;
 export function signalerColonneManquante(message: string | null | undefined): boolean {
   if (!message || !message.includes(COLONNE_COMPTE_FRAIS)) return false;
   if (!/n'existe pas|does not exist|could not find|schema cache/i.test(message)) return false;
-  if (presente) {
+  if (absenteDepuis === null) {
     console.warn(
       `[gestion-portefeuille] ${COLONNE_COMPTE_FRAIS} absente : ` +
         "exécute supabase/fund-frais-compte.sql. Le compte de prélèvement des " +
-        "frais de gestion reste vide en attendant.",
+        "frais de gestion reste vide en attendant ; nouvelle tentative dans " +
+        `${REESSAI_MS / 1000} s.`,
     );
   }
-  presente = false;
+  absenteDepuis = Date.now();
   return true;
 }
 
 /** Retire de la ligne ce que la base ne sait pas encore stocker. */
 export function sansColonnesAbsentes<T extends Record<string, unknown>>(row: T): T {
-  if (presente) return row;
+  if (presente()) return row;
   const reste = { ...row };
   delete reste[COLONNE_COMPTE_FRAIS];
   return reste;
