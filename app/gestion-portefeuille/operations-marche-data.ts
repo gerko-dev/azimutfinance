@@ -19,13 +19,17 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 import {
   alimenteAchatsVentes,
+  montantDenouementRemere,
   montantExecution,
   montantOperation,
   montantRestant,
+  ordreRapproche,
   partRestantePese,
   interetPret,
   posteEngageDe,
   posteRealise,
+  posteRemereDenouement,
+  remereOuvertA,
   sensRemereDe,
   statutPretDe,
   type DescriptionOperation,
@@ -66,6 +70,7 @@ type Ligne = {
   interets_courus: number | string;
   compte_reglement: string;
   cloture_le: string | null;
+  rapproche_le: string | null;
   modalite: string | null;
   note: string;
 };
@@ -80,7 +85,7 @@ const nb = (v: number | string | null | undefined): number => {
 const COLS_OPERATION =
   "id, fund_id, date_operation, description, instrument, validite, code, libelle, " +
   "quantite, prix, sgi, taux_courtage, taux_tps, taux_brvm, taux_dcbr, " +
-  "interets_courus, compte_reglement, cloture_le, modalite, note";
+  "interets_courus, compte_reglement, cloture_le, rapproche_le, modalite, note";
 
 const COLS_EXECUTION =
   "id, operation_id, date_execution, date_denouement, quantite, prix, rapproche_le, note";
@@ -199,6 +204,7 @@ function versOperation(
     sgi: l.sgi ?? "",
     compteReglement: l.compte_reglement ?? "",
     clotureLe: l.cloture_le ?? null,
+    rapprocheLe: l.rapproche_le ?? null,
     modalite:
       l.modalite === "adjudication" || l.modalite === "syndication" ? l.modalite : null,
     note: l.note ?? "",
@@ -418,6 +424,13 @@ export function agregerParPoste(
     // d'ailleurs pas de poste pour lui.
     if (!alimenteAchatsVentes(o)) continue;
 
+    // RAPPROCHÉ AU NIVEAU DE L'ORDRE : le marché primaire se règle AVANT
+    // l'attribution, si bien qu'il n'y a aucune exécution sur laquelle poser
+    // le lettrage. Une fois l'ordre constaté sur le relevé, le solde bancaire
+    // saisi le contient déjà — ni son engagement ni ce qui en sera servi n'ont
+    // plus à peser. C'est un lettrage, pas une annulation.
+    if (ordreRapproche(o, dateArrete)) continue;
+
     // ── La part servie, exécution par exécution ──────────────────────────
     //
     // Chaque exécution est valorisée à SON prix : un ordre à cours limité est
@@ -442,6 +455,38 @@ export function agregerParPoste(
     if (!partRestantePese(o, dateArrete)) continue;
 
     ajouter(posteEngageDe(o), o.compteReglement, montantRestant(o));
+  }
+
+  // ── Le DÉNOUEMENT des rémérés encore ouverts ──────────────────────────
+  //
+  // Une boucle à part, et non un troisième ajout dans la précédente : les
+  // rémérés prêtés — pardon, les ordres porteurs d'un PRÊT — sortent plus haut
+  // par `alimenteAchatsVentes`, et un réméré doit être compté même lorsque
+  // son ordre a été entièrement servi, c'est-à-dire là où la boucle précédente
+  // a déjà rendu la main.
+  //
+  // CE FLUX EST L'INVERSE DE L'ORDRE D'ENTRÉE. Un achat à réméré se dénoue par
+  // une vente : à la date de dénouement, le fonds ENCAISSE. Une vente à réméré
+  // se dénoue par un rachat : il DÉCAISSE. Cf. `posteRemereDenouement`.
+  //
+  // Un réméré déjà soldé avant l'arrêté n'y figure plus : son dénouement est
+  // alors une opération MTP ordinaire, déjà comptée comme telle plus haut, et
+  // l'y laisser compterait le même flux deux fois.
+  //
+  // LA DATE QUI COMPTE EST CELLE DU DÉNOUEMENT, comme pour une exécution : le
+  // terme du réméré doit tomber dans l'horizon de l'arrêté. Un réméré qui se
+  // dénoue le mois prochain n'a rien à faire dans un point arrêté aujourd'hui
+  // — le trésorier demande de quoi il disposera À TELLE DATE, et ce cash-là
+  // n'aura pas encore bougé.
+  for (const o of operations) {
+    if (!remereOuvertA(o, dateArrete)) continue;
+    const terme = o.remere?.dateFin ?? "";
+    if (dateArrete && (!terme || terme > dateArrete)) continue;
+    ajouter(
+      posteRemereDenouement(o.description),
+      o.compteReglement,
+      montantDenouementRemere(o, dateArrete),
+    );
   }
 
   return parPoste;

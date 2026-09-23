@@ -250,6 +250,75 @@ export function montantRemere(
   return o.quantite * r.prixSortie + o.interetsCourus;
 }
 
+/**
+ * Poste portant le flux ATTENDU AU DÉNOUEMENT d'un réméré.
+ *
+ * Il est l'INVERSE du sens de l'ordre d'entrée, parce qu'un réméré se dénoue
+ * par l'opération contraire :
+ *
+ *   ACHAT à réméré  → le fonds a décaissé, et il REVENDRA au terme : le
+ *                     dénouement lui rapporte du cash. Poste d'ENCAISSEMENT,
+ *                     dans « CASH A RECEVOIR ».
+ *   VENTE à réméré  → le fonds a encaissé, et il RACHÈTERA au terme : le
+ *                     dénouement lui coûte du cash. Poste de DÉCAISSEMENT,
+ *                     dans « AUTRES ENGAGEMENTS ».
+ *
+ * Les clefs du classeur nomment le flux D'ENTRÉE — un achat à réméré y est un
+ * « cash out » — alors que la ligne porte le flux DE SORTIE. Les deux se lisent
+ * à l'envers l'une de l'autre, et c'est la source de toutes les confusions sur
+ * ces deux lignes : on garde la clef du classeur, l'affichage dit l'effet.
+ */
+export function posteRemereDenouement(d: DescriptionOperation): string {
+  return sensDe(d) === "achat" ? "REMERES_CASH_OUT" : "REMERES_CASH_IN";
+}
+
+/**
+ * Ce que le dénouement d'un réméré fera bouger, à la date d'arrêté.
+ *
+ * Valorisé sur la quantité RÉELLEMENT SERVIE et dénouée au plus tard à
+ * l'arrêté — un ordre à réméré partiellement servi n'engage que sa part
+ * servie —, au PRIX DE SORTIE convenu, qui est précisément ce que le réméré
+ * ajoute à un ordre ordinaire.
+ */
+export function montantDenouementRemere(
+  o: {
+    description: DescriptionOperation;
+    prix: number;
+    quantite: number;
+    interetsCourus: number;
+    remere: Remere | null;
+    executions: Execution[];
+  },
+  dateArrete: string | null,
+): number {
+  if (!o.remere) return 0;
+  const servie = o.executions
+    .filter((e) => !dateArrete || e.dateDenouement <= dateArrete)
+    .reduce((s, e) => s + e.quantite, 0);
+  if (servie <= 0) return 0;
+  // Les courus suivent la part servie : les porter en entier sur une exécution
+  // partielle aurait gonflé le flux attendu.
+  const partCourus = o.quantite > 0 ? (o.interetsCourus * servie) / o.quantite : 0;
+  return servie * o.remere.prixSortie + partCourus;
+}
+
+/**
+ * Le réméré est-il encore DENOUE À FAIRE à la date d'arrêté ?
+ *
+ * Un réméré soldé avant l'arrêté n'attend plus rien : son dénouement est une
+ * opération MTP ordinaire, déjà comptée comme telle. L'y laisser compterait le
+ * même flux deux fois.
+ */
+export function remereOuvertA(
+  o: { remere: Remere | null; executions: Execution[] },
+  dateArrete: string | null,
+): boolean {
+  if (!remereNoue(o) || !o.remere) return false;
+  const d = o.remere.dateDenouement;
+  if (!d) return true;
+  return dateArrete !== null && d > dateArrete;
+}
+
 /** Une part servie d'un ordre, à sa date. */
 export type Execution = {
   id: string;
@@ -303,6 +372,15 @@ export type OperationMarche = {
   executions: Execution[];
   /** Volet réméré, si l'ordre en est un. MTP uniquement. */
   remere: Remere | null;
+  /** Date à laquelle le RÈGLEMENT DE L'ORDRE a été constaté sur le relevé.
+   *
+   *  PROPRE AU MARCHÉ PRIMAIRE, où l'on règle AVANT d'être servi : on verse
+   *  sa soumission, et l'attribution ne vient qu'après. Le rapprochement
+   *  arrive donc avant toute exécution, et il ne peut pas se poser sur elle.
+   *
+   *  Partout ailleurs, c'est chaque exécution qui se rapproche — il n'y a rien
+   *  à régler tant que rien n'est servi. */
+  rapprocheLe: string | null;
   /** Modalité d'une SOUSCRIPTION au marché primaire, null pour toute autre
    *  opération. Elle décide de la façon dont le titre se désigne : choisi au
    *  calendrier pour une adjudication, décrit à la main pour une syndication. */
@@ -325,7 +403,14 @@ export type OperationMarche = {
  *  permis de clore un ordre par inadvertance en corrigeant son prix. */
 export type SaisieOperation = Omit<
   OperationMarche,
-  "id" | "montant" | "executions" | "clotureLe" | "remere" | "pret" | "denoueRemereDe"
+  | "id"
+  | "montant"
+  | "executions"
+  | "clotureLe"
+  | "rapprocheLe"
+  | "remere"
+  | "pret"
+  | "denoueRemereDe"
 > & {
   /** Le volet prêt tel qu'il se saisit : sans le statut ni l'intérêt, qui se
    *  déduisent. */
@@ -594,12 +679,17 @@ export function dateLimiteOrdre(o: {
   validite: Validite;
   description: DescriptionOperation;
 }): string | null {
-  // UN ORDRE MTP NE PÉRIME PAS. La validité est une notion de carnet : une
-  // adjudication de titres publics est servie ou ne l'est pas, et un réméré se
-  // négocie de gré à gré. Le formulaire masque d'ailleurs le champ hors MFR —
-  // mais l'état par défaut restait « jour », si bien qu'un achat MTP validé
-  // sortait du point dès le lendemain, sans que rien ne l'explique.
-  if (marcheDe(o.description) === "mtp") return null;
+  // SEUL UN ORDRE DE BOURSE PÉRIME. La validité est une notion de CARNET : un
+  // ordre MFR y reste le temps qu'on lui donne, puis il sort. Rien de tel
+  // ailleurs — une adjudication de titres publics est servie ou ne l'est pas,
+  // un réméré se négocie de gré à gré, et une souscription au primaire attend
+  // le dépouillement.
+  //
+  // Le formulaire masque d'ailleurs le champ hors MFR, mais l'état par défaut
+  // reste « jour » : sans cette sortie, un ordre non coté héritait d'une
+  // échéance qu'il n'a pas et sortait du point dès le lendemain — voire le
+  // jour même — sans que rien ne l'explique.
+  if (marcheDe(o.description) !== "mfr") return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(o.dateOperation)) return o.dateOperation;
   const d = new Date(`${o.dateOperation}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return o.dateOperation;
@@ -661,7 +751,8 @@ export function partRestantePese(
   if (o.dateOperation > dateArrete) return false;
   // Clôturé à cette date-là, ou avant.
   if (o.clotureLe && o.clotureLe <= dateArrete) return false;
-  // Périmé. Un ordre MTP n'a pas de limite : il attend d'être servi ou clos.
+  // Périmé. Hors bourse, il n'y a pas de limite : l'ordre attend d'être
+  // servi ou clos.
   const limite = dateLimiteOrdre(o);
   if (limite !== null && limite < dateArrete) return false;
   return true;
@@ -736,4 +827,30 @@ export function dateDenouement(
     if (estOuvre(d)) restant--;
   }
   return d.toISOString().slice(0, 10);
+}
+
+/**
+ * AU PRIMAIRE, ON RÈGLE AVANT D'ÊTRE SERVI.
+ *
+ * On verse sa soumission, puis l'adjudication dit ce qu'on obtient. Le
+ * rapprochement bancaire précède donc l'exécution, et il se pose sur l'ORDRE
+ * — il n'y a encore aucune exécution sur laquelle l'accrocher.
+ *
+ * Partout ailleurs c'est l'inverse : rien n'est à régler tant que rien n'est
+ * servi, et chaque exécution porte son propre rapprochement.
+ */
+export function rapprochementSurOrdre(d: DescriptionOperation): boolean {
+  return d === "SOUSCRIPTION_MP";
+}
+
+/** L'ordre est-il déjà réglé, à la date d'arrêté ?
+ *
+ *  Réglé veut dire : le solde bancaire saisi le contient déjà. L'ordre sort
+ *  alors des postes de flux — l'y laisser le compterait deux fois. */
+export function ordreRapproche(
+  o: { rapprocheLe: string | null },
+  dateArrete: string | null,
+): boolean {
+  if (!o.rapprocheLe) return false;
+  return !dateArrete || o.rapprocheLe <= dateArrete;
 }

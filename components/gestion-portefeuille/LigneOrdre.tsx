@@ -17,9 +17,11 @@ import {
   dateDenouement,
   dateLimiteOrdre,
   montantExecution,
+  rapprochementSurOrdre,
   type EtatOrdre,
 } from "@/app/gestion-portefeuille/operations-marche-types";
 import type { OperationAvecFonds } from "@/app/gestion-portefeuille/operations-marche-data";
+import ChampMontant from "./ChampMontant";
 import {
   conventionDe,
   type ParametresMarche,
@@ -48,6 +50,9 @@ export default function LigneOrdre({
   onSupprimerExecution,
   onCloturer,
   onRapprocher,
+  onRapprocherOrdre,
+  selectionnee,
+  onSelectionner,
 }: {
   o: OperationAvecFonds;
   servie: number;
@@ -68,6 +73,13 @@ export default function LigneOrdre({
   onSupprimerExecution: (id: string) => void;
   onCloturer: (date: string | null) => void;
   onRapprocher: (executionId: string, date: string | null) => void;
+  /** Rapprochement de l'ORDRE — marché primaire, où l'on règle avant d'être
+   *  servi. Absent partout ailleurs. */
+  onRapprocherOrdre: (date: string | null) => void;
+  /** Sélection pour un geste de masse. La ligne ne fait que la porter : ce
+   *  qu'on en fait se décide au-dessus du tableau. */
+  selectionnee: boolean;
+  onSelectionner: () => void;
 }) {
   const [dateExecution, setDateExecution] = useState(() =>
     new Date().toISOString().slice(0, 10),
@@ -98,7 +110,18 @@ export default function LigneOrdre({
 
   return (
     <>
-      <tr className="hover:bg-slate-50">
+      <tr className={selectionnee ? "bg-blue-50" : "hover:bg-slate-50"}>
+        {/* LA CASE DE SÉLECTION, pour les gestes de masse. Elle ne porte
+            aucune action à elle seule : ce qu'on en fait se décide dans la
+            barre au-dessus du tableau, une fois la sélection faite. */}
+        <td className="px-3 py-1.5">
+          <input
+            type="checkbox"
+            checked={selectionnee}
+            onChange={onSelectionner}
+            aria-label={`Sélectionner l'opération du ${o.dateOperation}`}
+          />
+        </td>
         <td className="px-3 py-1.5 tabular-nums whitespace-nowrap">{o.dateOperation}</td>
         <td className="px-3 py-1.5">{o.fondsNom}</td>
         <td className="px-3 py-1.5 whitespace-nowrap">
@@ -129,7 +152,7 @@ export default function LigneOrdre({
               le {o.clotureLe}
             </span>
           )}
-          {/* Un ordre MTP n'a pas de date limite : ne rien afficher plutôt
+          {/* Hors bourse, pas de date limite : ne rien afficher plutôt
               qu'une échéance inventée. */}
           {reste > 0 && etat !== "perime" && etat !== "cloture" && dateLimiteOrdre(o) && (
             <span className="block text-[9px] text-slate-400">
@@ -154,6 +177,30 @@ export default function LigneOrdre({
               {ouvert ? "Fermer" : "Exécuter"}
             </button>
           )}
+          {/* AU PRIMAIRE, ON RÈGLE AVANT D'ÊTRE SERVI : le rapprochement se
+              pose sur l'ORDRE, et il y arrive avant toute exécution — il n'y
+              a encore rien sur quoi l'accrocher. Une fois constaté, l'ordre
+              sort des postes de flux : le solde bancaire le contient déjà. */}
+          {rapprochementSurOrdre(o.description) &&
+            (o.rapprocheLe ? (
+              <button
+                onClick={() => onRapprocherOrdre(null)}
+                disabled={enCours}
+                className="text-[10px] text-emerald-700 hover:text-emerald-900 disabled:opacity-50 mr-3"
+                title={`Réglé le ${o.rapprocheLe} — défaire`}
+              >
+                ✓ réglé
+              </button>
+            ) : (
+              <button
+                onClick={() => onRapprocherOrdre(new Date().toISOString().slice(0, 10))}
+                disabled={enCours}
+                className="text-[10px] text-blue-700 hover:text-blue-900 disabled:opacity-50 mr-3"
+                title="Soumission versée et constatée sur le relevé : sort des flux"
+              >
+                Rapprocher
+              </button>
+            ))}
           {/* CLÔTURER, même partiellement servi : le gérant renonce à faire
               exécuter le reste. Ce qui a été servi demeure — il a été réglé,
               ou le sera. La clôture date un renoncement, elle n'efface rien,
@@ -198,7 +245,7 @@ export default function LigneOrdre({
       {/* Les exécutions déjà enregistrées, avec leur date de règlement. */}
       {o.executions.length > 0 && (
         <tr className="bg-slate-50/60">
-          <td colSpan={10} className="px-3 py-1.5">
+          <td colSpan={11} className="px-3 py-1.5">
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-slate-600">
               {o.executions.map((e) => (
                 <span key={e.id} className="tabular-nums">
@@ -248,14 +295,13 @@ export default function LigneOrdre({
 
       {ouvert && (
         <tr className="bg-emerald-50/50">
-          <td colSpan={10} className="px-3 py-2">
+          <td colSpan={11} className="px-3 py-2">
             <div className="flex flex-wrap items-end gap-3">
               <label className="flex flex-col gap-1">
                 <span className={etiquette}>Quantité servie</span>
-                <input
-                  value={quantite}
-                  onChange={(e) => setQuantite(e.target.value)}
-                  inputMode="numeric"
+                <ChampMontant
+                  valeur={quantite}
+                  onChange={setQuantite}
                   disabled={o.instrument === "mtp"}
                   className={`${champ} w-32 text-right tabular-nums disabled:bg-slate-100`}
                 />
@@ -268,10 +314,9 @@ export default function LigneOrdre({
 
               <label className="flex flex-col gap-1">
                 <span className={etiquette}>Prix d&apos;exécution</span>
-                <input
-                  value={prix}
-                  onChange={(e) => setPrix(e.target.value)}
-                  inputMode="numeric"
+                <ChampMontant
+                  valeur={prix}
+                  onChange={setPrix}
                   className={`${champ} w-32 text-right tabular-nums`}
                 />
                 <span className={aide}>

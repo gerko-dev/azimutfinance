@@ -10,10 +10,10 @@
 
 import { revalidatePath } from "next/cache";
 
-import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/lib/admin/types";
 
 import { estNiveau1, MSG_NIVEAU1 } from "./guard";
+import { autoriser, type ClientServeur } from "./operations-marche-garde";
 import { construirePointTresorerie } from "./tresorerie-data";
 import {
   adjudicationsOuvertes,
@@ -28,6 +28,7 @@ import {
   DESCRIPTIONS,
   dateDenouement,
   marcheDe,
+  rapprochementSurOrdre,
   sensDe,
   type DescriptionOperation,
   type Instrument,
@@ -45,34 +46,6 @@ const EST_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 const DESCRIPTIONS_VALIDES = new Set<string>(DESCRIPTIONS.map((d) => d.valeur));
 const INSTRUMENTS_VALIDES = new Set<string>(["actions", "obligations", "mtp"]);
-
-type ClientServeur = Awaited<ReturnType<typeof createSupabaseServerClient>>;
-
-// Union DISCRIMINEE, et type ecrit a la main : laisse a l'inference, le type
-// de retour fusionnait les deux branches et `acces.erreur` ressortait
-// `string | undefined` apres le test `in`.
-type Acces =
-  | { erreur: string }
-  | { supabase: ClientServeur; userId: string };
-
-/** Vérifie la session, le niveau et la propriété du fonds. */
-async function autoriser(fundId: string): Promise<Acces> {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { erreur: "Tu dois être connecté." };
-  if (!(await estNiveau1())) return { erreur: MSG_NIVEAU1 };
-
-  const { data: fund } = await supabase
-    .from("managed_funds")
-    .select("id")
-    .eq("id", fundId)
-    .eq("owner_id", user.id)
-    .maybeSingle();
-  if (!fund) return { erreur: "Fonds introuvable." };
-  return { supabase, userId: user.id };
-}
 
 /**
  * Comptes de règlement d'un fonds — les COLONNES de son point de trésorerie.
@@ -646,6 +619,61 @@ export async function reprendrePretAction(
 }
 
 /**
+ * Rapproche un ORDRE : son reglement a ete constate sur le releve.
+ *
+ * MARCHE PRIMAIRE UNIQUEMENT, parce que c'est le seul ou l'on regle AVANT
+ * d'etre servi : on verse sa soumission, et l'adjudication dit ensuite ce
+ * qu'on obtient. Il n'existe donc aucune execution sur laquelle poser le
+ * lettrage au moment ou le cash part.
+ *
+ * Ailleurs, rien n'est a regler tant que rien n'est servi, et c'est chaque
+ * execution qui porte son rapprochement — cf. `rapprocherExecutionAction`.
+ *
+ * `null` defait le rapprochement, pour corriger une fausse manoeuvre.
+ */
+export async function rapprocherOperationAction(
+  fundId: string,
+  operationId: string,
+  dateRapprochement: string | null,
+): Promise<ActionResult<{ id: string }>> {
+  const acces = await autoriser(fundId);
+  if ("erreur" in acces) return { ok: false, error: acces.erreur };
+  const { supabase, userId } = acces;
+
+  if (dateRapprochement !== null && !EST_DATE.test(dateRapprochement))
+    return { ok: false, error: "Renseigne la date de rapprochement." };
+
+  const { data: ordre } = await supabase
+    .from("fund_market_operations")
+    .select("description")
+    .eq("id", operationId)
+    .eq("fund_id", fundId)
+    .eq("owner_id", userId)
+    .maybeSingle();
+  if (!ordre) return { ok: false, error: "Opération introuvable." };
+
+  const description = (ordre as { description: string }).description;
+  if (!rapprochementSurOrdre(description as DescriptionOperation))
+    return {
+      ok: false,
+      error:
+        "Seule une souscription au primaire se rapproche avant exécution : ailleurs, le rapprochement se pose sur l'exécution.",
+    };
+
+  const { error } = await supabase
+    .from("fund_market_operations")
+    .update({ rapproche_le: dateRapprochement })
+    .eq("id", operationId)
+    .eq("fund_id", fundId)
+    .eq("owner_id", userId);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/gestion-portefeuille/operations-marche");
+  revalidatePath("/gestion-portefeuille/tresorerie");
+  return { ok: true, data: { id: operationId } };
+}
+
+/**
  * Rapproche une execution : le reglement a ete constate sur le releve.
  *
  * Elle sort alors des postes de flux, parce que le solde bancaire saisi la
@@ -716,4 +744,67 @@ export async function supprimerOperationMarcheAction(
 
   revalidatePath(`/gestion-portefeuille/fonds/${fundId}`);
   return { ok: true, data: { id: operationId } };
+}
+
+/**
+ * Supprime PLUSIEURS opérations d'un coup.
+ *
+ * Une séance produit des dizaines de lignes, et une erreur de manipulation les
+ * produit aussi : les reprendre une à une, en confirmant chacune, était le
+ * genre de corvée qui pousse à laisser traîner des lignes fausses.
+ *
+ * L'ÉCRAN EST INTERFONDS, donc le lot peut l'être. On regroupe par
+ * portefeuille et on autorise chacun UNE FOIS — la garde lit la session et la
+ * propriété du fonds, et l'appeler par ligne aurait fait autant d'allers-
+ * retours que de suppressions. Un fonds refusé ne fait pas tomber les autres :
+ * son motif est rendu, le reste passe.
+ *
+ * Les exécutions et les volets suivent l'opération : c'est la base qui s'en
+ * charge, par cascade.
+ */
+export async function supprimerOperationsMarcheAction(
+  cibles: { fondsId: string; id: string }[],
+): Promise<ActionResult<{ supprimees: number; refus: string[] }>> {
+  if (cibles.length === 0) return { ok: false, error: "Aucune opération sélectionnée." };
+
+  const parFonds = new Map<string, string[]>();
+  for (const c of cibles) {
+    if (!c.fondsId || !c.id) continue;
+    parFonds.set(c.fondsId, [...(parFonds.get(c.fondsId) ?? []), c.id]);
+  }
+
+  let supprimees = 0;
+  const refus: string[] = [];
+
+  for (const [fundId, ids] of parFonds) {
+    const acces = await autoriser(fundId);
+    if ("erreur" in acces) {
+      refus.push(`${ids.length} opération(s) non supprimée(s) : ${acces.erreur}`);
+      continue;
+    }
+    const { supabase, userId } = acces;
+
+    // `count` plutôt qu'une confiance dans la liste envoyée : la RLS ou un
+    // identifiant périmé peut en écarter une, et annoncer un compte qu'on n'a
+    // pas vérifié ferait croire à une suppression qui n'a pas eu lieu.
+    const { error, count } = await supabase
+      .from("fund_market_operations")
+      .delete({ count: "exact" })
+      .in("id", ids)
+      .eq("fund_id", fundId)
+      .eq("owner_id", userId);
+
+    if (error) {
+      refus.push(`${ids.length} opération(s) non supprimée(s) : ${error.message}`);
+      continue;
+    }
+    supprimees += count ?? 0;
+    revalidatePath(`/gestion-portefeuille/fonds/${fundId}`);
+  }
+
+  if (supprimees > 0) {
+    revalidatePath("/gestion-portefeuille/operations-marche");
+    revalidatePath("/gestion-portefeuille/tresorerie");
+  }
+  return { ok: true, data: { supprimees, refus } };
 }

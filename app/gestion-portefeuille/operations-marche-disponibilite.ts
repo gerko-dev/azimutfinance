@@ -119,23 +119,41 @@ export type Disponibilite = {
 };
 
 /**
- * Ce qu'il reste de cessible sur un titre, pour un fonds.
+ * Tout ce qu'il faut pour juger d'une cession : l'inventaire de reference et
+ * les operations du fonds.
  *
- * `exclureOperationId` sert à la MODIFICATION : un ordre de vente qu'on
- * corrige ne doit pas se compter lui-même parmi les quantités déjà engagées,
- * sinon relire sa propre quantité la refuserait.
+ * IL SE LIT UNE FOIS, POUR TOUS LES TITRES. C'etait la cause des vingt
+ * secondes du menu deroulant de vente : `titresCessibles` appelait
+ * `disponibiliteCession` par titre, et chacune redemandait l'inventaire et les
+ * operations. Trente-cinq titres faisaient donc trente-cinq fois huit
+ * aller-retours. La memoisation de requete etait censee les ramener a huit ;
+ * s'appuyer dessus pour la tenue d'une boucle etait une fragilite, pas une
+ * optimisation.
  */
-export async function disponibiliteCession(
-  fundId: string,
-  code: string,
-  libelle: string,
-  exclureOperationId: string | null = null,
-): Promise<Disponibilite> {
+type ContexteCession = {
+  asOfDate: string | null;
+  parCle: Map<string, number>;
+  operations: OperationMarche[];
+};
+
+async function contexteCession(fundId: string): Promise<ContexteCession> {
   const [{ asOfDate, parCle }, operations] = await Promise.all([
     quantitesInventaire(fundId),
     loadOperationsMarche(fundId),
   ]);
+  return { asOfDate, parCle, operations };
+}
 
+/**
+ * Le CALCUL, sans aucune lecture : c'est lui qui porte la regle, et il est le
+ * meme qu'on juge un titre ou trente-cinq.
+ */
+function disponibiliteDans(
+  { asOfDate, parCle, operations }: ContexteCession,
+  code: string,
+  libelle: string,
+  exclureOperationId: string | null,
+): Disponibilite {
   const c = cle(code);
   const l = cle(libelle);
   const detenue = (c && parCle.get(c)) || (l && parCle.get(l)) || 0;
@@ -211,6 +229,30 @@ export async function disponibiliteCession(
   };
 }
 
+/**
+ * Ce qu'il reste de cessible sur un titre, pour un fonds.
+ *
+ * Pour UN titre. Quand il s'agit d'en juger plusieurs — le menu déroulant
+ * d'une vente —, c'est `titresCessibles` qu'il faut : elle ne lit qu'une fois.
+ *
+ * `exclureOperationId` sert à la MODIFICATION : un ordre de vente qu'on
+ * corrige ne doit pas se compter lui-même parmi les quantités déjà engagées,
+ * sinon relire sa propre quantité la refuserait.
+ */
+export async function disponibiliteCession(
+  fundId: string,
+  code: string,
+  libelle: string,
+  exclureOperationId: string | null = null,
+): Promise<Disponibilite> {
+  return disponibiliteDans(
+    await contexteCession(fundId),
+    code,
+    libelle,
+    exclureOperationId,
+  );
+}
+
 /** Message de refus, ou null si la cession passe. Dit les quatre termes du
  *  calcul : un refus qu'on ne peut pas vérifier soi-même est un refus qu'on
  *  soupçonne d'être faux. */
@@ -255,7 +297,11 @@ export async function titresCessibles(
   options: OptionTitre[],
   exclureOperationId: string | null = null,
 ): Promise<OptionTitre[]> {
-  const { parCle } = await quantitesInventaire(fundId);
+  // UNE SEULE LECTURE pour toute la liste. Ce qui suit est du calcul pur.
+  const debut = performance.now();
+  const ctx = await contexteCession(fundId);
+  const lecture = performance.now() - debut;
+  const { parCle } = ctx;
   if (parCle.size === 0) return [];
 
   // On ne calcule la disponibilité que des titres que le fonds touche de près
@@ -269,16 +315,18 @@ export async function titresCessibles(
       parCle.has(cle(t.libelle)),
   );
 
-  const resultats = await Promise.all(
-    candidats.map(async (t) => {
-      const d = await disponibiliteCession(
-        fundId,
-        t.isin || t.cle,
-        t.libelle,
-        exclureOperationId,
-      );
-      return { t, d };
-    }),
+  const resultats = candidats.map((t) => ({
+    t,
+    d: disponibiliteDans(ctx, t.isin || t.cle, t.libelle, exclureOperationId),
+  }));
+
+  // Le menu déroulant de vente a mis jusqu'à cinquante-sept secondes à
+  // s'ouvrir. La trace sépare ce qui se lit de ce qui se calcule : sans elle,
+  // le journal ne disait que « application-code », qui ne désigne rien.
+  console.info(
+    `[cessions] ${fundId} : lecture ${Math.round(lecture)} ms, ` +
+      `${candidats.length} titres jugés en ${Math.round(performance.now() - debut - lecture)} ms ` +
+      `sur ${ctx.operations.length} opérations`,
   );
 
   return resultats

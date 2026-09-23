@@ -28,9 +28,11 @@ import {
   listerTitresAction,
   modifierOperationMarcheAction,
   rapprocherExecutionAction,
+  rapprocherOperationAction,
   reprendrePretAction,
   supprimerExecutionAction,
   supprimerOperationMarcheAction,
+  supprimerOperationsMarcheAction,
 } from "@/app/gestion-portefeuille/operations-marche-actions";
 import {
   DESCRIPTIONS,
@@ -57,8 +59,11 @@ import {
   type SaisieRemere,
   type Validite,
 } from "@/app/gestion-portefeuille/operations-marche-types";
+import ChampMontant from "./ChampMontant";
 import VoletsMtp, { type EtatVolets } from "./VoletsMtp";
 import { RecapPrets, RecapRemeres } from "./RecapVolets";
+import RecapPrimaire from "./RecapPrimaire";
+import ImportOperationsMarche from "./ImportOperationsMarche";
 import type { OperationAvecFonds } from "@/app/gestion-portefeuille/operations-marche-data";
 import type { OptionTitre } from "@/app/gestion-portefeuille/operations-marche-titres";
 import type { Partenaire } from "@/app/gestion-portefeuille/partenaires-types";
@@ -83,10 +88,18 @@ const TAUX_ACTIONS = { courtage: 0.004, tps: 0.1 };
 
 /** Onglets de l'écran. Les deux derniers sont des RÉCAPITULATIFS : rien ne s'y
  *  saisit, tout se corrige sur l'ordre. */
-type Onglet = "operations" | "saisie" | "remeres" | "prets";
+type Onglet =
+  | "operations"
+  | "saisie"
+  | "importation"
+  | "primaire"
+  | "remeres"
+  | "prets";
 const ONGLETS: { cle: Onglet; libelle: string }[] = [
   { cle: "operations", libelle: "Opérations" },
   { cle: "saisie", libelle: "Saisir un ordre" },
+  { cle: "importation", libelle: "Importation" },
+  { cle: "primaire", libelle: "Marché primaire" },
   { cle: "remeres", libelle: "Rémérés" },
   { cle: "prets", libelle: "Prêts de titres" },
 ];
@@ -235,6 +248,12 @@ export default function OperationsMarchePanel({
   /** Ordre dont la ligne d'exécution est dépliée. Un seul à la fois : deux
    *  formulaires ouverts sur deux ordres inviteraient à se tromper de ligne. */
   const [executionOuverte, setExecutionOuverte] = useState<string | null>(null);
+  /** Opérations cochées, par identifiant. */
+  const [selection, setSelection] = useState<Set<string>>(new Set());
+  /** La suppression de masse est irréversible : elle se demande deux fois.
+   *  Un `confirm()` du navigateur aurait fait le même office, mais il sort de
+   *  l'écran et se clique sans lire. */
+  const [confirmation, setConfirmation] = useState(false);
 
   const marche = marcheDe(description);
   /** Une syndication se décrit à la main : ni liste, ni caractéristiques
@@ -709,11 +728,64 @@ export default function OperationsMarchePanel({
     });
   };
 
+  /** Rapproche l'ORDRE : au primaire, le règlement précède l'exécution. */
+  const rapprocherOrdre = (o: OperationAvecFonds, date: string | null) => {
+    setErreur(null);
+    demarrer(async () => {
+      const res = await rapprocherOperationAction(o.fondsId, o.id, date);
+      if (!res.ok) setErreur(res.error);
+      else router.refresh();
+    });
+  };
+
   const supprimer = (op: OperationAvecFonds) => {
     demarrer(async () => {
       const res = await supprimerOperationMarcheAction(op.fondsId, op.id);
       if (!res.ok) setErreur(res.error);
       else router.refresh();
+    });
+  };
+
+  // ── Sélection multiple ─────────────────────────────────────────────────
+  //
+  // Une séance produit des dizaines de lignes, et une fausse manœuvre en
+  // produit autant. Les reprendre une à une était la corvée qui fait qu'on
+  // laisse traîner des lignes fausses.
+  //
+  // La sélection se garde par IDENTIFIANT, jamais par rang : la liste se
+  // réordonne à chaque rafraîchissement, et une sélection par position aurait
+  // fini par désigner une autre opération que celle cochée.
+  const basculerSelection = (id: string) =>
+    setSelection((s) => {
+      const suivant = new Set(s);
+      if (suivant.has(id)) suivant.delete(id);
+      else suivant.add(id);
+      return suivant;
+    });
+
+  const toutSelectionner = () =>
+    setSelection((s) =>
+      s.size === operations.length ? new Set() : new Set(operations.map((o) => o.id)),
+    );
+
+  const supprimerSelection = () => {
+    setErreur(null);
+    const cibles = operations
+      .filter((o) => selection.has(o.id))
+      .map((o) => ({ fondsId: o.fondsId, id: o.id }));
+    if (cibles.length === 0) return;
+    demarrer(async () => {
+      const res = await supprimerOperationsMarcheAction(cibles);
+      if (!res.ok) {
+        setErreur(res.error);
+        return;
+      }
+      // Le compte vient du SERVEUR, pas de la liste envoyée : une ligne que la
+      // base a refusée ne doit pas être annoncée comme supprimée.
+      if (res.data.refus.length > 0) setErreur(res.data.refus.join(" · "));
+      setSelection(new Set());
+      setConfirmation(false);
+      router.refresh();
     });
   };
 
@@ -857,7 +929,9 @@ export default function OperationsMarchePanel({
           // Le décompte dit tout de suite si l'onglet a quelque chose à
           // montrer : sans lui, on y va pour rien.
           const n =
-            t.cle === "remeres"
+            t.cle === "primaire"
+              ? operations.filter((o) => o.description === "SOUSCRIPTION_MP").length
+              : t.cle === "remeres"
               ? operations.filter(remereNoue).length
               : t.cle === "prets"
                 ? operations.filter((o) => o.pret).length
@@ -877,13 +951,31 @@ export default function OperationsMarchePanel({
               }`}
             >
               {t.libelle}
-              {t.cle !== "saisie" && (
+              {t.cle !== "saisie" && t.cle !== "importation" && (
                 <span className="ml-1.5 text-[10px] text-slate-400">{n}</span>
               )}
             </button>
           );
         })}
       </nav>
+
+      {onglet === "importation" && (
+        <ImportOperationsMarche
+          fonds={fonds}
+          fondsId={fondsId}
+          onChangerFonds={changerFonds}
+          sgi={sgi}
+          parametres={parametres}
+        />
+      )}
+
+      {onglet === "primaire" && (
+        <RecapPrimaire
+          operations={operations}
+          onModifier={modifier}
+          onRapprocher={rapprocherOrdre}
+        />
+      )}
 
       {onglet === "remeres" && (
         <RecapRemeres
@@ -1192,29 +1284,26 @@ export default function OperationsMarchePanel({
           </Champ>
 
           <Champ label="Quantité">
-            <input
-              value={quantite}
-              onChange={(e) => setQuantite(e.target.value)}
-              inputMode="numeric"
+            <ChampMontant
+              valeur={quantite}
+              onChange={setQuantite}
               className={`${champ} text-right tabular-nums`}
             />
           </Champ>
 
 
           <Champ label="Prix unitaire">
-            <input
-              value={prix}
-              onChange={(e) => setPrix(e.target.value)}
-              inputMode="numeric"
+            <ChampMontant
+              valeur={prix}
+              onChange={setPrix}
               className={`${champ} text-right tabular-nums`}
             />
           </Champ>
 
           <Champ label="Intérêts courus">
-            <input
-              value={couruManuel ?? String(Math.round(couruCalcule))}
-              onChange={(e) => setCouruManuel(e.target.value)}
-              inputMode="numeric"
+            <ChampMontant
+              valeur={couruManuel ?? String(Math.round(couruCalcule))}
+              onChange={setCouruManuel}
               className={`${champ} text-right tabular-nums ${
                 couruManuel === null ? "bg-slate-50" : ""
               }`}
@@ -1403,10 +1492,86 @@ export default function OperationsMarchePanel({
           onglet === "operations" ? "" : "hidden"
         }`}
       >
+        {/* ── Ce qui est sélectionné, et ce qu'on peut en faire ──────────
+            La barre n'apparaît QUE s'il y a une sélection : une barre d'outils
+            permanente et vide n'apprend rien et vole une ligne à l'écran. */}
+        {selection.size > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 px-3 py-2 bg-blue-50 border-b border-blue-200">
+            <span className="text-[11px] text-blue-900">
+              <strong>{selection.size}</strong> opération
+              {selection.size > 1 ? "s" : ""} sélectionnée
+              {selection.size > 1 ? "s" : ""}
+              <button
+                type="button"
+                onClick={() => {
+                  setSelection(new Set());
+                  setConfirmation(false);
+                }}
+                className="ml-3 text-blue-700 hover:text-blue-900 underline"
+              >
+                tout décocher
+              </button>
+            </span>
+            <div className="flex items-center gap-2">
+              {confirmation ? (
+                <>
+                  <span className="text-[11px] text-rose-800">
+                    Supprimer définitivement ? Les exécutions suivent.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={supprimerSelection}
+                    disabled={enCours}
+                    className="text-[11px] font-medium px-3 py-1.5 rounded bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-50"
+                  >
+                    {enCours ? "Suppression…" : "Confirmer"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmation(false)}
+                    disabled={enCours}
+                    className="text-[11px] text-slate-600 hover:text-slate-900 disabled:opacity-50"
+                  >
+                    Annuler
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setConfirmation(true)}
+                  disabled={enCours}
+                  className="text-[11px] font-medium px-3 py-1.5 rounded border border-rose-300 text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+                >
+                  Supprimer la sélection
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="overflow-x-auto">
           <table className="w-full text-[11px] border-collapse">
             <thead className="bg-slate-100 text-slate-600">
               <tr>
+                <th className="px-3 py-2">
+                  <input
+                    type="checkbox"
+                    checked={
+                      operations.length > 0 && selection.size === operations.length
+                    }
+                    ref={(el) => {
+                      // L'ÉTAT INTERMÉDIAIRE : ni tout ni rien. Sans lui, une
+                      // sélection partielle affiche une case vide, et le clic
+                      // suivant coche tout au lieu de décocher.
+                      if (el)
+                        el.indeterminate =
+                          selection.size > 0 && selection.size < operations.length;
+                    }}
+                    onChange={toutSelectionner}
+                    disabled={operations.length === 0}
+                    aria-label="Tout sélectionner"
+                  />
+                </th>
                 <th className="text-left px-3 py-2 font-medium">Date</th>
                 <th className="text-left px-3 py-2 font-medium">Fonds</th>
                 <th className="text-left px-3 py-2 font-medium">Nature</th>
@@ -1422,7 +1587,7 @@ export default function OperationsMarchePanel({
             <tbody className="divide-y divide-slate-100">
               {operations.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="px-3 py-6 text-center text-slate-400">
+                  <td colSpan={11} className="px-3 py-6 text-center text-slate-400">
                     Aucune opération saisie.
                   </td>
                 </tr>
@@ -1449,6 +1614,9 @@ export default function OperationsMarchePanel({
                     onSupprimerExecution={(id) => retirerExecution(o, id)}
                     onCloturer={(date) => cloturer(o, date)}
                     onRapprocher={(id, date) => rapprocher(o, id, date)}
+                    onRapprocherOrdre={(date) => rapprocherOrdre(o, date)}
+                    selectionnee={selection.has(o.id)}
+                    onSelectionner={() => basculerSelection(o.id)}
                   />
                 );
               })}

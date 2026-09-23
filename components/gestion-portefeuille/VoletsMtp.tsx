@@ -28,6 +28,7 @@ import {
 } from "@/app/gestion-portefeuille/operations-marche-types";
 import type { Partenaire } from "@/app/gestion-portefeuille/partenaires-types";
 import { BANKS_BY_COUNTRY } from "@/app/gestion-portefeuille/portfolio-security-schema";
+import ChampMontant, { valeurMontant } from "./ChampMontant";
 import ChampTaux from "./ChampTaux";
 
 const fmt0 = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
@@ -212,15 +213,9 @@ export default function VoletsMtp({
           </Champ>
 
           <Champ label="Prix de sortie">
-            <input
-              value={String(remere.prixSortie)}
-              onChange={(e) =>
-                setRemere({
-                  prixSortie:
-                    Number(e.target.value.replace(/\s/g, "").replace(",", ".")) || 0,
-                })
-              }
-              inputMode="numeric"
+            <ChampMontant
+              valeur={String(remere.prixSortie)}
+              onChange={(t) => setRemere({ prixSortie: valeurMontant(t) })}
               className={`${champ} text-right tabular-nums`}
             />
             <span className={aide}>

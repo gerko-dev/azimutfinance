@@ -57,3 +57,26 @@ alter table public.fund_market_operations
     (description = 'SOUSCRIPTION_MP' and modalite in ('adjudication', 'syndication'))
     or (description <> 'SOUSCRIPTION_MP' and modalite is null)
   );
+
+-- ------------------------------------------------------------
+-- 3. Le rapprochement de l'ORDRE.
+-- ------------------------------------------------------------
+--
+-- AU PRIMAIRE, ON REGLE AVANT D'ETRE SERVI. On verse sa soumission, et
+-- l'adjudication dit ensuite ce qu'on obtient : au moment ou le cash part, il
+-- n'existe aucune execution sur laquelle poser le lettrage.
+--
+-- Partout ailleurs c'est l'inverse — rien n'est a regler tant que rien n'est
+-- servi — et le rapprochement vit sur l'execution
+-- (fund_market_executions.rapproche_le). Les deux colonnes coexistent donc,
+-- chacune pour un moment different du cycle.
+--
+-- Une fois l'ordre rapproche, il sort des postes de flux du point de
+-- tresorerie : le solde bancaire saisi le contient deja. C'est un lettrage,
+-- pas une annulation — l'ordre reste, avec sa date.
+alter table public.fund_market_operations
+  add column if not exists rapproche_le date;
+
+comment on column public.fund_market_operations.rapproche_le is
+  'Reglement de l''ordre constate sur le releve. Marche primaire uniquement : '
+  'ailleurs, c''est chaque execution qui porte son rapprochement.';
