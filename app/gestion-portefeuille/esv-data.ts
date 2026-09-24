@@ -222,6 +222,9 @@ function evenementsObligations(detenues: Map<string, Detention>): EvenementEsv[]
  * même que le simulateur YTM. Un calcul maison ici aurait fini par diverger de
  * la fiche du titre, et le gérant aurait eu deux montants pour un coupon.
  *
+ * L'ÉCHÉANCIER EST DÉROULÉ EN ENTIER, passé compris : un coupon échu et non
+ * encaissé est exactement ce que ce module doit montrer.
+ *
  * LES BAT N'Y SONT PAS : `loadBonds` ne garde que les OAT. Un bon du Trésor
  * est escompté — un seul flux, à l'échéance — et il faudrait le reconstruire
  * autrement. On le signale plutôt que de le taire.
@@ -235,11 +238,21 @@ function evenementsSouverains(detenues: Map<string, Detention>): {
 
   const parIsin = new Map(loadBonds().map((b) => [cle(b.isin), b]));
   const sansEcheancier: string[] = [];
-  // Depuis la veille, pour ne pas perdre un coupon qui tombe aujourd'hui :
-  // `getFutureCashFlows` ne garde que les dates STRICTEMENT postérieures.
-  const depuis = parseDate(
-    new Date(Date.now() - 86_400_000).toISOString().slice(0, 10),
-  );
+
+  // ── ON REMONTE AVANT AUJOURD'HUI, ET C'EST TOUT L'ENJEU ────────────────
+  //
+  // `getFutureCashFlows` ne rend que les flux STRICTEMENT POSTÉRIEURS à la
+  // date qu'on lui donne. En lui passant la veille — ce que faisait le
+  // premier jet — aucun coupon échu ne sortait : les titres publics ne
+  // pouvaient donc JAMAIS apparaître en retard, alors que c'est précisément
+  // ce que le module cherche. Les obligations cotées, elles, remontaient bien
+  // leur historique, et la divergence entre les deux gisements ne se voyait
+  // pas.
+  //
+  // On déroule donc l'échéancier ENTIER, comme pour la cote, et l'on laisse
+  // `statutEsv` trancher : ce qui précède le début du suivi ressort en gris,
+  // ce qui suit et n'est pas pointé ressort en rouge.
+  const depuis = parseDate("1990-01-01");
 
   for (const [isin, d] of detenues) {
     const bond = parIsin.get(isin);
