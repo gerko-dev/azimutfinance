@@ -471,13 +471,9 @@ function evenementsNonCotes(
 }
 
 /**
- * Normalise une raison sociale pour l'apparier.
- *
- * Le BOC écrit « BOA CÔTE D'IVOIRE », le référentiel « BANK OF AFRICA CI » :
- * aucune normalisation ne rapprochera ces deux-là, et c'est assumé — l'avis
- * non apparié laisse simplement la ligne sur son estimation. Ce qu'on corrige
- * ici, ce sont les écarts de FORME : accents, apostrophes typographiques,
- * ponctuation, espaces multiples.
+ * Normalise une raison sociale : accents, apostrophes typographiques,
+ * ponctuation, espaces multiples. Ne juge de rien, met seulement les deux
+ * écritures sur le même plan.
  */
 function normaliserNom(s: string): string {
   return (s ?? "")
@@ -488,6 +484,66 @@ function normaliserNom(s: string): string {
     .replace(/[^A-Z0-9]+/g, " ")
     .trim();
 }
+
+/** Mots qui ne distinguent rien : ils figurent dans la moitié des raisons
+ *  sociales de la cote. */
+const MOTS_VIDES = new Set(["DE", "DU", "DES", "LA", "LE", "LES", "L", "ET", "POUR", "SA", "D"]);
+
+const motsDe = (s: string): string[] =>
+  normaliserNom(s).split(" ").filter((t) => t && !MOTS_VIDES.has(t));
+
+/**
+ * Le nom du BOC est-il CONTENU dans celui du référentiel ?
+ *
+ * Tous les mots de l'avis doivent se retrouver dans le nom candidat. C'est
+ * volontairement sévère : « BOA SENEGAL » ne doit jamais tomber sur « BOA
+ * MALI », et un dividende attribué au mauvais titre est bien pire qu'un
+ * dividende manquant — le premier se propage au point de trésorerie sans
+ * qu'on le voie, le second se signale.
+ *
+ * L'ABRÉVIATION EST TOLÉRÉE DANS UN SEUL SENS : « INT » vaut
+ * « INTERNATIONAL », et jamais l'inverse. Dans les deux sens, le suffixe de
+ * pays « CI » avalait « CIE » — et « CIE CI » trouvait trente-trois candidats.
+ * Trois lettres au minimum, pour la même raison.
+ */
+function nomCouvert(nomAvis: string, nomCandidat: string): boolean {
+  const avis = motsDe(nomAvis);
+  const cand = motsDe(nomCandidat);
+  if (avis.length === 0 || cand.length === 0) return false;
+  return avis.every((t) =>
+    cand.some((u) => u === t || (t.length >= 3 && u.startsWith(t))),
+  );
+}
+
+/**
+ * AVIS DU BOC QUE LE NOM SEUL NE PERMET PAS DE RATTACHER.
+ *
+ * La Bourse emploie deux vocabulaires dans le MÊME bulletin : sa table de
+ * cotation dit « BANK OF AFRICA CI », son calendrier des dividendes « BOA
+ * CÔTE D'IVOIRE ». Ailleurs elle abrège — « BIIC BN » pour la Banque
+ * Internationale pour l'Industrie et le Commerce du Bénin, « SOCIETE
+ * GENERALE CI » quand le mnémonique est SGBC et le nom de la cote « SGB CI ».
+ *
+ * Aucun algorithme ne rapproche honnêtement un sigle de sa raison sociale.
+ * Cette table le fait explicitement, et elle est FAITE POUR ÊTRE ÉTENDUE : le
+ * jour où la Bourse renomme une valeur, l'avis ressort dans « avis non
+ * rattachés » à l'écran, et une ligne ici le règle.
+ *
+ * Clef : le nom du calendrier, passé par `normaliserNom` — donc SANS
+ * apostrophe ni ponctuation, celles-ci devenant des espaces. Écrire
+ * « BOA COTE D'IVOIRE » ici ne correspondait à rien : la clef réelle est
+ * « BOA COTE D IVOIRE ». Valeur : le mnémonique BRVM.
+ */
+const ALIAS_AVIS_BOC: Record<string, string> = {
+  "BOA BURKINA FASO": "BOABF",
+  "BOA COTE D IVOIRE": "BOAC",
+  "BOA BENIN": "BOAB",
+  "SONATEL SENEGAL": "SNTS",
+  "CORIS BANK INT BF": "CBIBF",
+  "ECOBANK TRANSNATIONAL INCORPORATED TG": "ETIT",
+  "BIIC BN": "BICB",
+  "SOCIETE GENERALE CI": "SGBC",
+};
 
 /**
  * DIVIDENDES des actions détenues — STRICTEMENT CEUX DU BOC.
@@ -508,33 +564,60 @@ function normaliserNom(s: string): string {
 function evenementsDividendes(
   detenues: Map<string, Detention>,
   aujourdhui: string,
-): { evenements: EvenementEsv[]; sansAvis: string[] } {
+): { evenements: EvenementEsv[]; sansAvis: string[]; nonRattaches: string[] } {
   const evenements: EvenementEsv[] = [];
   const sansAvis: string[] = [];
-  if (detenues.size === 0) return { evenements, sansAvis };
+  if (detenues.size === 0) return { evenements, sansAvis, nonRattaches: [] };
 
-  const parCode = new Map(loadAllActions().map((a) => [cle(a.code), a]));
+  const actions = loadAllActions();
+  const parCode = new Map(actions.map((a) => [cle(a.code), a]));
 
-  // Les avis du BOC, indexés par raison sociale normalisée. Le plus RÉCENT
-  // gagne : un avis rectificatif porte un numéro différent, et c'est la
-  // dernière date de paiement publiée qui vaut.
-  const avisParNom = new Map<string, ReturnType<typeof loadBocDividendes>[number]>();
-  for (const d of loadBocDividendes()) {
-    const k = normaliserNom(d.titre);
-    const deja = avisParNom.get(k);
-    if (!deja || d.datePaiement > deja.datePaiement) avisParNom.set(k, d);
+  // ── CHAQUE AVIS EST RATTACHÉ À UN MNÉMONIQUE, UNE FOIS ────────────────
+  //
+  // On résout dans ce sens — de l'avis vers le titre — et non l'inverse : il
+  // y a une trentaine d'avis pour deux cents valeurs cotées, et c'est ainsi
+  // qu'on peut dire ce qui n'a PAS été rattaché.
+  //
+  // Trois passes, de la plus sûre à la plus large : la table d'alias, puis
+  // l'égalité exacte des noms, puis la couverture par mots. Une correspondance
+  // AMBIGUË est rejetée — deux candidats valent zéro candidat, un dividende
+  // attribué au mauvais titre étant bien pire qu'un dividende manquant.
+  const avisParCode = new Map<string, ReturnType<typeof loadBocDividendes>[number]>();
+  const nonRattaches: string[] = [];
+
+  for (const avis of loadBocDividendes()) {
+    const norme = normaliserNom(avis.titre);
+    let code = ALIAS_AVIS_BOC[norme] ?? "";
+
+    if (!code) {
+      const exact = actions.filter((a) => normaliserNom(a.name) === norme);
+      if (exact.length === 1) code = cle(exact[0].code);
+    }
+    if (!code) {
+      const couverts = actions.filter((a) => nomCouvert(avis.titre, a.name));
+      if (couverts.length === 1) code = cle(couverts[0].code);
+      else if (couverts.length > 1) {
+        nonRattaches.push(
+          `${avis.titre} (avis ${avis.avis}) — ${couverts.length} titres possibles`,
+        );
+        continue;
+      }
+    }
+    if (!code) {
+      nonRattaches.push(`${avis.titre} (avis ${avis.avis}) — aucun titre reconnu`);
+      continue;
+    }
+
+    // Le plus RÉCENT gagne : un avis rectificatif porte un numéro différent,
+    // et c'est la dernière date de paiement publiée qui vaut.
+    const deja = avisParCode.get(code);
+    if (!deja || avis.datePaiement > deja.datePaiement) avisParCode.set(code, avis);
   }
 
   for (const [k, d] of detenues) {
     const a = parCode.get(k);
     const nomMarche = a?.name ?? d.libelle;
-
-    // Cherché sous le nom du référentiel PUIS sous celui de l'inventaire : le
-    // dépositaire n'écrit pas toujours comme la Bourse.
-    const avis =
-      avisParNom.get(normaliserNom(nomMarche)) ??
-      avisParNom.get(normaliserNom(d.libelle)) ??
-      null;
+    const avis = avisParCode.get(k) ?? null;
 
     if (!avis) {
       sansAvis.push(`${k} — ${d.libelle || nomMarche}`);
@@ -572,7 +655,7 @@ function evenementsDividendes(
     });
   }
 
-  return { evenements, sansAvis };
+  return { evenements, sansAvis, nonRattaches };
 }
 
 type LigneReception = {
@@ -621,6 +704,13 @@ export type CalendrierEsv = {
    *  rien : leur dividende n'apparaîtra qu'une fois l'avis publié, et d'ici
    *  là c'est cette liste qui dit pourquoi le calendrier est muet. */
   actionsSansAvis: string[];
+  /** Avis du BOC qu'on n'a pas su rattacher à un titre de la cote.
+   *
+   *  C'est le SYMÉTRIQUE du précédent, et le plus important des deux : un avis
+   *  orphelin est un dividende que la Bourse a publié et que le module a
+   *  laissé tomber. Sans cette liste, il disparaissait en silence — et il n'y
+   *  a pas d'avis d'opéré pour un encaissement qu'on n'attendait pas. */
+  avisNonRattaches: string[];
 };
 
 /**
@@ -643,6 +733,7 @@ export const construireCalendrierEsv = cache(
         dateInventaire: null,
         sansEcheancier: [],
         actionsSansAvis: [],
+        avisNonRattaches: [],
       };
     }
 
@@ -669,6 +760,7 @@ export const construireCalendrierEsv = cache(
       dateInventaire: actuel.asOfDate,
       sansEcheancier: [...souv.sansEcheancier, ...hors.incompletes],
       actionsSansAvis: div.sansAvis,
+      avisNonRattaches: div.nonRattaches,
     };
   },
 );

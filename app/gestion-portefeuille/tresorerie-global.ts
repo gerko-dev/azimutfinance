@@ -203,6 +203,12 @@ export async function construirePointGlobal(
       actionsSansAvis: points.flatMap((p) =>
         p.calendrierEsv.actionsSansAvis.map((t) => `${p.fonds} · ${t}`),
       ),
+      // Le même avis orphelin remonte de chaque fonds : il vient du BOC, pas
+      // du portefeuille. On dédoublonne plutôt que de le répéter autant de
+      // fois qu'il y a de fonds.
+      avisNonRattaches: [
+        ...new Set(points.flatMap((p) => p.calendrierEsv.avisNonRattaches)),
+      ],
     },
     spotsAVenir: points.flatMap((p) =>
       p.spotsAVenir.map((s) => ({ ...s, libelle: `${p.fonds} · ${s.libelle}` })),

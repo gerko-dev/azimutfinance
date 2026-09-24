@@ -300,6 +300,28 @@ export default function EsvPanel({
         />
       </div>
 
+      {/* UN AVIS PUBLIÉ QUE LE MODULE A LAISSÉ TOMBER.
+          C'est le plus grave des deux manques : la Bourse a publié le
+          dividende, et il n'apparaît nulle part. Sans ce bandeau il
+          disparaissait en silence — et il n'y a pas d'avis d'opéré pour un
+          encaissement qu'on n'attendait pas. */}
+      {calendrier.avisNonRattaches.length > 0 && (
+        <div className="text-[11px] text-rose-800 bg-rose-50 border border-rose-200 rounded px-3 py-2">
+          <strong>
+            {calendrier.avisNonRattaches.length} avis de dividende du BOC non
+            rattaché(s) à un titre
+          </strong>{" "}
+          : la Bourse les a publiés sous un nom que le référentiel ne reconnaît
+          pas. S&apos;ils concernent un titre détenu, leur dividende manque au
+          calendrier.
+          <ul className="mt-1 space-y-0.5 list-disc pl-4">
+            {calendrier.avisNonRattaches.map((t, i) => (
+              <li key={i}>{t}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* CE QUE LE CALENDRIER NE DIT PAS, ET POURQUOI.
           Le module ne porte que des montants publiés : une action dont le
           dividende n'est pas encore annoncé au BOC n'y figure pas. Sans cette
