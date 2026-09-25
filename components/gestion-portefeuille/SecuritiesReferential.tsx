@@ -212,6 +212,24 @@ function EditPanel({
   const isCote = listable && listing === "cote";
   const detailFields = fields.filter((f) => f.key !== "cote");
 
+  // « NON RENSEIGNÉ » N'EST PAS « NON COTÉ ».
+  //
+  // Les deux se confondaient : l'affichage repliait tout ce qui n'était pas
+  // « cote » sur « non coté », et la recherche automatique dans le référentiel
+  // du site ne se déclenchait donc jamais sur une fiche née d'un import, qui
+  // ne porte pas ce champ.
+  //
+  // C'est ce qui laissait « TPTG 6,70% 2026-2033 » en titre personnalisé alors
+  // que son ISIN, TG0000003466, figure au référentiel obligataire : à
+  // l'ouverture du formulaire, rien n'allait le chercher, et aucune
+  // caractéristique ne se pré-remplissait.
+  //
+  // On sonde donc le site quand la fiche N'A PAS TRANCHÉ et n'est liée à rien.
+  // Un « non coté » explicitement choisi par le gérant reste respecté : c'est
+  // une décision, pas une absence.
+  const coteTranche = attrs.cote === "cote" || attrs.cote === "noncote";
+  const aSonder = listable && !coteTranche && !linkedToSite;
+
   // Coté : recherche automatique (debounce) dans le référentiel du site à
   // partir du code/ISIN saisi, et pré-remplissage visible des caractéristiques.
   const isinVal = attrs.isin ?? "";
@@ -219,7 +237,7 @@ function EditPanel({
     let alive = true;
     const t = setTimeout(async () => {
       if (!alive) return;
-      if (!isCote || (!code.trim() && !isinVal.trim())) {
+      if ((!isCote && !aSonder) || (!code.trim() && !isinVal.trim())) {
         setCotedInfo(null);
         return;
       }
@@ -250,7 +268,7 @@ function EditPanel({
       alive = false;
       clearTimeout(t);
     };
-  }, [isCote, code, isinVal]);
+  }, [isCote, aSonder, code, isinVal]);
 
   // OPCVM/FCP : même logique que la création (cascade SGO → FCP, catégorie auto).
   const [fundRef, setFundRef] = useState<FundOption[] | null>(null);

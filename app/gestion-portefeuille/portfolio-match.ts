@@ -633,17 +633,59 @@ export function matchPositions(
       // saisis par le gérant.
       const source = custom.attributes?.source ?? "";
       const refId = custom.attributes?.refId ?? "";
-      const nature: MatchKind =
+      const isinFiche = custom.isin || custom.attributes?.isin || "";
+
+      // UN COMPTE N'A PAS DE NATURE DE MARCHÉ, et c'est la même décision que
+      // pour la section.
+      //
+      // Treize fiches de trésorerie traînent un `source: "fund"` — séquelle
+      // d'un vieux rapprochement par nom avec un OPC du site : « MTN CI
+      // OPCVM001 », « JULAYA BN OPCVM001 », « WAVE SN OPCVM001 » y avaient
+      // assez de mots communs pour s'y accrocher. La SECTION était déjà
+      // rétablie à « trésorerie », mais la NATURE restait « fund » : le badge
+      // annonçait « OPCVM reconnu » sur des lignes de mobile money, et le lien
+      // menait vers la fiche d'un fonds sans rapport.
+      //
+      // Le gérant a typé la fiche compte : rien d'automatique ne doit lui
+      // opposer une reconnaissance de marché.
+      const natureStockee: MatchKind =
         SOURCES_LIEES.has(source) && refId ? (source as MatchKind) : "custom";
+
+      // UNE FICHE NON LIÉE QUE LE SITE CONNAÎT DOIT ÊTRE LIÉE.
+      //
+      // « TPTG 6,70% 2026-2033 » ressortait en « titre personnalisé » alors
+      // que son ISIN, TG0000003466, figure au référentiel obligataire sous le
+      // symbole TPTG.O6. La fiche du gérant n'était pas contredite — elle
+      // était simplement incomplète, faute de `source` et de `refId`, et rien
+      // ne rattrapait cet oubli à l'import.
+      //
+      // Compléter n'est pas contredire : on ne cherche le site que lorsque la
+      // fiche ne désigne DÉJÀ aucune référence, et on ne cherche que sur ses
+      // propres identifiants — code et ISIN —, jamais sur son nom. Deux titres
+      // partagent un nom proche, jamais un ISIN.
+      const duSite =
+        !estUnCompte && natureStockee === "custom"
+          ? lookupReference(custom.code, isinFiche)
+          : null;
+
+      const nature: MatchKind = estUnCompte
+        ? "custom"
+        : (duSite?.kind ?? natureStockee);
+      const identifiant = estUnCompte
+        ? custom.id
+        : (duSite?.id ?? (natureStockee === "custom" ? custom.id : refId));
 
       return resolve(
         raw,
         section,
         nature,
-        nature === "custom" ? custom.id : refId,
+        identifiant,
         custom.name,
         custom.id,
-        { code: custom.code, isin: custom.isin || custom.attributes?.isin },
+        {
+          code: duSite?.code || custom.code,
+          isin: duSite?.isin || isinFiche,
+        },
       );
     }
 
