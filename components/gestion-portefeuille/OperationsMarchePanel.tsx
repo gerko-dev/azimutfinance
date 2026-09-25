@@ -27,6 +27,7 @@ import {
   enregistrerOperationMarcheAction,
   listerTitresAction,
   modifierOperationMarcheAction,
+  rapprocherDenouementAction,
   rapprocherExecutionAction,
   rapprocherOperationAction,
   reprendrePretAction,
@@ -50,6 +51,7 @@ import {
   quantiteExecutee,
   quantiteRestante,
   sensDe,
+  type DenouementDepositaire,
   type DescriptionOperation,
   type Instrument,
   type ModaliteSouscription,
@@ -63,6 +65,7 @@ import ChampMontant from "./ChampMontant";
 import VoletsMtp, { type EtatVolets } from "./VoletsMtp";
 import { RecapPrets, RecapRemeres } from "./RecapVolets";
 import RecapPrimaire from "./RecapPrimaire";
+import RecapDepositaire from "./RecapDepositaire";
 import ImportOperationsMarche from "./ImportOperationsMarche";
 import type { OperationAvecFonds } from "@/app/gestion-portefeuille/operations-marche-data";
 import type { OptionTitre } from "@/app/gestion-portefeuille/operations-marche-titres";
@@ -92,6 +95,7 @@ type Onglet =
   | "operations"
   | "saisie"
   | "importation"
+  | "depositaire"
   | "primaire"
   | "remeres"
   | "prets";
@@ -99,6 +103,7 @@ const ONGLETS: { cle: Onglet; libelle: string }[] = [
   { cle: "operations", libelle: "Opérations" },
   { cle: "saisie", libelle: "Saisir un ordre" },
   { cle: "importation", libelle: "Importation" },
+  { cle: "depositaire", libelle: "Rapprochement dépositaire" },
   { cle: "primaire", libelle: "Marché primaire" },
   { cle: "remeres", libelle: "Rémérés" },
   { cle: "prets", libelle: "Prêts de titres" },
@@ -719,6 +724,24 @@ export default function OperationsMarchePanel({
     });
   };
 
+  /**
+   * Lettre — ou délettre — TOUTE une date de dénouement.
+   *
+   * Le dépositaire arrête un bilan global et vire le solde : le geste suit
+   * l'écriture bancaire, pas la ligne d'ordre.
+   */
+  const rapprocherDenouement = (
+    d: DenouementDepositaire,
+    dateRapprochement: string | null,
+  ) => {
+    setErreur(null);
+    demarrer(async () => {
+      const res = await rapprocherDenouementAction(d.fondsId, d.date, dateRapprochement);
+      if (!res.ok) setErreur(res.error);
+      else router.refresh();
+    });
+  };
+
   const rapprocher = (o: OperationAvecFonds, executionId: string, date: string | null) => {
     setErreur(null);
     demarrer(async () => {
@@ -967,6 +990,10 @@ export default function OperationsMarchePanel({
           sgi={sgi}
           parametres={parametres}
         />
+      )}
+
+      {onglet === "depositaire" && (
+        <RecapDepositaire operations={operations} onRapprocher={rapprocherDenouement} />
       )}
 
       {onglet === "primaire" && (

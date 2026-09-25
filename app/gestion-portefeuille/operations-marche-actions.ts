@@ -706,6 +706,66 @@ export async function rapprocherExecutionAction(
   return { ok: true, data: { id: executionId } };
 }
 
+/**
+ * Rapproche TOUTES les executions de bourse d'une meme date de denouement.
+ *
+ * LE DEPOSITAIRE ARRETE UN BILAN GLOBAL PAR DATE et vire le solde : une seule
+ * ecriture au releve pour tout ce que le fonds a achete et vendu ce jour-la.
+ * Lettrer execution par execution obligeait a refaire a la main l'addition
+ * qu'il venait de faire, et laissait la porte ouverte a une date a moitie
+ * pointee, que rien au releve ne justifie.
+ *
+ * MFR UNIQUEMENT. Le gre a gre se regle avec sa contrepartie, operation par
+ * operation ; une souscription au primaire se regle avant meme d'etre servie.
+ * Ni l'un ni l'autre ne passe par ce bilan, et les inclure ferait tomber dans
+ * le meme virement des flux qui n'y sont pas.
+ *
+ * `null` defait le lettrage de toute la date.
+ */
+export async function rapprocherDenouementAction(
+  fundId: string,
+  dateDenouement: string,
+  dateRapprochement: string | null,
+): Promise<ActionResult<{ executions: number }>> {
+  const acces = await autoriser(fundId);
+  if ("erreur" in acces) return { ok: false, error: acces.erreur };
+  const { supabase, userId } = acces;
+
+  if (!EST_DATE.test(dateDenouement))
+    return { ok: false, error: "Date de denouement invalide." };
+  if (dateRapprochement !== null && !EST_DATE.test(dateRapprochement))
+    return { ok: false, error: "Renseigne la date de rapprochement." };
+
+  // Les ordres de BOURSE de ce fonds. Le filtre se fait ici plutot que dans la
+  // requete : `marcheDe` est la seule definition du marche d'un ordre, et la
+  // reecrire en liste de descriptions cote SQL la ferait diverger le jour ou
+  // une nature s'ajoute.
+  const { data: ordres, error: erreurOrdres } = await supabase
+    .from("fund_market_operations")
+    .select("id, description")
+    .eq("fund_id", fundId)
+    .eq("owner_id", userId);
+  if (erreurOrdres) return { ok: false, error: erreurOrdres.message };
+
+  const ids = (ordres ?? [])
+    .filter((o) => marcheDe((o as { description: string }).description as DescriptionOperation) === "mfr")
+    .map((o) => (o as { id: string }).id);
+  if (ids.length === 0) return { ok: true, data: { executions: 0 } };
+
+  const { data, error } = await supabase
+    .from("fund_market_executions")
+    .update({ rapproche_le: dateRapprochement })
+    .in("operation_id", ids)
+    .eq("date_denouement", dateDenouement)
+    .eq("owner_id", userId)
+    .select("id");
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/gestion-portefeuille/operations-marche");
+  revalidatePath("/gestion-portefeuille/tresorerie");
+  return { ok: true, data: { executions: (data ?? []).length } };
+}
+
 export async function supprimerExecutionAction(
   fundId: string,
   executionId: string,

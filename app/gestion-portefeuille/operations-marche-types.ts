@@ -854,3 +854,132 @@ export function ordreRapproche(
   if (!o.rapprocheLe) return false;
   return !dateArrete || o.rapprocheLe <= dateArrete;
 }
+
+// ==========================================================================
+// RAPPROCHEMENT DÉPOSITAIRE — LES TITRES COTÉS SE RÈGLENT PAR DATE
+// ==========================================================================
+//
+// LE DÉPOSITAIRE NE RÈGLE PAS TITRE PAR TITRE. Il arrête, pour une date de
+// dénouement donnée, un BILAN GLOBAL de tout ce que le fonds a acheté et vendu
+// en bourse ce jour-là, et il vire le solde — une seule écriture au relevé.
+//
+// Le lettrage suivait pourtant l'exécution : une ligne d'un côté, une écriture
+// bancaire de l'autre, et rien pour les faire correspondre. Pointer quatre
+// achats et deux ventes contre un virement unique demandait de refaire à la
+// main l'addition que le dépositaire venait de faire.
+//
+// Le STOCKAGE reste à l'exécution, et c'est voulu : c'est elle qui porte le
+// flux au point de trésorerie, et c'est à son niveau qu'une correction se
+// répare. Seul le GESTE devient global — on lettre une date, pas une ligne.
+//
+// MFR UNIQUEMENT. Le gré à gré se règle opération par opération avec sa
+// contrepartie, et une souscription au primaire se règle avant même d'être
+// servie : ni l'un ni l'autre ne passe par ce bilan.
+
+/** Une exécution dans le bilan d'une date. */
+export type LigneDenouement = {
+  executionId: string;
+  operationId: string;
+  code: string;
+  libelle: string;
+  sens: "achat" | "vente";
+  quantite: number;
+  prix: number;
+  /** Montant réglé, frais compris. Toujours positif : c'est le sens qui dit
+   *  s'il part ou s'il arrive. */
+  montant: number;
+  rapprocheLe: string | null;
+};
+
+export type DenouementDepositaire = {
+  cle: string;
+  fondsId: string;
+  fondsNom: string;
+  /** Date de dénouement : celle à laquelle le dépositaire arrête son bilan. */
+  date: string;
+  lignes: LigneDenouement[];
+  montantAchats: number;
+  montantVentes: number;
+  /** Ventes moins achats. Positif, le dépositaire CRÉDITE le fonds ; négatif,
+   *  il le DÉBITE. C'est ce montant-là, et lui seul, qui figure au relevé. */
+  net: number;
+  rapprochees: number;
+  total: number;
+  /** Date de lettrage EN VIGUEUR : celle que portent les exécutions déjà
+   *  lettrées, quand elles s'accordent. Null dès qu'elles divergent — ce qui
+   *  ne peut venir que d'un lettrage fait ligne à ligne, avant que ce geste
+   *  n'existe. Un bilan à moitié pointé garde donc sa date : c'est elle qu'il
+   *  faut reprendre pour finir le travail, pas une autre. */
+  dateRapprochement: string | null;
+};
+
+/**
+ * Regroupe les exécutions de BOURSE par fonds et par date de dénouement.
+ *
+ * PAR FONDS AUTANT QUE PAR DATE : chaque portefeuille a son compte chez le
+ * dépositaire et reçoit son propre virement. Les réunir donnerait un net qui ne
+ * correspond à aucun relevé.
+ */
+export function regrouperDenouements<
+  T extends OperationMarche & { fondsId: string; fondsNom: string },
+>(operations: T[]): DenouementDepositaire[] {
+  const paquets = new Map<string, DenouementDepositaire>();
+
+  for (const o of operations) {
+    if (marcheDe(o.description) !== "mfr") continue;
+    const sens = sensDe(o.description);
+    for (const e of o.executions) {
+      if (!e.dateDenouement) continue;
+      const cle = `${o.fondsId}|${e.dateDenouement}`;
+      let p = paquets.get(cle);
+      if (!p) {
+        p = {
+          cle,
+          fondsId: o.fondsId,
+          fondsNom: o.fondsNom,
+          date: e.dateDenouement,
+          lignes: [],
+          montantAchats: 0,
+          montantVentes: 0,
+          net: 0,
+          rapprochees: 0,
+          total: 0,
+          dateRapprochement: null,
+        };
+        paquets.set(cle, p);
+      }
+      const montant = montantExecution(o, e);
+      p.lignes.push({
+        executionId: e.id,
+        operationId: o.id,
+        code: o.code,
+        libelle: o.libelle,
+        sens,
+        quantite: e.quantite,
+        prix: e.prix > 0 ? e.prix : o.prix,
+        montant,
+        rapprocheLe: e.rapprocheLe,
+      });
+      if (sens === "achat") p.montantAchats += montant;
+      else p.montantVentes += montant;
+      p.total += 1;
+      if (e.rapprocheLe) p.rapprochees += 1;
+    }
+  }
+
+  for (const p of paquets.values()) {
+    p.net = p.montantVentes - p.montantAchats;
+    const dates = new Set(
+      p.lignes.map((l) => l.rapprocheLe).filter((d): d is string => d !== null),
+    );
+    p.dateRapprochement = dates.size === 1 ? [...dates][0] : null;
+    p.lignes.sort(
+      (a, b) => a.sens.localeCompare(b.sens) || a.libelle.localeCompare(b.libelle, "fr"),
+    );
+  }
+
+  // La plus récente en tête : c'est le relevé qu'on a sous les yeux.
+  return [...paquets.values()].sort(
+    (a, b) => b.date.localeCompare(a.date) || a.fondsNom.localeCompare(b.fondsNom, "fr"),
+  );
+}
