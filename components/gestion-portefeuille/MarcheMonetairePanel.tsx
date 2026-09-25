@@ -45,22 +45,36 @@ import {
   type Metrique,
   type Unite,
 } from "@/app/gestion-portefeuille/marche-monetaire-types";
+import {
+  aideSection,
+  BoutonFiltre,
+  carte,
+  couleurDegradee,
+  enMilliards,
+  Indicateur,
+  nf0,
+  nf1,
+  nf2,
+  Pivot,
+  pourcent,
+  RangeeFiltres,
+  titreSection,
+  tooltip,
+  type AxePivot,
+} from "./analyse-ui";
 
 // === FORMATS ===
-
-const nf = (d: number) =>
-  new Intl.NumberFormat("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d });
-
-const nf0 = nf(0);
-const nf1 = nf(1);
-const nf2 = nf(2);
+//
+// Les briques communes — nombres, infobulles, indicateurs, pivot — vivent
+// dans `analyse-ui` : les quatre onglets d'analyse partagent la même
+// grammaire, et deux tableaux jumeaux finiraient par diverger.
 
 /** Les montants circulent en MILLIONS ; ils s'affichent en milliards. */
 function formater(v: number | null, unite: Unite): string {
   if (v === null || !Number.isFinite(v)) return "";
   switch (unite) {
     case "milliards":
-      return nf1.format(v / 1000);
+      return enMilliards(v);
     case "pourcent":
       return nf2.format(v);
     case "prix":
@@ -70,18 +84,7 @@ function formater(v: number | null, unite: Unite): string {
   }
 }
 
-/**
- * Recharts type son `formatter` très largement : la valeur peut être absente,
- * un tableau, une date. Plutôt que de répéter une assertion à chaque
- * graphique, on adapte la signature une fois ici.
- */
-const tooltip =
-  (rendu: (valeur: number, nom: string) => [string, string]) =>
-  (v: unknown, n: unknown): [string, string] =>
-    rendu(Number(v), String(n));
-
-const mds = (v: number | null): string => (v === null ? "—" : `${nf1.format(v / 1000)} Mds`);
-const pourcent = (v: number | null): string => (v === null ? "—" : `${nf2.format(v)} %`);
+const mds = (v: number | null): string => (v === null ? "—" : `${enMilliards(v)} Mds`);
 
 // === FILTRES ===
 
@@ -128,18 +131,6 @@ function periodes(
 
 // === PRÉSENTATION ===
 
-const carte = "bg-white border border-slate-200 rounded-lg";
-const titreSection = "text-xs font-semibold text-slate-800";
-const aideSection = "text-[10px] text-slate-500 mt-0.5";
-
-/** Du court terme (clair) au long terme (foncé) : la maturité se lit à l'œil. */
-function couleurTenor(rang: number, total: number): string {
-  const part = total <= 1 ? 0 : rang / (total - 1);
-  // La teinte glisse du cyan vers l'indigo en même temps que la clarté baisse :
-  // sept nuances d'un même bleu ne se distinguent pas dans une barre empilée.
-  return `hsl(${Math.round(190 + part * 45)}, ${Math.round(65 + part * 15)}%, ${Math.round(72 - part * 44)}%)`;
-}
-
 /**
  * Clef de série d'une maturité, ZÉRO-REMPLIE.
  *
@@ -166,75 +157,17 @@ const clefTenor = (mois: number) => `m${String(mois).padStart(3, "0")}`;
 // d'apparaître. Ce qui identifie une série ici n'est pas sa maturité mais son
 // RANG dans l'empilement, du plus court au plus long ; la clef le dit.
 
-function Indicateur({
-  libelle,
-  valeur,
-  aide,
-  accent,
-}: {
-  libelle: string;
-  valeur: string;
-  aide?: string;
-  accent?: boolean;
-}) {
-  return (
-    <div className="px-3 py-2 border border-slate-200 rounded-lg bg-white" title={aide}>
-      <div className="text-[10px] uppercase tracking-wider text-slate-500">{libelle}</div>
-      <div
-        className={`text-sm font-semibold tabular-nums ${
-          accent ? "text-blue-800" : "text-slate-900"
-        }`}
-      >
-        {valeur}
-      </div>
-    </div>
-  );
-}
-
-function BoutonFiltre({
-  actif,
-  onClick,
-  children,
-  titre,
-  couleur,
-}: {
-  actif: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-  titre?: string;
-  couleur?: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={titre}
-      style={actif && couleur ? { backgroundColor: couleur, borderColor: couleur } : undefined}
-      className={`px-2.5 py-1 text-[11px] rounded border transition ${
-        actif
-          ? couleur
-            ? "text-white font-medium"
-            : "bg-blue-700 border-blue-700 text-white font-medium"
-          : "bg-white border-slate-300 text-slate-500 hover:border-slate-400"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
 /**
- * Pivot pays × maturité.
+ * Le pivot du marché monétaire : pays en lignes, maturités en colonnes.
  *
- * La même grille sert aux montants et aux taux : `agreger` sait déjà qu'un
- * montant se somme et qu'un taux se pondère. La colonne et la ligne de total ne
- * rejouent donc PAS le calcul cellule par cellule — elles agrègent l'ensemble
- * des lignes concernées, ce qui donne une vraie moyenne pondérée là où une
- * moyenne de moyennes serait fausse.
+ * Habillage du pivot générique, qui ne connaît aucun domaine. Tout ce qui est
+ * propre aux adjudications tient ici : les colonnes sont des tranches de
+ * maturité, la règle d'agrégation sait qu'un montant se somme et qu'un taux se
+ * pondère, et l'avertissement dit sur quelle part du marché la moyenne porte.
  */
-function Pivot({
+function PivotMonetaire({
   lignes,
-  tenors: toutesTenors,
+  tenors,
   pays,
   metrique,
 }: {
@@ -245,111 +178,63 @@ function Pivot({
 }) {
   const unite = METRIQUES[metrique].unite;
 
-  const tenors = useMemo(
-    () => tenorsRenseignes(metrique, lignes, toutesTenors),
-    [toutesTenors, lignes, metrique],
+  const colonnes: AxePivot[] = useMemo(
+    () =>
+      tenorsRenseignes(metrique, lignes, tenors).map((t) => ({
+        cle: String(t),
+        titre: String(t),
+        sousTitre: libelleTranche(t),
+      })),
+    [metrique, lignes, tenors],
   );
 
-  const parPays = useMemo(() => {
-    const m = new Map<string, Adjudication[]>();
-    for (const l of lignes) {
-      const liste = m.get(l.country);
-      if (liste) liste.push(l);
-      else m.set(l.country, [l]);
-    }
-    return m;
-  }, [lignes]);
-
-  const cellule = (sousEnsemble: Adjudication[]) => {
-    const v = agreger(metrique, sousEnsemble);
-    return v === null ? <span className="text-slate-300">·</span> : formater(v, unite);
-  };
-
-  const totalLibelle = unite === "milliards" || unite === "entier" ? "Total" : "Moy.";
+  const lignesAxe: AxePivot[] = useMemo(
+    () =>
+      pays.map((p) => ({
+        cle: p,
+        titre: PAYS_NOM[p] ?? p,
+        couleur: PAYS_COULEUR[p],
+      })),
+    [pays],
+  );
 
   // Sur quelle part du marché la moyenne porte-t-elle vraiment ? Un coupon
   // n'existe que pour les OAT, un taux moyen pondéré surtout pour les bons.
   const assise = assiseMetrique(metrique, lignes);
-  const partielle = assise !== null && assise < 0.995;
 
   return (
-    <div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-[11px] border-collapse">
-          <thead>
-            <tr className="border-b border-slate-200">
-              <th className="text-left font-medium text-slate-500 px-2 py-1.5">Pays</th>
-              {tenors.map((t) => (
-                <th key={t} className="text-right font-medium text-slate-600 px-2 py-1.5">
-                  <div className="tabular-nums">{t}</div>
-                  <div className="text-[9px] font-normal text-slate-400">{libelleTranche(t)}</div>
-                </th>
-              ))}
-              <th className="text-right font-semibold text-slate-700 px-2 py-1.5 border-l border-slate-200">
-                {totalLibelle}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {pays.map((p) => {
-              const duPays = parPays.get(p) ?? [];
-              return (
-                <tr key={p} className="border-b border-slate-100 hover:bg-slate-50">
-                  <td className="px-2 py-1 text-slate-800 whitespace-nowrap">
-                    <span
-                      className="inline-block w-1.5 h-1.5 rounded-full mr-1.5 align-middle"
-                      style={{ backgroundColor: PAYS_COULEUR[p] }}
-                    />
-                    {PAYS_NOM[p] ?? p}
-                  </td>
-                  {tenors.map((t) => (
-                    <td key={t} className="px-2 py-1 text-right tabular-nums text-slate-700">
-                      {cellule(duPays.filter((l) => l.tenor === t))}
-                    </td>
-                  ))}
-                  <td className="px-2 py-1 text-right tabular-nums font-semibold text-slate-900 border-l border-slate-200">
-                    {cellule(duPays)}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-          <tfoot>
-            <tr className="border-t-2 border-slate-300 bg-slate-50">
-              <td className="px-2 py-1.5 font-semibold text-slate-800">Total général</td>
-              {tenors.map((t) => (
-                <td
-                  key={t}
-                  className="px-2 py-1.5 text-right tabular-nums font-semibold text-slate-800"
-                >
-                  {cellule(lignes.filter((l) => l.tenor === t))}
-                </td>
-              ))}
-              <td className="px-2 py-1.5 text-right tabular-nums font-bold text-blue-800 border-l border-slate-200">
-                {cellule(lignes)}
-              </td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
-      <p className="text-[10px] text-slate-400 mt-1.5">
-        {METRIQUES[metrique].aide}
-        {unite === "milliards" ? " Montants en milliards de FCFA." : ""}
-        {unite === "prix" ? " Prix pour 10 000 F de nominal." : ""}
-      </p>
-      {partielle && (
-        <p className="text-[10px] text-amber-700 mt-0.5">
-          Donnée publiée sur {nf0.format((assise as number) * 100)} % du montant retenu
-          seulement : la moyenne ne porte que sur cette part.
-          {metrique === "tauxInteret"
-            ? " Un bon du Trésor s'adjuge à l'escompte, sans coupon — il n'a pas de taux d'intérêt."
-            : ""}
-          {metrique === "tmp" || metrique === "tauxMarginal"
-            ? " Ces taux ne sont publiés que lorsque l'adjudication se fait au taux, ce qui est surtout le cas des bons."
-            : ""}
-        </p>
-      )}
-    </div>
+    <Pivot<Adjudication>
+      donnees={lignes}
+      lignes={lignesAxe}
+      colonnes={colonnes}
+      cleLigne={(l) => l.country}
+      cleColonne={(l) => String(l.tenor)}
+      cellule={(sous) => agreger(metrique, sous)}
+      formater={(v) => formater(v, unite)}
+      enTeteLignes="Pays"
+      libelleTotal={unite === "milliards" || unite === "entier" ? "Total" : "Moy."}
+      note={
+        <>
+          {METRIQUES[metrique].aide}
+          {unite === "milliards" ? " Montants en milliards de FCFA." : ""}
+          {unite === "prix" ? " Prix pour 10 000 F de nominal." : ""}
+        </>
+      }
+      alerte={
+        assise !== null && assise < 0.995 ? (
+          <>
+            Donnée publiée sur {nf0.format(assise * 100)} % du montant retenu seulement : la
+            moyenne ne porte que sur cette part.
+            {metrique === "tauxInteret"
+              ? " Un bon du Trésor s'adjuge à l'escompte, sans coupon — il n'a pas de taux d'intérêt."
+              : ""}
+            {metrique === "tmp" || metrique === "tauxMarginal"
+              ? " Ces taux ne sont publiés que lorsque l'adjudication se fait au taux, ce qui est surtout le cas des bons."
+              : ""}
+          </>
+        ) : undefined
+      }
+    />
   );
 }
 
@@ -471,8 +356,7 @@ export default function MarcheMonetairePanel({ lignes }: { lignes: LigneCompacte
     <div className="space-y-4">
       {/* ====== FILTRES ====== */}
       <section className={`${carte} p-3 space-y-2.5`}>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-[10px] uppercase tracking-wider text-slate-500 w-20">Période</span>
+        <RangeeFiltres libelle="Période">
           {presets.map((p) => (
             <BoutonFiltre
               key={p.cle}
@@ -496,12 +380,9 @@ export default function MarcheMonetairePanel({ lignes }: { lignes: LigneCompacte
             onChange={(e) => setPeriode({ cle: "perso", debut: periode.debut, fin: e.target.value })}
             className="text-[11px] border border-slate-300 rounded px-1.5 py-1 text-slate-700"
           />
-        </div>
+        </RangeeFiltres>
 
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-[10px] uppercase tracking-wider text-slate-500 w-20">
-            Instrument
-          </span>
+        <RangeeFiltres libelle="Instrument">
           {(
             [
               ["tous", "Tous"],
@@ -532,10 +413,9 @@ export default function MarcheMonetairePanel({ lignes }: { lignes: LigneCompacte
           >
             + échanges et rachats
           </BoutonFiltre>
-        </div>
+        </RangeeFiltres>
 
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-[10px] uppercase tracking-wider text-slate-500 w-20">Émetteurs</span>
+        <RangeeFiltres libelle="Émetteurs">
           {PAYS_ORDRE.map((p) => (
             <BoutonFiltre
               key={p}
@@ -555,7 +435,7 @@ export default function MarcheMonetairePanel({ lignes }: { lignes: LigneCompacte
               tout réafficher
             </button>
           )}
-        </div>
+        </RangeeFiltres>
       </section>
 
       {filtrees.length === 0 ? (
@@ -633,7 +513,7 @@ export default function MarcheMonetairePanel({ lignes }: { lignes: LigneCompacte
               mois.
             </p>
             <div className="mt-2">
-              <Pivot lignes={filtrees} tenors={tenors} pays={pays} metrique="retenu" />
+              <PivotMonetaire lignes={filtrees} tenors={tenors} pays={pays} metrique="retenu" />
             </div>
             <div className="h-72 mt-3">
               <ResponsiveContainer>
@@ -656,7 +536,7 @@ export default function MarcheMonetairePanel({ lignes }: { lignes: LigneCompacte
                       dataKey={clefTenor(t)}
                       name={libelleTranche(t)}
                       stackId="m"
-                      fill={couleurTenor(i, tenors.length)}
+                      fill={couleurDegradee(i, tenors.length)}
                     />
                   ))}
                 </BarChart>
@@ -687,7 +567,7 @@ export default function MarcheMonetairePanel({ lignes }: { lignes: LigneCompacte
               </div>
             </div>
             <div className="mt-2">
-              <Pivot lignes={filtrees} tenors={tenors} pays={pays} metrique={metriqueTaux} />
+              <PivotMonetaire lignes={filtrees} tenors={tenors} pays={pays} metrique={metriqueTaux} />
             </div>
             <div className="h-72 mt-3">
               <ResponsiveContainer>

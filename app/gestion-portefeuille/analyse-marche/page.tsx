@@ -1,11 +1,17 @@
 import Link from "next/link";
 
+import AnalyseActionsPanel from "@/components/gestion-portefeuille/AnalyseActionsPanel";
+import AnalyseFcpPanel from "@/components/gestion-portefeuille/AnalyseFcpPanel";
+import AnalyseObligationsPanel from "@/components/gestion-portefeuille/AnalyseObligationsPanel";
 import AnticipationPanel from "@/components/gestion-portefeuille/AnticipationPanel";
 import MarcheMonetairePanel from "@/components/gestion-portefeuille/MarcheMonetairePanel";
 import SelecteurFonds from "@/components/gestion-portefeuille/SelecteurFonds";
 
 import { loadMyFunds } from "../data";
 import { construireAnticipations } from "../anticipation-data";
+import { chargerActions } from "../analyse-actions-data";
+import { chargerFcp } from "../analyse-fcp-data";
+import { chargerObligations } from "../analyse-obligations-data";
 import { chargerAdjudications } from "../marche-monetaire-data";
 
 export const metadata = {
@@ -17,36 +23,55 @@ export const dynamic = "force-dynamic";
 /**
  * Analyse du MARCHÉ, pas d'un portefeuille.
  *
- * Les anticipations de cours portent sur toute la cote : elles valorisent
- * chaque action de la BRVM par cinq méthodes, que le fonds la détienne ou non.
- * Les loger sous la fiche d'un fonds laissait croire l'inverse, et obligeait à
- * choisir un portefeuille pour consulter une vue de place.
+ * Un onglet par compartiment, parce qu'ils ne se lisent pas ensemble : les
+ * actions se rangent par secteur, les obligations par maturité, les
+ * adjudications par pays et par tranche, les OPCVM par maison. Vouloir les
+ * réunir dans un seul écran donnerait un tableau dont aucune colonne ne
+ * vaudrait pour tout le monde.
  *
- * Le fonds ne sert donc qu'à ANNOTER : il dit ce qui est détenu, et combien.
- * C'est une lecture de plus sur le même tableau, pas un filtre.
+ * L'ONGLET EST DANS L'URL, et non dans un état client, pour que le serveur ne
+ * calcule QUE la vue demandée. Chacune coûte : les anticipations valorisent
+ * toute la cote par cinq méthodes, le compartiment actions rejoue 144 000
+ * points de cours, l'obligataire reconstruit deux cents échéanciers. Les
+ * calculer toutes pour n'en montrer qu'une serait quatre fois le travail pour
+ * le même écran.
  *
- * DEUX MARCHÉS, DEUX ONGLETS. Les actions cotées et les adjudications
- * souveraines ne se lisent pas ensemble : l'une se regarde titre par titre,
- * l'autre pays par pays et maturité par maturité. L'onglet est choisi dans
- * l'URL plutôt que dans un état client, pour que le serveur ne calcule que la
- * vue demandée — les anticipations valorisent toute la cote, ce n'est pas un
- * travail à faire pour rien.
+ * Le fonds choisi ne sert qu'aux anticipations, où il ANNOTE : il dit ce qui
+ * est détenu, et à quel poids. Les trois autres onglets décrivent la place
+ * entière, sans référence à un portefeuille.
  */
 
-type Onglet = "actions" | "monetaire";
+type Onglet = "actions" | "obligations" | "monetaire" | "fcp" | "anticipations";
 
 const ONGLETS: { cle: Onglet; libelle: string; aide: string }[] = [
   {
     cle: "actions",
-    libelle: "Anticipations de cours",
-    aide: "Toute la cote BRVM valorisée par cinq méthodes.",
+    libelle: "Actions BRVM",
+    aide: "Capitalisation, liquidité, valorisation et performance du compartiment actions.",
+  },
+  {
+    cle: "obligations",
+    libelle: "Obligations BRVM",
+    aide: "Encours, rendements, duration et échéancier du compartiment obligataire.",
   },
   {
     cle: "monetaire",
     libelle: "Marché monétaire",
     aide: "Adjudications UMOA-Titres : montants, taux, couverture, absorption.",
   },
+  {
+    cle: "fcp",
+    libelle: "FCP",
+    aide: "Le marché des OPCVM de l'UMOA : encours, parts de marché, performances.",
+  },
+  {
+    cle: "anticipations",
+    libelle: "Anticipations de cours",
+    aide: "Toute la cote BRVM valorisée par cinq méthodes.",
+  },
 ];
+
+const DEFAUT: Onglet = "actions";
 
 export default async function AnalyseMarchePage({
   searchParams,
@@ -54,22 +79,22 @@ export default async function AnalyseMarchePage({
   searchParams: Promise<{ fonds?: string; onglet?: string }>;
 }) {
   const { fonds: choix, onglet: demande } = await searchParams;
-  const onglet: Onglet = demande === "monetaire" ? "monetaire" : "actions";
+  const onglet: Onglet =
+    ONGLETS.find((o) => o.cle === demande)?.cle ?? DEFAUT;
 
   const fonds = await loadMyFunds();
   const options = fonds.map((f) => ({ id: f.id, nom: f.nom }));
   const choisi = fonds.find((f) => f.id === choix) ?? fonds[0] ?? null;
 
   const tableau =
-    onglet === "actions" && choisi
+    onglet === "anticipations" && choisi
       ? await construireAnticipations(choisi.id, choisi.objectifPerf)
       : null;
-  const adjudications = onglet === "monetaire" ? chargerAdjudications() : null;
 
   const lien = (cle: Onglet) => {
     const p = new URLSearchParams();
     if (choix) p.set("fonds", choix);
-    if (cle !== "actions") p.set("onglet", cle);
+    if (cle !== DEFAUT) p.set("onglet", cle);
     const q = p.toString();
     return q ? `/gestion-portefeuille/analyse-marche?${q}` : "/gestion-portefeuille/analyse-marche";
   };
@@ -80,12 +105,10 @@ export default async function AnalyseMarchePage({
         <div>
           <h1 className="text-lg font-semibold text-slate-900">Analyse de marché</h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            {onglet === "actions"
-              ? "Les cours anticipés de toute la cote, par cinq méthodes de valorisation. Le fonds choisi sert de repère : il indique ce qui est détenu, et à quel poids."
-              : "Le marché primaire souverain de l'UMOA : ce que les États ont sollicité, ce que le marché a offert, ce qui a été retenu et à quel prix."}
+            {ONGLETS.find((o) => o.cle === onglet)?.aide}
           </p>
         </div>
-        {onglet === "actions" && options.length > 0 && (
+        {onglet === "anticipations" && options.length > 0 && (
           <SelecteurFonds
             fonds={options}
             valeur={choisi?.id ?? ""}
@@ -97,7 +120,7 @@ export default async function AnalyseMarchePage({
         )}
       </div>
 
-      <div className="flex gap-1 border-b border-slate-200">
+      <div className="flex flex-wrap gap-1 border-b border-slate-200">
         {ONGLETS.map((o) => (
           <Link
             key={o.cle}
@@ -114,16 +137,40 @@ export default async function AnalyseMarchePage({
         ))}
       </div>
 
-      {onglet === "monetaire" ? (
-        <MarcheMonetairePanel lignes={adjudications ?? []} />
-      ) : tableau ? (
-        <AnticipationPanel tableau={tableau} />
-      ) : (
-        <p className="text-xs text-slate-500 bg-white border border-slate-200 rounded-lg px-3 py-6 text-center">
-          Aucun fonds enregistré : les anticipations ont besoin d&apos;un portefeuille de
-          référence pour situer les positions détenues.
-        </p>
-      )}
+      {onglet === "actions" && <PanneauActions />}
+      {onglet === "obligations" && <PanneauObligations />}
+      {onglet === "monetaire" && <MarcheMonetairePanel lignes={chargerAdjudications()} />}
+      {onglet === "fcp" && <PanneauFcp />}
+      {onglet === "anticipations" &&
+        (tableau ? (
+          <AnticipationPanel tableau={tableau} />
+        ) : (
+          <p className="text-xs text-slate-500 bg-white border border-slate-200 rounded-lg px-3 py-6 text-center">
+            Aucun fonds enregistré : les anticipations ont besoin d&apos;un portefeuille de
+            référence pour situer les positions détenues.
+          </p>
+        ))}
     </div>
+  );
+}
+
+function PanneauActions() {
+  const { lignes, dateReference } = chargerActions();
+  return <AnalyseActionsPanel lignes={lignes} dateReference={dateReference} />;
+}
+
+function PanneauObligations() {
+  const { lignes, dateCours } = chargerObligations();
+  return <AnalyseObligationsPanel lignes={lignes} dateCours={dateCours} />;
+}
+
+function PanneauFcp() {
+  const { lignes, trimestreReference, derniereVl } = chargerFcp();
+  return (
+    <AnalyseFcpPanel
+      lignes={lignes}
+      trimestreReference={trimestreReference}
+      derniereVl={derniereVl}
+    />
   );
 }
