@@ -56,6 +56,7 @@ HEADERS = {
 # Source : la liste BRVM cours-actions/0 + connaissance des pays d'emission
 TICKERS: list[tuple[str, str]] = [
     ("ABJC", "ci"),  # SERVAIR ABIDJAN
+    ("BBGC", "ci"),  # BRIDGE BANK GROUP CI - premiere cotation le 24/09/2026
     ("BICB", "bj"),  # BANQUE INTERNATIONALE BENIN
     ("BICC", "ci"),  # BICI CI
     ("BNBC", "ci"),  # BERNABE
