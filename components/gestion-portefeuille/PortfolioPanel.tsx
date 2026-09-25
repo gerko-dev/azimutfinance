@@ -6,6 +6,7 @@ import Link from "next/link";
 import {
   createCustomSecurityAction,
   getSecurityDefaultsAction,
+  listCustomSecuritiesAction,
   importInventoryAction,
   listFundReferentialAction,
   lookupReferenceAction,
@@ -18,6 +19,7 @@ import {
   SLOT_LABELS,
   SLOT_ORDER,
   hrefForMatch,
+  type CustomSecurity,
   type CustomSecurityInput,
   type FundOption,
   type ImportedPosition,
@@ -603,11 +605,40 @@ const KINDS_LIES = new Set<MatchKind>(["stock", "listed-bond", "sovereign", "fun
 /**
  * État initial du formulaire pour une ligne d'inventaire.
  *
- * Rouvrir « Modifier » sur une ligne DÉJÀ liée au site doit retrouver sa
- * liaison : sans ces attributs, le formulaire repartait sur « Non coté » avec
- * des champs vides, et la liaison qu'on venait d'établir semblait perdue.
+ * LA FICHE ATTACHÉE FAIT FOI QUAND IL Y EN A UNE.
+ *
+ * Ce formulaire repartait de la seule ligne importée, sans jamais lire la
+ * fiche à laquelle elle est pourtant rattachée. Sur un compte de trésorerie,
+ * il rouvrait donc vide : pays, banque, canal, nature et type de compte —
+ * tous déjà renseignés au référentiel — étaient redemandés.
+ *
+ * Et l'enregistrement n'écrasait pas la fiche : il en créait une SECONDE. Le
+ * dédoublonnage porte sur le CODE, or le formulaire présentait celui de
+ * l'inventaire (« ORASNDEC ») là où la fiche portait celui du gérant
+ * (« ORANGE SN »). Dix-neuf noms du référentiel se sont ainsi retrouvés
+ * portés par deux fiches, parfois trois.
+ *
+ * Rouvrir « Modifier » doit retrouver ce qui est enregistré — code compris,
+ * puisque c'est lui qui décide si l'on corrige une fiche ou si l'on en crée
+ * une autre.
  */
-function initialDeLaLigne(p: ImportedPosition): CustomSecurityInput {
+function initialDeLaLigne(
+  p: ImportedPosition,
+  fiches: Map<string, CustomSecurity>,
+): CustomSecurityInput {
+  const fiche = p.customSecurityId ? fiches.get(p.customSecurityId) : undefined;
+  if (fiche) {
+    return {
+      kind: fiche.kind,
+      code: fiche.code,
+      name: fiche.name,
+      currency: fiche.currency || "XOF",
+      // Copie : le formulaire va les modifier, et muter l'objet du
+      // référentiel ferait diverger la liste affichée de ce qui est en base.
+      attributes: { ...(fiche.attributes ?? {}) },
+    };
+  }
+
   const attributes: Record<string, string> = {};
   if (KINDS_LIES.has(p.matchKind)) {
     attributes.cote = "cote";
@@ -805,6 +836,23 @@ export default function PortfolioPanel({
   const [parsed, setParsed] = useState<ParsedInventory | null>(null);
   const [positions, setPositions] = useState<ImportedPosition[]>([]);
   const [resolvingIndex, setResolvingIndex] = useState<number | null>(null);
+
+  // LE RÉFÉRENTIEL, POUR ROUVRIR UNE FICHE TELLE QU'ELLE EST ENREGISTRÉE.
+  //
+  // Sans lui, « Modifier » sur une ligne rattachée repartait d'une page
+  // blanche : le formulaire ne connaissait que la ligne importée, jamais la
+  // fiche derrière elle. Une lecture, partagée par toutes les lignes.
+  const [fichesParId, setFichesParId] = useState<Map<string, CustomSecurity>>(new Map());
+  useEffect(() => {
+    let vivant = true;
+    listCustomSecuritiesAction().then((res) => {
+      if (!vivant || !res.ok) return;
+      setFichesParId(new Map(res.data.map((c) => [c.id, c])));
+    });
+    return () => {
+      vivant = false;
+    };
+  }, []);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [importing, startImport] = useTransition();
@@ -1135,7 +1183,7 @@ export default function PortfolioPanel({
                     customForm={
                       resolvingIndex === i ? (
                         <CustomSecurityForm
-                          initial={initialDeLaLigne(p)}
+                          initial={initialDeLaLigne(p, fichesParId)}
                           onCancel={() => setResolvingIndex(null)}
                           onCreated={applyCustom}
                           onLinked={applyLinked}
