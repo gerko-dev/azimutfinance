@@ -518,26 +518,44 @@ export function matchPositions(
   // qu'une ligne d'inventaire désignée par son ISIN restait non reconnue dès
   // que le titre portait un code différent — le cas courant pour une
   // obligation, dont le mnémonique BRVM et l'ISIN ne coïncident jamais.
-  const customByCode = new Map<string, CustomSecurity>();
+  // UNE CLEF PEUT DÉSIGNER PLUSIEURS FICHES, et il faut les garder toutes.
+  //
+  // L'index ne retenait que la première venue. Or deux fiches partagent parfois
+  // un alias — « boa fcp ao opcvm002 » figure à la fois sur le compte
+  // dépositaire « E_BOA CI NFD » et, par accident d'import, sur le fonds
+  // « AURORE OPPORTUNITES ». Quand les gardes écartent la mauvaise, il faut
+  // pouvoir se rabattre sur l'autre ; avec une seule entrée par clef, la ligne
+  // ressortait non reconnue alors que sa fiche existait.
+  const ajouterA = (
+    m: Map<string, CustomSecurity[]>,
+    k: string,
+    c: CustomSecurity,
+  ) => {
+    if (!k) return;
+    const deja = m.get(k);
+    if (deja) {
+      if (!deja.includes(c)) deja.push(c);
+    } else m.set(k, [c]);
+  };
+
+  const customByCode = new Map<string, CustomSecurity[]>();
   // Index secondaire par NOM normalisé (et par code normalisé « nom ») : les
   // titres du référentiel (surtout OPCVM) peuvent avoir un code différent du
   // libellé de l'inventaire — on les reconnaît alors par leur nom.
-  const customByName = new Map<string, CustomSecurity>();
+  const customByName = new Map<string, CustomSecurity[]>();
   for (const c of customSecurities) {
-    customByCode.set(normCode(c.code), c);
+    ajouterA(customByCode, normCode(c.code), c);
     // L'ISIN ne se substitue pas au code : il s'ajoute. Un titre reste
     // atteignable par l'un ou par l'autre.
-    const isin = normCode(c.isin ?? "");
-    if (isin && !customByCode.has(isin)) customByCode.set(isin, c);
+    ajouterA(customByCode, normCode(c.isin ?? ""), c);
     // L'ISIN porté dans les attributs sert de repli : certains titres l'y ont
     // sans que la colonne dédiée soit remplie.
-    const isinAttr = normCode(c.attributes?.isin ?? "");
-    if (isinAttr && !customByCode.has(isinAttr)) customByCode.set(isinAttr, c);
+    ajouterA(customByCode, normCode(c.attributes?.isin ?? ""), c);
     // Nom, code, ET tous les libellés sous lesquels ce titre a déjà été
     // rapproché. Sans les alias, un export qui nomme le titre autrement
     // ressort « non reconnu » alors que le gérant l'a déjà rattaché.
     for (const key of [normName(c.name), normName(c.code), ...lireAlias(c.attributes)]) {
-      if (key.length >= 4 && !customByName.has(key)) customByName.set(key, c);
+      if (key.length >= 4) ajouterA(customByName, key, c);
     }
   }
 
@@ -595,10 +613,49 @@ export function matchPositions(
     const compatible = (c: CustomSecurity | undefined): CustomSecurity | undefined =>
       c && porteQuantiteEtPrix && c.kind === "tresorerie" ? undefined : c;
 
+    // UN COMPTE NE SE RECONNAÎT PAS À SON CODE.
+    //
+    // « OPCVM002 » n'est pas un code de titre : c'est le NUMÉRO DE COMPTE du
+    // fonds, le même chez tous ses établissements. Six lignes le portent dans
+    // un seul inventaire — UBA Bénin, Julaya SN, Best Cash, MTN Bénin, Wave
+    // SN, BOA — et ce sont six comptes différents.
+    //
+    // Une fiche d'OPCVM portait ce numéro comme code. Toutes ces lignes s'y
+    // accrochaient donc et ressortaient en parts de fonds : près d'un milliard
+    // de trésorerie compté comme un placement, dans les ratios comme au point.
+    // Pire, chaque enregistrement ajoutait le libellé de la ligne en ALIAS sur
+    // cette fiche — « mtn opcvm002 », « boa fcp ao opcvm002 » — de sorte que
+    // la confusion se gravait et se reproduisait à l'import suivant.
+    //
+    // LA RÈGLE VAUT AUSSI POUR L'ALIAS, et c'est nécessaire : chaque
+    // enregistrement ajoutait le libellé de la ligne mal classée en alias sur
+    // la fiche du fonds. « opcvm002 », « mtn opcvm002 », « boa fcp ao
+    // opcvm002 » y figurent désormais, et ces alias-là captent la ligne AVANT
+    // qu'on en vienne au code. Ne garder la garde que sur le code n'aurait
+    // rien changé à l'existant.
+    //
+    // Ce n'est pas une règle nouvelle, c'est la SYMÉTRIQUE de celle du dessus,
+    // et c'est déjà celle que le module applique plus bas : une ligne sans
+    // quantité ni cours mais avec une valorisation est un compte — l'étape
+    // « 4b » la classe ainsi par défaut depuis toujours.
+    //
+    // On n'écarte que les instruments de MARCHÉ : action, obligation, OPCVM.
+    // « autre » reste admis, c'est le fourre-tout du référentiel, et l'y
+    // interdire casserait des rattachements légitimes.
+    const ligneDeCompte =
+      raw.quantity == null && raw.price == null && raw.valuation != null;
+    const INSTRUMENTS = new Set<PortfolioSection>(["action", "obligation", "opcvm"]);
+    const pasUnTitre = (c: CustomSecurity | undefined): CustomSecurity | undefined =>
+      c && ligneDeCompte && INSTRUMENTS.has(c.kind) ? undefined : c;
+
+    /** Première fiche de la liste que les gardes acceptent. */
+    const retenir = (liste: CustomSecurity[] | undefined): CustomSecurity | undefined =>
+      liste?.map((c) => pasUnTitre(compatible(c))).find(Boolean);
+
     const custom =
-      compatible(customByName.get(nomLigne)) ??
-      compatible(customByName.get(nomCode)) ??
-      premier((c) => compatible(customByCode.get(c)));
+      retenir(customByName.get(nomLigne)) ??
+      retenir(customByName.get(nomCode)) ??
+      premier((c) => retenir(customByCode.get(c)));
     if (custom) {
       // Section : priorité au type du site (titre lié), puis au kind stocké s'il
       // est spécifique, sinon à la section de la ligne d'inventaire (ex. un titre
