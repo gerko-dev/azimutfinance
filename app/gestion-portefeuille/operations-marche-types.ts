@@ -759,29 +759,56 @@ export function partRestantePese(
 }
 
 /**
- * Jours fériés de la place, repris de la feuille « Étiquettes de données ».
+ * Jours de FERMETURE de la BRVM. Liste établie SUR PIÈCES, pas de mémoire.
  *
- * Liste FIGÉE et datée : elle couvre 2026 et le 1er janvier 2027. Au-delà, le
- * calcul du dénouement ne les connaîtra plus et proposera une date d'un jour
- * trop tôt. C'est pour cela que la date de dénouement reste MODIFIABLE à la
- * saisie d'une exécution — le calcul assiste, il ne décide pas.
+ * LA PRÉCÉDENTE ÉTAIT FAUSSE, et elle l'était de façon invisible : recopiée
+ * d'une feuille du classeur, elle n'a jamais pu être confrontée à quoi que ce
+ * soit. Sur ses six dates tombant en semaine et déjà passées, une seule
+ * correspondait à une fermeture — le 1er janvier. Les cinq autres (31 mars,
+ * 30 avril, 8 mai, 24 juillet, 13 août) sont des séances où la bourse a coté,
+ * et neuf fermetures réelles y manquaient. Un ordre du 24 septembre se dénouait
+ * ainsi le 29 au lieu du 28, parce qu'un 28 septembre férié y figurait sans
+ * raison.
+ *
+ * COMMENT ELLES ONT ÉTÉ ÉTABLIES. L'historique de cours REPORTE la séance
+ * précédente les jours de fermeture : le 1er mai 2026 y porte, pour les
+ * quarante-sept valeurs, exactement les cours et les volumes du 30 avril. Une
+ * journée qui duplique sa veille à l'identique sur tout le gisement est donc
+ * une journée sans séance — la probabilité d'une coïncidence est nulle. Le
+ * script `scripts/verifier_jours_feries.py` applique ce test et signale tout
+ * désaccord avec la liste ci-dessous.
+ *
+ * Le recoupement est net : les fermetures ainsi détectées en 2026 tombent sur
+ * le lundi de Pâques (6 avril, Pâques 2026 étant le 5), l'Ascension (14 mai),
+ * le lundi de Pentecôte (25 mai), le 1er mai et le 7 août — dates qu'aucune
+ * donnée de cours ne connaît et que le calendrier calcule seul. Les quatre
+ * autres suivent le calendrier lunaire.
+ *
+ * LA LISTE S'ARRÊTE AU 1er JANVIER 2027, et c'est assumé : au-delà, les fêtes
+ * mobiles ne se devinent pas. Le calcul proposera alors une date d'un jour trop
+ * tôt — raison pour laquelle la date de dénouement reste MODIFIABLE à la
+ * saisie d'une exécution. Le calcul assiste, il ne décide pas.
+ *
+ * Les samedis et dimanches n'y figurent pas : `estOuvre` les écarte déjà, et
+ * les y mettre donnait à la liste une apparence de complétude qu'elle n'avait
+ * pas.
  */
 export const JOURS_FERIES: readonly string[] = [
-  "2026-01-01",
-  "2026-03-21",
-  "2026-03-28",
-  "2026-03-31",
-  "2026-04-30",
-  "2026-05-08",
-  "2026-05-10",
-  "2026-05-31",
-  "2026-07-12",
-  "2026-07-24",
-  "2026-08-13",
-  "2026-09-28",
-  "2026-11-01",
-  "2026-12-02",
-  "2027-01-01",
+  // — 2026, fermetures OBSERVÉES dans l'historique de cours —
+  "2026-01-01", // jeudi — Jour de l'an
+  "2026-03-16", // lundi — fête mobile du calendrier lunaire
+  "2026-03-20", // vendredi — fête mobile du calendrier lunaire
+  "2026-04-06", // lundi — lundi de Pâques
+  "2026-05-01", // vendredi — fête du Travail
+  "2026-05-14", // jeudi — Ascension
+  "2026-05-25", // lundi — lundi de Pentecôte
+  "2026-05-27", // mercredi — fête mobile du calendrier lunaire
+  "2026-08-07", // vendredi — fête de l'Indépendance
+  "2026-08-25", // mardi — fête mobile du calendrier lunaire
+  // — À venir, non encore observables. Deux dates fixes, fermées chacune des
+  //   cinq dernières années où elles sont tombées en semaine. —
+  "2026-12-25", // vendredi — Noël
+  "2027-01-01", // vendredi — Jour de l'an
 ];
 
 const FERIES = new Set(JOURS_FERIES);
