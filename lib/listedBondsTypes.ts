@@ -70,6 +70,20 @@ export type ListedBond = {
   currency: string;
   /** Valeur nominale d'origine par titre (a l'emission). */
   nominalValue: number;
+  /**
+   * Nominal d'ORIGINE par titre, quand il n'est pas celui de la cote.
+   *
+   * Absent, la convention BRVM s'applique : 10 000 F. Elle vaut pour tout le
+   * compartiment obligataire de la bourse, et c'est pourquoi le referentiel
+   * cote ne porte pas ce champ.
+   *
+   * ELLE NE VAUT PAS AILLEURS. Un emprunt de gre a gre se place en grosses
+   * coupures — SOROUBAT a 5 000 000, SDMA et ADDOHA a 10 000 000 — et ses
+   * flux par titre sont alors mille fois ceux qu'un nominal de 10 000
+   * produirait. Le referentiel du gerant le renseigne ; ce champ le porte
+   * jusqu'au moteur.
+   */
+  nominalOrigine?: number;
   totalIssued: number;
   outstanding: number;
   couponRate: number;
@@ -634,7 +648,22 @@ export function calculateBPV(
 /** Convention BRVM : toutes les obligations cotees ont un nominal d'origine
  *  de 10 000 FCFA par titre. La colonne `nominalValue` du CSV donne la VN
  *  *courante* (post amorts deja passes), pas l'initiale. */
-const INITIAL_NOMINAL_PER_TITRE = 10_000;
+const NOMINAL_BRVM = 10_000;
+
+/**
+ * Nominal d'origine par titre a retenir pour derouler un echeancier.
+ *
+ * `nominalValue` NE PEUT PAS SERVIR : sur une cotee, elle porte la VN
+ * COURANTE, deja amputee des amortissements passes. La prendre pour l'origine
+ * ferait decroitre deux fois le capital d'un emprunt amortissable.
+ *
+ * On lit donc `nominalOrigine`, que seuls les titres hors cote renseignent, et
+ * l'on retombe sinon sur la convention de la bourse.
+ */
+export function nominalOrigineDe(b: { nominalOrigine?: number }): number {
+  const n = b.nominalOrigine;
+  return typeof n === "number" && Number.isFinite(n) && n > 0 ? n : NOMINAL_BRVM;
+}
 
 /** Nombre exact de jours entre deux dates (ACT/365 — convention "réel/réel"). */
 function daysBetweenDates(from: Date, to: Date): number {
@@ -696,8 +725,9 @@ function cashflowsFromSchedule(bond: ListedBond): ScheduleCashflow[] {
   const issueDate = parseISODate(bond.issueDate);
   const issueOk = !isNaN(issueDate.getTime());
 
+  const initial = nominalOrigineDe(bond);
   const out: ScheduleCashflow[] = [];
-  let outstanding = INITIAL_NOMINAL_PER_TITRE;
+  let outstanding = initial;
   let prevDate: Date | null = issueOk ? issueDate : null;
 
   for (const step of sched) {
@@ -779,21 +809,22 @@ export function getBondCashflows(bond: ListedBond): {
   // dans buildBondCashflowSchedule) calcule les YTM/Duration/BPV avec une
   // cascade per-original-titre (amort = INITIAL/R, coupons cascadants) — voir
   // commentaires dedans pour la justification.
+  const initial = nominalOrigineDe(bond);
   const amortPerPeriod =
     isIF || totalNbAmortPeriods === 0
       ? 0
-      : INITIAL_NOMINAL_PER_TITRE / totalNbAmortPeriods;
+      : initial / totalNbAmortPeriods;
 
   // Deux outstandings distincts :
   //  - mathOutstanding : base de calcul du coupon. Reste a INITIAL en mode T
-  //    (le coupon est toujours assis sur 10 000 par titre survivant, conv BOC),
+  //    (le coupon reste assis sur le nominal d'ORIGINE par titre survivant, conv BOC),
   //    cascade INITIAL → 0 en mode N.
   //  - displayOutstanding : capital restant affiche dans le tableau. Cascade
   //    TOUJOURS, peu importe T/N — l'investisseur veut voir son exposition
   //    cumulee diminuer au fil des amortissements (la VN du nominal initial
   //    ramenee au prorata des amorts deja verses).
-  let mathOutstanding = INITIAL_NOMINAL_PER_TITRE;
-  let displayOutstanding = INITIAL_NOMINAL_PER_TITRE;
+  let mathOutstanding = initial;
+  let displayOutstanding = initial;
   let prevDate = issueDate;
   const cashflows: {
     date: string;
@@ -815,7 +846,7 @@ export function getBondCashflows(bond: ListedBond): {
 
     // ACT/365 sur le capital restant du. Mode T : capital reste 10 000 par
     // titre survivant (matche BOC). Mode N : mathOutstanding cascade.
-    const couponBase = isSurTitre ? INITIAL_NOMINAL_PER_TITRE : mathOutstanding;
+    const couponBase = isSurTitre ? initial : mathOutstanding;
     const couponAmount = (couponBase * bond.couponRate * days) / 365;
 
     // Amort
@@ -824,7 +855,7 @@ export function getBondCashflows(bond: ListedBond): {
     if (isAmortPeriod) {
       if (isIF) {
         if (i === allCouponDates.length - 1) {
-          amortAmount = INITIAL_NOMINAL_PER_TITRE;
+          amortAmount = initial;
           isLastPayment = true;
         }
       } else if (isLastAmort) {
@@ -918,14 +949,15 @@ export function getBondPastCashflows(bond: ListedBond): {
   );
   const totalNbAmortPeriods = allAmortDates.length;
 
+  const initial = nominalOrigineDe(bond);
   const amortPerPeriod =
     isIF || totalNbAmortPeriods === 0
       ? 0
-      : INITIAL_NOMINAL_PER_TITRE / totalNbAmortPeriods;
+      : initial / totalNbAmortPeriods;
 
   // Cf. getBondCashflows pour la dualite math vs display.
-  let mathOutstanding = INITIAL_NOMINAL_PER_TITRE;
-  let displayOutstanding = INITIAL_NOMINAL_PER_TITRE;
+  let mathOutstanding = initial;
+  let displayOutstanding = initial;
   let prevDate = issueDate;
   const cashflows: {
     date: string;
@@ -946,7 +978,7 @@ export function getBondPastCashflows(bond: ListedBond): {
     const isAmortPeriod = amortIndex >= 0;
     const isLastAmort = amortIndex === totalNbAmortPeriods - 1;
 
-    const couponBase = isSurTitre ? INITIAL_NOMINAL_PER_TITRE : mathOutstanding;
+    const couponBase = isSurTitre ? initial : mathOutstanding;
     const couponAmount = (couponBase * bond.couponRate * days) / 365;
 
     let amortAmount = 0;
@@ -954,7 +986,7 @@ export function getBondPastCashflows(bond: ListedBond): {
     if (isAmortPeriod) {
       if (isIF) {
         if (i === allCouponDates.length - 1) {
-          amortAmount = INITIAL_NOMINAL_PER_TITRE;
+          amortAmount = initial;
           isLastPayment = true;
         }
       } else if (isLastAmort) {

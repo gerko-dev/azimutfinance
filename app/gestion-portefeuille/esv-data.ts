@@ -329,6 +329,16 @@ function ficheEnObligation(c: CustomSecurity): ListedBond | null {
     sector: (a.sector ?? "") as string,
     currency: c.currency || "XOF",
     nominalValue: nominal,
+    // LE NOMINAL DE LA FICHE EST CELUI DE L'ÉMISSION, et il commande tout
+    // l'échéancier : coupon, tranches d'amortissement, remboursement final.
+    //
+    // Sans lui, le générateur retombait sur la convention de la BOURSE —
+    // 10 000 F la coupure — qui ne vaut que pour la cote. Un emprunt privé se
+    // place en grosses coupures : SOROUBAT à 5 000 000, SDMA et ADDOHA à
+    // 10 000 000. Leurs coupons ressortaient MILLE FOIS trop petits, et le
+    // gérant n'avait aucun moyen de s'en apercevoir sur l'écran : un montant
+    // par titre de 696 F au lieu de 695 800 F se lit comme un montant.
+    nominalOrigine: nominal,
     totalIssued: nb(a.totalIssued),
     outstanding: nb(a.outstanding),
     couponRate: taux,
@@ -469,9 +479,17 @@ function evenementsNonCotes(
         // LA FICHE EST SAISIE À LA MAIN : son échéancier vaut ce que vaut ce
         // qui y a été porté. Le dire sur chaque ligne évite de prendre un
         // coupon reconstruit pour un coupon publié.
+        //
+        // ET L'ON DIT LE NOMINAL RETENU dès qu'il sort de la convention de
+        // place. C'est lui qui fixe l'échelle de tout le reste : s'il est
+        // faux, les montants le sont dans le même rapport, et rien d'autre à
+        // l'écran ne permettrait de le voir.
         reserve:
           "Titre non coté — échéancier reconstruit d'après les caractéristiques " +
-          "saisies au référentiel.",
+          "saisies au référentiel." +
+          (bond.nominalOrigine && bond.nominalOrigine !== 10_000
+            ? ` Nominal d'origine retenu : ${bond.nominalOrigine.toLocaleString("fr-FR")} F par titre.`
+            : ""),
         reception: null,
       });
     }

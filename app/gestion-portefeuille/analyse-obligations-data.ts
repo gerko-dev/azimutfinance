@@ -9,6 +9,7 @@ import {
   calculateDuration,
   getBondCashflows,
   getBondYTMFromLatest,
+  nominalOrigineDe,
   type ListedBond,
   type ListedBondPrice,
 } from "@/lib/listedBondsTypes";
@@ -18,8 +19,11 @@ import { trancheDe, type FluxAnnuel, type LigneObligation } from "./analyse-obli
 /** Au-delà, l'échéancier ne dit plus rien d'utile à un gérant. */
 const HORIZON_ANNEES = 20;
 
-/** Convention BRVM : toute obligation cotée est émise par coupures de 10 000 F. */
-const NOMINAL_PAR_TITRE = 10_000;
+// Le nombre de coupures se déduit du nominal d'ORIGINE, que le moteur résout
+// lui-même : la convention de la bourse — 10 000 F — pour une cotée, celui de
+// la fiche pour un titre hors cote. Écrire ici un 10 000 en dur aurait été
+// juste aujourd'hui, où ce module ne lit que la cote, et faux le jour où il
+// lira autre chose.
 
 /**
  * Bornes de plausibilité d'un rendement actuariel, en décimal.
@@ -66,15 +70,15 @@ function derniersCours(prix: ListedBondPrice[]): Map<string, ListedBondPrice> {
  * Tombées futures d'une ligne, agrégées par année civile et ramenées au
  * gisement entier.
  *
- * `getBondCashflows` raisonne PAR TITRE, sur un nominal d'origine de 10 000 F :
- * c'est la convention de toute la chaîne obligataire du site. Pour le
+ * `getBondCashflows` raisonne PAR TITRE, sur le nominal d'origine de la ligne
+ * — 10 000 F pour une cotée, par convention de place. Pour le
  * compartiment, on multiplie par le nombre de coupures émises — et non par
  * l'encours courant, qui a déjà été amputé des amortissements passés que ces
  * flux futurs, eux, ne comptent plus.
  */
 function fluxParAnnee(bond: ListedBond, anneeMax: number): FluxAnnuel[] {
   if (!(bond.totalIssued > 0)) return [];
-  const coupures = bond.totalIssued / NOMINAL_PAR_TITRE;
+  const coupures = bond.totalIssued / nominalOrigineDe(bond);
   const parAnnee = new Map<number, FluxAnnuel>();
   for (const cf of getBondCashflows(bond)) {
     const annee = Number(cf.date.slice(0, 4));
