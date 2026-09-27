@@ -92,6 +92,13 @@ export type CustomSecurityInput = {
    *  référentiel, qui n'est rattaché à aucun portefeuille : la fiche y reste
    *  alors partagée, comme avant. */
   fondsId?: string;
+  /** Fiche EXISTANTE que ce formulaire corrige, ou undefined s'il en crée une.
+   *
+   *  Sans lui, « Modifier » sur une ligne déjà rattachée repassait par la
+   *  création : le code étant pris, l'enregistrement retombait sur la fusion
+   *  d'unicité, qui ne remplit que les champs VIDES. Une correction du pays ou
+   *  de l'établissement était donc acceptée à l'écran et perdue en base. */
+  ficheId?: string;
   /** Libellé EXACT de la ligne d'inventaire à l'origine de la création.
    *
    *  Il est conservé en alias sur la fiche, et c'est ce qui rend le travail

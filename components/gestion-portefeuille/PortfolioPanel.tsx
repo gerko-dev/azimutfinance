@@ -7,6 +7,7 @@ import {
   createCustomSecurityAction,
   getSecurityDefaultsAction,
   listCustomSecuritiesAction,
+  updateCustomSecurityAction,
   importInventoryAction,
   listFundReferentialAction,
   lookupReferenceAction,
@@ -158,7 +159,9 @@ function CustomSecurityForm({
 }: {
   initial: CustomSecurityInput;
   onCancel: () => void;
-  onCreated: (created: { id: string; name: string; code: string }) => void;
+  /** Reçoit la fiche ENTIÈRE, attributs compris : l'appelant en a besoin pour
+   *  que « Modifier » la retrouve ensuite telle qu'elle vient d'être saisie. */
+  onCreated: (created: CustomSecurity) => void;
   onLinked: (match: ReferenceMatch) => void;
 }) {
   const [kind, setKind] = useState<PortfolioSection>(initial.kind);
@@ -253,15 +256,23 @@ function CustomSecurityForm({
     fondsId: initial.fondsId,
   });
 
-  // Crée effectivement le titre personnalisé (après vérif / choix explicite).
+  // Enregistre le titre personnalisé (après vérif / choix explicite).
+  //
+  // CORRIGER N'EST PAS RECRÉER. Quand le formulaire a été ouvert sur une fiche
+  // existante, on la MET À JOUR. Passer par la création la faisait buter sur
+  // l'unicité du code, et le repli de fusion ne remplit que les champs vides :
+  // changer le pays d'un compte déjà renseigné était accepté à l'écran, puis
+  // silencieusement ignoré en base.
   const doCreate = () => {
     start(async () => {
-      const res = await createCustomSecurityAction(buildInput());
+      const res = initial.ficheId
+        ? await updateCustomSecurityAction(initial.ficheId, buildInput())
+        : await createCustomSecurityAction(buildInput());
       if (!res.ok) {
         setError(res.error);
         return;
       }
-      onCreated({ id: res.data.id, name: res.data.name, code: res.data.code });
+      onCreated(res.data);
     });
   };
 
@@ -633,6 +644,7 @@ function initialDeLaLigne(
   const fiche = p.customSecurityId ? fiches.get(p.customSecurityId) : undefined;
   if (fiche) {
     return {
+      ficheId: fiche.id,
       kind: fiche.kind,
       code: fiche.code,
       name: fiche.name,
@@ -923,7 +935,13 @@ export default function PortfolioPanel({
   // depuis un inventaire sans colonne symbole : `normCode("")` ne vaut aucun
   // code, donc aucune ligne n'était mise à jour et le gérant voyait sa saisie
   // ignorée.
-  const applyCustom = (created: { id: string; name: string; code: string }) => {
+  const applyCustom = (created: CustomSecurity) => {
+    // L'INDEX DES FICHES EST CHARGÉ UNE FOIS AU MONTAGE, et une fiche créée
+    // pendant l'import n'y figure donc pas. « Modifier » retrouvait bien son
+    // identifiant sur la ligne, mais pas la fiche derrière : le formulaire
+    // repartait de la ligne brute, et Pays, Établissement, Type de compte
+    // revenaient vides. On l'y inscrit à la volée.
+    setFichesParId((prev) => new Map(prev).set(created.id, created));
     const parCode = normCode(created.code);
     const parNom = normName(created.name);
     const enCours = resolvingIndex;
