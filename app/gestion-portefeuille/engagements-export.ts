@@ -27,6 +27,9 @@ import { etablissementDuCompte } from "./tresorerie-comptes";
 import { fraisGestionDuMois, libelleMois, moisDesFrais } from "./frais-gestion";
 import { loadFluxManuels, loadNivellements } from "./tresorerie-flux-data";
 import { loadNavMois } from "./nav-data";
+import { loadStocks } from "@/lib/dataLoader";
+
+import { normName } from "./portfolio-match";
 import { chargerParametresMarche } from "./parametres-marche-data";
 import { loadToutesOperationsMarche } from "./operations-marche-data";
 import {
@@ -429,12 +432,75 @@ const familleOperation = (sens: "achat" | "vente", servi: boolean): string =>
       ? "VENTES_REALISEES"
       : "VENTES_VALIDEES";
 
+/**
+ * Le classeur ne connaît pas la VENTE à réméré.
+ *
+ * Sa liste d'engagements n'a que la forme ACHAT — ACHATS_A_RÉMÉRÉ_VALIDES —
+ * alors que le site modélise les deux sens. Le gérant range donc la vente en
+ * VENTES_MTP_REALISEES, qui est bien ce qu'elle devient économiquement : une
+ * cession de gré à gré qui fait entrer du cash.
+ *
+ * RÉSERVE ASSUMÉE : la ligne n'est pas encore servie quand elle sort sous ce
+ * libellé. Elle comptera donc dans les ventes RÉALISÉES du classeur avant de
+ * l'être, et l'écart se résorbera à l'exécution — qui produira, elle, la même
+ * ligne. C'est le choix du gérant, pris en connaissance de cause ; le site,
+ * lui, continue de la porter comme un engagement dans son propre point.
+ */
+const POSTE_REMPLACE: Record<string, { type: string; description: string }> = {
+  VENTES_A_RÉMÉRÉ_VALIDES: {
+    type: "VENTES_REALISEES",
+    description: "VENTES_MTP_REALISEES",
+  },
+};
+
 /** Libellés d'instrument de la feuille « Étiquettes de données ». */
 const INSTRUMENT_CLASSEUR: Record<Instrument, string> = {
   actions: "Actions",
   obligations: "Obligations_et_autres_titres_de_créances",
   mtp: "Instruments_du_marché_monétaire",
 };
+
+/**
+ * Le SYMBOLE d'une action, depuis ce que l'ordre en porte.
+ *
+ * LA COLONNE S'APPELLE « CODE ISIN », MAIS POUR UNE ACTION LE CLASSEUR Y MET
+ * LE SYMBOLE : sa liste de validation y égrène ABJC, BICB, BOAC, SNTS. Le
+ * site, lui, enregistre l'ISIN sur l'ordre — CI0000005864 pour ORANGE CI. Les
+ * deux se valent pour désigner le titre, mais un seul passe la validation de
+ * la feuille, et c'est le symbole.
+ *
+ * Trois clefs d'affilée, de la plus sûre à la plus large : l'ISIN, le symbole
+ * lui-même — un ordre ancien peut déjà le porter — puis le NOM. Le nom sert
+ * les cas où le code manque : un ordre de notre base porte « 0 » en code et
+ * « BANQUE INTERNATIONALE POUR L'INDUSTRIE ET LE COMMERCE DU BENIN » en
+ * libellé, et sans cette troisième passe il sortirait sous un zéro.
+ *
+ * Faute de tout, on rend ce qu'on avait : une cellule visiblement à corriger
+ * vaut mieux qu'une cellule vide.
+ */
+function symboleAction(): (code: string, libelle: string) => string {
+  const parIsin = new Map<string, string>();
+  const parSymbole = new Map<string, string>();
+  const parNom = new Map<string, string>();
+  for (const s of loadStocks()) {
+    const symbole = (s.code ?? "").trim().toUpperCase();
+    if (!symbole) continue;
+    parSymbole.set(symbole, symbole);
+    const isin = (s.isin ?? "").trim().toUpperCase();
+    if (isin) parIsin.set(isin, symbole);
+    const nom = normName(s.name ?? "");
+    if (nom && !parNom.has(nom)) parNom.set(nom, symbole);
+  }
+  return (code, libelle) => {
+    const c = (code ?? "").trim().toUpperCase();
+    return (
+      parIsin.get(c) ??
+      parSymbole.get(c) ??
+      parNom.get(normName(libelle ?? "")) ??
+      code
+    );
+  };
+}
 
 /**
  * Les opérations de marché d'un ensemble de fonds, prêtes à coller.
@@ -464,6 +530,7 @@ async function operationsDeMarche(
 
   const marche: LigneOperation[] = [];
   const primaire: LigneEngagement[] = [];
+  const symbole = symboleAction();
 
   for (const o of ordres) {
     const nom = fondsParId.get(o.fondsId);
@@ -473,7 +540,9 @@ async function operationsDeMarche(
     const socle = {
       fonds: nom,
       instrument: INSTRUMENT_CLASSEUR[o.instrument] ?? o.instrument,
-      code: o.code,
+      // Le symbole pour une action, l'ISIN ou le mnémonique pour le reste :
+      // c'est ainsi que la feuille désigne chaque famille de titre.
+      code: o.instrument === "actions" ? symbole(o.code, o.libelle) : o.code,
       titre: o.libelle,
       sgi: o.sgi,
       tauxCourtage: o.tauxCourtage,
@@ -506,7 +575,9 @@ async function operationsDeMarche(
     const reste = quantiteRestante(o);
     const courusRestants =
       o.quantite > 0 ? (o.interetsCourus * reste) / o.quantite : 0;
-    const poste = enCleClasseur(posteEngageDe(o));
+    const brut = enCleClasseur(posteEngageDe(o));
+    const remplace = POSTE_REMPLACE[brut];
+    const poste = remplace?.description ?? brut;
 
     if (marcheDe(o.description) === "primaire") {
       primaire.push({
@@ -527,7 +598,7 @@ async function operationsDeMarche(
     marche.push({
       ...socle,
       date: o.dateOperation,
-      typeOperation: familleOperation(sens, false),
+      typeOperation: remplace?.type ?? familleOperation(sens, false),
       description: poste,
       quantite: reste,
       prix: o.prix,
