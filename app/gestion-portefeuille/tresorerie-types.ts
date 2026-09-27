@@ -254,10 +254,6 @@ export type PointTresorerie = {
    *  disparaîtrait en silence, et le gérant chercherait longtemps pourquoi un
    *  poste ne bouge pas. */
   operationsSansColonne: { libelle: string; compte: string; montant: number }[];
-  /** Opérations négociées mais PAS ENCORE DÉNOUÉES à la date d'arrêté. Elles
-   *  ne comptent pas — la trésorerie n'a pas bougé — mais elle bougera, et le
-   *  trésorier doit les voir venir. */
-  operationsNonDenouees: { libelle: string; dateDenouement: string; montant: number }[];
   /** Flux SAISIS du fonds — les quatre lignes « autres ». Ils voyagent avec le
    *  point pour que le formulaire les montre sans les relire. */
   fluxSaisis: FluxManuel[];

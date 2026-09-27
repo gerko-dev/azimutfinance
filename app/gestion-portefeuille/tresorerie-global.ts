@@ -178,9 +178,6 @@ export async function construirePointGlobal(
     operationsSansColonne: points.flatMap((p) =>
       p.operationsSansColonne.map((o) => ({ ...o, libelle: `${p.fonds} · ${o.libelle}` })),
     ),
-    operationsNonDenouees: points.flatMap((p) =>
-      p.operationsNonDenouees.map((o) => ({ ...o, libelle: `${p.fonds} · ${o.libelle}` })),
-    ),
     remeresAVenir: points.flatMap((p) =>
       p.remeresAVenir.map((o) => ({ ...o, libelle: `${p.fonds} · ${o.libelle}` })),
     ),

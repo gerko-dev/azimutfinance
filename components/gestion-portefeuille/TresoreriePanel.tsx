@@ -257,30 +257,6 @@ function Contenu({
 
 
 
-        {/* CE QUI N'EST PAS ENCORE COMPTÉ, ET POURQUOI.
-            Le point ne retient que les opérations DÉNOUÉES à la date
-            d'arrêté — la règle du classeur. Sans cet encart, une opération
-            saisie le jour même semblait s'être perdue : elle est simplement
-            en attente de règlement, et le dire vaut mieux que de laisser
-            chercher. */}
-        {point.operationsNonDenouees.length > 0 && (
-          <div className="text-[11px] text-slate-700 bg-slate-50 border border-slate-200 rounded px-3 py-2 mt-2">
-            <strong>
-              {point.operationsNonDenouees.length} opération(s) négociée(s) mais pas
-              encore dénouée(s)
-            </strong>{" "}
-            au {point.dateFin ?? point.dateInventaire ?? "—"} : elles ne comptent pas
-            encore dans les soldes ci-dessous.
-            <ul className="mt-1 space-y-0.5">
-              {point.operationsNonDenouees.map((o, i) => (
-                <li key={i} className="tabular-nums">
-                  dénouement {o.dateDenouement} · {o.libelle} — {montant(o.montant)} F
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
         {/* LES SPOTS DONT L'ÉCHÉANCE EST ENCORE DEVANT. Même raison que les
             rémérés : le flux est certain, il n'entre simplement pas dans
             l'horizon de l'arrêté. */}

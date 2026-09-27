@@ -352,24 +352,15 @@ export const construirePointTresorerie = cache(async function construirePoint(
                 `les frais n'ont aucune colonne où s'inscrire.`,
         };
 
-  // Negociees, pas encore denouees : elles ne comptent pas aujourd'hui, mais
-  // le tresorier doit les voir venir.
-  // Ce sont les EXÉCUTIONS qui se dénouent, pas les ordres : on liste donc
-  // celles dont le règlement tombe après la date d'arrêté. Un ordre non servi
-  // n'y figure pas — il n'a rien à régler, il pèse déjà comme engagement.
-  const nonDenouees = operations
-    .flatMap((o) =>
-      o.executions
-        .filter((e) => dateArrete !== null && e.dateDenouement > dateArrete)
-        .map((e) => ({
-          libelle:
-            `${o.libelle || o.code || "Opération"} — ${o.compteReglement}` +
-            (e.quantite < o.quantite ? ` (${e.quantite} / ${o.quantite})` : ""),
-          dateDenouement: e.dateDenouement,
-          montant: o.quantite > 0 ? (o.montant / o.quantite) * e.quantite : 0,
-        })),
-    )
-    .sort((a, b) => a.dateDenouement.localeCompare(b.dateDenouement));
+  // LES EXÉCUTIONS NON DÉNOUÉES NE SONT PLUS LISTÉES ICI. Le point les
+  // énumérait une par une — quarante-trois lignes certains jours, souvent le
+  // même titre servi en dix fois — pour dire qu'elles ne comptaient pas
+  // encore. L'onglet « Rapprochement dépositaire » des opérations de marché
+  // les montre désormais groupées par date de dénouement, avec le net que le
+  // dépositaire virera : c'est la même information, lisible.
+  //
+  // Elles restent naturellement exclues des soldes : seul le libellé qui
+  // l'annonçait disparaît.
 
   // Rémérés dont le TERME est au-delà de l'arrêté : leur flux ne compte pas
   // encore, mais il est certain. Sans cette liste, un remboursement à sept
@@ -528,7 +519,6 @@ export const construirePointTresorerie = cache(async function construirePoint(
     operationsSansColonne: sansColonne.sort(
       (a, b) => Math.abs(b.montant) - Math.abs(a.montant),
     ),
-    operationsNonDenouees: nonDenouees,
     ordresPerimes: perimes,
   };
 });
