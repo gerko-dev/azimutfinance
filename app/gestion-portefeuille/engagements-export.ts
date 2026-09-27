@@ -27,6 +27,20 @@ import { etablissementDuCompte } from "./tresorerie-comptes";
 import { fraisGestionDuMois, libelleMois, moisDesFrais } from "./frais-gestion";
 import { loadFluxManuels, loadNivellements } from "./tresorerie-flux-data";
 import { loadNavMois } from "./nav-data";
+import { chargerParametresMarche } from "./parametres-marche-data";
+import { loadToutesOperationsMarche } from "./operations-marche-data";
+import {
+  dateDenouement,
+  marcheDe,
+  montantExecution,
+  montantRestant,
+  partRestantePese,
+  posteEngageDe,
+  posteRealise,
+  quantiteRestante,
+  sensDe,
+  type Instrument,
+} from "./operations-marche-types";
 import type { PosteFlux } from "./tresorerie-flux-types";
 import type { FundRecord } from "./types";
 
@@ -51,8 +65,23 @@ export type Correspondance = {
   origine: "déclarée" | "déduite";
 };
 
+/**
+ * Statut du virement, dans le vocabulaire du classeur.
+ *
+ * SA LISTE DE VALIDATION N'ADMET QUE QUATRE VALEURS — « OK », « NON OK »,
+ * « EN COURS », « ANNULÉ ». Elle est portée par la feuille elle-même, et un
+ * « NOK » y serait refusé à la première correction manuelle.
+ *
+ * Le site n'en connaît que deux : ce qu'il a vu passer sur un relevé, et le
+ * reste. Il n'a pas d'état « annulé » — on y supprime une ligne, on ne la
+ * barre pas — ni d'« en cours », qui est un jugement.
+ */
+const statutVirement = (rapproche: string | null): string =>
+  rapproche ? "OK" : "NON OK";
+
 export type ExportEngagements = {
   lignes: LigneEngagement[];
+  operations: LigneOperation[];
   correspondances: Correspondance[];
   /** Périmètre et date, pour l'en-tête du fichier. */
   perimetre: string;
@@ -202,7 +231,11 @@ async function banquesDuFonds(fundId: string): Promise<Banques> {
 async function engagementsDuFonds(
   fonds: FundRecord,
   dateArrete: string,
-): Promise<{ lignes: LigneEngagement[]; correspondances: Correspondance[] }> {
+): Promise<{
+  lignes: LigneEngagement[];
+  correspondances: Correspondance[];
+  banques: Banques;
+}> {
   const [flux, nivellements, banques] = await Promise.all([
     loadFluxManuels(fonds.id),
     loadNivellements(fonds.id),
@@ -223,10 +256,10 @@ async function engagementsDuFonds(
       montant: f.montant,
       banque: banques.libelle(f.compte),
       datePrevue: f.dateFlux,
-      // LE SITE N'A PAS D'ÉTAT « ANNULÉ » : on y supprime un flux, on ne le
-      // barre pas. Tout ce qu'il porte est donc en vigueur, et « OK » est
-      // l'exact reflet de ce qu'il sait.
-      statut: "OK",
+      // UN FLUX SAISI NE SE RAPPROCHE PAS : le site n'a aucun moyen de savoir
+      // si le virement est parti. Le dire « OK » aurait fait passer une
+      // intention pour un fait, sur toute une colonne.
+      statut: statutVirement(null),
       dateEffective: "",
     });
   }
@@ -244,7 +277,7 @@ async function engagementsDuFonds(
       montant: n.montant,
       banque: source,
       datePrevue: n.dateNivellement,
-      statut: "OK",
+      statut: statutVirement(n.rapprocheDebit),
       dateEffective: n.rapprocheDebit ?? "",
     });
     lignes.push({
@@ -256,7 +289,7 @@ async function engagementsDuFonds(
       montant: n.montant,
       banque: destination,
       datePrevue: n.dateNivellement,
-      statut: "OK",
+      statut: statutVirement(n.rapprocheCredit),
       dateEffective: n.rapprocheCredit ?? "",
     });
   }
@@ -286,13 +319,13 @@ async function engagementsDuFonds(
         montant: Math.round(frais.montant),
         banque: banques.libelle(compteFrais),
         datePrevue: dateArrete,
-        statut: "OK",
+        statut: statutVirement(null),
         dateEffective: "",
       });
     }
   }
 
-  return { lignes, correspondances: banques.correspondances };
+  return { lignes, correspondances: banques.correspondances, banques };
 }
 
 /** L'export, pour un fonds ou pour tous. */
@@ -312,8 +345,17 @@ export async function construireExportEngagements(
     }
   }
 
-  const lignes = parts
-    .flatMap((p) => p.lignes)
+  // Les tables de banques, une par fonds : un même établissement peut porter
+  // un libellé déclaré chez l'un et déduit chez l'autre.
+  const tables = new Map(fonds.map((f, i) => [f.id, parts[i].banques]));
+  const nomsParId = new Map(fonds.map((f) => [f.id, nomClasseur(f)]));
+  const { marche, primaire } = await operationsDeMarche(
+    nomsParId,
+    dateArrete,
+    (fondsId, cle) => tables.get(fondsId)?.libelle(cle) ?? cle,
+  );
+
+  const lignes = [...parts.flatMap((p) => p.lignes), ...primaire]
     // Par DATE puis par fonds : c'est l'ordre du tableau, qui se remplit au
     // fil de l'eau. Coller un bloc trié autrement obligerait à retrier.
     .sort(
@@ -325,10 +367,186 @@ export async function construireExportEngagements(
 
   return {
     lignes,
+    operations: marche,
     correspondances: [...correspondances.values()].sort((a, b) =>
       a.libelle.localeCompare(b.libelle, "fr"),
     ),
     perimetre: fonds.length === 1 ? nomClasseur(fonds[0]) : `${fonds.length} fonds`,
     dateArrete,
   };
+}
+
+// ==========================================================================
+// FEUILLE « OPÉRATIONS DE MARCHÉ »
+// ==========================================================================
+//
+// Même principe, autre tableau : vingt colonnes au lieu de dix, et deux lignes
+// possibles par ordre — l'ENGAGÉ tant qu'il n'est pas servi, le RÉALISÉ pour
+// chaque part qui l'a été. C'est exactement la distinction que porte déjà le
+// point de trésorerie, et les libellés du classeur sont les mêmes que les
+// siens, aux traits de soulignement près.
+
+/** Une ligne du tableau des opérations de marché, colonnes B à S. */
+export type LigneOperation = {
+  fonds: string;
+  date: string;
+  typeOperation: string;
+  description: string;
+  instrument: string;
+  code: string;
+  titre: string;
+  quantite: number;
+  prix: number;
+  sgi: string;
+  tauxCourtage: number;
+  tauxTps: number;
+  /** Les deux commissions de place, additionnées : le classeur n'en a qu'une
+   *  colonne, et les y séparer ne change aucun montant. */
+  tauxPlace: number;
+  interetsCourus: number;
+  montant: number;
+  banque: string;
+  statut: string;
+  dateDenouement: string;
+};
+
+/**
+ * Nos postes portent les mêmes mots que le classeur, à l'espace près : le
+ * point de trésorerie dit « ACHATS MFR VALIDES » là où la feuille écrit
+ * « ACHATS_MFR_VALIDES ». Une substitution suffit donc, et elle vaut mieux
+ * qu'une seconde table de correspondance à tenir à jour en double.
+ */
+const enCleClasseur = (poste: string): string => poste.trim().replace(/\s+/g, "_");
+
+/** Familles de la colonne « Type d'opération », dans l'orthographe du
+ *  classeur — où les ventes validées prennent un E. */
+const familleOperation = (sens: "achat" | "vente", servi: boolean): string =>
+  sens === "achat"
+    ? servi
+      ? "ACHATS_REALISES"
+      : "ACHATS_VALIDES"
+    : servi
+      ? "VENTES_REALISEES"
+      : "VENTES_VALIDEES";
+
+/** Libellés d'instrument de la feuille « Étiquettes de données ». */
+const INSTRUMENT_CLASSEUR: Record<Instrument, string> = {
+  actions: "Actions",
+  obligations: "Obligations_et_autres_titres_de_créances",
+  mtp: "Instruments_du_marché_monétaire",
+};
+
+/**
+ * Les opérations de marché d'un ensemble de fonds, prêtes à coller.
+ *
+ * DEUX LIGNES PAR ORDRE, AU PLUS. La part SERVIE donne une ligne par exécution
+ * — c'est elle qui porte le prix réellement obtenu, la date de dénouement et
+ * le rapprochement. La part NON SERVIE en donne une seule, au cours ordonné,
+ * et seulement tant qu'elle pèse encore : un ordre périmé ou clôturé n'engage
+ * plus rien, et le faire figurer gonflerait des engagements qui n'existent
+ * pas.
+ *
+ * UNE SOUSCRIPTION AU PRIMAIRE NON SERVIE N'EST PAS ICI. Le classeur la porte
+ * dans l'autre feuille, sous « AUTRES_ENGAGEMENTS / OPERATIONS_MARCHÉ_PRIMAIRE »
+ * — parce qu'au primaire on règle AVANT d'être servi, et que l'engagement est
+ * donc un décaissement, pas un ordre en carnet. Servie, elle revient ici comme
+ * un achat de titres publics.
+ */
+async function operationsDeMarche(
+  fondsParId: Map<string, string>,
+  dateArrete: string,
+  banques: (fondsId: string, cle: string) => string,
+): Promise<{ marche: LigneOperation[]; primaire: LigneEngagement[] }> {
+  const [ordres, parametres] = await Promise.all([
+    loadToutesOperationsMarche(),
+    chargerParametresMarche(),
+  ]);
+
+  const marche: LigneOperation[] = [];
+  const primaire: LigneEngagement[] = [];
+
+  for (const o of ordres) {
+    const nom = fondsParId.get(o.fondsId);
+    if (!nom) continue;
+    const sens = sensDe(o.description);
+    const banque = banques(o.fondsId, o.compteReglement);
+    const socle = {
+      fonds: nom,
+      instrument: INSTRUMENT_CLASSEUR[o.instrument] ?? o.instrument,
+      code: o.code,
+      titre: o.libelle,
+      sgi: o.sgi,
+      tauxCourtage: o.tauxCourtage,
+      tauxTps: o.tauxTps,
+      tauxPlace: o.tauxBrvm + o.tauxDcbr,
+      banque,
+    };
+
+    for (const e of o.executions) {
+      // Les courus sont portés par l'ORDRE pour sa totalité : on en prend la
+      // part servie, sans quoi un ordre servi en trois fois les compterait
+      // trois fois.
+      const courus =
+        o.quantite > 0 ? (o.interetsCourus * e.quantite) / o.quantite : 0;
+      marche.push({
+        ...socle,
+        date: e.dateExecution,
+        typeOperation: familleOperation(sens, true),
+        description: enCleClasseur(posteRealise(o.description)),
+        quantite: e.quantite,
+        prix: e.prix > 0 ? e.prix : o.prix,
+        interetsCourus: Math.round(courus),
+        montant: Math.round(montantExecution(o, e)),
+        statut: statutVirement(e.rapprocheLe),
+        dateDenouement: e.dateDenouement,
+      });
+    }
+
+    if (!partRestantePese(o, dateArrete)) continue;
+    const reste = quantiteRestante(o);
+    const courusRestants =
+      o.quantite > 0 ? (o.interetsCourus * reste) / o.quantite : 0;
+    const poste = enCleClasseur(posteEngageDe(o));
+
+    if (marcheDe(o.description) === "primaire") {
+      primaire.push({
+        fonds: nom,
+        date: o.dateOperation,
+        typeOperation: "AUTRES_ENGAGEMENTS",
+        description: poste,
+        detail: o.libelle || o.code,
+        montant: Math.round(montantRestant(o)),
+        banque,
+        datePrevue: o.dateOperation,
+        statut: statutVirement(o.rapprocheLe),
+        dateEffective: o.rapprocheLe ?? "",
+      });
+      continue;
+    }
+
+    marche.push({
+      ...socle,
+      date: o.dateOperation,
+      typeOperation: familleOperation(sens, false),
+      description: poste,
+      quantite: reste,
+      prix: o.prix,
+      interetsCourus: Math.round(courusRestants),
+      montant: Math.round(montantRestant(o)),
+      // RIEN N'EST RÉGLÉ TANT QUE RIEN N'EST SERVI : la question du virement
+      // ne se pose pas encore, et « NON OK » le dit sans rien affirmer.
+      statut: statutVirement(null),
+      // La convention du gérant, la même qu'à la saisie d'une exécution : le
+      // dénouement d'un ordre non servi ne se connaît pas, il se calcule.
+      dateDenouement: dateDenouement(
+        o.dateOperation,
+        marcheDe(o.description) === "mfr" ? parametres.mfr : parametres.mtp,
+      ),
+    });
+  }
+
+  marche.sort(
+    (a, b) => a.date.localeCompare(b.date) || a.fonds.localeCompare(b.fonds, "fr"),
+  );
+  return { marche, primaire };
 }

@@ -29,8 +29,31 @@ const COLONNES: { titre: string; largeur: number }[] = [
   { titre: "Date effective", largeur: 14 },
 ];
 
+/** Colonnes B à S de la feuille « Opérations de marché », dans l'ordre. */
+const COLONNES_MARCHE: { titre: string; largeur: number }[] = [
+  { titre: "Fonds", largeur: 30 },
+  { titre: "Date", largeur: 12 },
+  { titre: "Type d'opération", largeur: 20 },
+  { titre: "Description", largeur: 24 },
+  { titre: "Instrument", largeur: 34 },
+  { titre: "Code ISIN", largeur: 16 },
+  { titre: "Titres", largeur: 38 },
+  { titre: "Quantité", largeur: 12 },
+  { titre: "Prix", largeur: 10 },
+  { titre: "SGI/BTCC", largeur: 18 },
+  { titre: "Taux courtage", largeur: 12 },
+  { titre: "Taux TPS", largeur: 10 },
+  { titre: "Taux BRVM/DCBR", largeur: 14 },
+  { titre: "Intérêts courus", largeur: 14 },
+  { titre: "Montant", largeur: 16 },
+  { titre: "Banque de règlement", largeur: 22 },
+  { titre: "Statut virement", largeur: 14 },
+  { titre: "Date de dénouement", largeur: 14 },
+];
+
 const FMT_DATE = "dd/mm/yyyy";
 const FMT_MONTANT = "#,##0";
+const FMT_TAUX = "0.0000";
 
 function enTete(cell: ExcelJS.Cell) {
   cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
@@ -84,7 +107,59 @@ export async function buildEngagementsExcel(
     vide.font = { size: 10, italic: true, color: { argb: "FF64748B" } };
   }
 
-  // ── Feuille 2 : ce qu'il a fallu traduire ────────────────────────────
+  // ── Feuille 2 : les opérations de marché ─────────────────────────────
+  //
+  // DEUX LIGNES PAR ORDRE, AU PLUS : ce qui a été servi et ce qui ne l'est pas
+  // encore. La feuille du classeur les distingue par sa colonne « Type
+  // d'opération » — VALIDES contre REALISES — et c'est la même distinction que
+  // porte le point de trésorerie.
+  const wm = wb.addWorksheet("Opérations de marché");
+  wm.columns = COLONNES_MARCHE.map((c) => ({ width: c.largeur }));
+  const teteM = wm.addRow(COLONNES_MARCHE.map((c) => c.titre));
+  teteM.eachCell(enTete);
+  teteM.height = 28;
+  wm.views = [{ state: "frozen", ySplit: 1 }];
+
+  for (const o of donnees.operations) {
+    const row = wm.addRow([
+      o.fonds,
+      date(o.date),
+      o.typeOperation,
+      o.description,
+      o.instrument,
+      o.code,
+      o.titre,
+      o.quantite,
+      o.prix,
+      o.sgi,
+      o.tauxCourtage,
+      o.tauxTps,
+      o.tauxPlace,
+      o.interetsCourus,
+      o.montant,
+      o.banque,
+      o.statut,
+      date(o.dateDenouement),
+    ]);
+    row.getCell(2).numFmt = FMT_DATE;
+    row.getCell(8).numFmt = FMT_MONTANT;
+    row.getCell(9).numFmt = FMT_MONTANT;
+    // Les taux restent en DÉCIMAL, comme le classeur les porte : 0,004 pour
+    // quatre pour mille. Les convertir en pourcentage ici casserait toutes ses
+    // formules de frais.
+    for (const c of [11, 12, 13]) row.getCell(c).numFmt = FMT_TAUX;
+    row.getCell(14).numFmt = FMT_MONTANT;
+    row.getCell(15).numFmt = FMT_MONTANT;
+    row.getCell(18).numFmt = FMT_DATE;
+    row.font = { size: 10 };
+  }
+
+  if (donnees.operations.length === 0) {
+    const vide = wm.addRow(["Aucune opération de marché sur ce périmètre."]);
+    vide.font = { size: 10, italic: true, color: { argb: "FF64748B" } };
+  }
+
+  // ── Feuille 3 : ce qu'il a fallu traduire ────────────────────────────
   //
   // ELLE N'EST PAS DÉCORATIVE. Le nom de banque est la seule colonne que le
   // site ne peut pas produire à coup sûr : le classeur écrit « BOA CI » là où
@@ -112,6 +187,15 @@ export async function buildEngagementsExcel(
     "",
     "La date des frais de gestion est celle de l'arrêté : le site en calcule le montant,",
     "pas le jour du prélèvement, qui relève d'une décision.",
+    "",
+    "« Statut virement » vaut OK quand le règlement a été constaté sur un relevé, NON OK sinon.",
+    "Le site ne connaît pas « EN COURS » ni « ANNULÉ », qui relèvent de votre appréciation.",
+    "",
+    "Pour les opérations de marché : le dénouement d'un ordre NON SERVI est calculé selon la",
+    "convention de vos paramètres, celui d'une exécution est celui qui a été saisi.",
+    "",
+    "Une VENTE à réméré non servie ressort en VENTES_A_RÉMÉRÉ_VALIDES : le classeur ne connaît",
+    "que la forme ACHAT. Le site modélise les deux sens ; à vous de décider où la ranger.",
     "",
     `Périmètre : ${donnees.perimetre} — arrêté au ${donnees.dateArrete}.`,
   ]) {
