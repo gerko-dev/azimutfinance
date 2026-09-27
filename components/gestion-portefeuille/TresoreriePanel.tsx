@@ -247,7 +247,23 @@ function Contenu({
               </span>
             )}
           </button>
-          )}
+          )}
+          {/* L'EXPORT SUIT L'ECRAN. Meme fonds, meme date d'arrete : le
+              fichier porte ce que le gerant a sous les yeux, et non un
+              perimetre qu'il faudrait re-choisir dans une boite de dialogue.
+              C'est un lien et non un bouton, parce que c'est un
+              telechargement : le navigateur sait faire, une action serveur
+              aurait demande de reconstituer le fichier cote client. */}
+          <a
+            href={`/gestion-portefeuille/tresorerie/export?${new URLSearchParams({
+              ...(parFonds ? { fonds: point.fondsId } : {}),
+              ...(point.dateFin ? { engagements: point.dateFin } : {}),
+            }).toString()}`}
+            className="px-3 py-1 rounded text-[11px] font-medium border border-slate-300 text-slate-700 hover:bg-slate-50 transition"
+            title="Les engagements au format de la feuille « Autres opérations » du classeur de trésorerie, prêts à coller."
+          >
+            Export engagements
+          </a>
           {point.soldesSaisisLe && (
             <span className="text-[11px] text-slate-500">
               Derniers soldes saisis : {point.soldesSaisisLe}

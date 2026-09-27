@@ -424,6 +424,17 @@ export const SECURITY_FIELDS: Record<PortfolioSection, FieldDef[]> = {
     { key: "natureCompte", label: "Nature du compte", type: "text" }, // "espece" | "depositaire"
     { key: "typeCompte", label: "Type de compte", type: "select", options: TYPE_COMPTE },
     { key: "tauxRemuneration", label: "Taux de rémunération", type: "number", unit: "%", placeholder: "3,5" },
+    // Le classeur de trésorerie nomme ses banques court et suffixe le pays —
+    // « BOA CI », « ORABANK SN ». L'export le déduit de l'établissement et du
+    // pays, ce qui tombe juste la plupart du temps ; ce champ permet de figer
+    // les cas où la déduction se trompe, et l'emporte alors sur elle.
+    {
+      key: "libelleClasseur",
+      label: "Libellé classeur",
+      type: "text",
+      placeholder: "Ex. BOA CI",
+      hint: "Nom de la banque dans le classeur de trésorerie. Laissé vide, il est déduit.",
+    },
   ],
   autre: [{ key: "note", label: "Description", type: "text", placeholder: "Nature de l'actif" }],
 };
