@@ -559,6 +559,20 @@ export function ficheUtilisablePar(
   return proprietaire === "" || fondsId === "" || proprietaire === fondsId;
 }
 
+/**
+ * 0 quand la fiche a un proprietaire, 1 quand elle n'en a pas.
+ *
+ * Il n'y a pas a verifier DUQUEL il s'agit : la liste est deja filtree, et
+ * toute fiche qui y a un proprietaire l'a dans ce fonds-ci. Le tri est stable,
+ * donc a rang egal l'ordre d'origine tient.
+ */
+export function rangProprietaire(c: {
+  kind: string;
+  attributes?: Record<string, string> | null;
+}): number {
+  return fondsProprietaire(c) === "" ? 1 : 0;
+}
+
 // Matche toutes les lignes d'un inventaire.
 export function matchPositions(
   rows: RawPosition[],
@@ -568,7 +582,16 @@ export function matchPositions(
   // Les comptes d'un AUTRE fonds sortent du jeu avant tout rapprochement :
   // les ecarter ici plutot qu'a chaque garde evite d'avoir a y penser a
   // chacune des quatre passes.
-  const customSecurities = toutesFiches.filter((c) => ficheUtilisablePar(c, fondsId));
+  //
+  // ET LE COMPTE DE CE FONDS PASSE DEVANT. Le referentiel garde des fiches
+  // creees puis jamais rapprochees : sans proprietaire demontrable, elles
+  // restent partageables, et rien n'empecherait deux fonds de s'accrocher a la
+  // meme au prochain import — la porte qu'on vient de fermer se rouvrirait par
+  // la. Une preference suffit a l'eviter, la ou une suppression aurait detruit
+  // le travail de quelqu'un.
+  const customSecurities = toutesFiches
+    .filter((c) => ficheUtilisablePar(c, fondsId))
+    .sort((a, b) => rangProprietaire(a) - rangProprietaire(b));
   const index = buildSiteIndex();
   // Un titre du référentiel doit être reconnu par ses TROIS identifiants :
   // code / symbole, ISIN, et nom exact. L'ISIN manquait à cet index, si bien

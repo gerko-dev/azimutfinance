@@ -10,7 +10,7 @@
 // coups de chaînes de caractères ferait double emploi avec ce que le gérant a
 // déjà renseigné, et divergerait au premier compte ajouté sans elle.
 
-import { ficheUtilisablePar, normName } from "./portfolio-match";
+import { ficheUtilisablePar, normName, rangProprietaire } from "./portfolio-match";
 import { lireAlias } from "./portfolio-security-schema";
 import type { CustomSecurity } from "./portfolio-types";
 
@@ -146,11 +146,13 @@ export function indexerParNom(
   fondsId = "",
 ): Map<string, CustomSecurity> {
   const index = new Map<string, CustomSecurity>();
-  for (const c of fiches) {
-    // Le compte d'un AUTRE fonds n'entre pas dans l'index : c'est ici, a la
-    // lecture, que le defaut se voyait — un compte depositaire emprunte au
-    // portefeuille voisin.
-    if (!ficheUtilisablePar(c, fondsId)) continue;
+  // L'index garde la PREMIERE fiche rencontree sous chaque clef : les comptes
+  // de ce fonds passent donc devant ceux que personne ne reclame, faute de
+  // quoi une fiche orpheline homonyme raflerait la clef.
+  const ordonnees = fiches
+    .filter((c) => ficheUtilisablePar(c, fondsId))
+    .sort((a, b) => rangProprietaire(a) - rangProprietaire(b));
+  for (const c of ordonnees) {
     for (const clef of [normName(c.name), normName(c.code), ...lireAlias(c.attributes)]) {
       // Le seuil de quatre caractères est celui de l'import : en deçà, un nom
       // est trop court pour désigner un compte sans ambiguïté.
