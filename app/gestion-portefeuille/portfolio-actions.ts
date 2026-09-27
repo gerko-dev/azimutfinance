@@ -4,7 +4,13 @@ import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/lib/admin/types";
 import { parseInventoryBuffer, type RawPosition } from "./portfolio-parse";
-import { matchPositions, lookupReference, siteSecurityAttributes, normName } from "./portfolio-match";
+import {
+  CLEF_FONDS,
+  lookupReference,
+  matchPositions,
+  normName,
+  siteSecurityAttributes,
+} from "./portfolio-match";
 import { loadCustomSecurities } from "./portfolio-data";
 import { loadFunds } from "@/lib/fcp";
 import {
@@ -51,7 +57,13 @@ function buildAttributes(
   // resynchronisation des caractéristiques suffisait à faire perdre à cent
   // soixante-dix-huit fiches le nom sous lequel l'inventaire les désigne, et
   // l'import suivant ne les reconnaissait plus.
-  for (const k of ["source", "refId", "isin", "alias"]) {
+  //
+  // ET LE FONDS PROPRIETAIRE, pour la meme raison exactement. Il ne figure
+  // dans aucun schema — ce n'est pas une caracteristique du compte mais le
+  // portefeuille auquel il appartient — et une simple correction du pays ou
+  // de la banque l'aurait efface, rendant le compte de nouveau partageable.
+  // Le defaut se serait vu des le rapprochement suivant, loin de sa cause.
+  for (const k of ["source", "refId", "isin", "alias", "fundId"]) {
     const v = (raw?.[k] ?? "").toString().trim();
     if (v && !out[k]) out[k] = v;
   }
@@ -128,7 +140,7 @@ async function reclassifyFund(
       valuation: r.valuation as number | null,
     }));
 
-    const matched = matchPositions(raws, customs);
+    const matched = matchPositions(raws, customs, fundId);
     bilan.examinees += rows.length;
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i] as Record<string, unknown>;
@@ -225,7 +237,7 @@ export async function importInventoryAction(
     return { ok: false, error: "Aucune ligne détectée dans l'inventaire." };
 
   const customs = await loadCustomSecurities();
-  const positions = matchPositions(parsed.positions, customs);
+  const positions = matchPositions(parsed.positions, customs, fundId);
 
   const avertissements = [...parsed.avertissements];
   // Le total du fichier est calculé AVANT matching ; la valorisation d'un
@@ -335,6 +347,14 @@ export async function createCustomSecurityAction(
   if (libelleInventaire) {
     const alias = ajouterAlias(attributes, libelleInventaire, []);
     if (alias !== null) attributes.alias = alias;
+  }
+
+  // UN COMPTE NAIT AVEC SON FONDS. Sans cette marque, la fiche retombe dans
+  // le pot commun et le rapprochement la prete au premier inventaire qui la
+  // nomme — c'est ainsi qu'un fonds heritait du depositaire d'un autre.
+  const fondsProprio = (input.fondsId ?? "").trim();
+  if (fondsProprio && (kind === "tresorerie" || kind === "dat")) {
+    attributes[CLEF_FONDS] = fondsProprio;
   }
 
   const isin = (attributes.isin ?? "").trim();
@@ -1235,6 +1255,13 @@ export async function savePortfolioAction(
         for (const libelle of [nomInventaire, nomSite]) {
           const alias = ajouterAlias(attributs, libelle, []);
           if (alias !== null) attributs.alias = alias;
+        }
+        // Les comptes naissent rattaches au fonds dont l'inventaire les
+        // apporte. Les titres, non : ils se partagent, c'est tout l'objet du
+        // referentiel.
+        const natureFiche = SECTIONS.includes(p.section) ? p.section : "autre";
+        if (natureFiche === "tresorerie" || natureFiche === "dat") {
+          attributs[CLEF_FONDS] = fundId;
         }
 
         toInsert.push({

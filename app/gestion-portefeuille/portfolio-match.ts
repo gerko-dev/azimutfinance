@@ -507,11 +507,68 @@ export function siteSecurityAttributes(
   return null;
 }
 
+// ==========================================================================
+// UN COMPTE APPARTIENT A UN FONDS. UN TITRE, NON.
+// ==========================================================================
+//
+// Le referentiel est PARTAGE, et c'est ce qu'on veut pour les titres : SONATEL
+// est SONATEL pour tout le monde, et deux fonds qui la detiennent doivent
+// pointer sur la meme fiche.
+//
+// UN COMPTE BANCAIRE NE SE PARTAGE PAS. Deux fonds ont chacun le leur, meme
+// chez le meme etablissement, et leurs numeros different. Rien ne l'empechait
+// pourtant : le rapprochement se fait par nom ET PAR ALIAS, et un alias appris
+// sur l'inventaire d'un fonds valait pour tous. C'est ainsi que la ligne
+// « BOA FCP AO OPCVM002 » d'AURORE OPPORTUNITES s'est retrouvee accrochee a
+// « E_BOA CI NFD », le compte depositaire du FONDS DIVERSIFIE : Aurore heritait
+// d'un depositaire qui n'est pas le sien, et de 124 millions avec.
+//
+// Une fiche de tresorerie porte donc desormais SON fonds, et le rapprochement
+// ne la prete a aucun autre. Les fiches anciennes, qui n'en portent pas,
+// restent partagees : la garde ne casse rien, elle empeche seulement le defaut
+// de se reproduire.
+
+/** Natures dont la fiche appartient a UN fonds et a lui seul. */
+const NATURES_PROPRES: ReadonlySet<string> = new Set(["tresorerie", "dat"]);
+
+/** Attribut portant le fonds proprietaire. */
+export const CLEF_FONDS = "fundId";
+
+/** Fonds auquel cette fiche appartient, ou "" si elle est partageable. */
+export function fondsProprietaire(c: {
+  kind: string;
+  attributes?: Record<string, string> | null;
+}): string {
+  if (!NATURES_PROPRES.has(c.kind)) return "";
+  return (c.attributes?.[CLEF_FONDS] ?? "").trim();
+}
+
+/**
+ * Cette fiche est-elle utilisable par ce fonds ?
+ *
+ * Oui si elle n'appartient a personne — le cas de tout titre, et des comptes
+ * enregistres avant cette regle — ou si elle lui appartient. Sans fonds
+ * connu, on n'ecarte rien : mieux vaut le comportement d'avant qu'un
+ * rapprochement qui echoue en silence.
+ */
+export function ficheUtilisablePar(
+  c: { kind: string; attributes?: Record<string, string> | null },
+  fondsId: string,
+): boolean {
+  const proprietaire = fondsProprietaire(c);
+  return proprietaire === "" || fondsId === "" || proprietaire === fondsId;
+}
+
 // Matche toutes les lignes d'un inventaire.
 export function matchPositions(
   rows: RawPosition[],
-  customSecurities: CustomSecurity[],
+  toutesFiches: CustomSecurity[],
+  fondsId = "",
 ): ImportedPosition[] {
+  // Les comptes d'un AUTRE fonds sortent du jeu avant tout rapprochement :
+  // les ecarter ici plutot qu'a chaque garde evite d'avoir a y penser a
+  // chacune des quatre passes.
+  const customSecurities = toutesFiches.filter((c) => ficheUtilisablePar(c, fondsId));
   const index = buildSiteIndex();
   // Un titre du référentiel doit être reconnu par ses TROIS identifiants :
   // code / symbole, ISIN, et nom exact. L'ISIN manquait à cet index, si bien

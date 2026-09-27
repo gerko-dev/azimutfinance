@@ -87,6 +87,11 @@ export type CustomSecurityInput = {
   name: string;
   currency: string;
   attributes: Record<string, string>;
+  /** Fonds auquel la fiche appartient, pour les natures qui ne se partagent
+   *  pas — un compte de trésorerie, un dépôt à terme. Vide depuis l'écran du
+   *  référentiel, qui n'est rattaché à aucun portefeuille : la fiche y reste
+   *  alors partagée, comme avant. */
+  fondsId?: string;
   /** Libellé EXACT de la ligne d'inventaire à l'origine de la création.
    *
    *  Il est conservé en alias sur la fiche, et c'est ce qui rend le travail

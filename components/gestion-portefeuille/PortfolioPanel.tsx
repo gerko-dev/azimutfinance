@@ -247,6 +247,10 @@ function CustomSecurityForm({
     currency,
     attributes: attrs,
     libelleInventaire: initial.name,
+    // Le fonds vient de l'écran, pas du formulaire : c'est le portefeuille
+    // dont on est en train de lire l'inventaire. Un compte créé ici lui
+    // appartient, et le rapprochement ne le prêtera à aucun autre.
+    fondsId: initial.fondsId,
   });
 
   // Crée effectivement le titre personnalisé (après vérif / choix explicite).
@@ -1183,7 +1187,7 @@ export default function PortfolioPanel({
                     customForm={
                       resolvingIndex === i ? (
                         <CustomSecurityForm
-                          initial={initialDeLaLigne(p, fichesParId)}
+                          initial={{ ...initialDeLaLigne(p, fichesParId), fondsId: fundId }}
                           onCancel={() => setResolvingIndex(null)}
                           onCreated={applyCustom}
                           onLinked={applyLinked}

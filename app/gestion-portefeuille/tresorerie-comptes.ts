@@ -10,7 +10,7 @@
 // coups de chaînes de caractères ferait double emploi avec ce que le gérant a
 // déjà renseigné, et divergerait au premier compte ajouté sans elle.
 
-import { normName } from "./portfolio-match";
+import { ficheUtilisablePar, normName } from "./portfolio-match";
 import { lireAlias } from "./portfolio-security-schema";
 import type { CustomSecurity } from "./portfolio-types";
 
@@ -141,9 +141,16 @@ export function groupeEtablissement(e: Etablissement): string {
  * normalisation. Rien d'approximatif : le nom doit correspondre exactement, aux
  * accents et à la ponctuation près.
  */
-export function indexerParNom(fiches: CustomSecurity[]): Map<string, CustomSecurity> {
+export function indexerParNom(
+  fiches: CustomSecurity[],
+  fondsId = "",
+): Map<string, CustomSecurity> {
   const index = new Map<string, CustomSecurity>();
   for (const c of fiches) {
+    // Le compte d'un AUTRE fonds n'entre pas dans l'index : c'est ici, a la
+    // lecture, que le defaut se voyait — un compte depositaire emprunte au
+    // portefeuille voisin.
+    if (!ficheUtilisablePar(c, fondsId)) continue;
     for (const clef of [normName(c.name), normName(c.code), ...lireAlias(c.attributes)]) {
       // Le seuil de quatre caractères est celui de l'import : en deçà, un nom
       // est trop court pour désigner un compte sans ambiguïté.

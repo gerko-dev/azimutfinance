@@ -27,7 +27,7 @@ import {
   ordonnerEtablissements,
   type Etablissement,
 } from "./tresorerie-comptes";
-import { normName } from "./portfolio-match";
+import { ficheUtilisablePar, normName } from "./portfolio-match";
 import { agregerParPoste, loadOperationsMarche } from "./operations-marche-data";
 import { agregerFluxParts, loadFluxParts } from "./parts-data";
 import { loadDernieresVl, loadNavMois } from "./nav-data";
@@ -130,12 +130,17 @@ export const construirePointTresorerie = cache(async function construirePoint(
   // referentiel (canal, pays, banque, nature du compte), et c'est de la qu'on
   // le lit. Un compte dont la fiche est incomplete remonte a part : la
   // correction se fait au referentiel, pas dans une table parallele.
-  const custom = new Map(fiches.map((c) => [c.id, c]));
+  // MEME GARDE SUR L'IDENTIFIANT STOCKE que sur le nom : une position peut
+  // porter le `customSecurityId` d'un compte appartenant a un autre fonds,
+  // fige la par un import anterieur a cette regle. S'y fier rendrait la garde
+  // inutile — c'est justement par la que le depositaire du voisin entrait.
+  const utilisables = fiches.filter((c) => ficheUtilisablePar(c, fundId));
+  const custom = new Map(utilisables.map((c) => [c.id, c]));
   // Second recours : le NOM EXACT. L'appariement de l'import fige son resultat
   // dans la position ; une ligne importee avant la creation de sa fiche reste
   // orpheline pour toujours. On refait donc la reconnaissance ici, avec la
   // meme clef et la meme normalisation qu'a l'import.
-  const parNom = indexerParNom(fiches);
+  const parNom = indexerParNom(fiches, fundId);
   const etablissements = new Map<string, Etablissement>();
   const soldesInventaire = new Map<string, number>();
   const nonRattaches = new Map<string, number>();
