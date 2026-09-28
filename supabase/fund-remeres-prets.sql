@@ -154,7 +154,13 @@ create policy fund_market_loans_all on public.fund_market_loans
 -- intermediaire de bourse, et une contrepartie n'intermedie rien — elle est en
 -- face. Ce qui se negocie avec elle, le prix de sortie, se saisit sur
 -- l'operation, remere par remere.
-alter table public.market_partners drop constraint if exists market_partners_kind_chk;
-alter table public.market_partners
-  add constraint market_partners_kind_chk
-  check (kind in ('sgi', 'btcc', 'remere', 'autre'));
+-- LA CONTRAINTE A DEMENAGE, et ce script ne la repose plus.
+--
+-- Elle vit desormais dans `market-partners-client.sql`, qui admet une nature
+-- de plus : « client ». La reposer ici, dans sa liste d'origine, rendait ce
+-- fichier NON REJOUABLE -- le referentiel compte trois partenaires « client »,
+-- et la contrainte etroite echouait sur eux. Un script de structure qu'on ne
+-- peut pas rejouer ne sert plus a reparer une base qui a derive, ce qui est
+-- pourtant sa seule raison d'etre.
+--
+-- Une seule definition, dans un seul fichier : celui qui l'a elargie.
