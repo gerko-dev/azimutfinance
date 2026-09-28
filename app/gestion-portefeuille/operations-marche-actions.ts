@@ -372,7 +372,38 @@ export async function enregistrerOperationMarcheAction(
 
   const id = (data as { id: string }).id;
   const erreurVolets = await enregistrerVolets(supabase, userId, id, saisie);
-  if (erreurVolets) return { ok: false, error: erreurVolets };
+  if (erreurVolets) {
+    // ON DEFAIT L'ORDRE PLUTOT QUE DE LE LAISSER A MOITIE NE.
+    //
+    // L'ordre et son volet -- remere ou pret -- sont deux ecritures, dans deux
+    // tables. Quand la seconde echoue, la premiere a deja pris : il reste un
+    // ordre SANS son volet, que rien ne signale. Il ne ressemble pourtant a
+    // rien de ce que le gerant a saisi, et il PESE : un prêt de 200 000 titres
+    // ampute d'autant le cessible, et la vente suivante est refusee au nom
+    // d'une ligne que personne n'a voulue.
+    //
+    // C'est exactement ce qui est arrivé quand la colonne « contrepartie »
+    // manquait a la table des prets : l'ordre passait, le volet non, et le
+    // message d'erreur laissait croire que rien n'avait ete enregistre.
+    //
+    // Faute de transaction a travers PostgREST, on rattrape a la main. Si la
+    // suppression echoue a son tour, on le DIT : mieux vaut un message long
+    // qu'une ligne fantome dont l'origine restera introuvable.
+    const { error: erreurRetrait } = await supabase
+      .from("fund_market_operations")
+      .delete()
+      .eq("id", id)
+      .eq("owner_id", userId);
+    if (erreurRetrait) {
+      return {
+        ok: false,
+        error:
+          `${erreurVolets} — et l'ordre n'a pas pu être retiré (${erreurRetrait.message}). ` +
+          "Une ligne incomplète subsiste dans l'onglet Opérations : supprime-la à la main.",
+      };
+    }
+    return { ok: false, error: erreurVolets };
+  }
 
   revalidatePath(`/gestion-portefeuille/fonds/${fundId}`);
   revalidatePath("/gestion-portefeuille/operations-marche");
