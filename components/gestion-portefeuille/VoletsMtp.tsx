@@ -104,6 +104,27 @@ export default function VoletsMtp({
   const interet = interetPret({ dateOperation, quantite, prix: prixOrdre }, pret);
   const finPret = pret.dateReprise ?? pret.dateFin;
   const jours = finPret ? joursEntre(dateOperation, finPret) : 0;
+  const valeurPretee = quantite * prixOrdre;
+
+  /**
+   * CE QUI MANQUE, ET NON « IL MANQUE QUELQUE CHOSE ».
+   *
+   * L'intérêt tombe à zéro dès qu'une de ses quatre entrées manque, et il
+   * n'affichait qu'un seul motif : « Renseigne la fin du prêt ». Quand c'est
+   * la DATE DE L'ORDRE qui est vide, ce message désigne donc un champ déjà
+   * rempli, et le gérant cherche là où il n'y a rien. Quand c'est le cours ou
+   * la quantité, il lisait « sur 0 F » — exact, mais il faut savoir le lire.
+   *
+   * Un zéro qui ne se justifie pas se lit comme un calcul en panne.
+   */
+  const aideInteret = (() => {
+    if (!dateOperation) return "Renseigne la date de l'opération.";
+    if (!finPret) return "Renseigne la fin du prêt.";
+    if (jours <= 0) return "La fin du prêt doit suivre la date de l'opération.";
+    if (!(valeurPretee > 0))
+      return `${jours} j base 360 — renseigne la quantité et le cours : l'intérêt se calcule sur la valeur prêtée.`;
+    return `${jours} j base 360, sur ${montantFr(valeurPretee)} F`;
+  })();
 
   if (verrouille) {
     return (
@@ -300,11 +321,7 @@ export default function VoletsMtp({
             <div className="text-xs border border-slate-200 bg-slate-50 rounded px-2 py-1.5 text-right tabular-nums text-slate-700">
               {montantFr(interet)} F
             </div>
-            <span className={aide}>
-              {jours > 0
-                ? `${jours} j base 360, sur ${montantFr(quantite * prixOrdre)} F`
-                : "Renseigne la fin du prêt"}
-            </span>
+            <span className={aide}>{aideInteret}</span>
           </Champ>
 
           {/* LA REPRISE N'EST PAS UN CHAMP DE CE FORMULAIRE. Une date de
