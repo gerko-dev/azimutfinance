@@ -1449,6 +1449,13 @@ def write_dividendes_csv(lignes: list[dict[str, str]], boc_date: date) -> None:
 
     La clef de fusion est (titre, avis) : un avis rectificatif porte un numero
     different et doit donc coexister, l'ordre chronologique tranchant.
+
+    `bocDate` EST LA PREMIERE VUE, PAS LA DERNIERE. Le tableau du BOC reporte
+    le meme calendrier tous les jours ; rafraichir la date a chaque passage
+    reecrivait les trente-trois lignes du fichier chaque matin, pour n'y
+    apprendre qu'une chose deja connue — que le bulletin d'hier les portait
+    encore. Le reste de la ligne, lui, se met bien a jour : une extraction
+    corrigee doit pouvoir remplacer une extraction fautive.
     """
     existantes: dict[str, dict[str, str]] = {}
     if DIVIDENDES_CSV.exists():
@@ -1461,7 +1468,8 @@ def write_dividendes_csv(lignes: list[dict[str, str]], boc_date: date) -> None:
         clef = f"{l['titre']}|{l['avis']}"
         if clef not in existantes:
             ajouts += 1
-        existantes[clef] = {**l, "bocDate": boc_date.isoformat()}
+        premiere = (existantes.get(clef) or {}).get("bocDate", "").strip()
+        existantes[clef] = {**l, "bocDate": premiere or boc_date.isoformat()}
 
     rows = sorted(
         existantes.values(),

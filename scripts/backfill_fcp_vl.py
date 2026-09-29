@@ -45,6 +45,17 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
 
+# LA CONSOLE WINDOWS N'EST PAS EN UTF-8.
+#
+# Le journal de ce script ecrit des fleches et des cadratins ; sur une console
+# cp1252 le premier « -> » faisait tomber tout le programme sur un
+# UnicodeEncodeError — apres le telechargement des bulletins et AVANT
+# l'ecriture du fichier, donc en perdant le travail. Le runner Ubuntu, lui,
+# est en UTF-8 et ne l'a jamais vu.
+for flux in (sys.stdout, sys.stderr):
+    if hasattr(flux, "reconfigure"):
+        flux.reconfigure(encoding="utf-8", errors="replace")
+
 RACINE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SORTIE = os.path.join(RACINE, "data", "fcp", "vl-historique.csv")
 JOURNAL = os.path.join(RACINE, "data", "fcp", ".vl-historique-bulletins.txt")
