@@ -416,52 +416,30 @@ export const construirePointTresorerie = cache(async function construirePoint(
   const somme = (libelles: string[], banque: string): number =>
     libelles.reduce((s, l) => s + v(l, banque), 0);
 
-  // ── Sous-totaux et soldes, formules du classeur ───────────────────────────
+  // ── Sous-totaux et soldes, formules du classeur ───────────────────────
   //
-  // Reprises a l'identique des cellules, y compris une bizarrerie qu'il faut
+  // LES FORMULES NE SONT PLUS ECRITES ICI. Elles vivent dans `composantes`,
+  // contre la definition de chaque ligne, et servent aussi a EXPLIQUER le
+  // montant au survol. Ecrites aux deux endroits, elles auraient fini par
+  // diverger : l'infobulle aurait decrit une formule qu'on n'applique plus.
+  //
+  // L'ordre de `LIGNES_POINT_TRESORERIE` est celui du calcul -- toute
+  // composante precede la ligne qui l'utilise -- donc une seule passe suffit.
+  //
+  // Une bizarrerie du classeur est reprise a l'identique et il faut la
   // connaitre : SOLDEREEL n'ajoute que « VENTES MTP REALISEES », pas le
-  // sous-total « VENTES REALISEES » — les ventes MFR realisees n'y entrent
-  // donc pas, alors que SOLDETHEORIQUE, lui, prend bien le sous-total. Les
-  // deux soldes ne traitent pas les ventes de la meme facon. C'est peut-etre
-  // voulu (seules les MTP se denouent en cash immediatement), peut-etre une
-  // erreur de formule ; on reproduit le classeur, on ne le corrige pas sans
-  // arbitrage du gerant.
-  for (const b of banques) {
-    valeurs.get("ACHATS VALIDES")![b] = somme(
-      ["ACHATS MFR VALIDES", "ACHATS MTP VALIDES", "ACHATS A RÉMÉRÉ VALIDES"], b);
-    valeurs.get("ACHATS REALISES")![b] = somme(
-      ["ACHATS MFR REALISES", "ACHATS MTP REALISES"], b);
-    valeurs.get("VENTES VALIDES")![b] = somme(
-      ["VENTES MFR VALIDES", "VENTES MTP VALIDES", "VENTES A RÉMÉRÉ VALIDES"], b);
-    valeurs.get("VENTES REALISEES")![b] = somme(
-      ["VENTES MFR REALISEES", "VENTES MTP REALISEES"], b);
-    valeurs.get("AUTRES ENGAGEMENTS")![b] = somme(
-      ["OPERATIONS MARCHÉ PRIMAIRE", "RACHAT", "FRAIS DE GESTION",
-       "REMERES_CASH_IN", "REMBOURSEMENT_SPOT", "AUTRES"], b);
-    valeurs.get("CASH A RECEVOIR")![b] = somme(
-      ["SOUSCRIPTION BUREAU CI", "SOUSCRIPTION BUREAU SN", "SOUSCRIPTION BUREAU BJ",
-       "REMERES_CASH_OUT", "SPOT", "AUTRES_CASH_A_RECEVOIR"], b);
-    // « SOUSCRIPTION PRIMAIRE PROB. » a quitté le tableau : le classeur la
-    // prévoyait, rien ne l'a jamais alimentée, et une souscription primaire
-    // probable n'existe pas — on soumissionne ou on ne soumissionne pas.
-    valeurs.get("FLUX THEORIQUES")![b] =
-      somme(["SOUSCRIPTION PROB. BUREAU CI", "SOUSCRIPTION PROB. BUREAU SN",
-             "SOUSCRIPTION PROB. BUREAU BJ", "AUTRES_FLUX_ENTRANT",
-             "DIVIDENDES/COUPONS"], b) -
-      somme(["RACHAT PROB.", "AUTRES_FLUX_SORTANT"], b);
-
-    valeurs.get("SOLDEREEL")![b] =
-      v("SOLDE", b) + v("CASH A RECEVOIR", b) + v("VENTES MTP REALISEES", b) -
-      v("ACHATS VALIDES", b) - v("ACHATS REALISES", b) - v("AUTRES ENGAGEMENTS", b);
-
-    // « ENGAGEMENTS PROBABLES » est parti de même. C'était un sous-total que
-    // rien ne calculait : ce qu'il aurait dû contenir — rachats et flux
-    // sortants probables — est déjà retranché par FLUX THEORIQUES, et l'y
-    // ajouter aurait compté ces sorties deux fois le jour où la ligne aurait
-    // trouvé une source.
-    valeurs.get("SOLDETHEORIQUE")![b] =
-      v("SOLDE", b) + v("VENTES REALISEES", b) + v("FLUX THEORIQUES", b) -
-      v("ACHATS VALIDES", b) - v("ACHATS REALISES", b) - v("AUTRES ENGAGEMENTS", b);
+  // sous-total « VENTES REALISEES » -- les ventes MFR realisees n'y entrent
+  // donc pas, alors que SOLDETHEORIQUE, lui, prend bien le sous-total. C'est
+  // peut-etre voulu (seules les MTP se denouent en cash immediatement),
+  // peut-etre une erreur de formule ; on reproduit le classeur, on ne le
+  // corrige pas sans arbitrage du gerant.
+  for (const def of LIGNES_POINT_TRESORERIE) {
+    const c = def.composantes;
+    if (!c) continue;
+    const cible = valeurs.get(def.libelle)!;
+    for (const b of banques) {
+      cible[b] = somme(c.plus, b) - somme(c.moins ?? [], b);
+    }
   }
 
   // ── Mise en forme ─────────────────────────────────────────────────────────
