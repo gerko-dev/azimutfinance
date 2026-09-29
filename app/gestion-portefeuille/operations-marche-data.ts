@@ -29,6 +29,7 @@ import {
   posteEngageDe,
   posteRealise,
   posteRemereDenouement,
+  quantiteRestante,
   remereOuvertA,
   sensRemereDe,
   statutPretDe,
@@ -40,6 +41,12 @@ import {
   type SaisieRemere,
   type Validite,
 } from "./operations-marche-types";
+import {
+  ajouterApport,
+  fmtPrix,
+  fmtQte,
+  type ApportsParPoste,
+} from "./tresorerie-apports";
 
 type LigneExecution = {
   id: string;
@@ -395,18 +402,19 @@ export const loadToutesOperationsMarche = cache(
 export function agregerParPoste(
   operations: OperationMarche[],
   dateArrete: string | null,
-): Map<string, Map<string, number>> {
-  const parPoste = new Map<string, Map<string, number>>();
+): ApportsParPoste {
+  const parPoste: ApportsParPoste = new Map();
 
-  const ajouter = (poste: string | null, compte: string, montant: number) => {
-    if (!poste || montant === 0) return;
-    let parCompte = parPoste.get(poste);
-    if (!parCompte) {
-      parCompte = new Map<string, number>();
-      parPoste.set(poste, parCompte);
-    }
-    parCompte.set(compte, (parCompte.get(compte) ?? 0) + montant);
-  };
+  const ajouter = (
+    poste: string | null,
+    compte: string,
+    montant: number,
+    detail: { date: string; libelle: string; info: string },
+  ) => ajouterApport(parPoste, poste, compte, montant, detail);
+
+  /** Le titre tel qu'on le reconnaît sur une ligne d'ordre. */
+  const titre = (o: OperationMarche) =>
+    o.libelle || o.code || "Titre sans libellé";
 
   for (const o of operations) {
     // UN ORDRE À RÉMÉRÉ EST UN ORDRE COMME UN AUTRE, à un poste près.
@@ -442,7 +450,20 @@ export function agregerParPoste(
       // RAPPROCHÉE : le solde bancaire saisi la contient déjà. L'y laisser la
       // compterait une seconde fois — c'est un lettrage, pas une annulation.
       if (e.rapprocheLe && (!dateArrete || e.rapprocheLe <= dateArrete)) continue;
-      ajouter(posteRealise(o.description), o.compteReglement, montantExecution(o, e));
+      ajouter(posteRealise(o.description), o.compteReglement, montantExecution(o, e), {
+        // LA DATE DU DÉNOUEMENT, pas celle de l'exécution : c'est elle qui
+        // décide si le montant compte à l'arrêté, donc elle qu'il faut
+        // pouvoir confronter à la date du point.
+        date: e.dateDenouement,
+        libelle: titre(o),
+        info: [
+          `${fmtQte(e.quantite)} × ${fmtPrix(e.prix || o.prix)}`,
+          o.sgi,
+          `exécuté le ${e.dateExecution}`,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+      });
     }
 
     // ── La part non servie, tant que l'ordre pèse ────────────────────────
@@ -454,7 +475,17 @@ export function agregerParPoste(
     // vente passée et non servie est un encaissement annoncé.
     if (!partRestantePese(o, dateArrete)) continue;
 
-    ajouter(posteEngageDe(o), o.compteReglement, montantRestant(o));
+    ajouter(posteEngageDe(o), o.compteReglement, montantRestant(o), {
+      date: o.dateOperation,
+      libelle: titre(o),
+      info: [
+        `${fmtQte(quantiteRestante(o))} / ${fmtQte(o.quantite)} non servi(s) × ${fmtPrix(o.prix)}`,
+        o.sgi,
+        o.validite ? `validité ${o.validite}` : "",
+      ]
+        .filter(Boolean)
+        .join(" · "),
+    });
   }
 
   // ── Le DÉNOUEMENT des rémérés encore ouverts ──────────────────────────
@@ -486,6 +517,17 @@ export function agregerParPoste(
       posteRemereDenouement(o.description),
       o.compteReglement,
       montantDenouementRemere(o, dateArrete),
+      {
+        date: terme,
+        libelle: titre(o),
+        info: [
+          "dénouement de réméré",
+          o.remere?.contrepartie ? `avec ${o.remere.contrepartie}` : "",
+          o.remere?.prixSortie ? `rachat à ${fmtPrix(o.remere.prixSortie)}` : "",
+        ]
+          .filter(Boolean)
+          .join(" · "),
+      },
     );
   }
 

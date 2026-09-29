@@ -55,6 +55,12 @@ import {
   type LigneTresorerie,
   type PointTresorerie,
 } from "./tresorerie-types";
+import {
+  fmtQte,
+  resumerDetails,
+  type ApportCompte,
+  type DetailMontant,
+} from "./tresorerie-apports";
 
 const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
 
@@ -270,9 +276,15 @@ export const construirePointTresorerie = cache(async function construirePoint(
   ];
   for (const apport of apports) {
     for (const [poste, parCompte] of apport) {
-      const cible = parPoste.get(poste) ?? new Map<string, number>();
-      for (const [compte, m] of parCompte) {
-        cible.set(compte, (cible.get(compte) ?? 0) + m);
+      const cible = parPoste.get(poste) ?? new Map<string, ApportCompte>();
+      for (const [compte, a] of parCompte) {
+        const deja = cible.get(compte);
+        if (deja) {
+          deja.montant += a.montant;
+          deja.details.push(...a.details);
+        } else {
+          cible.set(compte, a);
+        }
       }
       parPoste.set(poste, cible);
     }
@@ -286,12 +298,20 @@ export const construirePointTresorerie = cache(async function construirePoint(
   // part ou aller. L'ecarter en silence donnerait un poste qui ne bouge pas
   // sans raison visible ; on le remonte a part.
   const sansColonne: { libelle: string; compte: string; montant: number }[] = [];
+  // CE QUI COMPOSE CHAQUE CELLULE, poste par poste et compte par compte.
+  // Construit en meme temps que le montant, a partir des memes apports : une
+  // seconde lecture aurait eu ses propres regles de date et de lettrage.
+  const details: Record<string, Record<string, DetailMontant[]>> = {};
   for (const [poste, parCompte] of parPoste) {
     const cible = valeurs.get(poste);
     if (!cible) continue;
-    for (const [compte, m] of parCompte) {
-      if (colonnes.has(compte)) cible[compte] += m;
-      else sansColonne.push({ libelle: poste, compte, montant: m });
+    for (const [compte, a] of parCompte) {
+      if (colonnes.has(compte)) {
+        cible[compte] += a.montant;
+        (details[poste] ??= {})[compte] = resumerDetails(a.details);
+      } else {
+        sansColonne.push({ libelle: poste, compte, montant: a.montant });
+      }
     }
   }
 
@@ -340,6 +360,21 @@ export const construirePointTresorerie = cache(async function construirePoint(
   const compteFraisValide = compteFrais !== "" && banques.includes(compteFrais);
   if (frais.montant > 0 && compteFraisValide) {
     valeurs.get("FRAIS DE GESTION")![compteFrais] += frais.montant;
+    // LE DÉTAIL DES FRAIS EST LEUR CALCUL. Il n'y a pas d'opération derrière,
+    // mais un montant à huit chiffres qui tombe du ciel ne se vérifie pas :
+    // la ligne dit sur quoi porte la moyenne et combien de valorisations la
+    // composent, pour que le chiffre se recoupe.
+    (details["FRAIS DE GESTION"] ??= {})[compteFrais] = [
+      {
+        date: frais.au,
+        libelle: `Frais de gestion ${frais.mois}${frais.provisoire ? " (provision)" : ""}`,
+        montant: frais.montant,
+        info:
+          `actif net moyen ${fmtQte(Math.round(frais.actifNetMoyen))} F ` +
+          `sur ${frais.points} valorisation(s) du ${frais.du} au ${frais.au} ` +
+          `× ${(frais.taux * 100).toFixed(2)} % ÷ 12`,
+      },
+    ];
   }
   const fraisGestion =
     frais.indisponible !== null
@@ -480,6 +515,7 @@ export const construirePointTresorerie = cache(async function construirePoint(
     dateInventaire: actuel.asOfDate,
     lignes,
     fraisGestion,
+    details,
     remeresAVenir,
     fluxSaisis,
     spots,

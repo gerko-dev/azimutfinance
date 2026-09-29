@@ -17,6 +17,7 @@ import {
   type PointTresorerie,
 } from "./tresorerie-types";
 import { construirePointTresorerie } from "./tresorerie-data";
+import { resumerDetails, type DetailMontant } from "./tresorerie-apports";
 
 // L'identifiant de la vue consolidée vit dans `tresorerie-types`, qui ne lit
 // rien : les composants clients en ont besoin, et l'importer d'ici leur
@@ -133,6 +134,30 @@ export async function construirePointGlobal(
     soldesInventaire[b] = points.reduce((s, p) => s + (p.soldesInventaire[b] ?? 0), 0);
   }
 
+  // LE DÉTAIL DES CELLULES, FONDS PAR FONDS.
+  //
+  // Les listes se concatènent et chaque ligne est préfixée du nom de son
+  // fonds : sur la vue consolidée, « OAT Bénin 6,25 % » sans plus de précision
+  // n'aurait pas dit lequel des cinq portefeuilles l'a achetée. Le résumé est
+  // repassé après fusion, sans quoi une cellule consolidée pourrait porter
+  // cinq fois vingt-cinq lignes.
+  const details: Record<string, Record<string, DetailMontant[]>> = {};
+  for (const p of points) {
+    for (const [poste, parCompte] of Object.entries(p.details)) {
+      for (const [compte, lignesDetail] of Object.entries(parCompte)) {
+        const cible = ((details[poste] ??= {})[compte] ??= []);
+        for (const d of lignesDetail) {
+          cible.push({ ...d, libelle: `${p.fonds} · ${d.libelle}` });
+        }
+      }
+    }
+  }
+  for (const parCompte of Object.values(details)) {
+    for (const [compte, lignesDetail] of Object.entries(parCompte)) {
+      parCompte[compte] = resumerDetails(lignesDetail);
+    }
+  }
+
   // Les dates diffèrent d'un fonds à l'autre : on retient la PLUS RÉCENTE et
   // l'écran dit qu'il s'agit d'une consolidation. Inventer une date commune
   // aurait laissé croire à un arrêté simultané.
@@ -166,6 +191,7 @@ export async function construirePointGlobal(
       compte: "",
       applique: points.every((p) => p.fraisGestion.applique),
     },
+    details,
     postesAAlimenter: points[0].postesAAlimenter,
     etablissements,
     soldesInventaire,

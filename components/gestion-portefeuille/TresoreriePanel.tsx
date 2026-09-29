@@ -10,6 +10,7 @@ import {
   type LigneTresorerie,
   type PointTresorerie,
 } from "@/app/gestion-portefeuille/tresorerie-types";
+import type { DetailMontant } from "@/app/gestion-portefeuille/tresorerie-apports";
 import type { GrilleSoldes } from "@/app/gestion-portefeuille/tresorerie-grille";
 import SaisieSoldesDialog from "./SaisieSoldesDialog";
 import FluxSaisisDialog from "./FluxSaisisDialog";
@@ -75,13 +76,15 @@ const HAUTEUR_GROUPE = 24;
 const HAUTEUR_TABLEAU = "calc(100vh - 20rem)";
 
 /**
- * L'infobulle d'une cellule de montant.
+ * L'infobulle d'une cellule de montant : CE QUI LA COMPOSE, rien d'autre.
  *
- * POURQUOI ELLE EXISTE. Un point de trésorerie est une colonne de montants à
- * sept chiffres dont le libellé ne dit ni d'où ils viennent, ni sur quel solde
- * ils pèsent. « REMERES_CASH_IN » à 1,2 Md sur BOA CI : encaissement ou
- * décaissement ? déjà passé ou à venir ? qui l'a saisi ? Le trésorier qui a
- * bâti le classeur le sait ; personne d'autre.
+ * POURQUOI ELLE EXISTE. Le tableau est un tableau de sommes. « Deux milliards
+ * en achats MTP » ne dit ni quel titre, ni quand, ni en combien de fois, et il
+ * fallait ouvrir l'écran des opérations pour refaire l'addition à la main.
+ *
+ * ELLE N'EXPLIQUE PAS LA LIGNE. Ce que porte un poste et sur quel solde il
+ * pèse se lisent au survol de son INTITULÉ, dans la première colonne ; le
+ * montant, lui, ne répond qu'à une question — de quoi est-il fait.
  *
  * ELLE EST ANCRÉE À LA CELLULE, en position `fixed`, et non rendue dedans :
  * le tableau défile dans les deux sens sous un en-tête figé, et une bulle
@@ -96,15 +99,11 @@ type Bulle = {
   titre: string;
   colonne: string;
   montant: string;
-  texte: string;
-  /** Décomposition d'une ligne calculée, terme à terme. */
-  detail: { libelle: string; signe: "+" | "−"; valeur: string }[];
-  /** Ce qui s'ajoute au cas par cas : écart d'inventaire, détail des frais. */
-  notes: string[];
+  lignes: DetailMontant[];
 };
 
 /** Largeur de la bulle, en pixels — sert aussi à la ramener dans la fenêtre. */
-const LARGEUR_BULLE = 340;
+const LARGEUR_BULLE = 420;
 
 /** Où poser la bulle : sous la cellule, ou au-dessus si le bas manque. */
 function ancrer(cible: HTMLElement): Pick<Bulle, "x" | "y" | "dessous"> {
@@ -121,20 +120,59 @@ function ancrer(cible: HTMLElement): Pick<Bulle, "x" | "y" | "dessous"> {
   };
 }
 
-/** Intitulé lisible d'un poste, depuis sa clef de classeur. */
-const INTITULES = new Map(LIGNES_POINT_TRESORERIE.map((d) => [d.libelle, intitule(d)]));
-
 /** Les définitions par clef — les encarts de tête y prennent les deux soldes. */
 const DEFS = new Map(LIGNES_POINT_TRESORERIE.map((d) => [d.libelle, d]));
 
 /**
- * Ce que dit la bulle d'une cellule.
+ * Les pièces d'une cellule.
  *
- * `banque` vaut null dans la colonne Total.
+ * `banque` vaut null dans la colonne Total : on prend alors tous les comptes.
  *
- * La DÉCOMPOSITION d'une ligne calculée est tirée de ses `composantes`, qui
- * sont aussi ce qui commande le calcul côté serveur : l'explication ne peut
- * donc pas décrire une formule qu'on n'applique plus.
+ * UNE LIGNE CALCULÉE PREND LE DÉTAIL DE SES COMPOSANTES, avec leur signe —
+ * les flux théoriques retranchent les rachats probables, et les afficher en
+ * positif aurait donné une liste dont la somme ne fait pas la cellule.
+ *
+ * « SOLDE » EST ÉCARTÉ PARTOUT. Un solde bancaire vient d'un relevé, pas
+ * d'opérations : il n'a rien à détailler, et sa présence dans la liste d'un
+ * total l'aurait rendue illisible pour rien.
+ */
+function detailsDe(
+  def: DefinitionLigne,
+  point: PointTresorerie,
+  banque: string | null,
+): DetailMontant[] {
+  const termes = def.composantes
+    ? [
+        ...def.composantes.plus.map((l) => ({ l, signe: 1 })),
+        ...(def.composantes.moins ?? []).map((l) => ({ l, signe: -1 })),
+      ]
+    : [{ l: def.libelle, signe: 1 }];
+
+  const lignes: DetailMontant[] = [];
+  for (const { l, signe } of termes) {
+    if (l === "SOLDE") continue;
+    const parCompte = point.details[l];
+    if (!parCompte) continue;
+    const source =
+      banque === null ? Object.values(parCompte).flat() : (parCompte[banque] ?? []);
+    for (const d of source) {
+      lignes.push(signe === 1 ? d : { ...d, montant: -d.montant });
+    }
+  }
+  // Les plus gros d'abord : c'est ce qu'on cherche quand on survole un montant
+  // qui surprend. Le serveur a déjà écrêté chaque poste ; on écrête de nouveau
+  // ici, parce qu'un total en additionne plusieurs.
+  return lignes.sort((a, b) => Math.abs(b.montant) - Math.abs(a.montant)).slice(0, 30);
+}
+
+/**
+ * La bulle d'une cellule, ou null s'il n'y a rien à montrer.
+ *
+ * TROIS CAS SANS BULLE, et ce sont des choix :
+ *   - un montant NUL ou absent — il n'y a pas d'opération à détailler ;
+ *   - un SOLDE et les deux ratios — ils viennent d'un relevé ou d'un calcul
+ *     sur l'actif net, pas d'opérations ;
+ *   - un poste dont le détail n'est pas parvenu jusqu'ici.
  */
 function composerBulle(
   def: DefinitionLigne,
@@ -143,70 +181,23 @@ function composerBulle(
   banque: string | null,
   colonne: string,
   cible: HTMLElement,
-): Bulle {
-  const pct = def.nature === "pourcentage";
-  const valeurDe = (l: string): number | null => {
-    const ligne = parLibelle.get(l);
-    if (!ligne) return null;
-    return banque === null ? ligne.total : (ligne.parBanque[banque] ?? null);
-  };
-  const format = (v: number | null) => (pct ? pourcent(v) : montant(v));
+): Bulle | null {
+  if (def.nature === "solde" || def.nature === "pourcentage") return null;
+  if (def.libelle === "SOLDE") return null;
 
-  const termes = def.composantes
-    ? [
-        ...def.composantes.plus.map((l) => ({ l, signe: "+" as const })),
-        ...(def.composantes.moins ?? []).map((l) => ({ l, signe: "−" as const })),
-      ]
-    : [];
+  const ligne = parLibelle.get(def.libelle);
+  const valeur = ligne ? (banque === null ? ligne.total : ligne.parBanque[banque]) : null;
+  if (valeur === null || valeur === undefined || Math.round(valeur) === 0) return null;
 
-  const notes: string[] = [];
-  if (def.libelle === "SOLDE") {
-    const inv =
-      banque === null
-        ? point.banques.reduce((s, b) => s + (point.soldesInventaire[b] ?? 0), 0)
-        : (point.soldesInventaire[banque] ?? 0);
-    const saisi = valeurDe("SOLDE") ?? 0;
-    notes.push(
-      `Solde comptable à l'inventaire : ${montant(inv)} F — écart ${montant(saisi - inv)} F.`,
-    );
-  }
-  if (def.libelle === "FRAIS DE GESTION") {
-    const f = point.fraisGestion;
-    if (f.indisponible) {
-      notes.push(`Non calculés : ${f.indisponible}`);
-    } else {
-      notes.push(
-        `${f.mois} : ${montant(f.actifNetMoyen)} F de moyenne sur ${f.points} valorisation(s) du ${f.du} au ${f.au}, × ${fmt2.format(f.taux * 100)} % ÷ 12.`,
-      );
-      if (f.provisoire) notes.push("Le mois n'est pas terminé : c'est une provision, pas une facture.");
-      if (!f.applique) notes.push("Aucun compte de prélèvement sur la fiche du fonds : le montant n'est imputé nulle part.");
-    }
-  }
-  if (def.source === "a_alimenter") {
-    notes.push("Ce poste n'a pas encore de source dans le site : il vaut zéro.");
-  }
-  if (pct && banque !== null) {
-    notes.push("Non ventilé par compte : seule la colonne Total porte le ratio.");
-  }
-  if (banque === null && !pct) {
-    notes.push(`Somme des ${point.banques.length} compte(s) de la ligne.`);
-  }
-  if (point.dateFin) {
-    notes.push(`Arrêté au ${point.dateFin} : rien de postérieur ne compte.`);
-  }
+  const lignes = detailsDe(def, point, banque);
+  if (lignes.length === 0) return null;
 
   return {
     ...ancrer(cible),
     titre: intitule(def),
     colonne,
-    montant: format(valeurDe(def.libelle)),
-    texte: def.explication,
-    detail: termes.map((t) => ({
-      libelle: INTITULES.get(t.l) ?? t.l,
-      signe: t.signe,
-      valeur: montant(valeurDe(t.l)),
-    })),
-    notes,
+    montant: montant(valeur),
+    lignes,
   };
 }
 
@@ -227,37 +218,23 @@ function Infobulle({ bulle }: { bulle: Bulle }) {
         <span className="text-[11px] font-semibold tabular-nums">{bulle.montant}</span>
       </div>
       <div className="text-[9px] uppercase tracking-wider text-slate-400 mt-0.5">
-        {bulle.colonne}
+        {bulle.colonne} · {bulle.lignes.length} ligne(s)
       </div>
-      <p className="text-[10px] leading-snug text-slate-200 mt-1.5">{bulle.texte}</p>
-      {bulle.detail.length > 0 && (
-        <ul className="mt-1.5 pt-1.5 border-t border-slate-700 space-y-0.5">
-          {bulle.detail.map((d) => (
-            <li key={d.libelle} className="flex items-baseline justify-between gap-3 text-[10px]">
-              <span className="text-slate-300">
-                <span
-                  className={`inline-block w-2.5 font-semibold ${
-                    d.signe === "+" ? "text-emerald-400" : "text-rose-400"
-                  }`}
-                >
-                  {d.signe}
-                </span>
-                {d.libelle}
-              </span>
-              <span className="tabular-nums text-slate-100">{d.valeur}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-      {bulle.notes.length > 0 && (
-        <ul className="mt-1.5 pt-1.5 border-t border-slate-700 space-y-0.5">
-          {bulle.notes.map((n) => (
-            <li key={n} className="text-[9px] leading-snug text-slate-400">
-              {n}
-            </li>
-          ))}
-        </ul>
-      )}
+      <ul className="mt-1.5 pt-1.5 border-t border-slate-700 space-y-1">
+        {bulle.lignes.map((d, i) => (
+          <li key={`${d.date}-${d.libelle}-${i}`} className="text-[10px] leading-tight">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-slate-100 truncate">{d.libelle}</span>
+              <span className="tabular-nums shrink-0">{montant(d.montant)}</span>
+            </div>
+            {(d.date || d.info) && (
+              <div className="text-[9px] text-slate-400">
+                {[d.date, d.info].filter(Boolean).join(" · ")}
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -391,9 +368,11 @@ function Contenu({
         </div>
 
         <div className="grid grid-cols-2 gap-3 mt-3 max-w-lg">
+          {/* Pas d'infobulle sur les deux soldes : ils ne viennent d'aucune
+              opération, seulement de relevés et de sous-totaux. */}
           <div
-            className="bg-blue-50 border border-blue-200 rounded-md px-3 py-2 cursor-help"
-            {...survol(DEFS.get("SOLDEREEL")!, null, "Tous comptes")}
+            className="bg-blue-50 border border-blue-200 rounded-md px-3 py-2"
+            title={DEFS.get("SOLDEREEL")?.explication}
           >
             <div className="text-[10px] uppercase tracking-wider text-blue-700">Solde réel</div>
             <div className="text-sm font-semibold text-slate-900 tabular-nums mt-0.5">
@@ -401,8 +380,8 @@ function Contenu({
             </div>
           </div>
           <div
-            className="bg-slate-50 border border-slate-200 rounded-md px-3 py-2 cursor-help"
-            {...survol(DEFS.get("SOLDETHEORIQUE")!, null, "Tous comptes")}
+            className="bg-slate-50 border border-slate-200 rounded-md px-3 py-2"
+            title={DEFS.get("SOLDETHEORIQUE")?.explication}
           >
             <div className="text-[10px] uppercase tracking-wider text-slate-600">
               Solde théorique
@@ -733,6 +712,11 @@ function Contenu({
                 const l = parLibelle.get(def.libelle);
                 const pct = def.nature === "pourcentage";
                 const valeur = (v: number | null) => (pct ? pourcent(v) : montant(v));
+                // Un solde vient d'un relevé, un ratio de l'actif net : ni
+                // l'un ni l'autre n'a d'opérations à montrer.
+                const detaillable =
+                  def.nature !== "solde" && !pct && def.libelle !== "SOLDE";
+                const aide = detaillable ? "cursor-help" : "";
                 return (
                   <tr key={def.libelle} className={classeLigne(def)}>
                     <td
@@ -744,7 +728,10 @@ function Contenu({
                             : "bg-white"
                       }`}
                     >
-                      <span className="cursor-help" {...survol(def, null, `Total — ${point.banques.length} compte(s)`)}>
+                      {/* CE QUE LA LIGNE PORTE se lit ICI, sur son
+                          intitulé — pas sur les montants, qui ne doivent
+                          répondre qu'à « de quoi est-il fait ». */}
+                      <span className="cursor-help" title={def.explication}>
                         {intitule(def)}
                       </span>
                       {def.source === "a_alimenter" && (
@@ -760,8 +747,7 @@ function Contenu({
                       def.libelle === "SOLDE" ? (
                         <td
                           key={b}
-                          className="px-2 py-1.5 text-right tabular-nums whitespace-nowrap cursor-help"
-                          {...survol(def, b, nomColonne(i))}
+                          className="px-2 py-1.5 text-right tabular-nums whitespace-nowrap"
                         >
                           {montant(l ? (l.parBanque[b] ?? null) : null)}
                           {/* Le solde COMPTABLE de l'inventaire reste en
@@ -774,16 +760,18 @@ function Contenu({
                       ) : (
                         <td
                           key={b}
-                          className="text-right px-2 py-1.5 tabular-nums whitespace-nowrap cursor-help"
-                          {...survol(def, b, nomColonne(i))}
+                          className={`text-right px-2 py-1.5 tabular-nums whitespace-nowrap ${aide}`}
+                          {...(detaillable ? survol(def, b, nomColonne(i)) : {})}
                         >
                           {l ? valeur(l.parBanque[b] ?? null) : "—"}
                         </td>
                       ),
                     )}
                     <td
-                      className="text-right px-2 py-1.5 tabular-nums font-semibold border-l border-slate-300 bg-slate-50/80 whitespace-nowrap cursor-help"
-                      {...survol(def, null, `Total — ${point.banques.length} compte(s)`)}
+                      className={`text-right px-2 py-1.5 tabular-nums font-semibold border-l border-slate-300 bg-slate-50/80 whitespace-nowrap ${aide}`}
+                      {...(detaillable
+                        ? survol(def, null, `Tous comptes (${point.banques.length})`)
+                        : {})}
                     >
                       {def.libelle === "SOLDE"
                         ? montant(soldeBancaire)

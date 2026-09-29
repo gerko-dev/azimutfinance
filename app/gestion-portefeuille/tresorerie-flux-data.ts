@@ -22,6 +22,7 @@ import {
   type SensSpot,
   type Spot,
 } from "./tresorerie-flux-types";
+import { ajouterApport, type ApportsParPoste } from "./tresorerie-apports";
 
 const nb = (v: unknown): number => {
   const n = Number(v);
@@ -124,22 +125,26 @@ export function agregerFluxSaisis(
   flux: FluxManuel[],
   spots: Spot[],
   dateArrete: string | null,
-): Map<string, Map<string, number>> {
-  const parPoste = new Map<string, Map<string, number>>();
+): ApportsParPoste {
+  const parPoste: ApportsParPoste = new Map();
 
-  const ajouter = (poste: string, compte: string, montant: number) => {
-    if (!poste || !compte || montant === 0) return;
-    let parCompte = parPoste.get(poste);
-    if (!parCompte) {
-      parCompte = new Map<string, number>();
-      parPoste.set(poste, parCompte);
-    }
-    parCompte.set(compte, (parCompte.get(compte) ?? 0) + montant);
+  const ajouter = (
+    poste: string,
+    compte: string,
+    montant: number,
+    detail: { date: string; libelle: string; info: string },
+  ) => {
+    if (!compte) return;
+    ajouterApport(parPoste, poste, compte, montant, detail);
   };
 
   for (const f of flux) {
     if (dateArrete && f.dateFlux > dateArrete) continue;
-    ajouter(f.poste, f.compte, f.montant);
+    ajouter(f.poste, f.compte, f.montant, {
+      date: f.dateFlux,
+      libelle: f.libelle || "Flux saisi sans libellé",
+      info: "saisi à la main",
+    });
   }
 
   for (const s of spots) {
@@ -150,7 +155,16 @@ export function agregerFluxSaisis(
     if (dateArrete && s.dateValeur > dateArrete) continue;
     // Échéance au-delà de l'horizon : le flux viendra, mais pas d'ici là.
     if (dateArrete && s.dateEcheance > dateArrete) continue;
-    ajouter(posteDenouementSpot(s.sens), s.compte, montantDenouementSpot(s));
+    ajouter(posteDenouementSpot(s.sens), s.compte, montantDenouementSpot(s), {
+      date: s.dateEcheance,
+      libelle: `${s.sens === "placement" ? "Placement" : "Emprunt"} ${
+        s.contrepartie || "sans contrepartie"
+      }`,
+      info: [
+        `${(s.taux * 100).toFixed(2)} % du ${s.dateValeur} au ${s.dateEcheance}`,
+        "capital et intérêts",
+      ].join(" · "),
+    });
   }
 
   return parPoste;
@@ -234,17 +248,17 @@ export const loadNivellements = cache(async (fundId: string): Promise<Nivellemen
 export function agregerNivellements(
   nivellements: Nivellement[],
   dateArrete: string | null,
-): Map<string, Map<string, number>> {
-  const parPoste = new Map<string, Map<string, number>>();
+): ApportsParPoste {
+  const parPoste: ApportsParPoste = new Map();
 
-  const ajouter = (poste: string, compte: string, montant: number) => {
-    if (!poste || !compte || montant === 0) return;
-    let parCompte = parPoste.get(poste);
-    if (!parCompte) {
-      parCompte = new Map<string, number>();
-      parPoste.set(poste, parCompte);
-    }
-    parCompte.set(compte, (parCompte.get(compte) ?? 0) + montant);
+  const ajouter = (
+    poste: string,
+    compte: string,
+    montant: number,
+    detail: { date: string; libelle: string; info: string },
+  ) => {
+    if (!compte) return;
+    ajouterApport(parPoste, poste, compte, montant, detail);
   };
 
   /** Rapproché à la date d'arrêté ? Un rapprochement POSTÉRIEUR ne compte pas :
@@ -254,11 +268,20 @@ export function agregerNivellements(
   for (const n of nivellements) {
     // Pas encore ordonné à cette date : rien à annoncer.
     if (dateArrete && n.dateNivellement > dateArrete) continue;
+    const quoi = n.libelle || "Nivellement";
     if (!lettre(n.rapprocheDebit)) {
-      ajouter(POSTE_NIVELLEMENT_DEBIT, n.compteSource, n.montant);
+      ajouter(POSTE_NIVELLEMENT_DEBIT, n.compteSource, n.montant, {
+        date: n.dateNivellement,
+        libelle: quoi,
+        info: `débit · vers ${n.compteDestination}`,
+      });
     }
     if (!lettre(n.rapprocheCredit)) {
-      ajouter(POSTE_NIVELLEMENT_CREDIT, n.compteDestination, n.montant);
+      ajouter(POSTE_NIVELLEMENT_CREDIT, n.compteDestination, n.montant, {
+        date: n.dateNivellement,
+        libelle: quoi,
+        info: `crédit · depuis ${n.compteSource}`,
+      });
     }
   }
 

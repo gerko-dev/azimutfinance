@@ -15,6 +15,7 @@
 
 import type { FraisGestion } from "./frais-gestion";
 import type { CalendrierEsv } from "./esv-data";
+import type { DetailMontant } from "./tresorerie-apports";
 import type {
   FluxManuel,
   Nivellement,
@@ -552,6 +553,20 @@ export type PointTresorerie = {
    *  Un montant à huit chiffres qui tombe du ciel ne se vérifie pas. Celui-ci
    *  se recoupe : moyenne × taux ÷ 12, et l'on voit sur quoi la moyenne porte. */
   fraisGestion: FraisGestionPoint;
+  /**
+   * CE QUI COMPOSE CHAQUE MONTANT : poste, puis compte, puis les opérations.
+   *
+   * Le tableau est un tableau de sommes. « Deux milliards en achats MTP » ne
+   * dit ni quel titre, ni quand, ni en combien de fois, et le gérant devait
+   * ouvrir l'écran des opérations pour refaire l'addition. L'infobulle d'une
+   * cellule montre désormais ses pièces.
+   *
+   * Une cellule absente de cette table n'a rien à montrer : un poste qui vaut
+   * zéro, un solde bancaire — qui vient d'un relevé, pas d'opérations —, ou un
+   * ratio. Les listes sont RÉSUMÉES au-delà de vingt-cinq lignes, le reste
+   * regroupé sur une ligne de solde pour que le total reste juste.
+   */
+  details: Record<string, Record<string, DetailMontant[]>>;
   /** Postes encore sans source, comptés pour le bandeau d'avertissement. */
   postesAAlimenter: number;
   /** Établissements en colonnes, dans l'ordre d'affichage, avec leur groupe

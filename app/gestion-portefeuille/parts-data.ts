@@ -20,6 +20,7 @@ import {
   type SensPart,
   type TypeClient,
 } from "./parts-types";
+import { ajouterApport, type ApportsParPoste } from "./tresorerie-apports";
 
 type Ligne = {
   id: string;
@@ -133,20 +134,25 @@ export const loadTousFluxParts = cache(
 export function agregerFluxParts(
   flux: FluxPart[],
   dateArrete: string | null,
-): Map<string, Map<string, number>> {
-  const parPoste = new Map<string, Map<string, number>>();
+): ApportsParPoste {
+  const parPoste: ApportsParPoste = new Map();
 
   for (const f of flux) {
     if (f.montant === 0) continue;
     if (!fluxPese(f, dateArrete)) continue;
 
-    const poste = postePart(f);
-    let parCompte = parPoste.get(poste);
-    if (!parCompte) {
-      parCompte = new Map<string, number>();
-      parPoste.set(poste, parCompte);
-    }
-    parCompte.set(f.compteReglement, (parCompte.get(f.compteReglement) ?? 0) + f.montant);
+    ajouterApport(parPoste, postePart(f), f.compteReglement, f.montant, {
+      date: f.dateOperation,
+      libelle: f.investisseur || "Porteur non nommé",
+      info: [
+        f.sens === "rachat" ? "rachat" : "souscription",
+        f.certitude === "certain" ? "" : "probable",
+        f.bureau ? `bureau ${f.bureau}` : "",
+        f.dateVl ? `VL du ${f.dateVl}` : "",
+      ]
+        .filter(Boolean)
+        .join(" · "),
+    });
   }
   return parPoste;
 }

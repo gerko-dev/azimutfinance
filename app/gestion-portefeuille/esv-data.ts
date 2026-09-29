@@ -62,6 +62,12 @@ import {
   type NatureEsv,
   type Reception,
 } from "./esv-types";
+import {
+  ajouterApport,
+  fmtPrix,
+  fmtQte,
+  type ApportsParPoste,
+} from "./tresorerie-apports";
 
 const cle = (s: string | null | undefined) => (s ?? "").trim().toUpperCase();
 
@@ -813,8 +819,8 @@ export function agregerEsv(
   evenements: EvenementEsv[],
   compte: string,
   dateArrete: string | null,
-): Map<string, Map<string, number>> {
-  const parPoste = new Map<string, Map<string, number>>();
+): ApportsParPoste {
+  const parPoste: ApportsParPoste = new Map();
   if (!compte) return parPoste;
 
   for (const e of evenements) {
@@ -826,13 +832,17 @@ export function agregerEsv(
     if (e.date < DEBUT_SUIVI) continue;
     // Au-delà de l'horizon de l'arrêté, le flux n'aura pas encore eu lieu.
     if (dateArrete && e.date > dateArrete) continue;
-    const poste = POSTE_DE_NATURE[e.nature];
-    let parCompte = parPoste.get(poste);
-    if (!parCompte) {
-      parCompte = new Map<string, number>();
-      parPoste.set(poste, parCompte);
-    }
-    parCompte.set(compte, (parCompte.get(compte) ?? 0) + e.montantAttendu);
+    ajouterApport(parPoste, POSTE_DE_NATURE[e.nature], compte, e.montantAttendu, {
+      date: e.date,
+      libelle: e.libelle || e.code || e.isin || "Titre sans libellé",
+      info: [
+        e.nature,
+        `${fmtQte(e.quantite)} titre(s) × ${fmtPrix(e.montantParTitre)}`,
+        e.reserve ?? "",
+      ]
+        .filter(Boolean)
+        .join(" · "),
+    });
   }
   return parPoste;
 }
