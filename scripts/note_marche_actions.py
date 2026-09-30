@@ -13,11 +13,26 @@ suit.
 
 SOURCES, TOUTES LOCALES :
   data/historique_sika_indices/*.csv  cours de cloture des onze indices BRVM
-  data/historique_sika/*.csv          cours et volumes des 47 valeurs suivies
-  data/titres.csv                     capitalisation, titres en circulation, PER
+  data/historique_sika/*.csv          cours et volumes des valeurs suivies
+  data/titres.csv                     nom, secteur, nombre de titres -- ET RIEN
+                                      D'AUTRE : ses colonnes `price`,
+                                      `capitalization` et `per` sont une
+                                      photographie du 24 avril 2026 qu'aucun
+                                      scrap ne rafraichit
+  data/DB_Valeurs.csv                 resultats nets annuels (etats financiers)
+  data/DB_Titres.csv                  nombre de titres, format des etats
   data/dividendes-boc.csv             calendrier des detachements (BOC)
   data/obligations-cotees-boc-synthese.json  synthese obligataire du BOC
   data/umoa-emissions-realisees.csv   adjudications UMOA-Titres du mois
+
+LA CAPITALISATION ET LE PER SE CALCULENT ICI, ils ne se lisent nulle part. Les
+lire dans titres.csv donnait une capitalisation de 15 872 milliards quand elle
+en valait 21 000, et un PER median de 6,3x quand le marche se paie pres de
+14 fois ses benefices : des cours de cinq mois, et une colonne `per` dont le
+benefice implicite ne correspondait pas aux comptes publies. Le PER est donc
+refait a partir du dernier exercice ANNUEL RENSEIGNE des etats financiers --
+renseigne, parce que la colonne de l'exercice en cours existe des la premiere
+publication trimestrielle et reste a zero jusqu'a la cloture.
 
 LE DOCX EST ECRIT SANS DEPENDANCE. python-docx n'est pas installe et un
 document Word est une archive zip de quelques fichiers XML : autant les ecrire.
@@ -109,6 +124,10 @@ def variation(s: dict[str, tuple[float, float]], mois: str) -> dict | None:
     ytd = s[sorted(debut_annee)[-1]][0] if debut_annee else None
     return {
         "base": base,
+        # La seance qui sert de POINT DE DEPART : la derniere du mois
+        # precedent. Elle se dit dans l'en-tete, sinon « la performance du
+        # mois » ne designe pas une periode verifiable.
+        "base_date": avant[-1],
         "fin": fin,
         "pct": 100 * (fin / base - 1),
         "ytd": 100 * (fin / ytd - 1) if ytd else None,
@@ -137,6 +156,13 @@ def collecter(mois: str) -> dict:
             d["indices"][f[:-4]] = v
 
     # Referentiel des valeurs.
+    #
+    # ON N'Y PREND QUE CE QUI NE BOUGE PAS : le nom, le secteur, le pays, le
+    # nombre de titres. Les colonnes `price`, `capitalization`, `per` et
+    # `yield` de titres.csv sont une PHOTOGRAPHIE, et une vieille : aucun
+    # scrap ne les rafraichit, et leurs cours sont ceux du 24 avril 2026. Les
+    # lire pour publier une capitalisation ou un PER revenait a annoncer un
+    # marche vieux de cinq mois -- 26 % trop bas sur la capitalisation.
     titres = {}
     with io.open(os.path.join(DATA, "titres.csv"), encoding="utf-8-sig", newline="") as f:
         for r in csv.DictReader(f, delimiter=";"):
@@ -145,13 +171,8 @@ def collecter(mois: str) -> dict:
                 "secteur": (r.get("sector") or "").strip(),
                 "pays": (r.get("country") or "").strip(),
                 "titres": nombre(r.get("sharesOutstanding")),
-                "cap": nombre(r.get("capitalization")),
-                "per": nombre(r.get("per")),
             }
-    d["capitalisationActions"] = sum(t["cap"] or 0 for t in titres.values())
     d["nbSocietes"] = len(titres)
-    pers = sorted(t["per"] for t in titres.values() if t["per"] and 0 < t["per"] < 100)
-    d["perMedian"] = pers[len(pers) // 2] if pers else None
 
     # Valeurs : performance, volume, contribution a la capitalisation.
     dossier = os.path.join(DATA, "historique_sika")
@@ -211,6 +232,86 @@ def collecter(mois: str) -> dict:
                 annee[m] = annee.get(m, 0.0) + c * v
     d["plusActifDeLAnnee"] = bool(annee) and max(annee, key=lambda k: annee[k]) == mois
     d["moisEcoules"] = len(annee)
+
+    # ── Capitalisation et PER, aux cours de cloture du mois ──────────────
+    #
+    # LE PER SE CALCULE SUR DES BENEFICES AUDITES, pas sur une colonne toute
+    # faite. La colonne `per` de titres.csv donnait 6,3x de mediane ; elle
+    # etait fausse deux fois -- cours perimes, et benefices implicites sans
+    # rapport avec les comptes publies (elle pretait a Sonatel un benefice par
+    # action de 8 742 F quand son resultat 2025 en donne 2 467).
+    #
+    # L'EXERCICE RETENU EST LE DERNIER CLOS ET RENSEIGNE. Le classeur d'etats
+    # financiers ouvre la colonne de l'exercice en cours des sa premiere
+    # publication trimestrielle, mais y laisse l'annuel a zero : prendre « le
+    # dernier exercice annuel » sans verifier qu'il porte une valeur faisait
+    # ressortir vingt-neuf societes en perte.
+    resultats: dict[str, tuple[str, float]] = {}
+    par_exercice: dict[str, dict[str, float]] = {}
+    chemin_valeurs = os.path.join(DATA, "DB_Valeurs.csv")
+    if os.path.exists(chemin_valeurs):
+        with io.open(chemin_valeurs, encoding="utf-8-sig", newline="") as f:
+            for r in csv.DictReader(f):
+                if r.get("code_poste") != "CR_RNET" or r.get("periode") != "Annuel":
+                    continue
+                rn = nombre(r.get("valeur"))
+                if not rn:
+                    continue
+                cle = r["ticker"].strip().upper()
+                par_exercice.setdefault(cle, {})[r["exercice"]] = rn
+                if cle not in resultats or r["exercice"] > resultats[cle][0]:
+                    resultats[cle] = (r["exercice"], rn)
+
+    # CROISSANCE DES BENEFICES, a perimetre constant.
+    #
+    # C'est le chiffre qui permet de dire si les cours ont monte plus vite que
+    # les resultats -- une affirmation qu'on lit partout et que presque
+    # personne ne chiffre. Seules les societes presentes aux DEUX exercices
+    # comptent : y melanger celles qui n'en ont qu'un ferait passer une
+    # entree de perimetre pour de la croissance.
+    d["croissanceBenefices"] = None
+    d["exerciceCompare"] = None
+    exos = sorted({e for m in par_exercice.values() for e in m})
+    if len(exos) >= 2:
+        recent, precedent = exos[-1], exos[-2]
+        communs = [c for c, m in par_exercice.items() if recent in m and precedent in m]
+        avant_somme = sum(par_exercice[c][precedent] for c in communs)
+        apres_somme = sum(par_exercice[c][recent] for c in communs)
+        if avant_somme > 0 and communs:
+            d["croissanceBenefices"] = 100 * (apres_somme / avant_somme - 1)
+            d["exerciceCompare"] = (precedent, recent, len(communs))
+
+    cours_fin = {v["code"]: v["fin"] for v in valeurs}
+    capitalisation = 0.0
+    cap_avec_resultat = 0.0
+    benefices = 0.0
+    pers: list[float] = []
+    exercices: set[str] = set()
+    cotees = 0
+    for code, info in titres.items():
+        n = info.get("titres")
+        cours = cours_fin.get(code)
+        if not n or not cours:
+            continue
+        cotees += 1
+        capitalisation += cours * n
+        ex_rn = resultats.get(code)
+        if not ex_rn:
+            continue
+        ex, rn = ex_rn
+        exercices.add(ex)
+        cap_avec_resultat += cours * n
+        benefices += rn
+        if rn > 0:
+            pers.append(cours * n / rn)
+    d["capitalisationActions"] = capitalisation
+    # Le compte annonce est celui des societes REELLEMENT additionnees : une
+    # valeur admise ce mois-ci n'a pas d'historique, donc pas de capitalisation.
+    d["nbSocietes"] = cotees
+    d["perMarche"] = cap_avec_resultat / benefices if benefices > 0 else None
+    d["perMedian"] = sorted(pers)[len(pers) // 2] if pers else None
+    d["perSocietes"] = len(pers)
+    d["perExercice"] = max(exercices) if exercices else None
 
     avec_contrib = [v for v in valeurs if v["contribution"] is not None]
     d["contributions"] = sorted(avec_contrib, key=lambda v: -v["contribution"])
@@ -474,7 +575,8 @@ def rediger(d: dict) -> tuple[str, str]:
     x = [
         para(titre, "Titre"),
         para(
-            f"Arrêté au {date_fr(c['derniere'])} · {c['seances']} séances de cotation · "
+            f"Période analysée : du {date_fr(c['base_date'])} au {date_fr(c['derniere'])} · "
+            f"{c['seances']} séances de cotation · "
             f"Données : site AzimutFinance et Bulletin Officiel de la Cote",
             "SousTitre",
         ),
@@ -582,13 +684,24 @@ def rediger(d: dict) -> tuple[str, str]:
 
     # ── 2 ────────────────────────────────────────────────────────────────
     x.append(para("2. Perspectives pour les investisseurs", "Titre1"))
-    x.append(para(
-        f"**Le marché reste bon marché en apparence.** Le PER médian de la cote ressort à "
-        f"{fr(d['perMedian'], 1)}x, un niveau qui laisse de la place à la revalorisation pour les "
-        f"sociétés dont les résultats tiennent. Mais la dispersion est extrême, et la moyenne "
-        f"cache deux marchés : quelques capitalisations profondes et liquides, et une longue "
-        f"file de valeurs étroites où un ordre de taille moyenne déplace le cours."
-    ))
+    if d["perMarche"]:
+        x.append(para(
+            f"**La cote n’est plus donnée.** Rapportée aux bénéfices du dernier exercice clos "
+            f"({d['perExercice']}), la capitalisation du marché représente "
+            f"**{fr(d['perMarche'], 1)} fois** les résultats cumulés des sociétés cotées, et le "
+            f"rapport médian s’établit à {fr(d['perMedian'], 1)} fois sur "
+            f"{d['perSocietes']} sociétés bénéficiaires. Après une progression de "
+            f"{pct(c['ytd'])} depuis le 1ᵉʳ janvier, la revalorisation a précédé les résultats : "
+            + (f"les cours ont progressé de {pct(c['ytd'], 0)} quand les bénéfices cumulés des "
+               f"sociétés cotées n’ont gagné que {pct(d['croissanceBenefices'], 0)} entre les "
+               f"exercices {d['exerciceCompare'][0]} et {d['exerciceCompare'][1]} "
+               f"({d['exerciceCompare'][2]} sociétés à périmètre constant). "
+               if d.get("croissanceBenefices") is not None else "")
+            + f"Ce sont désormais les bénéfices qui doivent rattraper les cours, et non l’inverse. "
+            f"La dispersion reste extrême — d’un rapport de 4 fois à plus de 200 fois — et cache "
+            f"deux marchés : quelques capitalisations profondes et liquides, et une longue file "
+            f"de valeurs étroites où un ordre de taille moyenne déplace le cours."
+        ))
     if d["primaire"]:
         tete = d["primaire"][0]
         x.append(para(
@@ -841,14 +954,20 @@ def rediger_tv(d: dict) -> tuple[str, str]:
         f"{d['baisses']} actions sur {len(v)}. Ce qui compte, ce n’est pas le marché : "
         f"c’est ce que vous avez, vous, dans votre portefeuille.",
 
-        f"**Le deuxième : nos entreprises ne sont pas chères, et cela s’explique.** En "
-        f"moyenne, une action de la BRVM se paie aujourd’hui environ "
-        f"{fr(d['perMedian'], 0)} fois le bénéfice annuel de l’entreprise. C’est peu. "
-        f"Mais le prix est bas aussi parce que certaines actions ne s’échangent presque "
-        f"jamais. Si vous achetez un titre que personne ne traite, vous aurez du mal à le "
-        f"revendre le jour où vous en aurez besoin — et pas forcément au prix affiché. Une "
-        f"action bon marché n’est pas toujours une bonne affaire : parfois, c’est "
-        f"simplement une action difficile à revendre.",
+        f"**Le deuxième : les actions ne sont plus bon marché.** Aujourd’hui, l’ensemble "
+        f"des entreprises cotées vaut en Bourse à peu près "
+        f"{fr(d['perMarche'], 0)} fois ce qu’elles gagnent en une année. "
+        + (f"Regardez l’écart : depuis janvier, les cours ont pris près de "
+           f"{fr(abs(c['ytd']), 0)} %, alors que les bénéfices des entreprises, eux, n’ont "
+           f"progressé que d’environ {fr(abs(d['croissanceBenefices']), 0)} % sur le dernier "
+           f"exercice. "
+           if d.get("croissanceBenefices") is not None else "")
+        + f"Autrement dit, les cours ont monté beaucoup plus vite que les bénéfices — et pour "
+        f"que la hausse continue, il faudra maintenant que les résultats suivent. Attention "
+        f"aussi : certaines actions ne s’échangent presque jamais. Si vous "
+        f"achetez un titre que personne ne traite, vous aurez du mal à le revendre le jour où "
+        f"vous en aurez besoin, et pas forcément au prix affiché. Une action qui paraît bon "
+        f"marché est parfois, tout simplement, une action difficile à revendre.",
     ]
     if d["primaire"]:
         haut = max(p["rmp"] for p in d["primaire"])
@@ -955,7 +1074,7 @@ def rediger_tv(d: dict) -> tuple[str, str]:
         para(
             f"Texte d’intervention · durée estimée {int(minutes)} min "
             f"{int(round((minutes % 1) * 60)):02d} s · environ {mots} mots · "
-            f"données arrêtées au {date_fr(c['derniere'])}",
+            f"période analysée du {date_fr(c['base_date'])} au {date_fr(c['derniere'])}",
             "SousTitre",
         ),
         para(
@@ -1001,7 +1120,17 @@ def main() -> int:
         titre, corps = rediger(donnees)
         nom = f"Note de marché - Actions BRVM - {lm}.docx"
     chemin = os.path.join(RACINE, nom)
-    ecrire_docx(chemin, corps, titre, "AzimutFinance")
+    try:
+        ecrire_docx(chemin, corps, titre, "AzimutFinance")
+    except PermissionError:
+        # WORD VERROUILLE LE FICHIER QU'IL A OUVERT. Le dire, plutot que de
+        # laisser une trace de pile de dix lignes ou l'on ne lit rien.
+        print(
+            f"Impossible d'ecrire « {nom} » : le document est ouvert dans Word. "
+            f"Ferme-le, puis relance la commande.",
+            file=sys.stderr,
+        )
+        return 2
     print(f"Ecrit : {nom}")
     print(
         f"  {donnees['indices']['BRVMC']['seances']} seances, "
