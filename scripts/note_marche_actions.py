@@ -27,6 +27,7 @@ format reste lisible ici meme, sans boite noire.
 Usage :
     python scripts/note_marche_actions.py              # mois ecoule
     python scripts/note_marche_actions.py 2026-09      # mois explicite
+    python scripts/note_marche_actions.py 2026-09 --tv # version parlee, plateau TV
 """
 
 from __future__ import annotations
@@ -704,6 +705,279 @@ def rediger(d: dict) -> tuple[str, str]:
     return titre, "".join(x)
 
 
+# ── La version parlee ───────────────────────────────────────────────────────
+#
+# CE N'EST PAS LA MEME NOTE RACCOURCIE. Un texte lu a la television n'obeit pas
+# aux memes regles qu'une note ecrite : on ne peut pas relire une phrase qu'on
+# n'a pas comprise, on ne revient pas sur un chiffre, et le spectateur n'a pas
+# de tableau sous les yeux. Les nombres sont donc ARRONDIS -- « un peu plus de
+# trois pour cent » et non « +3,22 % » --, chaque terme de metier est explique
+# au moment ou il tombe, et il n'y a aucun tableau.
+#
+# LES CHIFFRES RESTENT CEUX DE LA NOTE ECRITE. C'est tout l'interet de les tirer
+# des memes donnees : la version parlee ne peut pas raconter autre chose.
+
+# Debit d'un intervenant sur un plateau, en mots par minute. Plus lent qu'une
+# lecture ordinaire : on marque les fins de phrase et on laisse passer les
+# chiffres.
+MOTS_PAR_MINUTE = 145
+
+
+# Chaque secteur avec son ACCORD. « L’industrie a reculé » contre « les banques
+# ont reculé » : le verbe suit le sujet, et une phrase lue a l’antenne ne
+# pardonne pas l’a-peu-pres qu’un tableau aurait absorbe sans bruit.
+SECTEURS_PARLES: dict[str, tuple[str, str]] = {
+    "BRVM-TEL": ("les télécoms", "ont"),
+    "BRVM-SF": ("les banques et les assurances", "ont"),
+    "BRVM-IN": ("l’industrie", "a"),
+    "BRVM-SP": ("les services publics — l’eau, l’électricité", "ont"),
+    "BRVM-EN": ("l’énergie et les carburants", "ont"),
+    "BRVM-CB": ("l’alimentation et les produits du quotidien", "ont"),
+    "BRVM-CD": ("la distribution et les biens d’équipement", "ont"),
+}
+
+
+def secteur_parle(code: str) -> tuple[str, str]:
+    """Le nom d'un secteur tel qu'on le dit a l'antenne, et son accord."""
+    return SECTEURS_PARLES.get(code, (NOMS_INDICES.get(code, code), "a"))
+
+
+def arrondi_parle(x: float) -> str:
+    """Un pourcentage comme on le dit : « un peu plus de 3 % »."""
+    a = abs(x)
+    entier = int(a)
+    reste = a - entier
+    if reste < 0.15:
+        return f"{entier} %"
+    if reste < 0.4:
+        return f"un peu plus de {entier} %"
+    if reste < 0.75:
+        return f"environ {entier},5 %"
+    return f"près de {entier + 1} %"
+
+
+def majuscule(s: str) -> str:
+    """Premiere lettre en capitale, sans toucher au reste."""
+    return s[:1].upper() + s[1:]
+
+
+def de_pct(x: float) -> str:
+    """Le pourcentage precede de « de », elide s'il le faut : « d’environ 17,5 % ».
+
+    « De environ 58,5 % » ne se dit pas, et c'est le genre de faute qui s'entend
+    immediatement a l'antenne. L'elision se decide sur la premiere lettre de ce
+    qui suit : elle se tranche donc ici, ou le pourcentage est mis en mots.
+    """
+    s = arrondi_parle(x)
+    return ("d’" if s[0].lower() in "aeiouéèêh" else "de ") + s
+
+
+def nom_court(n: str) -> str:
+    """Le nom qu'on prononce : sans le suffixe pays de la cote."""
+    return re.sub(r"\s+(CI|SN|BF|BJ|TG|ML|NE|BN)$", "", (n or "").strip())
+
+
+def rediger_tv(d: dict) -> tuple[str, str]:
+    mois = d["mois"]
+    lm = libelle_mois(mois)
+    c = d["indices"]["BRVMC"]
+    v = d["valeurs"]
+    premier = d["contributions"][0]
+    secto = [(k, d["indices"][k]) for k in SECTORIELS if k in d["indices"]]
+    secto.sort(key=lambda kv: -kv[1]["pct"])
+    meilleur, pire = secto[0], secto[-1]
+    volumes = sorted(v, key=lambda x: -x["valeur"])[:3]
+    part_premier = 100 * volumes[0]["valeur"] / d["valeurMois"]
+    sens = "gagné" if c["pct"] >= 0 else "perdu"
+    titre = f"Intervention BRVM TV — Le marché des actions en {lm}"
+
+    parties: list[tuple[str, list[str]]] = []
+
+    parties.append(("1. Comment le marché a évolué ce mois-ci", [
+        f"Bonjour à tous. Si l’on ne regarde que le chiffre principal, {lm} a été un bon "
+        f"mois à la Bourse d’Abidjan. L’indice BRVM Composite — c’est la moyenne "
+        f"de toutes les entreprises cotées — a {sens} {arrondi_parle(c['pct'])}. Depuis le "
+        f"début de l’année, il est en hausse {de_pct(c['ytd'])}. Voilà pour la "
+        f"photographie d’ensemble.",
+
+        f"Mais cette photographie cache quelque chose, et c’est le vrai sujet du mois. Sur "
+        f"les {len(v)} entreprises que nous suivons, **{d['baisses']} ont vu leur cours "
+        f"baisser**. Seulement {d['hausses']} ont monté. Autrement dit : l’indice monte, et "
+        f"pourtant la grande majorité des actions descendent.",
+
+        f"Comment est-ce possible ? Parce que dans un indice, toutes les entreprises ne pèsent "
+        f"pas le même poids. Une très grosse société compte beaucoup plus qu’une petite. Et "
+        f"ce mois-ci, une seule d’entre elles, **{nom_court(premier['nom'])}**, a progressé "
+        f"{de_pct(premier['pct'])}. À elle seule, elle a ajouté environ "
+        f"{fr(round(premier['contribution'] / 1e9))} milliards de francs CFA à la valeur du "
+        f"marché — davantage que ce que le marché entier a gagné dans le mois. Dit simplement : "
+        f"**si on met cette valeur de côté, le marché a baissé.**",
+
+        f"Quand on regarde métier par métier, l’écart est tout aussi net. "
+        f"{majuscule(secteur_parle(meilleur[0])[0])} {secteur_parle(meilleur[0])[1]} signé la "
+        f"meilleure progression du mois. {majuscule(secteur_parle(secto[1][0])[0])} "
+        f"{secteur_parle(secto[1][0])[1]} suivi, en légère hausse. À l’inverse, "
+        f"{secteur_parle(pire[0])[0]} {secteur_parle(pire[0])[1]} reculé "
+        f"{de_pct(pire[1]['pct'])}.",
+
+        f"Dernier point, et celui-là est encourageant : on a beaucoup échangé. Environ "
+        f"{fr(round(d['valeurMois'] / 1e9))} milliards de francs ont changé de mains, contre "
+        f"{fr(round(d['valeurMoisPrecedent'] / 1e9))} milliards le mois précédent. "
+        + ("C’est le mois le plus animé depuis le début de l’année. "
+           if d["plusActifDeLAnnee"] else "")
+        + f"Un marché où l’on échange beaucoup pendant que les cours baissent, ce n’est "
+        f"pas un marché abandonné : c’est un marché où les titres changent de mains. "
+        f"Certains vendent, d’autres en profitent pour acheter. À noter tout de même : "
+        f"{nom_court(volumes[0]['nom'])} représente à elle seule près de "
+        f"{fr(part_premier, 0)} % de tout ce qui s’est traité.",
+    ]))
+
+    enseignements = [
+        "J’en tire trois enseignements simples, pour quelqu’un qui découvre la Bourse.",
+
+        "**Le premier : acheter « la Bourse » et acheter « une action », ce n’est pas la "
+        "même chose.** Beaucoup de gens regardent l’indice, voient qu’il monte, et en "
+        f"concluent que leurs actions montent aussi. Ce mois-ci, c’est l’inverse pour "
+        f"{d['baisses']} actions sur {len(v)}. Ce qui compte, ce n’est pas le marché : "
+        f"c’est ce que vous avez, vous, dans votre portefeuille.",
+
+        f"**Le deuxième : nos entreprises ne sont pas chères, et cela s’explique.** En "
+        f"moyenne, une action de la BRVM se paie aujourd’hui environ "
+        f"{fr(d['perMedian'], 0)} fois le bénéfice annuel de l’entreprise. C’est peu. "
+        f"Mais le prix est bas aussi parce que certaines actions ne s’échangent presque "
+        f"jamais. Si vous achetez un titre que personne ne traite, vous aurez du mal à le "
+        f"revendre le jour où vous en aurez besoin — et pas forcément au prix affiché. Une "
+        f"action bon marché n’est pas toujours une bonne affaire : parfois, c’est "
+        f"simplement une action difficile à revendre.",
+    ]
+    if d["primaire"]:
+        haut = max(p["rmp"] for p in d["primaire"])
+        bas = min(p["rmp"] for p in d["primaire"])
+        enseignements.append(
+            f"**Le troisième, et c’est peut-être le plus important : l’État vous fait "
+            f"concurrence.** Ce mois-ci, les États de notre région ont emprunté environ "
+            f"{fr(round(d['primaireTotal'] / 1e9))} milliards de francs auprès des "
+            f"investisseurs, en promettant de les rémunérer entre {fr(bas, 1)} % et "
+            f"{fr(haut, 1)} % par an. Mettez-vous à la place d’une banque ou d’une "
+            f"compagnie d’assurance : si l’État lui propose {fr(haut, 1)} % par an, "
+            f"une action doit lui promettre nettement plus pour mériter son argent. C’est "
+            f"l’une des grandes raisons pour lesquelles les cours ont du mal à monter en ce "
+            f"moment."
+        )
+    parties.append(("2. Ce que cela signifie pour celui qui veut investir", enseignements))
+
+    suite = [
+        "Trois rendez-vous vont décider de la suite, et ils sont faciles à suivre.",
+
+        "**D’abord, les résultats des entreprises.** Dans les prochaines semaines, les "
+        "sociétés cotées vont publier leurs comptes du troisième trimestre. C’est le moment "
+        "de vérité : on saura si la baisse des cours était une simple respiration après une "
+        "belle année, ou si les affaires vont réellement moins bien. Regardez "
+        f"en priorité {secteur_parle(secto[-1][0])[0]}, "
+        f"qui {secteur_parle(secto[-1][0])[1]} le plus souffert ce mois-ci.",
+    ]
+    if d["dividendesAVenir"]:
+        p0 = d["dividendesAVenir"][0]
+        suite.append(
+            f"**Ensuite, les dividendes** — c’est-à-dire la part du bénéfice que "
+            f"l’entreprise reverse à ses actionnaires. Le prochain versement annoncé "
+            f"concerne {nom_court(p0['titre'])}, autour du {date_fr(p0['exDividende'])}."
+        )
+    else:
+        suite.append(
+            "**Ensuite, les dividendes** — c’est-à-dire la part du bénéfice que "
+            "l’entreprise reverse à ses actionnaires. La saison est terminée pour cette "
+            "année. Pendant plusieurs mois, le marché va donc perdre ce petit coup de pouce qui "
+            "soutenait les cours ; les prochains versements n’arriveront qu’après les "
+            "assemblées générales, au printemps prochain."
+        )
+    suite.append(
+        "**Enfin, le rythme des emprunts publics.** Si les États continuent d’emprunter "
+        "autant et aussi cher, l’argent des grands investisseurs continuera d’aller "
+        "vers eux plutôt que vers la Bourse."
+    )
+    suite.append(
+        "Si vous me demandez ce que j’anticipe : un marché qui reste globalement là où il "
+        "est, mais avec des écarts de plus en plus grands d’une entreprise à l’autre. "
+        "Les grandes valeurs, solides et faciles à échanger, devraient tenir. Les petites "
+        "valeurs peu traitées risquent de continuer à baisser, faute d’acheteurs. Et pour "
+        "que le marché reparte franchement à la hausse, il faudrait que la hausse s’élargisse "
+        "au-delà de deux ou trois grandes sociétés. Ce n’est pas ce que l’on observe "
+        "aujourd’hui."
+    )
+    parties.append(("3. Ce qui nous attend dans les prochaines semaines", suite))
+
+    parties.append(("4. Mes conseils à ceux qui nous regardent", [
+        "Je terminerai par cinq conseils très simples. Et je le précise tout de suite : "
+        "c’est un avis général. Pour une décision qui vous concerne personnellement, "
+        "parlez-en à votre société de gestion ou à votre société de bourse.",
+
+        "**Un : ne vous fiez pas seulement à l’indice.** Il peut monter pendant que votre "
+        "action baisse. Regardez vos titres un par un.",
+
+        "**Deux : avant d’acheter, vérifiez que le titre s’échange régulièrement.** "
+        "Regardez s’il y a des transactions tous les jours. Si une action ne se traite "
+        "qu’une fois par semaine, dites-vous que vous mettrez du temps à en sortir.",
+
+        "**Trois : ne confondez pas le dividende avec un cadeau.** Le jour où l’entreprise "
+        "verse le dividende, le cours de l’action baisse à peu près du même montant. Vous "
+        "n’avez rien gagné ce jour-là : vous avez simplement reçu en espèces une partie de "
+        "ce que vous déteniez en actions.",
+
+        "**Quatre : comparez toujours avec ce que l’État vous propose.** Si un emprunt "
+        "d’État vous rapporte sept ou huit pour cent par an sans que vous ayez à suivre la "
+        "Bourse, alors une action doit vous offrir une perspective clairement supérieure pour "
+        "justifier le risque que vous prenez.",
+
+        "**Cinq : n’achetez jamais tout d’un coup, et n’investissez que ce dont "
+        "vous n’avez pas besoin demain.** Sur notre marché, un ordre important peut à lui "
+        "seul faire bouger le cours. Étalez vos achats sur plusieurs semaines. Et rappelez-vous "
+        "que la Bourse récompense la durée, rarement la précipitation.",
+    ]))
+
+    parties.append(("5. Conclusion", [
+        f"En résumé : en {lm}, l’indice a {sens} {arrondi_parle(c['pct'])}, on a beaucoup "
+        f"échangé, mais la majorité des actions ont baissé. Le marché ne monte plus tous "
+        f"ensemble — il trie.",
+
+        "Pour l’épargnant, cela veut dire une chose : l’époque où il suffisait "
+        "d’acheter n’importe quelle action pour gagner de l’argent est derrière "
+        "nous. Aujourd’hui, il faut choisir. Choisir des entreprises solides, qui versent "
+        "des dividendes, et dont les titres s’échangent vraiment. Et ensuite, laisser du "
+        "temps au temps. Merci de votre attention.",
+    ]))
+
+    mots = sum(len(b.replace("**", "").split()) for _, blocs in parties for b in blocs)
+    minutes = mots / MOTS_PAR_MINUTE
+
+    x = [
+        para(titre, "Titre"),
+        para(
+            f"Texte d’intervention · durée estimée {int(minutes)} min "
+            f"{int(round((minutes % 1) * 60)):02d} s · environ {mots} mots · "
+            f"données arrêtées au {date_fr(c['derniere'])}",
+            "SousTitre",
+        ),
+        para(
+            "Les passages en gras sont les points à appuyer à l’oral. Les chiffres sont "
+            "volontairement arrondis : à l’antenne, un chiffre exact que personne ne retient "
+            "vaut moins qu’un ordre de grandeur que tout le monde comprend.",
+            "Encadre",
+        ),
+    ]
+    for intitule_partie, blocs in parties:
+        x.append(para(intitule_partie, "Titre1"))
+        for b in blocs:
+            x.append(para(b))
+    x.append(para(
+        "Avis général à caractère informatif, établi à partir des données de marché arrêtées à "
+        "la date indiquée. Ne constitue pas un conseil en investissement personnalisé. Les "
+        "performances passées ne préjugent pas des performances futures.",
+        "Legende",
+    ))
+    return titre, "".join(x)
+
+
 def main() -> int:
     if len(sys.argv) > 1 and re.match(r"^\d{4}-\d{2}$", sys.argv[1]):
         mois = sys.argv[1]
@@ -711,14 +985,21 @@ def main() -> int:
         aujourdhui = dt.date.today()
         mois = f"{aujourdhui.year}-{aujourdhui.month:02d}"
 
+    tv = "--tv" in sys.argv
+
     donnees = collecter(mois)
     if "BRVMC" not in donnees["indices"]:
         print(f"Aucune donnee d'indice pour {mois}.", file=sys.stderr)
         return 1
 
-    titre, corps = rediger(donnees)
     lm = libelle_mois(mois)
-    nom = f"Note de marché - Actions BRVM - {lm[0].upper()}{lm[1:]}.docx"
+    lm = lm[0].upper() + lm[1:]
+    if tv:
+        titre, corps = rediger_tv(donnees)
+        nom = f"Intervention BRVM TV - Actions - {lm}.docx"
+    else:
+        titre, corps = rediger(donnees)
+        nom = f"Note de marché - Actions BRVM - {lm}.docx"
     chemin = os.path.join(RACINE, nom)
     ecrire_docx(chemin, corps, titre, "AzimutFinance")
     print(f"Ecrit : {nom}")
