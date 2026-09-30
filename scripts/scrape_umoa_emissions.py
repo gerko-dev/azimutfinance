@@ -75,6 +75,28 @@ HEADERS = {
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data"
 
+# LES ISIN QUE UMOA-TITRES NE PUBLIE PAS.
+#
+# Le hub laisse la colonne ISIN vide sur certaines adjudications, et la remplit
+# des semaines plus tard -- parfois jamais : celle du Sénégal du 25 septembre
+# 2026 n'en portait toujours aucun cinq jours apres, et celle de Guinee Bissau
+# du 11 aout 2026 sept semaines apres. La page de detail de l'emission n'en
+# porte pas davantage : le hub est la seule source, et elle se tait.
+#
+# UN TITRE SANS ISIN N'EXISTE PAS POUR LE SITE. `aggregateSovereignBonds`
+# ecarte toute OAT qui n'en a pas -- il n'y a pas d'autre clef pour consolider
+# les rounds d'une meme ligne -- si bien qu'un gerant qui detient le titre ne
+# le retrouve pas a l'import de son inventaire, alors que son depositaire, lui,
+# le nomme par son ISIN.
+#
+# Ce fichier COMPLETE ce que le site omet, jamais ne le contredit : un ISIN
+# publie l'emporte toujours. Il est indispensable parce que le scrap REECRIT
+# le CSV en entier a chaque passage : corriger le CSV a la main se perdrait au
+# prochain cron.
+#
+# Clef : (pays, dateOperation, titreES) -- ce qui identifie une ligne du hub.
+OVERRIDES_ISIN = DATA_DIR / "umoa-emissions-isin.csv"
+
 # Fichiers de sortie, ordonnes par usage frequent.
 OUT = {
     "emission-hub-passees": DATA_DIR / "umoa-emissions-realisees.csv",
@@ -436,6 +458,55 @@ def clean_rows(
     return cleaned, dict(stats)
 
 
+def lire_overrides_isin() -> dict[tuple[str, str, str], str]:
+    """Les ISIN completes a la main, par (pays, dateOperation, titreES)."""
+    if not OVERRIDES_ISIN.exists():
+        return {}
+    out: dict[tuple[str, str, str], str] = {}
+    with OVERRIDES_ISIN.open(encoding="utf-8-sig", newline="") as f:
+        for row in csv.DictReader(f, delimiter=";"):
+            isin = (row.get("isin") or "").strip().upper()
+            if not re.fullmatch(r"[A-Z]{2}\d{10}", isin):
+                continue
+            clef = (
+                (row.get("pays") or "").strip(),
+                (row.get("dateOperation") or "").strip(),
+                (row.get("titreES") or "").strip(),
+            )
+            out[clef] = isin
+    return out
+
+
+def appliquer_overrides_isin(
+    rows: list[dict[str, str]],
+    overrides: dict[tuple[str, str, str], str],
+) -> tuple[int, int]:
+    """Comble les ISIN vides. Retourne (combles, trous restants).
+
+    ON NE REMPLACE JAMAIS UN ISIN PUBLIE. Le jour ou UMOA-Titres se decide a
+    publier le sien, c'est lui qui fait foi : notre deduction ne doit pas le
+    recouvrir en silence, sinon une erreur de notre part survivrait a sa
+    correction par la source.
+    """
+    combles = 0
+    trous = 0
+    for row in rows:
+        if (row.get("isin") or "").strip():
+            continue
+        clef = (
+            (row.get("pays") or "").strip(),
+            (row.get("dateOperation") or "").strip(),
+            (row.get("titreES") or "").strip(),
+        )
+        isin = overrides.get(clef)
+        if isin:
+            row["isin"] = isin
+            combles += 1
+        else:
+            trous += 1
+    return combles, trous
+
+
 def write_csv(path: Path, cols: list[str], rows: Iterable[dict[str, str]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as f:
@@ -466,6 +537,26 @@ def main() -> int:
         # AVANT ecriture CSV. Le CSV de sortie est donc deja propre, sans
         # filtrage runtime cote TS.
         cleaned_rows, stats = clean_rows(raw_rows, table_id)
+        if table_id == "emission-hub-passees":
+            combles, trous = appliquer_overrides_isin(cleaned_rows, lire_overrides_isin())
+            if combles:
+                print(f"  + {combles} ISIN complete(s) depuis {OVERRIDES_ISIN.name}", file=sys.stderr)
+            if trous:
+                # SIGNALE, PAS TU. Un titre sans ISIN est invisible du site :
+                # le gerant qui le detient ne le retrouvera pas a l'import, et
+                # rien d'autre ne le lui dirait.
+                print(
+                    f"  ! {trous} adjudication(s) encore sans ISIN "
+                    f"-- a completer dans {OVERRIDES_ISIN.name}",
+                    file=sys.stderr,
+                )
+                for r in cleaned_rows:
+                    if not (r.get("isin") or "").strip():
+                        print(
+                            f"      {r['dateOperation']}  {r['pays']:<14} "
+                            f"{r['instrument']:<4} {r['titreES']:<14} ech. {r['echeance']}",
+                            file=sys.stderr,
+                        )
         cols = FINAL_COLS[table_id]
         write_csv(out_path, cols, cleaned_rows)
         rel = out_path.relative_to(ROOT)
