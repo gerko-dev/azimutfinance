@@ -345,7 +345,24 @@ def collecter(mois: str) -> dict:
                       if (r.get("dateOperation") or "").startswith(mois)]
     except OSError:
         pass
+    # TROIS MESURES, ET ELLES NE DISENT PAS LA MEME CHOSE.
+    #
+    # La moyenne par PAYS lisse les maturites : le Burkina ressort a 6,74 %
+    # alors qu'il a place un bon a 3,70 % et une obligation a 7,50 % le meme
+    # mois. Annoncer « entre 6,6 % et 7,8 % » d'apres ces moyennes laissait
+    # croire a la fourchette des OPERATIONS, qui va en realite de 3,70 % a
+    # 8,26 %. Et melanger bons (2 ans au plus) et obligations (3 a 10 ans)
+    # dans une meme fourchette revient a comparer des durees differentes.
+    #
+    # On garde donc les trois : la moyenne generale pour l'ordre de grandeur,
+    # l'eventail complet pour la dispersion, et le haut de la fourchette des
+    # OBLIGATIONS pour ce qui concurrence reellement une action -- un
+    # placement long.
     par_pays: dict[str, list[float]] = {}
+    tous: list[float] = []
+    oat: list[float] = []
+    total_m = 0.0
+    total_my = 0.0
     for r in lignes:
         m = nombre(r.get("montantRetenuM")) or 0
         y = nombre(r.get("rendementMoyenPondere"))
@@ -354,11 +371,21 @@ def collecter(mois: str) -> dict:
         a = par_pays.setdefault(r["pays"], [0.0, 0.0])
         a[0] += m
         a[1] += y * m
+        tous.append(y)
+        total_m += m
+        total_my += y * m
+        if (r.get("instrument") or "").strip().upper() == "OAT":
+            oat.append(y)
     d["primaire"] = sorted(
         ({"pays": p, "montant": m * 1e6, "rmp": s / m} for p, (m, s) in par_pays.items()),
         key=lambda x: -x["montant"],
     )
     d["primaireTotal"] = sum(p["montant"] for p in d["primaire"])
+    d["primaireMoyenne"] = total_my / total_m if total_m else None
+    d["primaireMin"] = min(tous) if tous else None
+    d["primaireMax"] = max(tous) if tous else None
+    d["primaireOatMax"] = max(oat) if oat else None
+    d["primaireLignes"] = len(tous)
     return d
 
 
@@ -707,14 +734,25 @@ def rediger(d: dict) -> tuple[str, str]:
         x.append(para(
             f"**La concurrence de la dette souveraine est le fait dominant.** Les États de "
             f"l’UMOA ont levé {mds(d['primaireTotal'], 0)} sur le marché des titres publics "
-            f"durant le mois, à des rendements moyens pondérés allant de "
-            f"{fr(min(p['rmp'] for p in d['primaire']), 2)} % à "
-            f"{fr(max(p['rmp'] for p in d['primaire']), 2)} % selon les signatures. "
-            f"{tete['pays']} en concentre la plus grande part ({mds(tete['montant'], 0)}). "
-            f"Un investisseur institutionnel qui obtient {fr(max(p['rmp'] for p in d['primaire']), 2)} % "
-            f"sur une signature souveraine portée jusqu’à l’échéance exige une prime substantielle "
-            f"pour porter à la place une action peu liquide : c’est ce qui pèse sur les multiples, et cela "
-            f"ne changera pas tant que les besoins de financement des États resteront à ce niveau."
+            f"durant le mois, en {d['primaireLignes']} lignes, au rendement moyen pondéré de "
+            f"**{fr(d['primaireMoyenne'], 2)} %**. L’éventail est large — de "
+            f"{fr(d['primaireMin'], 2)} % à {fr(d['primaireMax'], 2)} % d’une ligne à l’autre — "
+            f"parce qu’il mêle des bons à deux ans au plus et des obligations à trois, cinq ou "
+            f"dix ans. Par signature, la moyenne pondérée va de "
+            f"{fr(min(p['rmp'] for p in d['primaire']), 2)} % "
+            f"({min(d['primaire'], key=lambda p: p['rmp'])['pays']}) à "
+            f"{fr(max(p['rmp'] for p in d['primaire']), 2)} % "
+            f"({max(d['primaire'], key=lambda p: p['rmp'])['pays']}). "
+            f"{tete['pays']} concentre la plus grande part des montants "
+            f"({mds(tete['montant'], 0)})."
+        ))
+        x.append(para(
+            f"C’est le terme long qui concurrence l’action : les obligations du Trésor du mois "
+            f"sont ressorties jusqu’à **{fr(d['primaireOatMax'], 2)} %**. Un investisseur "
+            f"institutionnel qui obtient ce rendement sur une signature souveraine portée "
+            f"jusqu’à l’échéance exige une prime substantielle pour porter à la place une action "
+            f"peu liquide : c’est ce qui pèse sur les multiples, et cela ne changera pas tant que "
+            f"les besoins de financement des États resteront à ce niveau."
         ))
     x.append(para(
         "**La liquidité demeure la contrainte structurelle.** Elle s’améliore, mais elle reste "
@@ -970,18 +1008,18 @@ def rediger_tv(d: dict) -> tuple[str, str]:
         f"marché est parfois, tout simplement, une action difficile à revendre.",
     ]
     if d["primaire"]:
-        haut = max(p["rmp"] for p in d["primaire"])
-        bas = min(p["rmp"] for p in d["primaire"])
         enseignements.append(
             f"**Le troisième, et c’est peut-être le plus important : l’État vous fait "
             f"concurrence.** Ce mois-ci, les États de notre région ont emprunté environ "
             f"{fr(round(d['primaireTotal'] / 1e9))} milliards de francs auprès des "
-            f"investisseurs, en promettant de les rémunérer entre {fr(bas, 1)} % et "
-            f"{fr(haut, 1)} % par an. Mettez-vous à la place d’une banque ou d’une "
-            f"compagnie d’assurance : si l’État lui propose {fr(haut, 1)} % par an, "
-            f"une action doit lui promettre nettement plus pour mériter son argent. C’est "
-            f"l’une des grandes raisons pour lesquelles les cours ont du mal à monter en ce "
-            f"moment."
+            f"investisseurs. En moyenne, ils ont promis de les rémunérer à "
+            f"{fr(d['primaireMoyenne'], 1)} % par an ; et sur les emprunts les plus longs, "
+            f"ceux qui se rapprochent le plus d’un placement en actions par leur durée, on est "
+            f"monté jusqu’à {fr(d['primaireOatMax'], 1)} %. Mettez-vous à la place d’une banque "
+            f"ou d’une compagnie d’assurance : si l’État lui offre plus de "
+            f"{fr(int(d['primaireOatMax']))} % par an, une action doit lui promettre nettement "
+            f"plus pour mériter son argent. C’est l’une des grandes raisons pour lesquelles les "
+            f"cours ont du mal à monter en ce moment."
         )
     parties.append(("2. Ce que cela signifie pour celui qui veut investir", enseignements))
 
