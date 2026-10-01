@@ -115,7 +115,25 @@ export default function RecapPrimaire({
                         {servie > 0 ? fmt0.format(servie) : "—"}
                       </td>
                       <td className={`${tdNum} font-medium`}>{montantFr(o.montant)}</td>
-                      <td className={td}>{o.compteReglement || "—"}</td>
+                      <td className={td}>
+                        {o.compteReglement || "—"}
+                        {/* UNE SOUMISSION VERSEE DEPUIS PLUSIEURS COMPTES doit
+                            le dire : le compte principal seul laisserait croire
+                            que tout est parti de la meme banque. */}
+                        {o.comptes.length > 1 && (
+                          <span
+                            className="ml-1 text-[9px] text-slate-400"
+                            title={o.comptes
+                              .map(
+                                (c) =>
+                                  `${c.compte} : ${Math.round(c.montant).toLocaleString("fr-FR")} F`,
+                              )
+                              .join(" · ")}
+                          >
+                            +{o.comptes.length - 1}
+                          </span>
+                        )}
+                      </td>
                       <td className={td}>
                         <span
                           className={`inline-block px-1.5 py-0.5 rounded text-[10px] ${e.ton}`}

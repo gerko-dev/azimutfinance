@@ -21,6 +21,11 @@ import {
   type TypeClient,
 } from "./parts-types";
 import { ajouterApport, type ApportsParPoste } from "./tresorerie-apports";
+import {
+  repartir,
+  ventilationSimple,
+  type VentilationCompte,
+} from "./ventilation-reglement";
 
 type Ligne = {
   id: string;
@@ -52,7 +57,7 @@ const nb = (v: number | string | null | undefined): number => {
 
 const BUREAUX = new Set(["CI", "SN", "BJ"]);
 
-function versFlux(l: Ligne): FluxPart {
+function versFlux(l: Ligne, comptes?: VentilationCompte[]): FluxPart {
   return {
     id: l.id,
     dateOperation: l.date_operation,
@@ -68,9 +73,55 @@ function versFlux(l: Ligne): FluxPart {
     performanceCible: l.performance_cible == null ? null : nb(l.performance_cible),
     dateFin: l.date_fin ?? null,
     compteReglement: l.compte_reglement ?? "",
+    // SANS VENTILATION ENREGISTREE, LE FLUX EN A QUAND MEME UNE : celle d'un
+    // seul compte, pour tout le montant. Les lecteurs n'ont ainsi qu'une
+    // forme a traiter, et les flux saisis avant cette fonctionnalite se lisent
+    // comme les autres.
+    comptes:
+      comptes && comptes.length > 0
+        ? comptes
+        : ventilationSimple(l.compte_reglement ?? "", nb(l.montant)),
     dateReglement: l.date_reglement ?? null,
     note: l.note ?? "",
   };
+}
+
+/**
+ * Les ventilations de plusieurs flux, par identifiant de flux.
+ *
+ * UNE SEULE REQUETE POUR TOUTE LA PAGE. Une lecture par flux aurait fait
+ * cinquante allers-retours sur un ecran qui en affiche cinquante, pour un
+ * tableau qui tient en memoire.
+ *
+ * Une lecture qui echoue laisse chaque flux a son compte unique plutot que de
+ * faire tomber l'ecran : la ventilation est un raffinement, le compte
+ * principal reste porte par la table mere.
+ */
+async function chargerVentilations(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  ids: string[],
+): Promise<Map<string, VentilationCompte[]>> {
+  const out = new Map<string, VentilationCompte[]>();
+  if (ids.length === 0) return out;
+  const { data, error } = await supabase
+    .from("fund_unit_flow_accounts")
+    .select("flow_id, rang, compte, montant")
+    .in("flow_id", ids)
+    .order("rang", { ascending: true });
+  if (error) {
+    console.error("[parts] ventilations illisibles —", error.message);
+    return out;
+  }
+  for (const l of (data ?? []) as unknown as {
+    flow_id: string;
+    compte: string;
+    montant: number | string;
+  }[]) {
+    const liste = out.get(l.flow_id) ?? [];
+    liste.push({ compte: l.compte, montant: nb(l.montant) });
+    out.set(l.flow_id, liste);
+  }
+  return out;
 }
 
 /** Flux d'un fonds. Mémoïsé : l'écran et le point de trésorerie les lisent
@@ -87,7 +138,9 @@ export const loadFluxParts = cache(async (fundId: string): Promise<FluxPart[]> =
   // trace, une colonne manquante — un script SQL pas encore joué — se lisait
   // comme « aucun flux », et le point de trésorerie sortait juste faux.
   if (error) console.error("[parts] lecture des flux impossible —", error.message);
-  return ((data ?? []) as unknown as Ligne[]).map(versFlux);
+  const lignes = (data ?? []) as unknown as Ligne[];
+  const ventilations = await chargerVentilations(supabase, lignes.map((l) => l.id));
+  return lignes.map((l) => versFlux(l, ventilations.get(l.id)));
 });
 
 /**
@@ -120,11 +173,20 @@ export const loadTousFluxParts = cache(
       managed_funds: { nom: string } | { nom: string }[] | null;
     };
 
-    const lignes = ((data ?? []) as unknown as LigneJointe[]).map((l) => {
+    const brutes = (data ?? []) as unknown as LigneJointe[];
+    const ventilations = await chargerVentilations(
+      supabase,
+      brutes.map((l) => l.id),
+    );
+    const lignes = brutes.map((l) => {
       // PostgREST renvoie la jointure tantôt en objet, tantôt en tableau selon
       // qu'il la juge unique : les deux formes se rencontrent, on les couvre.
       const f = Array.isArray(l.managed_funds) ? l.managed_funds[0] : l.managed_funds;
-      return { ...versFlux(l), fondsId: l.fund_id, fondsNom: f?.nom ?? "—" };
+      return {
+        ...versFlux(l, ventilations.get(l.id)),
+        fondsId: l.fund_id,
+        fondsNom: f?.nom ?? "—",
+      };
     });
     return { lignes, erreur: null };
   },
@@ -141,18 +203,29 @@ export function agregerFluxParts(
     if (f.montant === 0) continue;
     if (!fluxPese(f, dateArrete)) continue;
 
-    ajouterApport(parPoste, postePart(f), f.compteReglement, f.montant, {
-      date: f.dateOperation,
-      libelle: f.investisseur || "Porteur non nommé",
-      info: [
-        f.sens === "rachat" ? "rachat" : "souscription",
-        f.certitude === "certain" ? "" : "probable",
-        f.bureau ? `bureau ${f.bureau}` : "",
-        f.dateVl ? `VL du ${f.dateVl}` : "",
-      ]
-        .filter(Boolean)
-        .join(" · "),
-    });
+    // LE MONTANT SE REPARTIT SUR SES COMPTES. Un rachat paye depuis trois
+    // banques greve trois colonnes du point, chacune de sa part : le poser en
+    // entier sur la premiere annoncait un decaissement que le releve des deux
+    // autres ne portait pas.
+    const parts = repartir(f.montant, f.comptes);
+    const plusieurs = parts.length > 1;
+    for (const part of parts) {
+      ajouterApport(parPoste, postePart(f), part.compte, part.montant, {
+        date: f.dateOperation,
+        libelle: f.investisseur || "Porteur non nommé",
+        info: [
+          f.sens === "rachat" ? "rachat" : "souscription",
+          f.certitude === "certain" ? "" : "probable",
+          f.bureau ? `bureau ${f.bureau}` : "",
+          f.dateVl ? `VL du ${f.dateVl}` : "",
+          plusieurs
+            ? `part de ${parts.length} comptes sur ${Math.round(f.montant).toLocaleString("fr-FR")} F`
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" · "),
+      });
+    }
   }
   return parPoste;
 }

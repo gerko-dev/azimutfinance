@@ -47,6 +47,11 @@ import {
   fmtQte,
   type ApportsParPoste,
 } from "./tresorerie-apports";
+import {
+  repartir,
+  ventilationSimple,
+  type VentilationCompte,
+} from "./ventilation-reglement";
 
 type LigneExecution = {
   id: string;
@@ -190,6 +195,7 @@ function versOperation(
   executions: Execution[],
   remere: SaisieRemere | null = null,
   pret: SaisiePret | null = null,
+  comptes: VentilationCompte[] = [],
 ): OperationMarche {
   const base = {
     description: l.description as DescriptionOperation,
@@ -210,6 +216,13 @@ function versOperation(
     libelle: l.libelle ?? "",
     sgi: l.sgi ?? "",
     compteReglement: l.compte_reglement ?? "",
+    // SANS VENTILATION ENREGISTREE, L'ORDRE EN A QUAND MEME UNE : celle d'un
+    // seul compte. Les lecteurs n'ont ainsi qu'une forme à traiter, et les
+    // ordres saisis avant cette fonctionnalité se lisent comme les autres.
+    comptes:
+      comptes.length > 0
+        ? comptes
+        : ventilationSimple(l.compte_reglement ?? "", montantOperation(base)),
     clotureLe: l.cloture_le ?? null,
     rapprocheLe: l.rapproche_le ?? null,
     modalite:
@@ -275,6 +288,41 @@ async function chargerExecutions(
 }
 
 /** Volets réméré et prêt d'un lot d'ordres. Un ordre en a AU PLUS un. */
+/**
+ * Les ventilations de reglement de plusieurs ordres, par identifiant.
+ *
+ * UNE SEULE REQUETE POUR TOUT L'ECRAN, comme les volets. Une lecture qui
+ * echoue laisse chaque ordre a son compte unique plutot que de faire tomber
+ * la page : la ventilation est un raffinement, le compte principal reste porte
+ * par la table mere.
+ */
+async function chargerVentilations(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  operationIds: string[],
+): Promise<Map<string, VentilationCompte[]>> {
+  const out = new Map<string, VentilationCompte[]>();
+  if (operationIds.length === 0) return out;
+  const { data, error } = await supabase
+    .from("fund_market_operation_accounts")
+    .select("operation_id, rang, compte, montant")
+    .in("operation_id", operationIds)
+    .order("rang", { ascending: true });
+  if (error) {
+    console.error("[operations] ventilations illisibles —", error.message);
+    return out;
+  }
+  for (const l of (data ?? []) as unknown as {
+    operation_id: string;
+    compte: string;
+    montant: number | string;
+  }[]) {
+    const liste = out.get(l.operation_id) ?? [];
+    liste.push({ compte: l.compte, montant: nb(l.montant) });
+    out.set(l.operation_id, liste);
+  }
+  return out;
+}
+
 async function chargerVolets(
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
   operationIds: string[],
@@ -321,9 +369,10 @@ export const loadOperationsMarche = cache(
 
     const lignes = (data ?? []) as unknown as Ligne[];
     const ids = lignes.map((l) => l.id);
-    const [executions, volets] = await Promise.all([
+    const [executions, volets, ventilations] = await Promise.all([
       chargerExecutions(supabase, ids),
       chargerVolets(supabase, ids),
+      chargerVentilations(supabase, ids),
     ]);
     return resoudreRemeres(
       lignes.map((l) =>
@@ -332,6 +381,7 @@ export const loadOperationsMarche = cache(
           executions.get(l.id) ?? [],
           volets.repos.get(l.id) ?? null,
           volets.prets.get(l.id) ?? null,
+          ventilations.get(l.id) ?? [],
         ),
       ),
     );
@@ -363,9 +413,10 @@ export const loadToutesOperationsMarche = cache(
     };
     const lignes = (data ?? []) as unknown as LigneJointe[];
     const ids = lignes.map((l) => l.id);
-    const [executions, volets] = await Promise.all([
+    const [executions, volets, ventilations] = await Promise.all([
       chargerExecutions(supabase, ids),
       chargerVolets(supabase, ids),
+      chargerVentilations(supabase, ids),
     ]);
 
     const avecFonds = lignes.map((l) => {
@@ -378,6 +429,7 @@ export const loadToutesOperationsMarche = cache(
           executions.get(l.id) ?? [],
           volets.repos.get(l.id) ?? null,
           volets.prets.get(l.id) ?? null,
+          ventilations.get(l.id) ?? [],
         ),
         fondsId: l.fund_id,
         fondsNom: f?.nom ?? "—",
@@ -405,12 +457,39 @@ export function agregerParPoste(
 ): ApportsParPoste {
   const parPoste: ApportsParPoste = new Map();
 
+  // CHAQUE MONTANT SE REPARTIT SUR LES COMPTES DE L'ORDRE.
+  //
+  // Un seul compte — le cas ordinaire — et c'est l'ancien comportement, au
+  // caractère près. Plusieurs, et la part non servie comme chaque exécution se
+  // répartissent au prorata : une soumission versée depuis deux dépositaires
+  // grève deux colonnes du point, chacune de sa part, au lieu d'en charger une
+  // d'un montant que son relevé ne porte pas.
   const ajouter = (
     poste: string | null,
-    compte: string,
+    o: OperationMarche,
     montant: number,
     detail: { date: string; libelle: string; info: string },
-  ) => ajouterApport(parPoste, poste, compte, montant, detail);
+  ) => {
+    const parts = repartir(montant, o.comptes);
+    if (parts.length === 0) {
+      // Aucun compte : le montant doit RESSORTIR, pas disparaître. Il part
+      // sous une clef vide, que le point remonte dans « montants sans
+      // colonne ».
+      ajouterApport(parPoste, poste, o.compteReglement, montant, detail);
+      return;
+    }
+    const plusieurs = parts.length > 1;
+    for (const part of parts) {
+      ajouterApport(parPoste, poste, part.compte, part.montant, {
+        ...detail,
+        info: plusieurs
+          ? [detail.info, `part de ${parts.length} comptes de règlement`]
+              .filter(Boolean)
+              .join(" · ")
+          : detail.info,
+      });
+    }
+  };
 
   /** Le titre tel qu'on le reconnaît sur une ligne d'ordre. */
   const titre = (o: OperationMarche) =>
@@ -450,7 +529,7 @@ export function agregerParPoste(
       // RAPPROCHÉE : le solde bancaire saisi la contient déjà. L'y laisser la
       // compterait une seconde fois — c'est un lettrage, pas une annulation.
       if (e.rapprocheLe && (!dateArrete || e.rapprocheLe <= dateArrete)) continue;
-      ajouter(posteRealise(o.description), o.compteReglement, montantExecution(o, e), {
+      ajouter(posteRealise(o.description), o, montantExecution(o, e), {
         // LA DATE DU DÉNOUEMENT, pas celle de l'exécution : c'est elle qui
         // décide si le montant compte à l'arrêté, donc elle qu'il faut
         // pouvoir confronter à la date du point.
@@ -475,7 +554,7 @@ export function agregerParPoste(
     // vente passée et non servie est un encaissement annoncé.
     if (!partRestantePese(o, dateArrete)) continue;
 
-    ajouter(posteEngageDe(o), o.compteReglement, montantRestant(o), {
+    ajouter(posteEngageDe(o), o, montantRestant(o), {
       date: o.dateOperation,
       libelle: titre(o),
       info: [
@@ -515,7 +594,7 @@ export function agregerParPoste(
     if (dateArrete && (!terme || terme > dateArrete)) continue;
     ajouter(
       posteRemereDenouement(o.description),
-      o.compteReglement,
+      o,
       montantDenouementRemere(o, dateArrete),
       {
         date: terme,

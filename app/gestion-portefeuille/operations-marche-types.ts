@@ -12,6 +12,8 @@
 // le site et le classeur serait pire qu'un écart assumé.
 
 /** Nature d'un ordre : un sens, un marché. */
+import type { VentilationCompte } from "./ventilation-reglement";
+
 export type DescriptionOperation =
   | "ACHAT_MFR"
   | "ACHAT_MTP"
@@ -359,7 +361,28 @@ export type OperationMarche = {
   tauxBrvm: number;
   tauxDcbr: number;
   interetsCourus: number;
+  /** Compte PRINCIPAL de règlement : celui de la première ligne de `comptes`. */
   compteReglement: string;
+  /**
+   * Les comptes sur lesquels l'ordre se règle, dans l'ordre de saisie.
+   *
+   * POUR LES SOUSCRIPTIONS AU MARCHE PRIMAIRE. Une soumission se verse en
+   * rassemblant ce qui dort chez deux ou trois dépositaires, plutôt qu'en
+   * nivelant la veille pour tout sortir du même endroit. Tant qu'un seul
+   * compte était possible, le gérant posait tout le montant sur une colonne du
+   * point de trésorerie, qui annonçait un décaissement que le relevé des
+   * autres ne portait pas.
+   *
+   * LES MONTANTS Y VALENT CLEF DE REPARTITION, pas montants fermes : la part
+   * non servie et chaque exécution se règlent séparément, et leurs montants
+   * bougent à mesure que l'ordre est servi. Ce qui tombe au point est donc
+   * réparti au prorata. Quand la somme des lignes égale le montant de l'ordre
+   * — le cas normal —, la répartition rend exactement ce qui a été saisi.
+   *
+   * Toujours au moins une ligne : un ordre sans compte ne tomberait dans
+   * aucune colonne.
+   */
+  comptes: VentilationCompte[];
   /** Date de CLÔTURE manuelle, ou null tant que l'ordre est ouvert.
    *
    *  Un ordre partiellement servi que le gérant renonce à faire exécuter cesse

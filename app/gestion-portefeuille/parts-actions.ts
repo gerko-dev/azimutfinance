@@ -14,6 +14,11 @@ import { estNiveau1, MSG_NIVEAU1 } from "./guard";
 import { loadDernieresVl } from "./nav-data";
 import { construirePointTresorerie } from "./tresorerie-data";
 import { cibleAttendue, type SaisieFluxPart } from "./parts-types";
+import {
+  comptePrincipal,
+  nettoyerVentilation,
+  validerVentilation,
+} from "./ventilation-reglement";
 
 const EST_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -113,8 +118,15 @@ function valider(saisie: SaisieFluxPart): string | null {
     if (!(saisie.performanceCible >= 0 && saisie.performanceCible <= 1))
       return "La performance cible se saisit en pourcentage, entre 0 et 100.";
   }
-  if (!saisie.compteReglement.trim())
-    return "Choisis le compte de règlement : sans lui, le montant n'entre dans aucune colonne du point de trésorerie.";
+  // LA VENTILATION FAIT FOI, le compte principal s'en déduit. La somme doit
+  // tomber juste : le montant du flux est connu d'avance, et une répartition
+  // qui ne fait pas le compte est une faute de frappe — l'accepter laisserait
+  // disparaître la différence sans que rien ne la signale.
+  const invalideVentilation = validerVentilation(
+    nettoyerVentilation(saisie.comptes),
+    saisie.montant,
+  );
+  if (invalideVentilation) return invalideVentilation;
   // Le bureau ne concerne QUE les souscriptions : le classeur ne ventile pas
   // les rachats, et un rachat ne se collecte pas.
   if (saisie.sens === "souscription" && !saisie.bureau)
@@ -140,9 +152,54 @@ function valeurs(saisie: SaisieFluxPart) {
     // FACULTATIVE, mais liee au meme cas : une echeance ne se convient qu'avec
     // un client sensible, et elle ne survit pas a un changement de sens.
     date_fin: cibleAttendue(saisie) ? saisie.dateFin : null,
-    compte_reglement: saisie.compteReglement.trim(),
+    // LE COMPTE PRINCIPAL SE DEDUIT, il ne se saisit plus : c'est celui de la
+    // première ligne de la ventilation. Le laisser saisir à part aurait permis
+    // qu'il désigne une banque absente de la répartition.
+    compte_reglement: comptePrincipal(nettoyerVentilation(saisie.comptes)),
     note: saisie.note.trim(),
   };
+}
+
+/**
+ * Réécrit la ventilation d'un flux, en entier.
+ *
+ * EN ENTIER, ET PAS LIGNE A LIGNE. Une ventilation est un tout : deux lignes
+ * qui deviennent trois, un compte remplacé par un autre, un montant déplacé de
+ * l'un vers l'autre — rapprocher l'ancienne de la nouvelle pour n'écrire que
+ * la différence aurait demandé un rang stable que rien ne garantit, pour
+ * économiser trois lignes d'écriture.
+ *
+ * Une ventilation à UN SEUL compte n'est pas enregistrée : la table mère porte
+ * déjà ce compte, et stocker une ligne qui n'ajoute rien obligerait à la tenir
+ * d'accord avec elle.
+ */
+async function enregistrerVentilation(
+  supabase: ClientServeur,
+  userId: string,
+  fluxId: string,
+  saisie: SaisieFluxPart,
+): Promise<string | null> {
+  const lignes = nettoyerVentilation(saisie.comptes);
+
+  const { error: erreurPurge } = await supabase
+    .from("fund_unit_flow_accounts")
+    .delete()
+    .eq("flow_id", fluxId)
+    .eq("owner_id", userId);
+  if (erreurPurge) return erreurPurge.message;
+
+  if (lignes.length < 2) return null;
+
+  const { error } = await supabase.from("fund_unit_flow_accounts").insert(
+    lignes.map((l, i) => ({
+      flow_id: fluxId,
+      owner_id: userId,
+      rang: i,
+      compte: l.compte,
+      montant: l.montant,
+    })),
+  );
+  return error ? error.message : null;
 }
 
 function rafraichir(fundId: string) {
@@ -169,8 +226,28 @@ export async function enregistrerFluxPartAction(
     .single();
   if (error) return { ok: false, error: error.message };
 
+  const id = (data as { id: string }).id;
+  const erreurVentilation = await enregistrerVentilation(supabase, userId, id, saisie);
+  if (erreurVentilation) {
+    // ON DEFAIT LE FLUX PLUTOT QUE DE LE LAISSER A MOITIE NE. Un rachat
+    // enregistré sans sa répartition poserait tout son montant sur une seule
+    // colonne — exactement ce que le gérant cherchait à éviter en la saisissant.
+    const { error: erreurRetrait } = await supabase
+      .from("fund_unit_flows")
+      .delete()
+      .eq("id", id)
+      .eq("owner_id", userId);
+    if (erreurRetrait) {
+      return {
+        ok: false,
+        error: `${erreurVentilation} — et le flux n'a pas pu être retiré (${erreurRetrait.message}). Corrige sa répartition à la main.`,
+      };
+    }
+    return { ok: false, error: erreurVentilation };
+  }
+
   rafraichir(fundId);
-  return { ok: true, data: { id: (data as { id: string }).id } };
+  return { ok: true, data: { id } };
 }
 
 export async function modifierFluxPartAction(
@@ -192,6 +269,9 @@ export async function modifierFluxPartAction(
     .eq("fund_id", fundId)
     .eq("owner_id", userId);
   if (error) return { ok: false, error: error.message };
+
+  const erreurVentilation = await enregistrerVentilation(supabase, userId, fluxId, saisie);
+  if (erreurVentilation) return { ok: false, error: erreurVentilation };
 
   rafraichir(fundId);
   return { ok: true, data: { id: fluxId } };

@@ -9,6 +9,8 @@
 // dans le cash à recevoir, rachats dans les engagements, et leurs jumelles
 // « probables » dans les flux théoriques. Ce module les remplit.
 
+import type { VentilationCompte } from "./ventilation-reglement";
+
 /** Sens du flux, du point de vue du FONDS. */
 export type SensPart = "souscription" | "rachat";
 
@@ -118,7 +120,27 @@ export type FluxPart = {
    * Ne concerne, comme la cible, que les souscriptions de clients sensibles.
    */
   dateFin: string | null;
+  /**
+   * Compte PRINCIPAL de règlement : celui de la première ligne de `comptes`.
+   *
+   * Il reste parce que tout ce qui n'a besoin que de NOMMER une banque — les
+   * listes, l'export vers le classeur — n'a pas à connaître la ventilation.
+   */
   compteReglement: string;
+  /**
+   * Les comptes sur lesquels le flux se règle, dans l'ordre de saisie.
+   *
+   * UN RACHAT NE SE PAIE PAS TOUJOURS D'UN SEUL COMPTE : on paie sur ce qu'on
+   * a, et ce qu'on a est réparti entre plusieurs banques. Tant que le site
+   * n'acceptait qu'un compte, le gérant posait tout le montant sur une seule
+   * colonne du point de trésorerie, qui annonçait alors un décaissement que le
+   * relevé ne portait pas.
+   *
+   * La somme des lignes vaut le montant du flux : ici il est connu d'avance,
+   * donc la répartition est exacte et non une clef. Toujours au moins une
+   * ligne — un flux sans compte ne tomberait dans aucune colonne.
+   */
+  comptes: VentilationCompte[];
   /**
    * Date à laquelle le cash a bougé, ou null tant qu'il n'a pas bougé.
    *

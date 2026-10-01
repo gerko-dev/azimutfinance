@@ -41,6 +41,11 @@ import {
 } from "./operations-marche-disponibilite";
 import { chargerParametresMarche } from "./parametres-marche-data";
 import { conventionDe } from "./parametres-marche-types";
+import {
+  comptePrincipal,
+  nettoyerVentilation,
+  validerVentilation,
+} from "./ventilation-reglement";
 
 const EST_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -182,8 +187,16 @@ function valider(saisie: SaisieOperation): string | null {
     return "Choisis la nature de l'instrument.";
   if (!(saisie.quantite > 0)) return "La quantité doit être strictement positive.";
   if (!(saisie.prix > 0)) return "Le prix doit être strictement positif.";
-  if (!saisie.compteReglement.trim())
-    return "Choisis le compte de règlement : sans lui, le montant n'entre dans aucune colonne du point de trésorerie.";
+  // LA VENTILATION FAIT FOI, le compte principal s'en déduit.
+  //
+  // PAS DE TOTAL IMPOSE ICI, contrairement à un rachat de parts : un ordre de
+  // marché ne pèse pas un montant fixe — sa part non servie et chacune de ses
+  // exécutions se règlent séparément, et leurs montants bougent à mesure qu'il
+  // est servi. Les lignes y valent clef de répartition, et exiger qu'elles
+  // fassent exactement le montant de l'ordre aurait rendu la saisie fausse dès
+  // la première correction de prix.
+  const invalideVentilation = validerVentilation(nettoyerVentilation(saisie.comptes));
+  if (invalideVentilation) return invalideVentilation;
 
   // LES VOLETS SONT PROPRES AU MTP, et cela se vérifie ici aussi : l'écran
   // masque les cases sur un ordre de bourse, mais un formulaire qui a changé
@@ -237,6 +250,46 @@ function valider(saisie: SaisieOperation): string | null {
  * L'ordre importe : on supprime le volet qui n'est plus, puis on écrit celui
  * qui est. Un ordre ne peut porter que l'un des deux.
  */
+/**
+ * Réécrit la ventilation de règlement d'un ordre, en entier.
+ *
+ * EN ENTIER, ET PAS LIGNE A LIGNE : une ventilation est un tout. Rapprocher
+ * l'ancienne de la nouvelle pour n'écrire que la différence aurait demandé un
+ * rang stable que rien ne garantit, afin d'économiser trois écritures.
+ *
+ * Une ventilation à UN SEUL compte n'est pas enregistrée : la table mère porte
+ * déjà ce compte, et stocker une ligne qui n'ajoute rien obligerait à la tenir
+ * d'accord avec elle.
+ */
+async function enregistrerVentilation(
+  supabase: ClientServeur,
+  userId: string,
+  operationId: string,
+  saisie: SaisieOperation,
+): Promise<string | null> {
+  const lignes = nettoyerVentilation(saisie.comptes);
+
+  const { error: erreurPurge } = await supabase
+    .from("fund_market_operation_accounts")
+    .delete()
+    .eq("operation_id", operationId)
+    .eq("owner_id", userId);
+  if (erreurPurge) return erreurPurge.message;
+
+  if (lignes.length < 2) return null;
+
+  const { error } = await supabase.from("fund_market_operation_accounts").insert(
+    lignes.map((l, i) => ({
+      operation_id: operationId,
+      owner_id: userId,
+      rang: i,
+      compte: l.compte,
+      montant: l.montant,
+    })),
+  );
+  return error ? error.message : null;
+}
+
 async function enregistrerVolets(
   supabase: ClientServeur,
   userId: string,
@@ -361,7 +414,9 @@ export async function enregistrerOperationMarcheAction(
       taux_brvm: saisie.tauxBrvm,
       taux_dcbr: saisie.tauxDcbr,
       interets_courus: saisie.interetsCourus,
-      compte_reglement: saisie.compteReglement.trim(),
+      // Déduit de la ventilation : deux champs pour la même chose auraient
+      // fini par se contredire.
+      compte_reglement: comptePrincipal(nettoyerVentilation(saisie.comptes)),
       modalite: saisie.modalite,
       note: saisie.note.trim(),
     })
@@ -371,7 +426,9 @@ export async function enregistrerOperationMarcheAction(
   if (error) return { ok: false, error: error.message };
 
   const id = (data as { id: string }).id;
-  const erreurVolets = await enregistrerVolets(supabase, userId, id, saisie);
+  const erreurVolets =
+    (await enregistrerVentilation(supabase, userId, id, saisie)) ??
+    (await enregistrerVolets(supabase, userId, id, saisie));
   if (erreurVolets) {
     // ON DEFAIT L'ORDRE PLUTOT QUE DE LE LAISSER A MOITIE NE.
     //
@@ -451,7 +508,9 @@ export async function modifierOperationMarcheAction(
       taux_brvm: saisie.tauxBrvm,
       taux_dcbr: saisie.tauxDcbr,
       interets_courus: saisie.interetsCourus,
-      compte_reglement: saisie.compteReglement.trim(),
+      // Déduit de la ventilation : deux champs pour la même chose auraient
+      // fini par se contredire.
+      compte_reglement: comptePrincipal(nettoyerVentilation(saisie.comptes)),
       modalite: saisie.modalite,
       note: saisie.note.trim(),
     })
@@ -460,6 +519,14 @@ export async function modifierOperationMarcheAction(
     .eq("owner_id", userId);
 
   if (error) return { ok: false, error: error.message };
+
+  const erreurVentilation = await enregistrerVentilation(
+    supabase,
+    userId,
+    operationId,
+    saisie,
+  );
+  if (erreurVentilation) return { ok: false, error: erreurVentilation };
 
   const erreurVolets = await enregistrerVolets(supabase, userId, operationId, saisie);
   if (erreurVolets) return { ok: false, error: erreurVolets };

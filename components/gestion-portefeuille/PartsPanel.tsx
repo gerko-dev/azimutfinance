@@ -45,6 +45,11 @@ import type { Partenaire } from "@/app/gestion-portefeuille/partenaires-types";
 import ChampMontant from "./ChampMontant";
 import RecapClientsSensibles, { type VlCourante } from "./RecapClientsSensibles";
 import ChampTaux from "./ChampTaux";
+import ComptesReglement from "./ComptesReglement";
+import {
+  ventilationSimple,
+  type VentilationCompte,
+} from "@/app/gestion-portefeuille/ventilation-reglement";
 
 const fmt0 = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
 const fmt2 = new Intl.NumberFormat("fr-FR", {
@@ -152,7 +157,10 @@ export default function PartsPanel({
   const [typeClient, setTypeClient] = useState<TypeClient>("autre");
   const [investisseur, setInvestisseur] = useState("");
   const [montant, setMontant] = useState("");
-  const [compteReglement, setCompteReglement] = useState("");
+  // LA VENTILATION EST L'ETAT, le compte unique n'en est plus qu'un cas.
+  // Garder les deux — un `compteReglement` à côté d'une liste — aurait fait
+  // deux sources pour la même chose, et l'une des deux aurait fini par mentir.
+  const [comptesReglement, setComptesReglement] = useState<VentilationCompte[]>([]);
   const [note, setNote] = useState("");
 
   const fondsChoisi = fonds.find((f) => f.id === fondsId);
@@ -192,7 +200,7 @@ export default function PartsPanel({
 
   const changerFonds = (id: string) => {
     setFondsId(id);
-    setCompteReglement("");
+    setComptesReglement([]);
     poserTaux(defautFrais(fonds.find((f) => f.id === id), sens));
     // LES VL APPARTIENNENT AU FONDS : garder celles d'avant aurait laissé
     // souscrire à la valeur liquidative d'un autre portefeuille.
@@ -263,7 +271,10 @@ export default function PartsPanel({
         vl: vlChoisie?.vl ?? null,
         performanceCible: cibleAttendue({ sens, typeClient }) ? performanceCible : null,
         dateFin: cibleAttendue({ sens, typeClient }) && dateFin ? dateFin : null,
-        compteReglement,
+        // Le compte principal se déduit de la ventilation, côté serveur :
+        // deux champs pour la même chose auraient pu se contredire.
+        compteReglement: comptesReglement[0]?.compte ?? "",
+        comptes: comptesReglement,
         note,
       };
       const res = editionId
@@ -299,7 +310,11 @@ export default function PartsPanel({
     setPerformanceCible(f.performanceCible ?? 0);
     setCleCible((k) => k + 1);
     setDateFin(f.dateFin ?? "");
-    setCompteReglement(f.compteReglement);
+    setComptesReglement(
+      f.comptes.length > 0
+        ? f.comptes
+        : ventilationSimple(f.compteReglement, f.montant),
+    );
     setNote(f.note);
     setRetour(onglet === "saisie" ? "souscriptions" : onglet);
     setOnglet("saisie");
@@ -434,7 +449,22 @@ export default function PartsPanel({
                     "—"
                   )}
                 </td>
-                <td className="px-3 py-1.5">{f.compteReglement || "—"}</td>
+                <td className="px-3 py-1.5">
+                  {f.compteReglement || "—"}
+                  {f.comptes.length > 1 && (
+                    <span
+                      className="ml-1 text-[9px] text-slate-400"
+                      title={f.comptes
+                        .map(
+                          (c) =>
+                            `${c.compte} : ${Math.round(c.montant).toLocaleString("fr-FR")} F`,
+                        )
+                        .join(" · ")}
+                    >
+                      +{f.comptes.length - 1}
+                    </span>
+                  )}
+                </td>
                 <td className="px-3 py-1.5">
                   {f.dateReglement ? (
                     <span className="text-emerald-700">
@@ -893,28 +923,23 @@ export default function PartsPanel({
               </span>
             </Champ>
 
-            <Champ label="Compte de règlement" large>
-              <select
-                value={compteReglement}
-                onChange={(e) => setCompteReglement(e.target.value)}
-                disabled={comptesEtat !== "pret"}
-                className={`${champ} disabled:bg-slate-50`}
-              >
-                <option value="">— Choisir —</option>
-                {comptes.map((c) => (
-                  <option key={c.cle} value={c.cle}>
-                    {c.nom}
-                  </option>
-                ))}
-                {compteReglement && !comptes.some((c) => c.cle === compteReglement) && (
-                  <option value={compteReglement}>{compteReglement} (hors liste)</option>
-                )}
-              </select>
-              <span className={aide}>
-                {comptesEtat === "chargement"
-                  ? "Chargement des comptes…"
-                  : "La colonne du tableau où le montant tombera"}
-              </span>
+            {/* UN RACHAT SE PAIE SUR CE QU'ON A, et ce qu'on a est réparti
+                entre plusieurs banques. Le montant est connu d'avance, donc
+                la répartition doit tomber juste : l'écran dit ce qui reste à
+                répartir pendant la saisie, au lieu de le refuser au clic. */}
+            <Champ label="Comptes de règlement" large>
+              <ComptesReglement
+                valeur={comptesReglement}
+                onChange={setComptesReglement}
+                options={comptes}
+                etat={comptesEtat}
+                total={n(montant) > 0 ? n(montant) : undefined}
+                aideSimple={
+                  comptesEtat === "chargement"
+                    ? "Chargement des comptes…"
+                    : "La colonne du tableau où le montant tombera"
+                }
+              />
             </Champ>
 
             <Champ label="Note" large>

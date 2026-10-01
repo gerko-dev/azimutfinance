@@ -46,6 +46,7 @@ import {
 } from "./operations-marche-types";
 import type { PosteFlux } from "./tresorerie-flux-types";
 import type { FundRecord } from "./types";
+import { repartir } from "./ventilation-reglement";
 
 /** Une ligne du tableau, dans l'ordre des colonnes de la feuille. */
 export type LigneEngagement = {
@@ -580,18 +581,37 @@ async function operationsDeMarche(
     const poste = remplace?.description ?? brut;
 
     if (marcheDe(o.description) === "primaire") {
-      primaire.push({
-        fonds: nom,
-        date: o.dateOperation,
-        typeOperation: "AUTRES_ENGAGEMENTS",
-        description: poste,
-        detail: o.libelle || o.code,
-        montant: Math.round(montantRestant(o)),
-        banque,
-        datePrevue: o.dateOperation,
-        statut: statutVirement(o.rapprocheLe),
-        dateEffective: o.rapprocheLe ?? "",
-      });
+      // UNE LIGNE PAR COMPTE DE REGLEMENT, et non une ligne par ordre.
+      //
+      // Une soumission versée depuis deux dépositaires produit deux virements,
+      // que deux relevés porteront séparément. Les fondre en une ligne au nom
+      // de la première banque aurait donné un montant que son relevé ne porte
+      // pas — et rendu le rapprochement impossible sur l'autre.
+      //
+      // Un seul compte — le cas ordinaire — et la boucle rend exactement la
+      // ligne d'avant.
+      const parts = repartir(Math.round(montantRestant(o)), o.comptes);
+      const lignes =
+        parts.length > 0
+          ? parts
+          : [{ compte: o.compteReglement, montant: Math.round(montantRestant(o)) }];
+      for (const part of lignes) {
+        primaire.push({
+          fonds: nom,
+          date: o.dateOperation,
+          typeOperation: "AUTRES_ENGAGEMENTS",
+          description: poste,
+          detail:
+            lignes.length > 1
+              ? `${o.libelle || o.code} (${lignes.length} comptes)`
+              : o.libelle || o.code,
+          montant: part.montant,
+          banque: banques(o.fondsId, part.compte),
+          datePrevue: o.dateOperation,
+          statut: statutVirement(o.rapprocheLe),
+          dateEffective: o.rapprocheLe ?? "",
+        });
+      }
       continue;
     }
 

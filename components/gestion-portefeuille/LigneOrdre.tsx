@@ -163,7 +163,21 @@ export default function LigneOrdre({
         <td className="px-3 py-1.5 text-right tabular-nums font-medium">
           {montantFr(o.montant)}
         </td>
-        <td className="px-3 py-1.5 text-slate-600">{o.compteReglement}</td>
+        <td className="px-3 py-1.5 text-slate-600">
+          {o.compteReglement}
+          {o.comptes.length > 1 && (
+            <span
+              className="ml-1 text-[9px] text-slate-400"
+              title={o.comptes
+                .map(
+                  (c) => `${c.compte} : ${Math.round(c.montant).toLocaleString("fr-FR")} F`,
+                )
+                .join(" · ")}
+            >
+              +{o.comptes.length - 1}
+            </span>
+          )}
+        </td>
         <td className="px-3 py-1.5 text-right whitespace-nowrap">
           {/* Un ordre clos ne s'exécute plus : le gérant a renoncé au reste.
               Pour l'exécuter quand même, il faut d'abord le rouvrir — et ce

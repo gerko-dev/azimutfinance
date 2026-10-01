@@ -72,6 +72,11 @@ import type { OptionTitre } from "@/app/gestion-portefeuille/operations-marche-t
 import type { Partenaire } from "@/app/gestion-portefeuille/partenaires-types";
 import LigneOrdre from "./LigneOrdre";
 import type { ParametresMarche } from "@/app/gestion-portefeuille/parametres-marche-types";
+import ComptesReglement from "./ComptesReglement";
+import {
+  ventilationSimple,
+  type VentilationCompte,
+} from "@/app/gestion-portefeuille/ventilation-reglement";
 
 const fmt0 = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
 const montantFr = (v: number) => fmt0.format(Math.round(v));
@@ -215,7 +220,8 @@ export default function OperationsMarchePanel({
   const [tauxTps, setTauxTps] = useState("0");
   const [tauxBrvm, setTauxBrvm] = useState("0");
   const [tauxDcbr, setTauxDcbr] = useState("0");
-  const [compteReglement, setCompteReglement] = useState("");
+  // LA VENTILATION EST L'ETAT, le compte unique n'en est plus qu'un cas.
+  const [comptesReglement, setComptesReglement] = useState<VentilationCompte[]>([]);
   const [note, setNote] = useState("");
   const [validite, setValidite] = useState<Validite>("jour");
   /** Modalité d'une souscription au primaire. Null hors souscription. */
@@ -307,7 +313,9 @@ export default function OperationsMarchePanel({
 
   const changerFonds = (id: string) => {
     setFondsId(id);
-    setCompteReglement("");
+    // LES COMPTES SONT CEUX DU FONDS : changer de portefeuille les invalide
+    // tous, et pas seulement le premier.
+    setComptesReglement([]);
     // LE CESSIBLE DÉPEND DU FONDS. Sur une vente, changer de portefeuille
     // change la liste des titres : garder celle d'avant aurait proposé les
     // titres d'un fonds pour en vendre d'un autre.
@@ -540,7 +548,10 @@ export default function OperationsMarchePanel({
         tauxBrvm: n(tauxBrvm),
         tauxDcbr: n(tauxDcbr),
         interetsCourus,
-        compteReglement,
+        // Déduit de la ventilation côté serveur : deux champs pour la même
+        // chose auraient pu se contredire.
+        compteReglement: comptesReglement[0]?.compte ?? "",
+        comptes: comptesReglement,
         note,
         modalite: description === "SOUSCRIPTION_MP" ? modalite : null,
         remere,
@@ -607,7 +618,9 @@ export default function OperationsMarchePanel({
     // Les courus repris tels quels : ceux de l'opération font foi, pas un
     // recalcul qui pourrait diverger de l'avis d'opéré déjà reçu.
     setCouruManuel(String(Math.round(o.interetsCourus)));
-    setCompteReglement(o.compteReglement);
+    setComptesReglement(
+      o.comptes.length > 0 ? o.comptes : ventilationSimple(o.compteReglement, o.montant),
+    );
     setNote(o.note);
     setDenoueRemereDe(o.denoueRemereDe);
     reinitialiserVolets({
@@ -661,7 +674,9 @@ export default function OperationsMarchePanel({
     setTauxBrvm(String(o.tauxBrvm));
     setTauxDcbr(String(o.tauxDcbr));
     setCouruManuel(String(Math.round(o.interetsCourus)));
-    setCompteReglement(o.compteReglement);
+    setComptesReglement(
+      o.comptes.length > 0 ? o.comptes : ventilationSimple(o.compteReglement, o.montant),
+    );
     setNote(`Dénouement du réméré du ${o.dateOperation}`);
     reinitialiserVolets();
     setRetour("remeres");
@@ -1374,31 +1389,36 @@ export default function OperationsMarchePanel({
             )}
           </Champ>
 
-          <Champ label="Compte de règlement" large>
-            <select
-              value={compteReglement}
-              onChange={(e) => setCompteReglement(e.target.value)}
-              disabled={comptesEtat !== "pret"}
-              className={`${champ} disabled:bg-slate-50 disabled:text-slate-400`}
-            >
-              <option value="">
-                {comptesEtat === "chargement"
-                  ? "Chargement des comptes…"
-                  : comptesEtat === "erreur"
-                    ? "Comptes indisponibles"
-                    : "— Choisir —"}
-              </option>
-              {comptes.map((c) => (
-                <option key={c.cle} value={c.cle}>
-                  {c.nom}
-                  {c.pays ? ` · ${c.pays}` : ""}
-                  {c.sens ? ` · ${c.sens}` : ""}
-                </option>
-              ))}
-            </select>
-            {comptesErreur && (
-              <span className="text-[9px] text-amber-700">{comptesErreur}</span>
-            )}
+          {/* PLUSIEURS COMPTES, MAIS POUR LE PRIMAIRE SEULEMENT.
+              Une soumission se verse en rassemblant ce qui dort chez deux ou
+              trois dépositaires ; un ordre de bourse, lui, se règle chez le
+              dépositaire du titre et nulle part ailleurs. Ouvrir la
+              répartition partout aurait offert une complication là où la
+              question ne se pose pas. */}
+          <Champ
+            label={
+              description === "SOUSCRIPTION_MP"
+                ? "Comptes de règlement"
+                : "Compte de règlement"
+            }
+            large
+          >
+            <ComptesReglement
+              valeur={comptesReglement}
+              onChange={setComptesReglement}
+              options={comptes}
+              etat={comptesEtat}
+              erreur={comptesErreur}
+              multiple={description === "SOUSCRIPTION_MP"}
+              total={
+                description === "SOUSCRIPTION_MP" && montant > 0 ? montant : undefined
+              }
+              aideSimple={
+                description === "SOUSCRIPTION_MP"
+                  ? "Un seul compte, ou plusieurs si la soumission se verse depuis plusieurs banques"
+                  : undefined
+              }
+            />
           </Champ>
 
           <Champ label="Taux de courtage">
