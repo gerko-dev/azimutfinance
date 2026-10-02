@@ -11,8 +11,14 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { enregistrerSoldesMultiFondsAction } from "@/app/gestion-portefeuille/tresorerie-actions";
-import { lireRelevesAction } from "@/app/gestion-portefeuille/releves-actions";
-import type { LectureReleves } from "@/app/gestion-portefeuille/releves-data";
+import {
+  lireRelevesAction,
+  rattacherRelevesAction,
+} from "@/app/gestion-portefeuille/releves-actions";
+import type {
+  LectureReleves,
+  ReleveBrut,
+} from "@/app/gestion-portefeuille/releves-data";
 import type { GrilleSoldes } from "@/app/gestion-portefeuille/tresorerie-grille";
 
 const fmt0 = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
@@ -56,6 +62,8 @@ export default function SaisieSoldesDialog({
   // en attente du mois suivant.
   const [lecture, setLecture] = useState<LectureReleves | null>(null);
   const [applique, setApplique] = useState(0);
+  /** Avancement du dépôt : « 3 / 12 banques ». Vide quand rien n'est en cours. */
+  const [avancement, setAvancement] = useState("");
 
   const [valeurs, setValeurs] = useState<Record<string, string>>(() => {
     const v: Record<string, string> = {};
@@ -93,6 +101,97 @@ export default function SaisieSoldesDialog({
         setErreur(
           `Aucun des ${res.data.fichiers} relevés du dossier ${res.data.dossier} ne se rattache ` +
             `à une case de la grille. Le détail est ci-dessous.`,
+        );
+      }
+    });
+  };
+
+  /**
+   * Lit un dossier de relevés CHOISI DANS LE NAVIGATEUR.
+   *
+   * POURQUOI UN DOSSIER ET NON DES FICHIERS. C'est le sous-dossier qui nomme
+   * la banque — « 2026-10-01/BOA/… » — et un relevé ne le dit pas toujours
+   * lui-même. En choisissant des fichiers un par un, on perdrait l'information
+   * qui place le solde dans sa colonne.
+   *
+   * ENVOYE PAR BANQUE, PAS D'UN BLOC. Cinquante-trois relevés font quatre
+   * mégaoctets, et l'hébergeur borne le corps d'une requête : un lot par
+   * dossier reste petit, et l'écran peut dire où il en est.
+   */
+  const deposer = async (fichiers: FileList | null) => {
+    if (!fichiers || fichiers.length === 0) return;
+    setErreur(null);
+    setMessage(null);
+    setApplique(0);
+    setLecture(null);
+
+    const pdfs = Array.from(fichiers).filter((f) => f.name.toLowerCase().endsWith(".pdf"));
+    if (pdfs.length === 0) {
+      setErreur("Aucun PDF dans ce dossier.");
+      return;
+    }
+
+    // Le chemin relatif n'existe que si le navigateur a donné un DOSSIER.
+    const chemin = (f: File) =>
+      ((f as File & { webkitRelativePath?: string }).webkitRelativePath || f.name).replace(
+        /\\/g,
+        "/",
+      );
+    const lots = new Map<string, File[]>();
+    for (const f of pdfs) {
+      const bouts = chemin(f).split("/").filter(Boolean);
+      const banque = bouts.length >= 2 ? bouts[bouts.length - 2] : "";
+      const lot = lots.get(banque) ?? [];
+      lot.push(f);
+      lots.set(banque, lot);
+    }
+    // LE DOSSIER DE DATE EST CELUI D'AU-DESSUS, quand il y en a un : c'est le
+    // nom que l'écran affichera, et le gérant le reconnaîtra.
+    const segments = chemin(pdfs[0]).split("/").filter(Boolean);
+    const dossier = segments.length >= 3 ? segments[segments.length - 3] : "dépôt";
+
+    const tous: ReleveBrut[] = [];
+    let fait = 0;
+    for (const [banque, lot] of lots) {
+      setAvancement(`${++fait} / ${lots.size} — ${banque || "sans dossier"}`);
+      const corps = new FormData();
+      for (const f of lot) {
+        corps.append("fichiers", f);
+        corps.append("chemins", chemin(f));
+      }
+      try {
+        const r = await fetch("/gestion-portefeuille/tresorerie/releves", {
+          method: "POST",
+          body: corps,
+        });
+        const json = await r.json();
+        if (!r.ok) {
+          setAvancement("");
+          setErreur(json?.erreur ?? `Lecture impossible (${r.status}).`);
+          return;
+        }
+        tous.push(...(json.lus as ReleveBrut[]));
+      } catch (err) {
+        setAvancement("");
+        setErreur(
+          `Lecture interrompue sur « ${banque} » : ${err instanceof Error ? err.message : String(err)}`,
+        );
+        return;
+      }
+    }
+    setAvancement("");
+
+    demarrer(async () => {
+      const res = await rattacherRelevesAction(tous, dossier, date);
+      if (!res.ok) {
+        setErreur(res.error);
+        return;
+      }
+      setLecture(res.data);
+      if (res.data.propositions.length === 0) {
+        setErreur(
+          `Aucun des ${res.data.fichiers} relevés déposés ne se rattache à une case de la grille. ` +
+            `Le détail est ci-dessous.`,
         );
       }
     });
@@ -183,6 +282,33 @@ export default function SaisieSoldesDialog({
             >
               {enCours ? "Lecture…" : "Lire relevé"}
             </button>
+            {/* LE SECOND CHEMIN, pour le site en ligne : là-bas, le dossier
+                « Relevés » du poste n'existe pas. Le navigateur donne le
+                chemin relatif de chaque fichier quand on choisit un DOSSIER,
+                et c'est lui qui nomme la banque. */}
+            <label
+              className={`px-3 py-1.5 text-[11px] font-medium border border-slate-300 text-slate-700 rounded cursor-pointer hover:bg-slate-50 ${
+                enCours || avancement ? "opacity-50 pointer-events-none" : ""
+              }`}
+              title="Choisis le dossier de la date — celui qui contient un sous-dossier par banque."
+            >
+              {avancement ? `Lecture ${avancement}` : "Déposer un dossier…"}
+              <input
+                type="file"
+                multiple
+                accept="application/pdf,.pdf"
+                className="hidden"
+                // Propriétés non standard : seul ce couple fait proposer un
+                // DOSSIER au lieu d'une liste de fichiers.
+                {...{ webkitdirectory: "", directory: "" }}
+                onChange={(e) => {
+                  void deposer(e.target.files);
+                  // On vide la saisie pour que redéposer le même dossier
+                  // relance bien une lecture.
+                  e.target.value = "";
+                }}
+              />
+            </label>
             <label className="text-[11px] text-slate-600">
               Date des soldes
               <input

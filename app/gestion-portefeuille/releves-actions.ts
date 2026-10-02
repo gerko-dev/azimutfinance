@@ -14,7 +14,12 @@ import type { ActionResult } from "@/lib/admin/types";
 
 import { estNiveau1, MSG_NIVEAU1 } from "./guard";
 import { loadMyFunds } from "./data";
-import { lireReleves, type LectureReleves } from "./releves-data";
+import {
+  lireReleves,
+  rattacherLectures,
+  type LectureReleves,
+  type ReleveBrut,
+} from "./releves-data";
 import { chargerPoints, construireGrille } from "./tresorerie-grille";
 
 export async function lireRelevesAction(
@@ -37,4 +42,31 @@ export async function lireRelevesAction(
   const lu = await lireReleves(process.cwd(), grille, dossierVoulu);
   if ("erreur" in lu) return { ok: false, error: lu.erreur };
   return { ok: true, data: lu };
+}
+
+/**
+ * Rattache des relevés DEJA LUS par le navigateur.
+ *
+ * LA GRILLE NE SE CONSTRUIT QU'UNE FOIS, pour tout le dépôt : elle demande le
+ * point de trésorerie de chaque fonds, et la rebâtir à chaque lot de PDF
+ * aurait fait payer douze fois le même calcul.
+ *
+ * Le contenu arrive déjà interprété — numéro de compte, titulaire, solde — et
+ * c'est sans danger : rien n'est écrit ici, et ce qui est proposé passe sous
+ * les yeux du gérant avant d'entrer dans une case.
+ */
+export async function rattacherRelevesAction(
+  lus: ReleveBrut[],
+  dossier: string,
+  dateEngagements?: string | null,
+): Promise<ActionResult<LectureReleves>> {
+  if (!(await estNiveau1())) return { ok: false, error: MSG_NIVEAU1 };
+  if (lus.length === 0) return { ok: false, error: "Aucun relevé déposé." };
+
+  const fonds = await loadMyFunds();
+  if (fonds.length === 0) {
+    return { ok: false, error: "Aucun fonds géré : il n'y a aucune ligne où poser un solde." };
+  }
+  const grille = construireGrille(await chargerPoints(fonds, dateEngagements ?? null));
+  return { ok: true, data: rattacherLectures(lus, grille, dossier) };
 }
