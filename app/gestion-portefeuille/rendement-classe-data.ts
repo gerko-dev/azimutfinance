@@ -206,7 +206,14 @@ function aliasDe(p: Position, fiches: Map<string, CustomSecurity>): string[] {
   return out;
 }
 
-type LigneAgregee = { quantite: number; valorisation: number; alias: string[] };
+type LigneAgregee = {
+  quantite: number;
+  valorisation: number;
+  alias: string[];
+  /** Pour nommer la ligne dans une réserve : « corrige la fiche de X » est une
+   *  consigne, « une ligne est incohérente » n'en est pas une. */
+  libelle: string;
+};
 
 /** Les lignes d'une section, regroupées par titre : deux lots d'un même titre
  *  sont une seule position pour qui mesure un prix. */
@@ -219,7 +226,7 @@ function parTitre(
   for (const p of positions) {
     if (p.section !== section) continue;
     const k = cleTitre(p);
-    const e = m.get(k) ?? { quantite: 0, valorisation: 0, alias: [] };
+    const e = m.get(k) ?? { quantite: 0, valorisation: 0, alias: [], libelle: p.raw_label ?? k };
     e.quantite += Number(p.quantity) || 0;
     e.valorisation += Number(p.valuation) || 0;
     for (const a of aliasDe(p, fiches)) if (!e.alias.includes(a)) e.alias.push(a);
@@ -334,6 +341,7 @@ function rendementTitres(
   let gain = 0;
   let lignesSorties = 0;
   const lignesMuettes: string[] = [];
+  const lignesIncoherentes: string[] = [];
 
   for (const [cle, d] of avant) {
     baseTotale += d.valorisation;
@@ -356,6 +364,28 @@ function rendementTitres(
     }
 
     const revenu = d.alias.map((a) => revenus.get(a) ?? 0).find((v) => v !== 0) ?? 0;
+
+    // UN REVENU PLUS GROS QUE LE TITRE LUI-MEME DENONCE LA FICHE, PAS LE
+    // MARCHE. Sur une période, un titre encore détenu à la fin ne peut avoir
+    // rendu plus que son propre prix : ses tranches d'amortissement sont des
+    // FRACTIONS du capital, et son coupon quelques points. Au-delà, le nominal
+    // du référentiel ne décrit pas la coupure que l'inventaire valorise.
+    //
+    // C'est arrivé, et spectaculairement : la fiche de BEFI-ALIOS FINANCE
+    // porte un nominal de 50 000 000 000 F — la taille de l'émission entière,
+    // saisie dans la case du titre, alors que l'emprunt lui-même n'est que de
+    // 14 000 000 000. L'échéancier rendait donc des tranches de plusieurs
+    // milliards par titre contre un prix de 25 millions, et la poche
+    // obligataire de FCP AURORE SECURITE II affichait + 5 075 %.
+    //
+    // On ECARTE la ligne, comme un titre sans échéancier : la mesurer avec ce
+    // nominal serait faux, et la mesurer sans lui compterait l'amortissement
+    // en perte. La réserve la NOMME, pour qu'on aille corriger la fiche.
+    if (revenu > p0) {
+      lignesIncoherentes.push(d.libelle);
+      continue;
+    }
+
     base += d.valorisation;
     gain += d.valorisation * ((p1 + revenu - p0) / p0);
   }
@@ -366,14 +396,26 @@ function rendementTitres(
   if (lignesSorties > 0) motifs.push(`${lignesSorties} ligne(s) vendue(s) ou échue(s)`);
   if (lignesMuettes.length > 0)
     motifs.push(`${lignesMuettes.length} ligne(s) sans échéancier au référentiel`);
+  if (lignesIncoherentes.length > 0)
+    motifs.push(
+      `fiche à corriger — le nominal ne correspond pas à la coupure valorisée : ${lignesIncoherentes.slice(0, 3).join(", ")}`,
+    );
+
+  // UNE FICHE FAUSSE SE DIT MEME QUAND LA COUVERTURE RESTE BONNE : elle se
+  // corrige en deux minutes au référentiel, et personne n'ira la chercher si
+  // l'écran n'en parle pas.
+  const reserve =
+    couverture < 0.75
+      ? `Seuls ${Math.round(couverture * 100)} % de la poche de début sont mesurés — ${motifs.join(" ; ")}. Le reste est supposé avoir rendu autant.`
+      : lignesIncoherentes.length > 0
+        ? `Écarté du calcul, fiche à corriger au référentiel : ${lignesIncoherentes.slice(0, 3).join(", ")}.`
+        : null;
+
   return {
     performance: (gain / base) * 100,
     methode: "titres-detenus",
     couverture,
-    reserve:
-      couverture < 0.75
-        ? `Seuls ${Math.round(couverture * 100)} % de la poche de début sont mesurés — ${motifs.join(", ")}. Le reste est supposé avoir rendu autant.`
-        : null,
+    reserve,
   };
 }
 
