@@ -252,12 +252,27 @@ export function titulaireGenerique(intitule: string): boolean {
   return s.length > 0 && s.every((m) => SOCIETE.has(m));
 }
 
-/** Le fonds que suggère un nom de fichier, ou "" s'il n'en suggère aucun. */
+/**
+ * Le fonds que suggère un nom de fichier, ou "" s'il n'en suggère aucun.
+ *
+ * « NSIA AM » N'EST PAS « AM », ET C'EST TOUT L'ENJEU. « AM » désigne Aurore
+ * Monétaris ; « NSIA AM » désigne la société de gestion, NSIA Asset
+ * Management, dont le compte n'appartient à aucun fonds. Les deux se croisent
+ * dans la même banque, parfois dans le même dossier — « BOA AM » et
+ * « BOA NSIA AM » —, et lire l'abréviation sans regarder ce qui la précède
+ * versait la trésorerie de la maison dans la ligne d'un portefeuille.
+ *
+ * La règle est donc : une abréviation PRECEDEE du nom de la société ne
+ * désigne plus un fonds. On ne rend rien, et le relevé ressort non rattaché —
+ * ce qu'il est.
+ */
 export function fondsDuNomDeFichier(nom: string): string {
-  const sansExtension = nom.replace(/\.[a-z0-9]+$/i, "");
-  for (const m of mots(sansExtension)) {
-    const f = ABREVIATIONS[m];
-    if (f) return f;
+  const bouts = mots(nom.replace(/\.[a-z0-9]+$/i, ""));
+  for (let i = 0; i < bouts.length; i++) {
+    const f = ABREVIATIONS[bouts[i]];
+    if (!f) continue;
+    if (i > 0 && SOCIETE.has(bouts[i - 1])) return "";
+    return f;
   }
   return "";
 }
