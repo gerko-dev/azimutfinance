@@ -1,6 +1,6 @@
 // === Lecture des relevés bancaires : sept formats, une seule sortie ===
 //
-// Treize banques, huit mises en page. Aucune norme ne les régit : chacune pose
+// Treize banques, dix mises en page. Aucune norme ne les régit : chacune pose
 // le numéro de compte, le titulaire et le solde où son logiciel l'a décidé, et
 // trois d'entre elles ne donnent même pas de solde de clôture — il faut le
 // prendre sur la dernière ligne de mouvement.
@@ -229,9 +229,21 @@ function numeroDe(brut: string): string {
  * la dernière ligne aurait rendu le solde du début de période.
  */
 function lireExtrait(lignes: string[]): ReleveLu {
-  const numero = numeroDe(apresEtiquette(lignes, /Num[ée]ro de compte\s*:/i));
-  const intitule = apresEtiquette(lignes, /Libell[ée] du compte\s*:/i);
-  const client = apresEtiquette(lignes, /Nom du client\s*:/i);
+  // LE MEME MODELE EXISTE EN ANGLAIS. Orabank Sénégal l'édite tantôt en
+  // français — « EXTRAIT DE COMPTE » —, tantôt en anglais — « ACCOUNT
+  // STATEMENT » —, aux mêmes colonnes et au même ordre de lignes. Seules
+  // les étiquettes changent, et les deux jeux sont donc acceptés.
+  const numero = numeroDe(
+    apresEtiquette(lignes, /(?:Num[ée]ro de compte|Account number)\s*:/i),
+  );
+  const intitule = apresEtiquette(
+    lignes,
+    /(?:Libell[ée] du compte|Account title)\s*:/i,
+  );
+  const client = apresEtiquette(
+    lignes,
+    /(?:Nom du client|Customer's name)\s*:/i,
+  );
 
   // La colonne « Solde » est la dernière du tableau. On cherche la première
   // ligne qui commence par une date et qui porte au moins deux montants :
@@ -240,7 +252,7 @@ function lireExtrait(lignes: string[]): ReleveLu {
   let date: string | null = null;
   let dansTableau = false;
   for (const l of lignes) {
-    if (/Solde\s*\(XOF\)/i.test(l)) {
+    if (/(?:Solde|Balance)\s*\(XOF\)/i.test(l)) {
       dansTableau = true;
       continue;
     }
@@ -435,6 +447,31 @@ function lireUba(lignes: string[]): ReleveLu {
   };
 }
 
+/**
+ * Ecobank, nouveau modèle — « RELEVE DE COMPTE - FR - NEW ».
+ *
+ * Il a remplacé l'ancien en cours d'année, et il est bien plus simple : une
+ * étiquette par ligne, suivie de sa valeur. Seul le titulaire reste collé,
+ * devant « Solde d'ouverture ».
+ */
+function lireEcobankNouveau(lignes: string[]): ReleveLu {
+  const solde = montantApres(lignes, /Solde de cl[oô]ture/i);
+  return {
+    ...VIDE,
+    format: "ecobank-2",
+    numeroCompte: numeroDe(apresEtiquette(lignes, /Num[ée]ro de compte/i)),
+    intitule: avantEtiquette(lignes, /Solde d['’]ouverture/i),
+    solde,
+    soldeDisponible: montantApres(lignes, /Solde disponible/i),
+    // « Période   de   01-JUN-2025 AU 30-SEP-2025 » : la fin de période est la
+    // date du solde.
+    dateSolde: dateDuReleve(
+      (apresEtiquette(lignes, /P[ée]riode/i).split(/\bAU\b/i)[1] ?? "").trim(),
+    ),
+    probleme: solde === null ? "Solde de clôture introuvable." : null,
+  };
+}
+
 /** NSIA Banque Togo — « SOLDE » seul, en fin de tableau. */
 function lireNsiaTogo(lignes: string[]): ReleveLu {
   let solde: number | null = null;
@@ -470,7 +507,25 @@ function lireNsiaTogo(lignes: string[]): ReleveLu {
 export function interpreterReleve(lignes: string[]): ReleveLu {
   const texte = sansAccent(lignes.join("\n"));
 
+  // UN RELEVE SCANNE N'A PAS DE TEXTE, il n'a qu'une image. Aucun lecteur ne
+  // peut rien en tirer, et « format non reconnu » laissait croire à une mise
+  // en page de plus à écrire : c'est une reconnaissance de caractères qu'il
+  // faudrait, ce qui est un autre métier.
+  if (texte.trim().length < 40) {
+    return {
+      ...VIDE,
+      format: "image",
+      probleme:
+        "Relevé scanné : le PDF ne contient aucun texte, seulement une image.",
+    };
+  }
+
   if (texte.includes("extrait de compte")) return lireExtrait(lignes);
+  // Orabank édite le même modèle en anglais. « Account title » le distingue
+  // d'UBA, qui dit « Account Summary ».
+  if (texte.includes("account statement") && texte.includes("account title"))
+    return lireExtrait(lignes);
+  if (texte.includes("releve de compte - fr - new")) return lireEcobankNouveau(lignes);
   if (texte.includes("titulaire du compte") && texte.includes("solde de cloture"))
     return lireAfg(lignes);
   if (texte.includes("solde comptable de cloture")) return lireEcobank(lignes);
@@ -486,9 +541,27 @@ export function interpreterReleve(lignes: string[]): ReleveLu {
     return lireUba(lignes);
   if (texte.includes("solde debut periode")) return lireNsiaTogo(lignes);
 
+  // UN RELEVE SANS AUCUNE LIGNE N'EST PAS UN RELEVE ILLISIBLE, et le dire
+  // ainsi envoyait chercher une panne qui n'existe pas : la banque a répondu
+  // « rien » pour la période demandée.
+  //
+  // CE TEST VIENT EN DERNIER, APRES TOUS LES LECTEURS, et il a d'abord été mis
+  // en premier — ce qui écartait trois cent cinquante-sept relevés Ecobank qui
+  // portaient pourtant leur solde de clôture. Un compte sans mouvement du mois
+  // a un solde comme les autres ; c'est seulement quand AUCUN lecteur n'a rien
+  // trouvé que le relevé est vraiment vide.
+  if (texte.includes("aucunes donnees trouvees")) {
+    return {
+      ...VIDE,
+      format: "vide",
+      probleme:
+        "Relevé vide : la banque n'a renvoyé ni opération ni solde pour la période demandée.",
+    };
+  }
+
   return {
     ...VIDE,
     probleme:
-      "Format de relevé non reconnu : aucune des huit mises en page connues.",
+      "Format de relevé non reconnu : aucune des dix mises en page connues.",
   };
 }
