@@ -13,8 +13,11 @@ import { perfYTD } from "@/lib/fcpMath";
 import { getSeries as tauxSeries, preloadTauxData } from "@/lib/tauxLoader";
 import { loadLatestBalance } from "./balance-data";
 import { loadCustomSecurities } from "./portfolio-data";
-import { bondRefReturn } from "./bond-returns";
+import { bondRefReturn } from "./bond-returns";
+
 import { estNiveau1, MSG_NIVEAU1 } from "./guard";
+import { fluxParClasse } from "./flux-classe-data";
+import { dietzModifie, tensionDesFlux, type Flux } from "./performance-classe";
 
 // Normalisation de nom de fonds (accents / ponctuation / FCP-SICAV ignorés).
 const DIACRITICS = /[̀-ͯ]/g;
@@ -35,6 +38,16 @@ export type AttributionRow = {
   performance: number | null; // %
   benchmark: number | null; // % (mapping standard)
   alpha: number | null; // performance − benchmark
+  /**
+   * Poids des mouvements de la période devant le capital de début.
+   *
+   * Dietz modifiée suppose les apports petits devant la poche, ou bien
+   * répartis. Au-delà de un — une classe doublée en cours de période — le
+   * chiffre reste le meilleur disponible mais cesse d'être une performance au
+   * sens strict, et l'écran doit pouvoir le dire. Zéro quand la performance
+   * vient de la balance comptable, qui ne souffre pas de ce travers.
+   */
+  tensionFlux: number;
 };
 
 // Ligne du tableau d'effet d'allocation (Brinson).
@@ -300,22 +313,35 @@ export async function computeAttributionAction(
 
   const totalFin = Object.values(finByClass).reduce((s, v) => s + v, 0) || 1;
 
+  // LES MOUVEMENTS DE LA PERIODE, classe par classe. Ils ne servent qu'au
+  // repli : la balance, elle, part des comptes de résultat et ignore déjà les
+  // apports.
+  const flux: Record<string, Flux[]> =
+    !gainByClass && dateDebut ? await fluxParClasse(fundId, dateDebut, dateFin) : {};
+
   const rows: AttributionRow[] = [];
   for (const section of CLASS_ORDER) {
     const finVal = finByClass[section] ?? 0;
     const debutVal = debutByClass[section] ?? 0;
     if (finVal === 0 && debutVal === 0) continue;
 
-    // Performance :
-    //  - balance : gain de période de la classe / valorisation d'inventaire de
-    //              DÉBUT (base = capital en début de période) ;
-    //  - sinon   : variation de valorisation début → fin.
+    // Performance, deux chemins :
+    //
+    //  - BALANCE COMPTABLE : gain de période de la classe ÷ valorisation
+    //    d'inventaire de début. Exact — le gain vient des comptes de résultat,
+    //    donc les achats et les ventes n'y entrent pas.
+    //
+    //  - SANS BALANCE : Dietz modifiée. Le rapport de valorisations qui
+    //    tenait lieu de repli était FAUX dès qu'un ordre avait été passé : il
+    //    comptait l'argent apporté par le gérant comme de la performance, et
+    //    une poche doublée par un achat affichait + 100 %.
+    const fluxClasse = flux[section] ?? [];
     const perf = gainByClass
       ? debutVal > 0 && gainByClass[section] != null
         ? (gainByClass[section] / debutVal) * 100
         : null
-      : debutVal > 0
-        ? (finVal / debutVal - 1) * 100
+      : dateDebut
+        ? dietzModifie(debutVal, finVal, fluxClasse, dateDebut, dateFin)
         : null;
     const bench = classBenchmark[section] ?? null;
     rows.push({
@@ -324,6 +350,7 @@ export async function computeAttributionAction(
       performance: perf,
       benchmark: bench,
       alpha: perf != null && bench != null ? perf - bench : null,
+      tensionFlux: gainByClass ? 0 : tensionDesFlux(debutVal, fluxClasse),
     });
   }
 

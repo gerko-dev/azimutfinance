@@ -342,7 +342,22 @@ export default function VueEnsemblePanel({ vue }: { vue: VueEnsemble }) {
                   <tbody className="divide-y divide-slate-100">
                     {l.classes.map((c) => (
                       <tr key={c.classe}>
-                        <td className="py-0.5 text-slate-700">{c.classe}</td>
+                        <td className="py-0.5 text-slate-700">
+                          {c.classe}
+                          {/* DES MOUVEMENTS PLUS GROS QUE LA POCHE : la méthode
+                              de Dietz suppose les apports petits devant le
+                              capital, ou bien répartis. Au-delà, le chiffre
+                              reste le meilleur disponible, mais il cesse
+                              d'être une performance au sens strict. */}
+                          {c.tensionFlux > 1 && (
+                            <span
+                              className="ml-1 text-[9px] text-amber-700"
+                              title={`Les mouvements de la période pèsent ${fmt0.format(c.tensionFlux * 100)} % du capital de début : la performance de cette classe est à lire avec prudence.`}
+                            >
+                              ⚠
+                            </span>
+                          )}
+                        </td>
                         <td className="py-0.5 text-right tabular-nums text-slate-600">
                           {fmt0.format(c.poids)} %
                         </td>
