@@ -106,6 +106,41 @@ export async function supprimerFluxManuelAction(
   return { ok: true, data: { id: fluxId } };
 }
 
+/**
+ * REGLE un flux saisi, a une date qu'on renseigne — ou defait le reglement.
+ *
+ * LE FLUX SORT ALORS DU POINT DE TRESORERIE : le solde bancaire saisi contient
+ * deja le mouvement, et l'y laisser le compterait deux fois. C'est un
+ * LETTRAGE, pas une annulation — la ligne reste, avec sa date, et le gerant
+ * voit ce qui s'est passe. Jusqu'ici, le seul moyen de sortir un flux regle
+ * etait de le SUPPRIMER, ce qui en effacait la trace.
+ *
+ * `null` defait le lettrage : une date posee par erreur se reprend.
+ */
+export async function reglerFluxManuelAction(
+  fundId: string,
+  fluxId: string,
+  dateReglement: string | null,
+): Promise<ActionResult<{ id: string }>> {
+  const acces = await autoriser(fundId);
+  if ("erreur" in acces) return { ok: false, error: acces.erreur };
+  const { supabase, userId } = acces;
+
+  if (dateReglement !== null && !EST_DATE.test(dateReglement))
+    return { ok: false, error: "Renseigne la date du règlement." };
+
+  const { error } = await supabase
+    .from("fund_treasury_flows")
+    .update({ rapproche_le: dateReglement })
+    .eq("id", fluxId)
+    .eq("fund_id", fundId)
+    .eq("owner_id", userId);
+  if (error) return { ok: false, error: error.message };
+
+  rafraichir(fundId);
+  return { ok: true, data: { id: fluxId } };
+}
+
 // ── Spots ──────────────────────────────────────────────────────────────────
 
 function validerSpot(s: SaisieSpot): string | null {

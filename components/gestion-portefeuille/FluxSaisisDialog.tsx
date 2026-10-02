@@ -18,6 +18,7 @@ import { useRouter } from "next/navigation";
 
 import {
   enregistrerFluxManuelAction,
+  reglerFluxManuelAction,
   supprimerFluxManuelAction,
 } from "@/app/gestion-portefeuille/tresorerie-flux-actions";
 import {
@@ -105,6 +106,28 @@ export default function FluxSaisisDialog({
       }
       reinitialiser();
       router.refresh();
+    });
+  };
+
+  /**
+   * Pose ou retire la date de règlement.
+   *
+   * UN CLIC, LA DATE DU JOUR — comme pour une jambe de nivellement. Demander
+   * une date dans un champ aurait ajouté une étape à un geste qu'on fait
+   * relevé en main, et la date d'un règlement constaté aujourd'hui est
+   * aujourd'hui. Un second clic la retire, pour la poser par erreur sans
+   * conséquence.
+   */
+  const regler = (f: FluxManuel) => {
+    setErreur(null);
+    demarrer(async () => {
+      const res = await reglerFluxManuelAction(
+        fondsId,
+        f.id,
+        f.rapprocheLe ? null : new Date().toISOString().slice(0, 10),
+      );
+      if (!res.ok) setErreur(res.error);
+      else router.refresh();
     });
   };
 
@@ -272,13 +295,14 @@ export default function FluxSaisisDialog({
                   <th className="text-left px-2 py-1.5 font-medium">Compte</th>
                   <th className="text-left px-2 py-1.5 font-medium">Libellé</th>
                   <th className="text-right px-2 py-1.5 font-medium">Montant</th>
+                  <th className="text-left px-2 py-1.5 font-medium">Règlement</th>
                   <th className="px-2 py-1.5" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {flux.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-2 py-6 text-center text-slate-400">
+                    <td colSpan={7} className="px-2 py-6 text-center text-slate-400">
                       Aucun flux saisi pour ce fonds.
                     </td>
                   </tr>
@@ -288,7 +312,18 @@ export default function FluxSaisisDialog({
                   return (
                     <tr
                       key={f.id}
-                      className={editionId === f.id ? "bg-blue-50" : "hover:bg-slate-50"}
+                      className={
+                        editionId === f.id
+                          ? "bg-blue-50"
+                          : f.rapprocheLe
+                            ? // REGLE : la ligne reste, mais elle ne pèse plus.
+                              // L'effacer du tableau aurait privé le gérant de
+                              // la trace de ce qui s'est passé ; la laisser
+                              // identique aux autres lui aurait fait croire
+                              // qu'elle compte encore.
+                              "bg-slate-50 text-slate-400"
+                            : "hover:bg-slate-50"
+                      }
                     >
                       <td className="px-2 py-1.5 tabular-nums">{f.dateFlux}</td>
                       <td className="px-2 py-1.5">{libellePoste(f.poste)}</td>
@@ -301,6 +336,25 @@ export default function FluxSaisisDialog({
                       >
                         {sortant ? "−" : "+"}
                         {montantFr(f.montant)}
+                      </td>
+                      <td className="px-2 py-1.5 whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => regler(f)}
+                          disabled={enCours}
+                          className={`text-[10px] disabled:opacity-50 ${
+                            f.rapprocheLe
+                              ? "text-emerald-700 hover:text-emerald-900"
+                              : "text-blue-700 hover:text-blue-900"
+                          }`}
+                          title={
+                            f.rapprocheLe
+                              ? `Réglé le ${f.rapprocheLe} — il ne pèse plus sur le point. Cliquer pour défaire.`
+                              : "Le mouvement est passé : le flux sort du point de trésorerie, que le solde bancaire saisi contient déjà."
+                          }
+                        >
+                          {f.rapprocheLe ? `✓ ${f.rapprocheLe}` : "Marquer réglé"}
+                        </button>
                       </td>
                       <td className="px-2 py-1.5 text-right whitespace-nowrap">
                         <button

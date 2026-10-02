@@ -75,9 +75,43 @@ export type FluxManuel = {
   /** Toujours positif. Cf. `POSTES_FLUX`. */
   montant: number;
   libelle: string;
+  /**
+   * Date à laquelle le mouvement a été constaté sur le relevé, ou null tant
+   * qu'il n'a pas bougé.
+   *
+   * UNE FOIS POSEE, LE FLUX SORT DU POINT : le solde bancaire saisi contient
+   * déjà le mouvement, et l'y laisser le compterait deux fois. C'est un
+   * LETTRAGE, pas une annulation — la ligne reste, elle ne pèse plus. Sans ce
+   * geste, le gérant n'avait d'autre moyen de sortir un flux réglé que de le
+   * supprimer, ce qui effaçait la trace de ce qui s'était passé.
+   *
+   * ELLE NE SE SAISIT PAS AU FORMULAIRE, comme pour un flux de parts : un flux
+   * annoncé n'a pas de date de règlement, elle s'apprend quand le mouvement
+   * passe. La promettre à la saisie, c'était inscrire une date que rien ne
+   * garantissait et faire sortir le flux du point un jour choisi d'avance.
+   *
+   * UNE DATE ET NON UN BOOLEEN : le point se lit aussi à une date passée. Un
+   * flux rapproché le 5 octobre pesait encore dans un arrêté du 30 septembre,
+   * et une case à cochée l'en aurait fait sortir rétroactivement.
+   */
+  rapprocheLe: string | null;
 };
 
-export type SaisieFluxManuel = Omit<FluxManuel, "id">;
+/** Ce que le formulaire envoie. Le RÈGLEMENT n'en fait pas partie : il a son
+ *  propre geste, sur la ligne. */
+export type SaisieFluxManuel = Omit<FluxManuel, "id" | "rapprocheLe">;
+
+/** Le flux pèse-t-il encore, à la date d'arrêté ?
+ *
+ *  Un rapprochement POSTERIEUR à l'arrêté ne compte pas : à cette date-là, le
+ *  relevé ne le portait pas encore. */
+export function fluxManuelPese(
+  f: { rapprocheLe: string | null },
+  dateArrete: string | null,
+): boolean {
+  if (f.rapprocheLe === null) return true;
+  return dateArrete !== null && f.rapprocheLe > dateArrete;
+}
 
 // ── Opérations spot ────────────────────────────────────────────────────────
 

@@ -11,6 +11,7 @@ import { cache } from "react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 import {
+  fluxManuelPese,
   montantDenouementSpot,
   posteDenouementSpot,
   POSTE_NIVELLEMENT_CREDIT,
@@ -36,6 +37,7 @@ type LigneFlux = {
   date_flux: string;
   montant: number | string;
   libelle: string | null;
+  rapproche_le: string | null;
 };
 
 type LigneSpot = {
@@ -56,7 +58,7 @@ export const loadFluxManuels = cache(async (fundId: string): Promise<FluxManuel[
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from("fund_treasury_flows")
-    .select("id, poste, compte, date_flux, montant, libelle")
+    .select("id, poste, compte, date_flux, montant, libelle, rapproche_le")
     .eq("fund_id", fundId)
     .order("date_flux", { ascending: false });
 
@@ -78,6 +80,7 @@ export const loadFluxManuels = cache(async (fundId: string): Promise<FluxManuel[
       dateFlux: l.date_flux,
       montant: nb(l.montant),
       libelle: l.libelle ?? "",
+      rapprocheLe: l.rapproche_le ?? null,
     }));
 });
 
@@ -140,6 +143,10 @@ export function agregerFluxSaisis(
 
   for (const f of flux) {
     if (dateArrete && f.dateFlux > dateArrete) continue;
+    // REGLE : le solde bancaire saisi contient déjà le mouvement. L'y laisser
+    // le compterait deux fois — c'est le même lettrage que partout ailleurs
+    // dans le module.
+    if (!fluxManuelPese(f, dateArrete)) continue;
     ajouter(f.poste, f.compte, f.montant, {
       date: f.dateFlux,
       libelle: f.libelle || "Flux saisi sans libellé",

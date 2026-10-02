@@ -420,8 +420,14 @@ function Contenu({
             className="px-3 py-1 rounded text-[11px] font-medium border border-slate-300 text-slate-700 hover:bg-slate-50 transition"
           >
             Flux saisis
-            {point.fluxSaisis.length > 0 && (
-              <span className="ml-1.5 text-slate-400">{point.fluxSaisis.length}</span>
+            {/* LE COMPTE EST CELUI DE CE QUI PESE ENCORE, comme pour les
+                nivellements : un flux réglé ne demande plus rien au gérant, et
+                le compter l'aurait envoyé ouvrir une liste où il n'y a plus
+                rien à faire. */}
+            {point.fluxSaisis.filter((f) => !f.rapprocheLe).length > 0 && (
+              <span className="ml-1.5 text-slate-400">
+                {point.fluxSaisis.filter((f) => !f.rapprocheLe).length}
+              </span>
             )}
           </button>
           )}
