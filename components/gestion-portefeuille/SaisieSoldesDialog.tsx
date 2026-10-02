@@ -11,6 +11,8 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { enregistrerSoldesMultiFondsAction } from "@/app/gestion-portefeuille/tresorerie-actions";
+import { lireRelevesAction } from "@/app/gestion-portefeuille/releves-actions";
+import type { LectureReleves } from "@/app/gestion-portefeuille/releves-data";
 import type { GrilleSoldes } from "@/app/gestion-portefeuille/tresorerie-grille";
 
 const fmt0 = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
@@ -48,6 +50,12 @@ export default function SaisieSoldesDialog({
   const [date, setDate] = useState(
     grille.derniereDate ?? new Date().toISOString().slice(0, 10),
   );
+  // LA LECTURE NE REMPLIT RIEN TOUTE SEULE. Elle se range ici, l'écran la
+  // montre, et le gérant décide de l'appliquer : un solde à huit chiffres posé
+  // sans qu'on l'ait vu passer n'est pas une automatisation, c'est une erreur
+  // en attente du mois suivant.
+  const [lecture, setLecture] = useState<LectureReleves | null>(null);
+  const [applique, setApplique] = useState(0);
 
   const [valeurs, setValeurs] = useState<Record<string, string>>(() => {
     const v: Record<string, string> = {};
@@ -67,6 +75,54 @@ export default function SaisieSoldesDialog({
 
   const totalFonds = (l: GrilleSoldes["lignes"][number]) =>
     l.comptes.reduce((s, b) => s + lire(valeurs[cellule(l.fondsId, b)] ?? ""), 0);
+
+  /** Lit le dossier de relevés le plus récent, sans rien écrire. */
+  const lireLesReleves = () => {
+    setErreur(null);
+    setMessage(null);
+    setApplique(0);
+    demarrer(async () => {
+      const res = await lireRelevesAction(date);
+      if (!res.ok) {
+        setLecture(null);
+        setErreur(res.error);
+        return;
+      }
+      setLecture(res.data);
+      if (res.data.propositions.length === 0) {
+        setErreur(
+          `Aucun des ${res.data.fichiers} relevés du dossier ${res.data.dossier} ne se rattache ` +
+            `à une case de la grille. Le détail est ci-dessous.`,
+        );
+      }
+    });
+  };
+
+  /**
+   * Reporte les soldes lus dans les cases, et seulement dans celles-là.
+   *
+   * LES AUTRES CASES NE BOUGENT PAS. Un relevé manquant ne vaut pas un solde
+   * nul : remettre à zéro ce qu'on n'a pas lu ferait disparaître la trésorerie
+   * d'un fonds parce que son PDF n'était pas dans le dossier.
+   */
+  const appliquer = () => {
+    if (!lecture) return;
+    setValeurs((v) => {
+      const suite = { ...v };
+      for (const p of lecture.propositions) {
+        if (p.solde === null) continue;
+        suite[cellule(p.fondsId, p.etablissement)] = formaterSaisie(
+          String(Math.round(p.solde)),
+        );
+      }
+      return suite;
+    });
+    setApplique(lecture.propositions.length);
+    setMessage(
+      `${lecture.propositions.length} solde(s) reporté(s) dans la grille. ` +
+        `Rien n'est enregistré tant que tu n'as pas cliqué « Enregistrer les soldes ».`,
+    );
+  };
 
   const enregistrer = () => {
     setErreur(null);
@@ -115,15 +171,28 @@ export default function SaisieSoldesDialog({
               signalent qu&apos;un fonds n&apos;a pas de compte dans cette banque.
             </p>
           </div>
-          <label className="text-[11px] text-slate-600">
-            Date des soldes
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="ml-1.5 px-2 py-1 rounded border border-slate-300 text-[11px]"
-            />
-          </label>
+          <div className="flex items-center gap-3">
+            {/* LE DOSSIER DIT SA DATE, on ne la redemande pas : le bouton lit
+                toujours le sous-dossier le plus récent de « Relevés ». */}
+            <button
+              type="button"
+              onClick={lireLesReleves}
+              disabled={enCours}
+              className="px-3 py-1.5 text-[11px] font-medium border border-blue-300 text-blue-700 rounded hover:bg-blue-50 disabled:opacity-50"
+              title="Lit les relevés PDF déposés dans le dossier « Relevés », et propose les soldes."
+            >
+              {enCours ? "Lecture…" : "Lire relevé"}
+            </button>
+            <label className="text-[11px] text-slate-600">
+              Date des soldes
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="ml-1.5 px-2 py-1 rounded border border-slate-300 text-[11px]"
+              />
+            </label>
+          </div>
         </div>
 
         <div className="overflow-auto max-h-[60vh]">
@@ -221,6 +290,103 @@ export default function SaisieSoldesDialog({
               {message}
             </p>
           )}
+          {/* ── CE QUE LES RELEVES ONT DONNE ────────────────────────────
+              Deux listes, et la seconde n'est pas un détail : un relevé qu'on
+              ne sait pas placer doit se voir, sinon le gérant croit avoir tout
+              repris alors qu'il manque une banque. Chaque ligne écartée dit
+              POURQUOI, et ce qu'il y a à corriger. */}
+          {lecture && (
+            <div className="border border-slate-200 rounded overflow-hidden">
+              <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-slate-50 border-b border-slate-200">
+                <span className="text-[11px] text-slate-700">
+                  Dossier <strong>{lecture.dossier}</strong> · {lecture.fichiers} relevé(s) ·{" "}
+                  <span className="text-emerald-700 font-medium">
+                    {lecture.propositions.length} rattaché(s)
+                  </span>
+                  {lecture.ecartees.length > 0 && (
+                    <>
+                      {" · "}
+                      <span className="text-amber-700 font-medium">
+                        {lecture.ecartees.length} écarté(s)
+                      </span>
+                    </>
+                  )}
+                </span>
+                {lecture.propositions.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={appliquer}
+                    disabled={enCours}
+                    className="px-3 py-1 text-[11px] font-medium bg-blue-700 text-white rounded hover:bg-blue-800 disabled:opacity-50"
+                  >
+                    {applique > 0
+                      ? `${applique} solde(s) reporté(s)`
+                      : `Reporter ${lecture.propositions.length} solde(s) dans la grille`}
+                  </button>
+                )}
+              </div>
+
+              <div className="max-h-[30vh] overflow-auto">
+                <table className="w-full text-[10px]">
+                  <thead className="bg-white text-slate-500 sticky top-0">
+                    <tr>
+                      <th className="text-left px-2 py-1 font-medium">Relevé</th>
+                      <th className="text-left px-2 py-1 font-medium">Compte</th>
+                      <th className="text-left px-2 py-1 font-medium">Banque</th>
+                      <th className="text-left px-2 py-1 font-medium">Fonds</th>
+                      <th className="text-right px-2 py-1 font-medium">Solde</th>
+                      <th className="text-left px-2 py-1 font-medium">Au</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {lecture.propositions.map((p) => (
+                      <tr key={p.fichier} className="hover:bg-emerald-50/40">
+                        <td className="px-2 py-1 text-slate-500">{p.fichier}</td>
+                        <td className="px-2 py-1 text-slate-500">
+                          {p.intitule}
+                          {p.numeroCompte && (
+                            <span className="block text-slate-400">{p.numeroCompte}</span>
+                          )}
+                        </td>
+                        <td className="px-2 py-1">{p.etablissementNom}</td>
+                        <td className="px-2 py-1">{p.fondsNom}</td>
+                        <td className="px-2 py-1 text-right tabular-nums font-medium">
+                          {p.solde === null ? "—" : fmt0.format(Math.round(p.solde))}
+                          {/* L'ECART AU DISPONIBLE EXPLIQUE LA MOITIE DES
+                              RAPPROCHEMENTS QUI COINCENT : un chèque en cours
+                              d'encaissement, une opération du jour pas encore
+                              comptabilisée. On retient le COMPTABLE et on
+                              montre l'autre. */}
+                          {p.soldeDisponible !== null &&
+                            p.solde !== null &&
+                            Math.round(p.soldeDisponible) !== Math.round(p.solde) && (
+                              <span className="block text-slate-400 font-normal">
+                                dispo. {fmt0.format(Math.round(p.soldeDisponible))}
+                              </span>
+                            )}
+                        </td>
+                        <td className="px-2 py-1 text-slate-500 tabular-nums">
+                          {p.dateSolde ?? "—"}
+                        </td>
+                      </tr>
+                    ))}
+                    {lecture.ecartees.map((p) => (
+                      <tr key={p.fichier} className="bg-amber-50/50">
+                        <td className="px-2 py-1 text-slate-500">{p.fichier}</td>
+                        <td className="px-2 py-1 text-slate-500" colSpan={4}>
+                          <span className="text-amber-800">{p.probleme}</span>
+                        </td>
+                        <td className="px-2 py-1 text-right tabular-nums text-slate-400">
+                          {p.solde === null ? "—" : fmt0.format(Math.round(p.solde))}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center gap-2">
             <button
               type="button"
