@@ -88,5 +88,7 @@ __pycache__/
 /_tmp_*.mjs
 /_test_*
 
-# Diagnostic temporaire (route app/api/_debug) - ne pas versionner
+# Diagnostic temporaire (routes app/api/diagnostic) - ne pas versionner :
+# ces fichiers portent les inventaires et les valorisations des fonds.
 convergence-debug.json
+obligations-debug.json

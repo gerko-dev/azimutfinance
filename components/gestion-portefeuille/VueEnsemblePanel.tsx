@@ -124,7 +124,9 @@ export default function VueEnsemblePanel({ vue }: { vue: VueEnsemble }) {
           <p className="text-[11px] text-slate-500 mt-0.5">
             Du {origine} à la dernière valeur liquidative de chaque fonds. La performance
             vient de la VL — elle porte donc le passif du fonds et les régularisations du
-            dépositaire, à la différence d&apos;une somme de valorisations.
+            dépositaire, à la différence d&apos;une somme de valorisations. UN FONDS CRÉÉ EN
+            COURS D&apos;ANNÉE part de sa première VL, et son indice est calculé sur cette
+            même fenêtre : sa performance ne se compare pas à celle des autres.
           </p>
         </div>
 
@@ -187,6 +189,17 @@ export default function VueEnsemblePanel({ vue }: { vue: VueEnsemble }) {
                         title={`Composantes sans série exploitable : ${l.benchIrresolu.join(", ")}`}
                       >
                         benchmark à {fmt0.format(l.couvertureBench * 100)} %
+                      </span>
+                    )}
+                    {/* NE EN COURS D'ANNEE : la fenêtre n'est pas celle des
+                        autres fonds, et l'omettre ferait lire un trimestre
+                        comme une année. */}
+                    {l.depuisCreation && l.origine && (
+                      <span
+                        className="ml-1.5 text-[9px] text-slate-500"
+                        title={`Fonds créé en cours d'année : performance et indice sont calculés depuis la première VL, le ${l.origine}, et non depuis le 31 décembre.`}
+                      >
+                        depuis le {l.origine}
                       </span>
                     )}
                   </td>

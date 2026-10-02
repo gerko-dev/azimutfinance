@@ -71,7 +71,19 @@ export type LigneFonds = {
   encours: number | null;
   /** Date de la dernière VL retenue. */
   dateVl: string | null;
-  /** Performance depuis le 1ᵉʳ janvier, en %. */
+  /**
+   * ORIGINE REELLE DE LA PERFORMANCE ANNUELLE de ce fonds.
+   *
+   * Le 31 décembre précédent pour un fonds qui existait déjà. Pour un fonds
+   * CRÉÉ EN COURS D'ANNÉE, la date de sa première VL : il n'a pas de VL au
+   * 31 décembre, et rapporter sa performance à une valeur qui n'existe pas n'a
+   * pas de sens. Affichée à la ligne, parce que sa performance ne se compare
+   * alors plus à celle des autres fonds.
+   */
+  origine: string | null;
+  /** Vrai quand l'origine est la première VL et non le 31 décembre. */
+  depuisCreation: boolean;
+  /** Performance depuis l'origine ci-dessus, en %. */
   perfYtd: number | null;
   /** Benchmark composite du fonds sur la même fenêtre, en %. */
   benchYtd: number | null;
@@ -185,6 +197,8 @@ export async function chargerVueEnsemble(): Promise<VueEnsemble> {
         fondsNom: f.nom,
         encours: null,
         dateVl: null,
+        origine: null,
+        depuisCreation: false,
         perfYtd: null,
         benchYtd: null,
         alpha: null,
@@ -203,7 +217,29 @@ export async function chargerVueEnsemble(): Promise<VueEnsemble> {
       base.dateVl = derniere.date;
       base.encours = derniere.actifNet ?? null;
 
-      const vlOrigine = vlAuPlusTard(vls, origine);
+      // PAS DE VL AU 31 DECEMBRE : LE FONDS EST NE EN COURS D'ANNEE.
+      //
+      // Sa performance annuelle se mesure alors depuis sa PREMIERE VL — sa
+      // valeur d'origine —, et non depuis un 31 décembre où il n'existait pas.
+      // AURORE OBLIGATIONS SOUVERAINES II, lancé en juin, n'avait aucune
+      // performance affichée : la ligne portait « Aucune VL au 2025-12-31 »
+      // alors que le fonds tourne et publie.
+      //
+      // ET SON BENCHMARK SE LIT SUR LA MEME FENETRE. Comparer trois mois de
+      // fonds à neuf mois d'indice n'est pas un alpha, c'est un écart de
+      // calendrier : le benchmark est donc calculé au prorata, de la première
+      // VL à la dernière.
+      let vlOrigine = vlAuPlusTard(vls, origine);
+      let origineFonds = origine;
+      if (vlOrigine == null) {
+        const premiere = vls.find((p) => p.vl != null && p.vl > 0);
+        if (premiere && premiere.vl != null) {
+          vlOrigine = premiere.vl;
+          origineFonds = premiere.date;
+          base.depuisCreation = true;
+        }
+      }
+      base.origine = origineFonds;
       if (vlOrigine != null && derniere.vl != null) {
         base.perfYtd = (derniere.vl / vlOrigine - 1) * 100;
       }
@@ -212,7 +248,7 @@ export async function chargerVueEnsemble(): Promise<VueEnsemble> {
       // des tables disjointes, et les enchaîner doublait l'attente sur un
       // écran qui en affiche six.
       const [bench, attr] = await Promise.all([
-        computeBenchmarkAction(f.id, origine, derniere.date, origine),
+        computeBenchmarkAction(f.id, origineFonds, derniere.date, origineFonds),
         computeAttributionAction(f.id),
       ]);
 
@@ -241,7 +277,7 @@ export async function chargerVueEnsemble(): Promise<VueEnsemble> {
       // où aller.
       base.souci =
         base.perfYtd == null
-          ? `Aucune VL au ${origine} : la performance annuelle ne peut pas être calculée.`
+          ? `Aucune VL exploitable : la performance ne peut pas être calculée.`
           : !bench.ok
             ? bench.error
             : base.benchYtd == null
