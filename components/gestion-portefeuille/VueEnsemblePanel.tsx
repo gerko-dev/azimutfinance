@@ -343,17 +343,21 @@ export default function VueEnsemblePanel({ vue }: { vue: VueEnsemble }) {
                     {l.classes.map((c) => (
                       <tr key={c.classe}>
                         <td className="py-0.5 text-slate-700">
-                          {c.classe}
-                          {/* DES MOUVEMENTS PLUS GROS QUE LA POCHE : la méthode
-                              de Dietz suppose les apports petits devant le
-                              capital, ou bien répartis. Au-delà, le chiffre
-                              reste le meilleur disponible, mais il cesse
-                              d'être une performance au sens strict. */}
-                          {c.tensionFlux > 1 && (
-                            <span
-                              className="ml-1 text-[9px] text-amber-700"
-                              title={`Les mouvements de la période pèsent ${fmt0.format(c.tensionFlux * 100)} % du capital de début : la performance de cette classe est à lire avec prudence.`}
-                            >
+                          {/* COMMENT CE CHIFFRE A ETE OBTENU. Les classes ne se
+                              mesurent pas de la même façon — cours des titres,
+                              VL des OPCVM détenus, taux d'un dépôt —, et un
+                              tableau qui ne le dit pas laisse croire que ses
+                              lignes se comparent. */}
+                          <span title={c.aide} className="cursor-help decoration-dotted underline-offset-2 hover:underline">
+                            {c.classe}
+                          </span>
+                          {/* CE QUI FRAGILISE LE CHIFFRE : une poche à moitié
+                              vendue en cours de période, un dépôt sans taux au
+                              référentiel, une date d'inventaire invraisemblable.
+                              Le chiffre reste le meilleur disponible ; il cesse
+                              d'être une mesure au sens strict. */}
+                          {c.reserve && (
+                            <span className="ml-1 text-[9px] text-amber-700" title={c.reserve}>
                               ⚠
                             </span>
                           )}

@@ -973,7 +973,7 @@ export default function PerformancePanel({
             </h3>
             {attrMeta && (
               <span className="text-[10px] text-slate-500">
-                {attrMeta.source === "balance" ? "balance" : "inventaires"} ·{" "}
+                inventaires ·{" "}
                 {attrMeta.debut ? `${attrMeta.debut} → ${attrMeta.fin}` : `au ${attrMeta.fin}`}
               </span>
             )}
@@ -991,7 +991,20 @@ export default function PerformancePanel({
             <tbody>
               {attr.map((r) => (
                 <tr key={r.classe} className="border-b border-slate-200 last:border-0">
-                  <td className="px-3 py-2 text-slate-600 font-medium">{r.classe}</td>
+                  <td className="px-3 py-2 text-slate-600 font-medium">
+                    {/* CHAQUE CLASSE A SA METHODE, et le tableau le dit : le
+                        cours des titres détenus, la VL des OPCVM, le taux d'un
+                        dépôt, zéro pour la liquidité. Empiler ces lignes sans
+                        le dire laisserait croire qu'elles se comparent. */}
+                    <span title={r.aide} className="cursor-help decoration-dotted underline-offset-2 hover:underline">
+                      {r.classe}
+                    </span>
+                    {r.reserve && (
+                      <span className="ml-1 text-[11px] text-amber-700" title={r.reserve}>
+                        ⚠
+                      </span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-right font-mono text-slate-600">{fmt(r.poids)} %</td>
                   <td className={`px-3 py-2 text-right font-mono ${tone(r.performance)}`}>{pct(r.performance)}</td>
                   <td className={`px-3 py-2 text-right font-mono ${tone(r.benchmark)}`}>{pct(r.benchmark)}</td>
@@ -1001,11 +1014,13 @@ export default function PerformancePanel({
             </tbody>
           </table>
           <p className="px-3 py-2 text-[10px] text-slate-600">
-            {attrMeta?.source === "balance"
-              ? "Performance = résultat de période de la classe (mouvements : écarts d'estimation + /- values + produits) / valorisation de la classe à l'inventaire de début ; poids = inventaire de fin."
-              : "Performance = variation de valorisation de la classe entre inventaires début → fin ; poids = inventaire de fin."}{" "}
-            Benchmark : Actions/OPCVM → BRVM Composite ; Obligations → souverain UMOA ; DAT → taux
-            BCEAO ; Liquidité → 0.
+            Performance : actions et obligations → variation du prix unitaire des titres détenus,
+            coupons et dividendes compris, pondérée par la valorisation de début ; OPCVM → VL des
+            fonds détenus ; DAT → taux contractuel au prorata des jours ; Liquidité → 0, un compte
+            courant ne produisant rien. Poids = inventaire de fin, sauf la liquidité qui prend le
+            SOLDE THEORIQUE du point de trésorerie — le seul chiffre qui tienne compte des
+            engagements déjà pris. Benchmark : Actions/OPCVM → BRVM Composite ; Obligations →
+            souverain UMOA ; DAT → taux BCEAO ; Liquidité → 0.
           </p>
         </section>
       )}

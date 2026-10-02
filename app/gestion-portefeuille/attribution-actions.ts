@@ -11,13 +11,16 @@ import {
 import { loadFunds } from "@/lib/fcp";
 import { perfYTD } from "@/lib/fcpMath";
 import { getSeries as tauxSeries, preloadTauxData } from "@/lib/tauxLoader";
-import { loadLatestBalance } from "./balance-data";
 import { loadCustomSecurities } from "./portfolio-data";
 import { bondRefReturn } from "./bond-returns";
 
 import { estNiveau1, MSG_NIVEAU1 } from "./guard";
-import { fluxParClasse } from "./flux-classe-data";
-import { dietzModifie, tensionDesFlux, type Flux } from "./performance-classe";
+import {
+  LIBELLE_METHODE,
+  rendementsDeClasse,
+  soldeTheorique,
+  type MethodeRendement,
+} from "./rendement-classe-data";
 
 // Normalisation de nom de fonds (accents / ponctuation / FCP-SICAV ignorés).
 const DIACRITICS = /[̀-ͯ]/g;
@@ -39,15 +42,19 @@ export type AttributionRow = {
   benchmark: number | null; // % (mapping standard)
   alpha: number | null; // performance − benchmark
   /**
-   * Poids des mouvements de la période devant le capital de début.
+   * COMMENT la ligne a été calculée, et la phrase qui l'explique.
    *
-   * Dietz modifiée suppose les apports petits devant la poche, ou bien
-   * répartis. Au-delà de un — une classe doublée en cours de période — le
-   * chiffre reste le meilleur disponible mais cesse d'être une performance au
-   * sens strict, et l'écran doit pouvoir le dire. Zéro quand la performance
-   * vient de la balance comptable, qui ne souffre pas de ce travers.
+   * Les classes ne se mesurent pas de la même façon — un dépôt à terme porte
+   * son rendement dans son contrat, un OPCVM publie sa VL, une poche d'actions
+   * se lit sur le cours de ses titres. Un tableau qui empile ces lignes sans
+   * dire d'où vient chaque chiffre laisse croire qu'elles se comparent.
    */
-  tensionFlux: number;
+  methode: MethodeRendement;
+  aide: string;
+  /** Part de la poche réellement mesurée, de 0 à 1 (cf. `RendementClasse`). */
+  couverture: number;
+  /** Ce qui fragilise le chiffre, ou null. L'écran l'affiche tel quel. */
+  reserve: string | null;
 };
 
 // Ligne du tableau d'effet d'allocation (Brinson).
@@ -135,7 +142,7 @@ export async function computeAttributionAction(
     rows: AttributionRow[];
     dateDebut: string | null;
     dateFin: string;
-    source: "balance" | "inventaire";
+    source: "inventaire";
     alloc: AllocationRow[]; // tableau d'effet d'allocation
     rbTotal: number | null; // performance du benchmark composite (Σ wb·Rb)
   }>
@@ -147,9 +154,14 @@ export async function computeAttributionAction(
   if (!user) return { ok: false, error: "Tu dois être connecté." };
   if (!(await estNiveau1())) return { ok: false, error: MSG_NIVEAU1 };
 
-  // Valorisation par classe : TOUJOURS depuis l'inventaire de fin (poids ET
-  // base de la performance). Le gain de période provient de la balance si elle
-  // est importée ; sinon la performance est la variation début → fin.
+  // Valorisation par classe depuis l'inventaire de fin (poids ET base de la
+  // performance), sur la fenêtre inventaire de début → inventaire de fin.
+  //
+  // LA BALANCE COMPTABLE N'EST PLUS UN CHEMIN. Un seul fonds sur six en avait
+  // une : cinq écrans affichaient donc un calcul que le sixième n'affichait
+  // pas, sur une fenêtre différente par-dessus le marché, et deux fonds
+  // n'étaient pas comparables. Une méthode unique appliquée partout vaut mieux
+  // qu'une méthode exacte appliquée nulle part.
   const { data: snaps } = await supabase
     .from("fund_portfolio_snapshots")
     .select("id, slot, as_of_date, created_at")
@@ -168,14 +180,19 @@ export async function computeAttributionAction(
   const debutByClass = sumByClass(debutPos);
   const dateFin = finSnap.as_of_date;
 
-  const balance = await loadLatestBalance(fundId);
-  const gainByClass = balance && balance.total > 0 ? (balance.gain as Record<string, number>) : null;
-  const source: "balance" | "inventaire" = gainByClass ? "balance" : "inventaire";
+  const source = "inventaire" as const;
+  const dateDebut = debutSnap?.as_of_date ?? null;
 
-  // Fenêtre du benchmark : balance → YTD (31/12/N-1 → fin) ; sinon début → fin.
-  const dateDebut = gainByClass
-    ? `${Number(dateFin.slice(0, 4)) - 1}-12-31`
-    : (debutSnap?.as_of_date ?? null);
+  // LE POIDS DE LA LIQUIDITE VIENT DU POINT DE TRESORERIE, PAS DE L'INVENTAIRE.
+  //
+  // L'inventaire porte les soldes des comptes à la date d'arrêté, et ne sait
+  // rien des engagements déjà pris : souscriptions annoncées, rachats à payer,
+  // titres achetés non encore réglés. Le solde théorique, lui, les porte tous —
+  // c'est la raison d'être du point de trésorerie — et c'est le seul chiffre
+  // qui réponde à « de quoi le fonds dispose-t-il ». Les autres poches sont
+  // alors pesées contre ce total-là.
+  const soldeTh = await soldeTheorique(fundId, dateFin);
+  if (soldeTh != null && Number.isFinite(soldeTh)) finByClass.tresorerie = soldeTh;
 
   // Benchmark : fenêtre dateDebut → dateFin (mapping standard par classe).
   const emissions = loadUmoaEmissions();
@@ -313,11 +330,16 @@ export async function computeAttributionAction(
 
   const totalFin = Object.values(finByClass).reduce((s, v) => s + v, 0) || 1;
 
-  // LES MOUVEMENTS DE LA PERIODE, classe par classe. Ils ne servent qu'au
-  // repli : la balance, elle, part des comptes de résultat et ignore déjà les
-  // apports.
-  const flux: Record<string, Flux[]> =
-    !gainByClass && dateDebut ? await fluxParClasse(fundId, dateDebut, dateFin) : {};
+  // CHAQUE CLASSE PAR SA METHODE. Le détail est dans `rendement-classe-data` :
+  // le cours des titres détenus pour les actions et les obligations, la VL des
+  // OPCVM détenus, le taux contractuel des dépôts, et zéro pour la liquidité.
+  const rendements = await rendementsDeClasse({
+    fundId,
+    snapshotDebut: debutSnap?.id ?? null,
+    snapshotFin: finSnap.id,
+    debut: dateDebut,
+    fin: dateFin,
+  });
 
   const rows: AttributionRow[] = [];
   for (const section of CLASS_ORDER) {
@@ -325,24 +347,9 @@ export async function computeAttributionAction(
     const debutVal = debutByClass[section] ?? 0;
     if (finVal === 0 && debutVal === 0) continue;
 
-    // Performance, deux chemins :
-    //
-    //  - BALANCE COMPTABLE : gain de période de la classe ÷ valorisation
-    //    d'inventaire de début. Exact — le gain vient des comptes de résultat,
-    //    donc les achats et les ventes n'y entrent pas.
-    //
-    //  - SANS BALANCE : Dietz modifiée. Le rapport de valorisations qui
-    //    tenait lieu de repli était FAUX dès qu'un ordre avait été passé : il
-    //    comptait l'argent apporté par le gérant comme de la performance, et
-    //    une poche doublée par un achat affichait + 100 %.
-    const fluxClasse = flux[section] ?? [];
-    const perf = gainByClass
-      ? debutVal > 0 && gainByClass[section] != null
-        ? (gainByClass[section] / debutVal) * 100
-        : null
-      : dateDebut
-        ? dietzModifie(debutVal, finVal, fluxClasse, dateDebut, dateFin)
-        : null;
+    const r = rendements[section];
+    const perf = r?.performance ?? null;
+    const methode: MethodeRendement = r?.methode ?? "indisponible";
     const bench = classBenchmark[section] ?? null;
     rows.push({
       classe: CLASS_LABEL[section] ?? section,
@@ -350,7 +357,10 @@ export async function computeAttributionAction(
       performance: perf,
       benchmark: bench,
       alpha: perf != null && bench != null ? perf - bench : null,
-      tensionFlux: gainByClass ? 0 : tensionDesFlux(debutVal, fluxClasse),
+      methode,
+      aide: LIBELLE_METHODE[methode],
+      couverture: r?.couverture ?? 0,
+      reserve: r?.reserve ?? null,
     });
   }
 
