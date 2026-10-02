@@ -66,10 +66,30 @@ const PAYS: Record<string, string> = {
   gw: "guinee bissau",
 };
 
+/**
+ * Noms de banque que l'usage écrit tantôt soudés, tantôt séparés.
+ *
+ * ILS DOIVENT L'ETRE DES DEUX COTES. « BANK » est un mot vide — il reviendrait
+ * sinon dans la moitié des fiches — mais « ORA BANK » sans lui ne laisse que
+ * « ORA », trois lettres qu'on retrouve dans « ORANGE MONEY » : le dossier
+ * « ORA BANK CI » se rattachait au compte Orange Money de Côte d'Ivoire. On
+ * soude donc avant de retirer les mots vides, et des deux côtés, pour que le
+ * dossier et la fiche parlent de la même chose.
+ */
+const SOUDURES: [RegExp, string][] = [
+  [/\bora ?bank\b/g, "orabank"],
+  [/\bcoris ?ban(?:k|que)\b/g, "corisbank"],
+  [/\bafg ?bank\b/g, "afgbank"],
+  [/\beco ?bank\b/g, "ecobank"],
+  [/\bbank of africa\b/g, "boa"],
+];
+
 /** Un libellé réduit à ses mots distinctifs, pays développés. */
 function signature(s: string): string[] {
   const out: string[] = [];
-  for (const m of mots(s)) {
+  let brut = normaliser(s);
+  for (const [motif, soude] of SOUDURES) brut = brut.replace(motif, soude);
+  for (const m of brut.split(" ").filter(Boolean)) {
     const pays = PAYS[m];
     if (pays) {
       for (const p of pays.split(" ")) if (!out.includes(p)) out.push(p);
@@ -162,7 +182,17 @@ export function rattacherEtablissement(
   dossier: string,
   candidats: Candidat[],
 ): Resultat {
-  const cherche = signature(dossier);
+  const signatures = candidats.map((c) => signature(c.libelle));
+  // UN SIGLE DE DEUX LETTRES QUE PERSONNE NE PORTE NE DECIDE DE RIEN.
+  //
+  // Le gérant ajoute parfois au dossier une mention qui lui parle à lui :
+  // « NSIA BANQUE CI OP », « UBA AO ». Exiger de retrouver « OP » dans la
+  // fiche laissait le dossier orphelin pour deux lettres. Les codes pays, eux,
+  // sont déjà développés par `signature` — « CI » y est devenu « cote ivoire »
+  // et reste donc décisif.
+  const cherche = signature(dossier).filter(
+    (m) => m.length > 2 || signatures.some((s) => s.includes(m)),
+  );
   if (cherche.length === 0) {
     return { trouve: false, raison: `« ${dossier} » ne porte aucun mot distinctif.` };
   }
@@ -170,8 +200,21 @@ export function rattacherEtablissement(
   const gagnants = candidats.filter((c) => {
     const sienne = signature(c.libelle);
     const colle = sienne.join("");
+    // TROIS FACONS DE RETROUVER UN MOT, et il a fallu les trois pour couvrir
+    // les quinze orthographes de Coris Bank rencontrées en deux ans :
+    //   — le mot lui-même, aux tolérances de `memeMot` ;
+    //   — le mot COLLE dans la fiche : « CORISBANK » pour « Coris Bank » ;
+    //   — deux mots consécutifs de la fiche recollés, ce qui rattrape la
+    //     faute de frappe sur la soudure : « CORSBANK », « CORIBANK ».
+    const recolle = sienne.map((s, i) => s + (sienne[i + 1] ?? ""));
     return cherche.every(
-      (m) => sienne.some((s) => memeMot(m, s)) || colle.includes(m),
+      (m) =>
+        sienne.some((s) => memeMot(m, s)) ||
+        // LA FORME COLLEE N'EST ADMISE QU'AU-DELA DE SIX LETTRES : « ORA »
+        // se retrouve dans « ORANGE MONEY », et trois lettres ne nomment
+        // pas une banque.
+        (m.length >= 6 && colle.includes(m)) ||
+        recolle.some((s) => memeMot(m, s)),
     );
   });
 

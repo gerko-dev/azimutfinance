@@ -1,6 +1,6 @@
 // === Lecture des relevés bancaires : sept formats, une seule sortie ===
 //
-// Douze banques, sept mises en page. Aucune norme ne les régit : chacune pose
+// Treize banques, huit mises en page. Aucune norme ne les régit : chacune pose
 // le numéro de compte, le titulaire et le solde où son logiciel l'a décidé, et
 // trois d'entre elles ne donnent même pas de solde de clôture — il faut le
 // prendre sur la dernière ligne de mouvement.
@@ -389,6 +389,52 @@ function lireNsia(lignes: string[]): ReleveLu {
   };
 }
 
+/**
+ * UBA — « Account Statement », deux colonnes d'étiquettes fondues en une.
+ *
+ * Le relevé mélange les libellés de gauche et les valeurs de droite sur la
+ * même ligne, sans séparateur : « Numéro de compte   Solde d'ouverture
+ * (01/01/2026):101170000491   7,150,155 » porte le numéro de compte collé au
+ * deux-points, et le solde d'ouverture tout à droite. On vise donc chaque
+ * champ par son motif propre.
+ *
+ * LE RELEVE EXISTE EN DEUX LANGUES. Jusqu'en 2025 UBA l'editait en anglais
+ * — « Account Summary », « Closing Balance » —, depuis en francais. Meme mise
+ * en page, memes colonnes : seules les etiquettes changent, et les deux jeux
+ * sont donc acceptes partout.
+ *
+ * LE TITULAIRE EST LA LIGNE QUI SUIT LA PAGINATION. Les quatre premières
+ * lignes sont toujours « Account Statement », l'horodatage, « Page 1 of N »
+ * puis le nom du compte — et c'est le seul endroit où il figure en entier :
+ * le « Surnom du compte » est tronqué à vingt caractères, « FCP AURORE » pour
+ * trois fonds différents.
+ */
+function lireUba(lignes: string[]): ReleveLu {
+  const iPage = lignes.findIndex((l) => /^\s*Page\s+\d+\s+(of|sur|de)\s+\d+/i.test(l));
+  const intitule = iPage >= 0 && iPage + 1 < lignes.length ? lignes[iPage + 1].trim() : "";
+
+  const ligneCompte =
+    lignes.find((l) => /Num[ée]ro de compte|Account Number/i.test(l)) ?? "";
+  const num = ligneCompte.match(/:\s*(\d{6,})/);
+
+  const ligneDispo =
+    lignes.find((l) => /Solde disponible|Available Balance/i.test(l)) ?? "";
+  const solde = montantApres(lignes, /Solde de cl[oô]ture|Closing Balance/i);
+
+  return {
+    ...VIDE,
+    format: "uba",
+    numeroCompte: num ? num[1] : "",
+    intitule,
+    solde,
+    soldeDisponible: montantApres(lignes, /Solde disponible|Available Balance/i),
+    // « Solde disponible (30/09/2026): » — la date de la situation est entre
+    // parenthèses, là où les autres banques la mettent en tête de relevé.
+    dateSolde: dateDuReleve(ligneDispo.match(/\(([^)]*)\)/)?.[1] ?? ""),
+    probleme: solde === null ? "Solde de clôture introuvable." : null,
+  };
+}
+
 /** NSIA Banque Togo — « SOLDE » seul, en fin de tableau. */
 function lireNsiaTogo(lignes: string[]): ReleveLu {
   let solde: number | null = null;
@@ -433,11 +479,16 @@ export function interpreterReleve(lignes: string[]): ReleveLu {
   if (texte.includes("intitule du compte") && texte.includes("solde disponible"))
     return lireBis(lignes);
   if (texte.includes("historique des mouvements")) return lireNsia(lignes);
+  if (
+    texte.includes("account statement") &&
+    (texte.includes("resume du compte") || texte.includes("account summary"))
+  )
+    return lireUba(lignes);
   if (texte.includes("solde debut periode")) return lireNsiaTogo(lignes);
 
   return {
     ...VIDE,
     probleme:
-      "Format de relevé non reconnu : aucune des sept mises en page connues.",
+      "Format de relevé non reconnu : aucune des huit mises en page connues.",
   };
 }
