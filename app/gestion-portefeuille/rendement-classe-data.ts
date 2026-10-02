@@ -53,6 +53,7 @@ import "server-only";
 // et l'écran la signale dès qu'elle descend.
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { loadListedBonds } from "@/lib/dataLoader";
 import { loadFunds } from "@/lib/fcp";
 import { findObsOnOrBefore } from "@/lib/fcpMath";
 import { construireCalendrierEsv } from "./esv-data";
@@ -191,6 +192,40 @@ function parTitre(positions: Position[], section: string): Map<string, LigneAgre
   return m;
 }
 
+/**
+ * LE MODE D'AMORTISSEMENT DE CHAQUE TITRE, « T » ou « N ».
+ *
+ * « SUR NOMINAL » (N) : la valeur nominale du titre décroît, la quantité ne
+ * bouge pas. Le prix unitaire baisse d'autant, et le capital remboursé doit
+ * être recompté — sans quoi la ligne afficherait une perte qui n'en est pas
+ * une.
+ *
+ * « SUR TITRE » (T) : le nominal ne bouge pas, ce sont des TITRES qui sont
+ * tirés au sort et remboursés. La quantité baisse, le prix unitaire reste le
+ * même, et le capital remboursé l'est AU PAIR : il n'y a ni gain ni perte à
+ * constater. Le recompter serait un doublon — et pas un petit : une ligne
+ * TPCI.O80 à 9 975 F le titre créditée de 10 000 F d'amortissement affichait
+ * + 100 %, et portait à elle seule 8,7 points sur la poche obligataire de
+ * NSIA FONDS DIVERSIFIE.
+ */
+function modesAmortissement(fiches: CustomSecurity[]): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const b of loadListedBonds()) {
+    const mode = b.amortizationMode === "T" ? "T" : "N";
+    if (b.isin) m.set(normId(b.isin), mode);
+    if (b.code) m.set(normId(b.code), mode);
+  }
+  // Les titres du référentiel du gérant portent le mode dans leur fiche.
+  for (const c of fiches) {
+    const mode = c.attributes?.amortizationMode === "T" ? "T" : null;
+    if (!mode) continue;
+    if (c.isin) m.set(normId(c.isin), mode);
+    if (c.code) m.set(normId(c.code), mode);
+    m.set(`F${normId(c.id)}`, mode);
+  }
+  return m;
+}
+
 // ── Les revenus détachés pendant la période, PAR TITRE ──────────────────────
 //
 // UN COUPON N'EST PAS UNE PERTE. La valorisation d'une obligation porte son
@@ -206,6 +241,7 @@ async function revenusParTitre(
   fundId: string,
   debut: string,
   fin: string,
+  modes: Map<string, string>,
 ): Promise<Map<string, number>> {
   const calendrier = await construireCalendrierEsv(fundId);
   const out = new Map<string, number>();
@@ -217,10 +253,15 @@ async function revenusParTitre(
     if (e.date < debut || e.date > fin) continue;
     const m = Number(e.montantParTitre);
     if (!Number.isFinite(m) || m === 0) continue;
-    // L'ISIN ET LE MNEMONIQUE, parce qu'une position peut n'en porter qu'un —
-    // mais jamais deux fois le même, sans quoi un coupon compterait double.
     const isin = normId(e.isin);
     const code = normId(e.code);
+    // UN REMBOURSEMENT DE CAPITAL SUR TITRE N'EST PAS UN REVENU : il se voit
+    // dans la quantité, pas dans le prix, et le compter ici en ferait un gain.
+    if (e.nature === "amortissement" || e.nature === "remboursement") {
+      if ((modes.get(isin) ?? modes.get(code)) === "T") continue;
+    }
+    // L'ISIN ET LE MNEMONIQUE, parce qu'une position peut n'en porter qu'un —
+    // mais jamais deux fois le même, sans quoi un coupon compterait double.
     if (isin) poser(isin, m);
     if (code && code !== isin) poser(code, m);
   }
@@ -352,10 +393,14 @@ function rendementDat(
   const dureeFenetre = jours(debut, fin);
   if (!(dureeFenetre > 0)) return SANS;
 
-  type Depot = { taux: number; nominal: number; debut: string; fin: string };
+  type Depot = { taux: number; nominal: number; debut: string; fin: string; valo: number };
   const depots = new Map<string, Depot>();
-  let total = 0;
-  let mesure = 0;
+  // Les dépôts qu'on ne sait pas mesurer, DEDOUBLONNES EUX AUSSI : la
+  // couverture compare deux populations, elle doit les compter de la même
+  // façon. Un dépôt vu aux deux inventaires comptait auparavant une fois au
+  // numérateur et deux au dénominateur, et la ligne portait un avertissement
+  // alors qu'elle était entièrement mesurée.
+  const sansTaux = new Map<string, number>();
 
   for (const { position: p, auDebut } of lignes) {
     const a = p.custom_security_id ? fiches.get(p.custom_security_id)?.attributes : null;
@@ -363,8 +408,7 @@ function rendementDat(
     const taux = Number.isFinite(tauxFiche) ? tauxFiche : tauxDuLibelle(p.raw_label);
     const nominalFiche = nombre(a?.montantNominal);
     const nominal = Number.isFinite(nominalFiche) ? nominalFiche : (p.valuation ?? 0);
-    total += p.valuation ?? nominal;
-    if (!Number.isFinite(taux) || !(nominal > 0)) continue;
+    const valo = p.valuation ?? nominal;
 
     // Un dépôt DEJA LA au premier inventaire courait depuis le début de la
     // période, quelle que soit la date de valeur de sa fiche — qui ne porte
@@ -374,7 +418,12 @@ function rendementDat(
     const de = (a?.dateEcheance ?? "").trim();
     const d1 = auDebut || !dv || dv < debut ? debut : dv;
     const d2 = de && de < fin ? de : fin;
-    if (!(jours(d1, d2) > 0)) continue;
+
+    if (!Number.isFinite(taux) || !(nominal > 0) || !(jours(d1, d2) > 0)) {
+      const k = normNom(p.raw_label);
+      sansTaux.set(k, Math.max(sansTaux.get(k) ?? 0, valo));
+      continue;
+    }
 
     const cle = `${normNom(String(a?.contrepartie ?? p.raw_label))}|${nominal}|${taux}`;
     const deja = depots.get(cle);
@@ -383,21 +432,24 @@ function rendementDat(
       // plus large plutôt que de compter le capital deux fois.
       if (d1 < deja.debut) deja.debut = d1;
       if (d2 > deja.fin) deja.fin = d2;
+      if (valo > deja.valo) deja.valo = valo;
     } else {
-      depots.set(cle, { taux, nominal, debut: d1, fin: d2 });
-      mesure += p.valuation ?? nominal;
+      depots.set(cle, { taux, nominal, debut: d1, fin: d2, valo });
     }
   }
 
   let interets = 0;
   let capitalMoyen = 0;
+  let mesure = 0;
   for (const d of depots.values()) {
     const n = jours(d.debut, d.fin);
     interets += d.nominal * (d.taux / 100) * (n / 365);
     capitalMoyen += d.nominal * (n / dureeFenetre);
+    mesure += d.valo;
   }
   if (!(capitalMoyen > 0)) return SANS;
 
+  const total = mesure + [...sansTaux.values()].reduce((s, v) => s + v, 0);
   const couverture = total > 0 ? Math.min(1, mesure / total) : 1;
   return {
     performance: (interets / capitalMoyen) * 100,
@@ -463,13 +515,13 @@ export async function rendementsDeClasse(params: {
     return (data ?? []) as Position[];
   };
 
-  const [posDebut, posFin, revenus, fichesRef] = await Promise.all([
+  const fichesRef = await loadCustomSecurities();
+  const [posDebut, posFin, revenus] = await Promise.all([
     positions(snapshotDebut),
     positions(snapshotFin),
     fenetreDouteuse
       ? Promise.resolve(new Map<string, number>())
-      : revenusParTitre(fundId, debut, fin),
-    loadCustomSecurities(),
+      : revenusParTitre(fundId, debut, fin, modesAmortissement(fichesRef)),
   ]);
 
   // ── Actions, obligations, autres : le cours des titres détenus ────────────

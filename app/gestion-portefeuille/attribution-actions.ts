@@ -193,6 +193,11 @@ export async function computeAttributionAction(
   // alors pesées contre ce total-là.
   const soldeTh = await soldeTheorique(fundId, dateFin);
   if (soldeTh != null && Number.isFinite(soldeTh)) finByClass.tresorerie = soldeTh;
+  // UN SOLDE THEORIQUE NEGATIF N'EST PAS UNE ERREUR DE CALCUL : le fonds a
+  // engagé plus qu'il ne détient en banque. Le poids de la poche est alors
+  // négatif, et la ligne doit le dire — sans quoi on lit « - 4 % » sans
+  // savoir si c'est un bug ou un découvert.
+  const decouvert = soldeTh != null && soldeTh < 0 ? soldeTh : null;
 
   // Benchmark : fenêtre dateDebut → dateFin (mapping standard par classe).
   const emissions = loadUmoaEmissions();
@@ -360,7 +365,10 @@ export async function computeAttributionAction(
       methode,
       aide: LIBELLE_METHODE[methode],
       couverture: r?.couverture ?? 0,
-      reserve: r?.reserve ?? null,
+      reserve:
+        section === "tresorerie" && decouvert != null
+          ? `Le solde théorique du fonds est négatif (${Math.round(decouvert).toLocaleString("fr-FR")} F) : les engagements pris dépassent ce qui est en banque. Le poids de la poche est donc négatif, et celui des autres classes dépasse 100 %.`
+          : (r?.reserve ?? null),
     });
   }
 
