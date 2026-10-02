@@ -72,6 +72,17 @@ __pycache__/
 /*.pdf
 /*.docx
 
+# LES REGLES CI-DESSUS NE COUVRENT QUE DES FICHIERS A LA RACINE, et un releve
+# bancaire range dans un sous-dossier y echappe : « /*.pdf » ne descend pas
+# dans « Releves/2026-10-01/BOA/ ». Cinquante-trois releves de douze banques
+# attendaient ainsi le premier « git add -A » pour partir dans un depot public.
+#
+# Le dossier entier est donc ecarte, quelle que soit la forme de son accent :
+# macOS compose les accents autrement que Windows, et ne nommer qu'une des deux
+# formes aurait laisse passer l'autre.
+/Relev*s/
+/releves/
+
 # Archives et scripts jetables
 /data/historique_sika/*.rar
 /_tmp_*.mjs
