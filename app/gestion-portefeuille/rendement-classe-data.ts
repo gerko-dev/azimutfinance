@@ -175,18 +175,54 @@ function cleTitre(p: Position): string {
   return `L${normNom(p.raw_label).replace(/ /g, "")}`;
 }
 
-type LigneAgregee = { quantite: number; valorisation: number };
+/**
+ * TOUS LES NOMS SOUS LESQUELS UNE LIGNE PEUT ETRE APPELEE.
+ *
+ * L'inventaire désigne un titre du référentiel du gérant par l'IDENTIFIANT DE
+ * SA FICHE — un UUID. Le calendrier ESV, lui, range ses flux sous l'ISIN ou le
+ * code de cette même fiche. Les deux ne se rencontraient jamais, et cinq
+ * emprunts privés — CNO ETAT RCI CNPS MANSA BANK, BEFI-ALIOS FINANCE, APRIL
+ * OIL, SDMA, ADDOHA — ne recevaient aucun coupon ni aucun amortissement : leur
+ * capital remboursé se lisait comme une chute de cours. - 50 % pour ALIOS,
+ * - 15,6 % pour MANSA, et huit points de perte imaginaire sur la poche
+ * obligataire d'AURORE OBLIGATIONS SOUVERAINES.
+ */
+function aliasDe(p: Position, fiches: Map<string, CustomSecurity>): string[] {
+  const out: string[] = [];
+  const poser = (s: string | null | undefined) => {
+    const k = normId(s);
+    if (k && !out.includes(k)) out.push(k);
+  };
+  poser(p.match_id);
+  const c = p.custom_security_id ? fiches.get(p.custom_security_id) : undefined;
+  if (c) {
+    poser(c.isin);
+    poser(c.code);
+    poser(c.id);
+  }
+  const m = MOTIF_ISIN.exec(`${p.raw_code ?? ""} ${(p.raw_label ?? "").toUpperCase()}`);
+  if (m) poser(m[1]);
+  poser(p.raw_code);
+  return out;
+}
+
+type LigneAgregee = { quantite: number; valorisation: number; alias: string[] };
 
 /** Les lignes d'une section, regroupées par titre : deux lots d'un même titre
  *  sont une seule position pour qui mesure un prix. */
-function parTitre(positions: Position[], section: string): Map<string, LigneAgregee> {
+function parTitre(
+  positions: Position[],
+  section: string,
+  fiches: Map<string, CustomSecurity>,
+): Map<string, LigneAgregee> {
   const m = new Map<string, LigneAgregee>();
   for (const p of positions) {
     if (p.section !== section) continue;
     const k = cleTitre(p);
-    const e = m.get(k) ?? { quantite: 0, valorisation: 0 };
+    const e = m.get(k) ?? { quantite: 0, valorisation: 0, alias: [] };
     e.quantite += Number(p.quantity) || 0;
     e.valorisation += Number(p.valuation) || 0;
+    for (const a of aliasDe(p, fiches)) if (!e.alias.includes(a)) e.alias.push(a);
     m.set(k, e);
   }
   return m;
@@ -242,19 +278,25 @@ async function revenusParTitre(
   debut: string,
   fin: string,
   modes: Map<string, string>,
-): Promise<Map<string, number>> {
+): Promise<{ revenus: Map<string, number>; connus: Set<string> }> {
   const calendrier = await construireCalendrierEsv(fundId);
   const out = new Map<string, number>();
+  // LES TITRES DONT LE MODULE SAIT DEROULER LES FLUX, sur toute leur vie —
+  // pas seulement dans la fenêtre. Un titre dont on ne connaît AUCUN flux ne
+  // se mesure pas : son capital remboursé passerait pour une perte.
+  const connus = new Set<string>();
   const poser = (cle: string, montant: number) => {
     if (!cle) return;
     out.set(cle, (out.get(cle) ?? 0) + montant);
   };
   for (const e of calendrier.evenements) {
-    if (e.date < debut || e.date > fin) continue;
     const m = Number(e.montantParTitre);
-    if (!Number.isFinite(m) || m === 0) continue;
+    if (!Number.isFinite(m)) continue;
     const isin = normId(e.isin);
     const code = normId(e.code);
+    if (isin) connus.add(isin);
+    if (code) connus.add(code);
+    if (e.date < debut || e.date > fin) continue;
     // UN REMBOURSEMENT DE CAPITAL SUR TITRE N'EST PAS UN REVENU : il se voit
     // dans la quantité, pas dans le prix, et le compter ici en ferait un gain.
     if (e.nature === "amortissement" || e.nature === "remboursement") {
@@ -262,10 +304,11 @@ async function revenusParTitre(
     }
     // L'ISIN ET LE MNEMONIQUE, parce qu'une position peut n'en porter qu'un —
     // mais jamais deux fois le même, sans quoi un coupon compterait double.
+    if (m === 0) continue;
     if (isin) poser(isin, m);
     if (code && code !== isin) poser(code, m);
   }
-  return out;
+  return { revenus: out, connus };
 }
 
 // ── Actions et obligations : le cours des titres détenus ────────────────────
@@ -282,11 +325,15 @@ function rendementTitres(
   avant: Map<string, LigneAgregee>,
   apres: Map<string, LigneAgregee>,
   revenus: Map<string, number>,
+  /** Titres dont le module sait dérouler les flux. `null` quand la question ne
+   *  se pose pas — une action n'a pas d'échéancier, et son cours suffit. */
+  connus: Set<string> | null,
 ): RendementClasse {
   let base = 0;
   let baseTotale = 0;
   let gain = 0;
   let lignesSorties = 0;
+  const lignesMuettes: string[] = [];
 
   for (const [cle, d] of avant) {
     baseTotale += d.valorisation;
@@ -298,20 +345,34 @@ function rendementTitres(
     const p0 = d.valorisation / d.quantite;
     const p1 = f.valorisation / f.quantite;
     if (!(p0 > 0)) continue;
-    const revenu = revenus.get(cle) ?? 0;
+
+    // UN TITRE DONT ON NE CONNAIT AUCUN FLUX NE SE MESURE PAS. Son nominal
+    // s'amortit sans qu'on sache de combien, et la baisse de son prix unitaire
+    // se lirait comme une perte. Mieux vaut l'écarter et le DIRE que publier
+    // - 50 % sur un emprunt qui rembourse normalement.
+    if (connus && !d.alias.some((a) => connus.has(a))) {
+      lignesMuettes.push(cle);
+      continue;
+    }
+
+    const revenu = d.alias.map((a) => revenus.get(a) ?? 0).find((v) => v !== 0) ?? 0;
     base += d.valorisation;
     gain += d.valorisation * ((p1 + revenu - p0) / p0);
   }
 
   if (!(base > 0)) return SANS;
   const couverture = baseTotale > 0 ? base / baseTotale : 0;
+  const motifs: string[] = [];
+  if (lignesSorties > 0) motifs.push(`${lignesSorties} ligne(s) vendue(s) ou échue(s)`);
+  if (lignesMuettes.length > 0)
+    motifs.push(`${lignesMuettes.length} ligne(s) sans échéancier au référentiel`);
   return {
     performance: (gain / base) * 100,
     methode: "titres-detenus",
     couverture,
     reserve:
       couverture < 0.75
-        ? `Seuls ${Math.round(couverture * 100)} % de la poche de début sont encore détenus à la fin — ${lignesSorties} ligne(s) sortie(s). Le reste est supposé avoir rendu autant.`
+        ? `Seuls ${Math.round(couverture * 100)} % de la poche de début sont mesurés — ${motifs.join(", ")}. Le reste est supposé avoir rendu autant.`
         : null,
   };
 }
@@ -516,20 +577,25 @@ export async function rendementsDeClasse(params: {
   };
 
   const fichesRef = await loadCustomSecurities();
-  const [posDebut, posFin, revenus] = await Promise.all([
+  const fiches = new Map(fichesRef.map((c) => [c.id, c]));
+  const [posDebut, posFin, esv] = await Promise.all([
     positions(snapshotDebut),
     positions(snapshotFin),
-    fenetreDouteuse
-      ? Promise.resolve(new Map<string, number>())
-      : revenusParTitre(fundId, debut, fin, modesAmortissement(fichesRef)),
+    revenusParTitre(fundId, debut, fin, modesAmortissement(fichesRef)),
   ]);
+  // Fenêtre invraisemblable : le prix des titres reste comparable, les revenus
+  // non — on les ramasserait sur des siècles.
+  const revenus = fenetreDouteuse ? new Map<string, number>() : esv.revenus;
 
   // ── Actions, obligations, autres : le cours des titres détenus ────────────
   for (const section of ["action", "obligation", "autre"]) {
-    const avant = parTitre(posDebut, section);
-    const apres = parTitre(posFin, section);
+    const avant = parTitre(posDebut, section, fiches);
+    const apres = parTitre(posFin, section, fiches);
     if (avant.size === 0 && apres.size === 0) continue;
-    const r = rendementTitres(avant, apres, revenus);
+    // L'EXIGENCE D'ECHEANCIER NE VAUT QUE POUR LES OBLIGATIONS : une action n'a
+    // pas d'échéancier, son cours suffit, et un titre sans avis de dividende
+    // reste parfaitement mesurable.
+    const r = rendementTitres(avant, apres, revenus, section === "obligation" ? esv.connus : null);
     out[section] = fenetreDouteuse
       ? {
           ...r,
@@ -548,7 +614,6 @@ export async function rendementsDeClasse(params: {
   if (opcvm.length > 0 && !fenetreDouteuse) out.opcvm = rendementOpcvm(opcvm, debut, fin);
 
   // ── DAT ───────────────────────────────────────────────────────────────────
-  const fiches = new Map(fichesRef.map((c) => [c.id, c]));
   const depots = [
     ...posDebut.filter((p) => p.section === "dat").map((position) => ({ position, auDebut: true })),
     ...posFin.filter((p) => p.section === "dat").map((position) => ({ position, auDebut: false })),
