@@ -10,15 +10,16 @@ import "server-only";
 // la performance : un fonds dont la poche obligataire passe de 48 à 89
 // milliards affichait + 85 %.
 //
-//   ACTIONS, OBLIGATIONS ..... LE COURS DES TITRES DETENUS, ligne à ligne,
-//                              pondéré par la valorisation de début. Un titre
-//                              dont la quantité n'a pas bougé, ou a bougé, le
-//                              dit également : on compare son PRIX UNITAIRE
-//                              aux deux bouts, et le prix unitaire ne sait rien
-//                              des apports. S'y ajoutent les COUPONS ET
-//                              DIVIDENDES détachés dans la période — un coupon
-//                              sort de la poche, et sans le compter la poche
-//                              semblait perdre son propre revenu.
+//   ACTIONS, OBLIGATIONS ..... DIETZ MODIFIEE SUR LA POCHE, mouvements
+//                              reconstruits. Achats et ventes sont neutralisés
+//                              au prorata du temps : pris au carnet d'ordres
+//                              quand il les porte, déduits de l'écart de
+//                              quantité entre les deux inventaires sinon, et
+//                              datés au milieu de la période. Coupons courus,
+//                              décote et surcote y figurent d'eux-mêmes ; les
+//                              amortissements de capital sont des flux de
+//                              sortie, donc ne rapportent rien. Le détail est
+//                              dans `rendement-titres`.
 //
 //   OPCVM .................... La VL des fonds détenus. Un OPCVM publie sa
 //                              performance ; la recalculer depuis nos
@@ -34,23 +35,25 @@ import "server-only";
 //                              qui y tombent, les ventes qui s'y dénouent. La
 //                              poche est un passage, pas un placement.
 //
-// POURQUOI PAS LA DIETZ MODIFIEE, qui neutralise les apports ? Parce qu'elle
-// exige de LES CONNAITRE TOUS. Le carnet d'ordres du module ne commence qu'en
-// septembre 2026 : les quarante milliards entrés dans la poche obligataire
-// depuis janvier n'y figurent pas, et Dietz les aurait comptés en performance
-// comme le faisait le rapport des valorisations. Le prix d'un titre, lui, ne
-// dépend d'aucune saisie.
+// LE CARNET D'ORDRES NE SUFFIT PAS, ET C'EST POURQUOI ON RECONSTRUIT. Il ne
+// commence qu'en septembre 2026 : les quarante milliards entrés dans la poche
+// obligataire depuis janvier n'y figurent pas. Mais les QUANTITES des deux
+// inventaires, elles, les portent — un titre dont la quantité a doublé a été
+// acheté, qu'un ordre ait été saisi ou non. On en déduit le mouvement, daté au
+// milieu de la période faute de mieux, et le carnet l'emporte partout où il
+// parle.
 //
 // ON N'UTILISE PLUS LA BALANCE COMPTABLE. Un seul fonds sur six en avait une :
 // cinq écrans affichaient donc un calcul que le sixième n'affichait pas, sur
 // une fenêtre différente par-dessus le marché. Une méthode unique appliquée
 // partout vaut mieux qu'une méthode exacte appliquée nulle part.
 //
-// CE QUE LA METHODE SUPPOSE, ET QU'ELLE DIT : les titres SORTIS en cours de
-// période ont rendu autant que ceux restés. C'est l'hypothèse de toute moyenne
-// pondérée, et elle devient lourde quand la moitié de la poche a tourné. La
-// part réellement mesurée — la COUVERTURE — est donc rendue avec le chiffre,
-// et l'écran la signale dès qu'elle descend.
+// CE QUE LA METHODE SUPPOSE, ET QU'ELLE DIT. Un mouvement non tracé est réputé
+// avoir eu lieu AU MILIEU DE LA PERIODE ; une cession s'être faite à la valeur
+// d'inventaire de début, faute de prix de cession ; une acquisition à son prix
+// de revient. Les titres dont le module ne sait dérouler aucun flux sont
+// ECARTES plutôt que comptés en perte, et la part réellement mesurée — la
+// COUVERTURE — est rendue avec le chiffre.
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { loadListedBonds } from "@/lib/dataLoader";
@@ -59,12 +62,20 @@ import { findObsOnOrBefore } from "@/lib/fcpMath";
 import { construireCalendrierEsv } from "./esv-data";
 import { loadCustomSecurities } from "./portfolio-data";
 import type { CustomSecurity } from "./portfolio-types";
+import {
+  dietzModifie,
+  jours,
+  milieuDe,
+  mouvementsDuCarnet,
+  type Flux,
+  type MouvementOrdre,
+} from "./rendement-titres";
 import { construirePointTresorerie } from "./tresorerie-data";
 
 /** Comment la ligne a été calculée. L'écran l'affiche : un tableau qui mélange
  *  les méthodes sans le dire laisse croire que ses lignes se comparent. */
 export type MethodeRendement =
-  | "titres-detenus" // cours des titres + revenus détachés
+  | "titres-detenus" // Dietz modifiée, mouvements reconstruits
   | "vl-detenus" // performance propre des OPCVM détenus
   | "taux-contractuel" // taux du dépôt au prorata des jours
   | "nulle" // par construction : la liquidité ne produit rien
@@ -72,7 +83,7 @@ export type MethodeRendement =
 
 export const LIBELLE_METHODE: Record<MethodeRendement, string> = {
   "titres-detenus":
-    "Variation du prix unitaire de chaque titre détenu, coupons et dividendes détachés compris, pondérée par la valorisation de début de période. Indépendante des achats et des ventes.",
+    "Dietz modifiée sur la poche entière : achats et ventes neutralisés au prorata du temps, pris au carnet d'ordres quand il les porte, déduits des quantités au milieu de la période sinon. Comprend les coupons courus, la décote et la surcote constatées à l'entrée ; les amortissements de capital sont des flux de sortie, donc ne rapportent rien.",
   "vl-detenus":
     "Performance propre de chaque OPCVM détenu, lue sur sa VL publiée, pondérée par la valorisation des lignes.",
   "taux-contractuel":
@@ -99,9 +110,6 @@ const SANS: RendementClasse = {
   couverture: 0,
   reserve: null,
 };
-
-const jours = (a: string, b: string): number =>
-  (new Date(`${b}T00:00:00Z`).getTime() - new Date(`${a}T00:00:00Z`).getTime()) / 86_400_000;
 
 /** Au-delà, la date d'inventaire est une coquille, pas une période. Un fonds
  *  a un inventaire de début dans l'année ; « 0205-12-31 » n'en est pas un. */
@@ -147,6 +155,10 @@ type Position = {
   raw_code: string | null;
   quantity: number | null;
   valuation: number | null;
+  /** Prix de revient unitaire. C'est lui qui porte la DECOTE ou la SURCOTE :
+   *  un titre entré sous le pair est payé moins que son nominal, et l'écart se
+   *  constate quand la valorisation le rejoint. */
+  pru: number | null;
   match_id: string | null;
   match_kind: string | null;
   custom_security_id: string | null;
@@ -209,6 +221,8 @@ function aliasDe(p: Position, fiches: Map<string, CustomSecurity>): string[] {
 type LigneAgregee = {
   quantite: number;
   valorisation: number;
+  /** Prix de revient TOTAL de la ligne : pru × quantité, sommé sur les lots. */
+  revient: number;
   alias: string[];
   /** Pour nommer la ligne dans une réserve : « corrige la fiche de X » est une
    *  consigne, « une ligne est incohérente » n'en est pas une. */
@@ -226,9 +240,17 @@ function parTitre(
   for (const p of positions) {
     if (p.section !== section) continue;
     const k = cleTitre(p);
-    const e = m.get(k) ?? { quantite: 0, valorisation: 0, alias: [], libelle: p.raw_label ?? k };
-    e.quantite += Number(p.quantity) || 0;
+    const e = m.get(k) ?? {
+      quantite: 0,
+      valorisation: 0,
+      revient: 0,
+      alias: [],
+      libelle: p.raw_label ?? k,
+    };
+    const q = Number(p.quantity) || 0;
+    e.quantite += q;
     e.valorisation += Number(p.valuation) || 0;
+    e.revient += (Number(p.pru) || 0) * q;
     for (const a of aliasDe(p, fiches)) if (!e.alias.includes(a)) e.alias.push(a);
     m.set(k, e);
   }
@@ -273,28 +295,34 @@ function modesAmortissement(fiches: CustomSecurity[]): Map<string, string> {
 //
 // UN COUPON N'EST PAS UNE PERTE. La valorisation d'une obligation porte son
 // couru ; le jour du détachement, le couru retombe à zéro et l'argent part en
-// banque. Mesurée sur le seul prix, la poche obligataire perdait donc son
-// propre coupon — d'où les − 4 % à − 11 % qu'affichaient des portefeuilles
-// souverains dont aucun titre n'avait décroché.
+// banque. C'est une SORTIE DE CAPITAL de la poche, et la Dietz modifiée la
+// retranche du gain — donc la restitue. Sans cela, un portefeuille souverain
+// dont aucun titre n'avait décroché affichait − 4 % à − 11 %.
 //
 // LE MONTANT EST PRIS PAR TITRE, et c'est ce qui rend l'estimation solide : le
 // calendrier ESV reconstruit ses quantités sur l'inventaire d'aujourd'hui, mais
 // le coupon unitaire d'une obligation ne dépend d'aucune quantité.
+
+/** Un flux détaché, daté, exprimé PAR TITRE. */
+type RevenuTitre = { date: string; parTitre: number };
+
 async function revenusParTitre(
   fundId: string,
   debut: string,
   fin: string,
   modes: Map<string, string>,
-): Promise<{ revenus: Map<string, number>; connus: Set<string> }> {
+): Promise<{ revenus: Map<string, RevenuTitre[]>; connus: Set<string> }> {
   const calendrier = await construireCalendrierEsv(fundId);
-  const out = new Map<string, number>();
+  const out = new Map<string, RevenuTitre[]>();
   // LES TITRES DONT LE MODULE SAIT DEROULER LES FLUX, sur toute leur vie —
   // pas seulement dans la fenêtre. Un titre dont on ne connaît AUCUN flux ne
   // se mesure pas : son capital remboursé passerait pour une perte.
   const connus = new Set<string>();
-  const poser = (cle: string, montant: number) => {
+  const poser = (cle: string, r: RevenuTitre) => {
     if (!cle) return;
-    out.set(cle, (out.get(cle) ?? 0) + montant);
+    const l = out.get(cle) ?? [];
+    l.push(r);
+    out.set(cle, l);
   };
   for (const e of calendrier.evenements) {
     const m = Number(e.montantParTitre);
@@ -304,118 +332,177 @@ async function revenusParTitre(
     if (isin) connus.add(isin);
     if (code) connus.add(code);
     if (e.date < debut || e.date > fin) continue;
-    // UN REMBOURSEMENT DE CAPITAL SUR TITRE N'EST PAS UN REVENU : il se voit
-    // dans la quantité, pas dans le prix, et le compter ici en ferait un gain.
+    // UN AMORTISSEMENT SUR TITRE NE SE LIT PAS ICI : ce sont des titres qui
+    // sont tirés et remboursés au pair, et la QUANTITE le dit déjà. Le compter
+    // en plus le compterait deux fois.
     if (e.nature === "amortissement" || e.nature === "remboursement") {
       if ((modes.get(isin) ?? modes.get(code)) === "T") continue;
     }
-    // L'ISIN ET LE MNEMONIQUE, parce qu'une position peut n'en porter qu'un —
-    // mais jamais deux fois le même, sans quoi un coupon compterait double.
     if (m === 0) continue;
-    if (isin) poser(isin, m);
-    if (code && code !== isin) poser(code, m);
+    const r = { date: e.date, parTitre: m };
+    if (isin) poser(isin, r);
+    if (code && code !== isin) poser(code, r);
   }
   return { revenus: out, connus };
 }
 
-// ── Actions et obligations : le cours des titres détenus ────────────────────
+// ── Actions et obligations : la poche, mouvements reconstruits ─────────────
 //
-// Pour chaque titre présent aux DEUX inventaires, on compare son PRIX UNITAIRE
-// — valorisation ÷ quantité — et on y ajoute ce qu'il a détaché entre-temps.
-// Le prix unitaire est aveugle aux apports : qu'on ait doublé la ligne ou
-// qu'on l'ait allégée, il dit la même chose, et c'est exactement ce qu'on
-// cherche.
+// On applique la Dietz modifiée à la poche entière, avec des mouvements tirés
+// du carnet d'ordres quand il en porte la trace, et DEDUITS DE L'ECART DE
+// QUANTITE entre les deux inventaires sinon — datés au milieu de la période.
 //
-// La pondération est la VALORISATION DE DEBUT, c'est-à-dire le capital
-// réellement exposé au départ.
-function rendementTitres(
+// CE QUE CETTE FORME CONTIENT SANS QU'IL FAILLE L'AJOUTER :
+//
+//   LES COUPONS COURUS. La valorisation porte le couru, donc V₁ − V₀ contient
+//   l'intérêt couru de la période ; le coupon DETACHE, qui sort de la poche,
+//   revient au numérateur comme flux. La somme des deux est exactement le
+//   coupon couru — c'est une identité : couru₁ − couru₀ + coupons détachés =
+//   taux × VN × jours/365.
+//
+//   LA DECOTE ET LA SURCOTE. Un titre entré en cours de période entre au
+//   dénominateur pour son PRIX DE REVIENT et ressort au numérateur pour sa
+//   valeur d'inventaire : l'écart au nominal se constate de lui-même, dans un
+//   sens pour la décote, dans l'autre pour la surcote. Un titre détenu depuis
+//   le début n'en produit aucune, puisque sa décote a été constatée avant la
+//   période — exactement la règle du gérant.
+//
+//   LES AMORTISSEMENTS N'Y SONT PAS, et c'est voulu. Un remboursement de
+//   capital est un flux de SORTIE, pas un produit : il est retranché du gain,
+//   donc ne rapporte rien, et quitte le dénominateur au prorata du temps
+//   restant — ce capital-là ne travaille plus.
+//
+// ET LES LIGNES VENDUES NE SONT PLUS JETEES. C'était le défaut de la mesure
+// précédente : chez NSIA FONDS DIVERSIFIE, les trois quarts de la poche
+// obligataire ont tourné, on mesurait 23 % et on extrapolait le reste. Une
+// cession est désormais un flux, pas un trou.
+function rendementPoche(
   avant: Map<string, LigneAgregee>,
   apres: Map<string, LigneAgregee>,
-  revenus: Map<string, number>,
+  revenus: Map<string, RevenuTitre[]>,
   /** Titres dont le module sait dérouler les flux. `null` quand la question ne
    *  se pose pas — une action n'a pas d'échéancier, et son cours suffit. */
   connus: Set<string> | null,
+  ordres: Map<string, MouvementOrdre[]>,
+  debut: string,
+  fin: string,
 ): RendementClasse {
-  let base = 0;
+  const pivot = milieuDe(debut, fin);
+  const flux: Flux[] = [];
+  let v0 = 0;
+  let v1 = 0;
   let baseTotale = 0;
-  let gain = 0;
-  let lignesSorties = 0;
+  let brut = 0;
   const lignesMuettes: string[] = [];
   const lignesIncoherentes: string[] = [];
 
-  for (const [cle, d] of avant) {
-    baseTotale += d.valorisation;
+  for (const cle of new Set([...avant.keys(), ...apres.keys()])) {
+    const d = avant.get(cle);
     const f = apres.get(cle);
-    if (!f || !(d.quantite > 0) || !(f.quantite > 0) || !(d.valorisation > 0)) {
-      lignesSorties += 1;
-      continue;
-    }
-    const p0 = d.valorisation / d.quantite;
-    const p1 = f.valorisation / f.quantite;
-    if (!(p0 > 0)) continue;
+    const q0 = d?.quantite ?? 0;
+    const q1 = f?.quantite ?? 0;
+    const val0 = d?.valorisation ?? 0;
+    const val1 = f?.valorisation ?? 0;
+    const alias = (d?.alias ?? []).concat(f?.alias ?? []);
+    const libelle = d?.libelle ?? f?.libelle ?? cle;
+    baseTotale += val0;
+
+    const p0 = q0 > 0 ? val0 / q0 : 0;
+    const p1 = q1 > 0 ? val1 / q1 : 0;
+    const reference = p0 > 0 ? p0 : p1;
 
     // UN TITRE DONT ON NE CONNAIT AUCUN FLUX NE SE MESURE PAS. Son nominal
     // s'amortit sans qu'on sache de combien, et la baisse de son prix unitaire
     // se lirait comme une perte. Mieux vaut l'écarter et le DIRE que publier
-    // - 50 % sur un emprunt qui rembourse normalement.
-    if (connus && !d.alias.some((a) => connus.has(a))) {
-      lignesMuettes.push(cle);
+    // − 50 % sur un emprunt qui rembourse normalement.
+    if (connus && !alias.some((a) => connus.has(a))) {
+      lignesMuettes.push(libelle);
       continue;
     }
 
-    const revenu = d.alias.map((a) => revenus.get(a) ?? 0).find((v) => v !== 0) ?? 0;
+    const detaches = alias.map((a) => revenus.get(a)).find((v) => v && v.length > 0) ?? [];
+    const revenuTotal = detaches.reduce((s, r) => s + r.parTitre, 0);
 
     // UN REVENU PLUS GROS QUE LE TITRE LUI-MEME DENONCE LA FICHE, PAS LE
-    // MARCHE. Sur une période, un titre encore détenu à la fin ne peut avoir
-    // rendu plus que son propre prix : ses tranches d'amortissement sont des
-    // FRACTIONS du capital, et son coupon quelques points. Au-delà, le nominal
-    // du référentiel ne décrit pas la coupure que l'inventaire valorise.
-    //
-    // C'est arrivé, et spectaculairement : la fiche de BEFI-ALIOS FINANCE
-    // porte un nominal de 50 000 000 000 F — la taille de l'émission entière,
-    // saisie dans la case du titre, alors que l'emprunt lui-même n'est que de
-    // 14 000 000 000. L'échéancier rendait donc des tranches de plusieurs
-    // milliards par titre contre un prix de 25 millions, et la poche
-    // obligataire de FCP AURORE SECURITE II affichait + 5 075 %.
-    //
-    // On ECARTE la ligne, comme un titre sans échéancier : la mesurer avec ce
-    // nominal serait faux, et la mesurer sans lui compterait l'amortissement
-    // en perte. La réserve la NOMME, pour qu'on aille corriger la fiche.
-    if (revenu > p0) {
-      lignesIncoherentes.push(d.libelle);
+    // MARCHE. Un titre encore détenu n'a pas pu rendre plus que son propre
+    // prix : ses tranches d'amortissement sont des FRACTIONS du capital, son
+    // coupon quelques points. La fiche de BEFI-ALIOS FINANCE porte un nominal
+    // de 50 000 000 000 F — la taille de l'émission entière saisie dans la
+    // case du titre —, et la poche de FCP AURORE SECURITE II affichait
+    // + 5 075 %.
+    if (reference > 0 && revenuTotal > reference) {
+      lignesIncoherentes.push(libelle);
       continue;
     }
 
-    base += d.valorisation;
-    gain += d.valorisation * ((p1 + revenu - p0) / p0);
+    v0 += val0;
+    v1 += val1;
+
+    // ── CE QUE LE CARNET D'ORDRES SAIT ────────────────────────────────────
+    // Date et montant RÉELS, frais et courus compris. On ne compte que les
+    // exécutions DENOUEES : un ordre non servi n'a déplacé aucun capital.
+    const traces =
+      ordres.get(cle) ?? alias.map((a) => ordres.get(a)).find((v) => v && v.length > 0) ?? [];
+    let qteTracee = 0;
+    for (const m of traces) {
+      flux.push({ date: m.date, montant: m.montant });
+      brut += Math.abs(m.montant);
+      qteTracee += m.quantite;
+    }
+
+    // ── CE QU'IL NE SAIT PAS, DEDUIT DES QUANTITES ────────────────────────
+    // Au milieu de la période : à défaut de savoir, le milieu ne penche
+    // d'aucun côté. Une entrée est valorisée à son PRIX DE REVIENT — c'est
+    // par là que la décote et la surcote entrent dans le calcul. Une sortie,
+    // faute de prix de cession, à sa valeur d'inventaire de début.
+    const delta = q1 - q0 - qteTracee;
+    if (Math.abs(delta) > 1e-9) {
+      const revientFin = f && f.quantite > 0 && f.revient > 0 ? f.revient / f.quantite : 0;
+      const prix = delta > 0 ? revientFin || p1 || p0 : p0 || p1;
+      if (prix > 0) {
+        flux.push({ date: pivot, montant: delta * prix });
+        brut += Math.abs(delta * prix);
+      }
+    }
+
+    // ── LES REVENUS DETACHES SORTENT DE LA POCHE ──────────────────────────
+    const porte = q0 > 0 && q1 > 0 ? Math.min(q0, q1) : q0 || q1;
+    if (porte > 0) {
+      for (const r of detaches) {
+        flux.push({ date: r.date, montant: -r.parTitre * porte });
+        brut += Math.abs(r.parTitre * porte);
+      }
+    }
   }
 
-  if (!(base > 0)) return SANS;
-  const couverture = baseTotale > 0 ? base / baseTotale : 0;
+  const performance = dietzModifie(v0, v1, flux, debut, fin);
+  if (performance == null) return SANS;
+
+  const couverture = baseTotale > 0 ? v0 / baseTotale : 1;
   const motifs: string[] = [];
-  if (lignesSorties > 0) motifs.push(`${lignesSorties} ligne(s) vendue(s) ou échue(s)`);
   if (lignesMuettes.length > 0)
-    motifs.push(`${lignesMuettes.length} ligne(s) sans échéancier au référentiel`);
+    motifs.push(
+      `${lignesMuettes.length} ligne(s) sans échéancier au référentiel : ${lignesMuettes.slice(0, 3).join(", ")}`,
+    );
   if (lignesIncoherentes.length > 0)
     motifs.push(
-      `fiche à corriger — le nominal ne correspond pas à la coupure valorisée : ${lignesIncoherentes.slice(0, 3).join(", ")}`,
+      `fiche à corriger, le nominal ne correspond pas à la coupure valorisée : ${lignesIncoherentes.slice(0, 3).join(", ")}`,
+    );
+  // DES MOUVEMENTS PLUS GROS QUE LA POCHE : la Dietz modifiée suppose les
+  // apports petits devant le capital, ou bien répartis. Au-delà, le chiffre
+  // reste le meilleur disponible mais cesse d'être une performance au sens
+  // strict, et l'écran doit pouvoir le dire.
+  const tension = v0 > 0 ? brut / v0 : 0;
+  if (tension > 1.5)
+    motifs.push(
+      `les mouvements de la période pèsent ${Math.round(tension * 100)} % du capital de début`,
     );
 
-  // UNE FICHE FAUSSE SE DIT MEME QUAND LA COUVERTURE RESTE BONNE : elle se
-  // corrige en deux minutes au référentiel, et personne n'ira la chercher si
-  // l'écran n'en parle pas.
-  const reserve =
-    couverture < 0.75
-      ? `Seuls ${Math.round(couverture * 100)} % de la poche de début sont mesurés — ${motifs.join(" ; ")}. Le reste est supposé avoir rendu autant.`
-      : lignesIncoherentes.length > 0
-        ? `Écarté du calcul, fiche à corriger au référentiel : ${lignesIncoherentes.slice(0, 3).join(", ")}.`
-        : null;
-
   return {
-    performance: (gain / base) * 100,
+    performance,
     methode: "titres-detenus",
     couverture,
-    reserve,
+    reserve: motifs.length > 0 ? `${motifs.join(" ; ")}.` : null,
   };
 }
 
@@ -609,7 +696,7 @@ export async function rendementsDeClasse(params: {
 
   const supabase = await createSupabaseServerClient();
   const CHAMPS =
-    "raw_label, raw_code, quantity, valuation, match_id, match_kind, custom_security_id, section";
+    "raw_label, raw_code, quantity, valuation, pru, match_id, match_kind, custom_security_id, section";
   const positions = async (snapshotId: string): Promise<Position[]> => {
     const { data } = await supabase
       .from("fund_portfolio_positions")
@@ -620,16 +707,20 @@ export async function rendementsDeClasse(params: {
 
   const fichesRef = await loadCustomSecurities();
   const fiches = new Map(fichesRef.map((c) => [c.id, c]));
-  const [posDebut, posFin, esv] = await Promise.all([
+  const [posDebut, posFin, esv, ordres] = await Promise.all([
     positions(snapshotDebut),
     positions(snapshotFin),
     revenusParTitre(fundId, debut, fin, modesAmortissement(fichesRef)),
+    // LE CARNET D'ORDRES PASSE AVANT LA CONVENTION : quand il porte la trace
+    // d'une exécution, on en prend la date et le montant réels. La déduction
+    // par les quantités ne sert qu'à ce qu'il ignore.
+    mouvementsDuCarnet(fundId, debut, fin, ["actions", "obligations", "mtp"], normId),
   ]);
   // Fenêtre invraisemblable : le prix des titres reste comparable, les revenus
   // non — on les ramasserait sur des siècles.
-  const revenus = fenetreDouteuse ? new Map<string, number>() : esv.revenus;
+  const revenus = fenetreDouteuse ? new Map<string, RevenuTitre[]>() : esv.revenus;
 
-  // ── Actions, obligations, autres : le cours des titres détenus ────────────
+  // ── Actions, obligations, autres : la poche, mouvements reconstruits ──────
   for (const section of ["action", "obligation", "autre"]) {
     const avant = parTitre(posDebut, section, fiches);
     const apres = parTitre(posFin, section, fiches);
@@ -637,7 +728,15 @@ export async function rendementsDeClasse(params: {
     // L'EXIGENCE D'ECHEANCIER NE VAUT QUE POUR LES OBLIGATIONS : une action n'a
     // pas d'échéancier, son cours suffit, et un titre sans avis de dividende
     // reste parfaitement mesurable.
-    const r = rendementTitres(avant, apres, revenus, section === "obligation" ? esv.connus : null);
+    const r = rendementPoche(
+      avant,
+      apres,
+      revenus,
+      section === "obligation" ? esv.connus : null,
+      ordres,
+      debut,
+      fin,
+    );
     out[section] = fenetreDouteuse
       ? {
           ...r,

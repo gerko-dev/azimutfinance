@@ -1014,9 +1014,11 @@ export default function PerformancePanel({
             </tbody>
           </table>
           <p className="px-3 py-2 text-[10px] text-slate-600">
-            Performance : actions et obligations → variation du prix unitaire des titres détenus,
-            coupons et dividendes compris, pondérée par la valorisation de début ; OPCVM → VL des
-            fonds détenus ; DAT → taux contractuel au prorata des jours ; Liquidité → 0, un compte
+            Performance : actions et obligations → Dietz modifiée sur la poche, achats et ventes
+            neutralisés au prorata du temps (carnet d&apos;ordres quand il les porte, écart de
+            quantité daté au milieu de la période sinon) ; coupons courus, décote et surcote
+            compris, amortissements de capital traités en flux de sortie. OPCVM → VL des fonds
+            détenus ; DAT → taux contractuel au prorata des jours ; Liquidité → 0, un compte
             courant ne produisant rien. Poids = inventaire de fin, sauf la liquidité qui prend le
             SOLDE THEORIQUE du point de trésorerie — le seul chiffre qui tienne compte des
             engagements déjà pris. Benchmark : Actions/OPCVM → BRVM Composite ; Obligations →
