@@ -59,6 +59,10 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { loadListedBonds } from "@/lib/dataLoader";
 import { loadFunds } from "@/lib/fcp";
 import { findObsOnOrBefore } from "@/lib/fcpMath";
+import {
+  fluxDuReferentiel,
+  titresAEcheancier,
+} from "./echeancier-referentiel";
 import { construireCalendrierEsv } from "./esv-data";
 import { loadCustomSecurities } from "./portfolio-data";
 import type { CustomSecurity } from "./portfolio-types";
@@ -303,8 +307,9 @@ function modesAmortissement(fiches: CustomSecurity[]): Map<string, string> {
 // calendrier ESV reconstruit ses quantités sur l'inventaire d'aujourd'hui, mais
 // le coupon unitaire d'une obligation ne dépend d'aucune quantité.
 
-/** Un flux détaché, daté, exprimé PAR TITRE. */
-type RevenuTitre = { date: string; parTitre: number };
+/** Un flux détaché, daté, exprimé PAR TITRE — même forme que le gisement, pour
+ *  que les deux sources se remplacent sans conversion. */
+type RevenuTitre = { date: string; parTitre: number; capital?: boolean };
 
 async function revenusParTitre(
   fundId: string,
@@ -339,10 +344,23 @@ async function revenusParTitre(
       if ((modes.get(isin) ?? modes.get(code)) === "T") continue;
     }
     if (m === 0) continue;
-    const r = { date: e.date, parTitre: m };
+    const r: RevenuTitre = {
+      date: e.date,
+      parTitre: m,
+      capital: e.nature === "amortissement" || e.nature === "remboursement",
+    };
     if (isin) poser(isin, r);
     if (code && code !== isin) poser(code, r);
   }
+  // LE GISEMENT COMPLETE LE CALENDRIER DU FONDS. Le calendrier ne connaît que
+  // les titres ENCORE DETENUS — c'est la bonne règle pour la trésorerie, on
+  // n'attend pas le coupon d'une obligation vendue. Pour une performance,
+  // c'est l'inverse : une ligne cédée en cours de période a existé et doit se
+  // mesurer. OAT CI0000008041, CI0000008561, SN0000003732 — vingt-cinq
+  // milliards vendus chez NSIA FONDS DIVERSIFIE — étaient déclarées « sans
+  // échéancier » alors qu'elles sont au gisement UMOA-Titres.
+  for (const c of titresAEcheancier()) connus.add(c);
+
   return { revenus: out, connus };
 }
 
@@ -386,6 +404,9 @@ function rendementPoche(
   ordres: Map<string, MouvementOrdre[]>,
   debut: string,
   fin: string,
+  /** Vrai pour les obligations : on va alors chercher au gisement ce que le
+   *  calendrier du fonds ignore, faute de détenir encore le titre. */
+  avecGisement: boolean,
 ): RendementClasse {
   const pivot = milieuDe(debut, fin);
   const flux: Flux[] = [];
@@ -420,7 +441,12 @@ function rendementPoche(
       continue;
     }
 
-    const detaches = alias.map((a) => revenus.get(a)).find((v) => v && v.length > 0) ?? [];
+    // Le calendrier du fonds d'abord — il porte les titres du référentiel du
+    // gérant et les dividendes, que le gisement ignore. Le gisement ensuite,
+    // pour tout ce que le fonds ne détient plus.
+    const detaches =
+      alias.map((a) => revenus.get(a)).find((v) => v && v.length > 0) ??
+      (avecGisement ? fluxDuReferentiel(alias, debut, fin) : []);
     const revenuTotal = detaches.reduce((s, r) => s + r.parTitre, 0);
 
     // UN REVENU PLUS GROS QUE LE TITRE LUI-MEME DENONCE LA FICHE, PAS LE
@@ -736,6 +762,7 @@ export async function rendementsDeClasse(params: {
       ordres,
       debut,
       fin,
+      section === "obligation" && !fenetreDouteuse,
     );
     out[section] = fenetreDouteuse
       ? {
