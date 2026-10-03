@@ -29,6 +29,16 @@ import { computeAttributionAction, type AttributionRow } from "./attribution-act
 import { computeBenchmarkAction } from "./benchmark-actions";
 import { loadMyFunds } from "./data";
 import { loadNavHistory } from "./nav-data";
+import {
+  alleger,
+  base100,
+  indiceMaison,
+  pireRecul,
+  volatiliteAnnualisee,
+  type Point,
+} from "./vue-ensemble-risque";
+
+export type { Point } from "./vue-ensemble-risque";
 
 /** Décomposition de Brinson–Fachler d'un écart au benchmark. */
 export type Brinson = {
@@ -98,6 +108,24 @@ export type LigneFonds = {
   classes: AttributionRow[];
   /** Ce qui empêche de dire quelque chose de ce fonds, ou null. */
   souci: string | null;
+
+  // ── Ce qu'une performance seule ne dit pas ────────────────────────────
+  /** La courbe de VL, base 100 à l'origine du fonds. Allégée pour l'écran. */
+  serie: Point[];
+  /** Volatilité annualisée de la VL sur la fenêtre, en %. */
+  volatilite: number | null;
+  /** Pire recul sommet-creux sur la fenêtre, en % (négatif). */
+  recul: number | null;
+  /** Part du fonds dans l'encours de la maison, en %. */
+  part: number;
+  /**
+   * CE QUE CE FONDS APPORTE A LA PERFORMANCE DE LA MAISON, en points.
+   *
+   * part × performance. La somme des contributions est la performance
+   * pondérée — c'est ce qui permet de dire « les deux tiers de notre année
+   * viennent d'un seul fonds », ce qu'aucune colonne de pourcentages ne dit.
+   */
+  contribution: number | null;
 };
 
 export type VueEnsemble = {
@@ -106,6 +134,15 @@ export type VueEnsemble = {
   lignes: LigneFonds[];
   /** Somme des encours connus. */
   encoursTotal: number;
+  /** Encours de la maison à l'origine, pour dire de combien il a bougé. */
+  encoursOrigine: number;
+  /** L'indice de la maison, base 100, à composition variable. */
+  serieMaison: Point[];
+  /** Combien de fonds battent leur indice, sur combien de comparables. */
+  battent: number;
+  comparables: number;
+  /** Date de la VL la plus récente, tous fonds confondus. */
+  dernierArrete: string | null;
   /** Performances pondérées par l'encours — la performance de la MAISON. */
   perfPonderee: number | null;
   benchPondere: number | null;
@@ -207,6 +244,11 @@ export async function chargerVueEnsemble(): Promise<VueEnsemble> {
         attribution: null,
         classes: [],
         souci: null,
+        serie: [],
+        volatilite: null,
+        recul: null,
+        part: 0,
+        contribution: null,
       };
 
       const vls = await loadNavHistory(f.id);
@@ -243,6 +285,16 @@ export async function chargerVueEnsemble(): Promise<VueEnsemble> {
       if (vlOrigine != null && derniere.vl != null) {
         base.perfYtd = (derniere.vl / vlOrigine - 1) * 100;
       }
+
+      // LA TRAJECTOIRE, PAS SEULEMENT LE POINT D'ARRIVEE. Deux fonds à + 6 %
+      // ne se valent pas si l'un y est allé droit et l'autre en perdant douze
+      // points en chemin : le porteur sorti au creux n'a pas touché les + 6 %.
+      const fenetre: Point[] = vls
+        .filter((v) => v.date >= origineFonds && v.vl != null && v.vl > 0)
+        .map((v) => ({ date: v.date, valeur: v.vl as number }));
+      base.serie = alleger(base100(fenetre));
+      base.volatilite = volatiliteAnnualisee(fenetre);
+      base.recul = pireRecul(fenetre);
 
       // Le benchmark et l'attribution sont lus en parallèle : ils interrogent
       // des tables disjointes, et les enchaîner doublait l'attente sur un
@@ -316,10 +368,59 @@ export async function chargerVueEnsemble(): Promise<VueEnsemble> {
   const perfPonderee = poidsPerf > 0 ? perfPond / poidsPerf : null;
   const benchPondere = poidsBench > 0 ? benchPond / poidsBench : null;
 
+  // CE QUE CHAQUE FONDS APPORTE A L'ANNEE DE LA MAISON. La somme des
+  // contributions est la performance pondérée : c'est ce qui permet de dire
+  // « les deux tiers de notre année viennent d'un seul fonds », ce qu'aucune
+  // colonne de pourcentages ne dit.
+  for (const l of lignes) {
+    const e = l.encours ?? 0;
+    l.part = encoursTotal > 0 ? (e / encoursTotal) * 100 : 0;
+    l.contribution = l.perfYtd != null && encoursTotal > 0 ? (e / encoursTotal) * l.perfYtd : null;
+  }
+
+  // L'INDICE DE LA MAISON. `loadNavHistory` est mémoïsé par requête : ces
+  // lectures ne coûtent rien, elles ont déjà eu lieu plus haut.
+  const historiques = await Promise.all(fonds.map((f) => loadNavHistory(f.id)));
+  const serieMaison = alleger(
+    indiceMaison(
+      historiques.map((vls) => ({
+        serie: vls
+          .filter((v) => v.date >= origine && v.vl != null && v.vl > 0)
+          .map((v) => ({ date: v.date, valeur: v.vl as number })),
+        encours: vls
+          .filter((v) => v.actifNet != null && v.actifNet > 0)
+          .map((v) => ({ date: v.date, valeur: v.actifNet as number })),
+      })),
+    ),
+  );
+
+  // L'ENCOURS DE LA MAISON A L'ORIGINE, pour dire de combien il a bougé. Un
+  // fonds sans actif net au 31 décembre n'y entre pas : il n'existait pas, et
+  // le compter à zéro ferait passer sa création pour une collecte.
+  let encoursOrigine = 0;
+  for (const vls of historiques) {
+    let retenu = 0;
+    for (const v of vls) {
+      if (v.date > origine) break;
+      if (v.actifNet != null && v.actifNet > 0) retenu = v.actifNet;
+    }
+    encoursOrigine += retenu;
+  }
+
+  const comparables = lignes.filter((l) => l.alpha != null).length;
+  const battent = lignes.filter((l) => (l.alpha ?? 0) > 0).length;
+  const dernierArrete =
+    lignes.map((l) => l.dateVl).filter((d): d is string => !!d).sort().pop() ?? null;
+
   return {
     origine,
     lignes,
     encoursTotal,
+    encoursOrigine,
+    serieMaison,
+    battent,
+    comparables,
+    dernierArrete,
     perfPonderee,
     benchPondere,
     alphaPondere:
