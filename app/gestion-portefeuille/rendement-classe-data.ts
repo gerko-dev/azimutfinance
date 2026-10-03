@@ -507,12 +507,26 @@ function rendementPoche(
       qteTracee += m.quantite;
     }
 
+    // UNE LIGNE REMBOURSEE N'A PAS ETE VENDUE, et il ne faut surtout pas
+    // compter sa sortie deux fois.
+    //
+    // Un emprunt arrivé à échéance dans la fenêtre disparaît de l'inventaire
+    // de fin — sa quantité tombe à zéro — ET il a détaché son remboursement.
+    // Le capital sortait donc en double : une fois comme flux de
+    // remboursement, une fois comme cession déduite des quantités. SOROUBAT,
+    // échue le 5 février, affichait + 100 % sur ce seul mécanisme, et toute
+    // obligation échue dans la période faisait de même.
+    //
+    // Quand le remboursement est là, c'est LUI la sortie : il est daté du bon
+    // jour et porte le bon montant, nominal et coupon final compris.
+    const rembourse = q1 === 0 && q0 > 0 && detaches.some((r) => r.capital);
+
     // ── CE QU'IL NE SAIT PAS, DEDUIT DES QUANTITES ────────────────────────
     // Au milieu de la période : à défaut de savoir, le milieu ne penche
     // d'aucun côté. Une entrée est valorisée à son PRIX DE REVIENT — c'est
     // par là que la décote et la surcote entrent dans le calcul. Une sortie,
     // faute de prix de cession, à sa valeur d'inventaire de début.
-    const delta = q1 - q0 - qteTracee;
+    const delta = rembourse ? 0 : q1 - q0 - qteTracee;
     if (Math.abs(delta) > 1e-9) {
       const revientFin = f && f.quantite > 0 && f.revient > 0 ? f.revient / f.quantite : 0;
       const prix = delta > 0 ? revientFin || p1 || p0 : p0 || p1;
