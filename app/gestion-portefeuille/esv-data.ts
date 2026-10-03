@@ -313,7 +313,7 @@ const nb = (v: string | undefined): number => {
  * générateur officiel dessus. Les champs que le référentiel du gérant n'a pas
  * — notation, caractère vert, appel — ne servent pas au calcul des flux.
  */
-function ficheEnObligation(c: CustomSecurity): ListedBond | null {
+export function ficheEnObligation(c: CustomSecurity): ListedBond | null {
   const a = c.attributes ?? {};
   const taux = nb(a.couponRate) / 100;
   const nominal = nb(a.nominalValue);

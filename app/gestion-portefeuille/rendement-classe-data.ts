@@ -60,6 +60,8 @@ import { loadListedBonds } from "@/lib/dataLoader";
 import { loadFunds } from "@/lib/fcp";
 import { findObsOnOrBefore } from "@/lib/fcpMath";
 import {
+  ficheDeroulable,
+  fluxDeLaFiche,
   fluxDuReferentiel,
   titresAEcheancier,
 } from "./echeancier-referentiel";
@@ -225,6 +227,9 @@ function aliasDe(p: Position, fiches: Map<string, CustomSecurity>): string[] {
 type LigneAgregee = {
   quantite: number;
   valorisation: number;
+  /** La fiche du référentiel du gérant, quand la ligne y est rattachée. Elle
+   *  seule porte l'échéancier d'un emprunt non coté. */
+  fiche?: CustomSecurity;
   /** Prix de revient TOTAL de la ligne : pru × quantité, sommé sur les lots. */
   revient: number;
   alias: string[];
@@ -251,6 +256,10 @@ function parTitre(
       alias: [],
       libelle: p.raw_label ?? k,
     };
+    if (!e.fiche && p.custom_security_id) {
+      const c = fiches.get(p.custom_security_id);
+      if (c) e.fiche = c;
+    }
     const q = Number(p.quantity) || 0;
     e.quantite += q;
     e.valorisation += Number(p.valuation) || 0;
@@ -436,7 +445,8 @@ function rendementPoche(
     // s'amortit sans qu'on sache de combien, et la baisse de son prix unitaire
     // se lirait comme une perte. Mieux vaut l'écarter et le DIRE que publier
     // − 50 % sur un emprunt qui rembourse normalement.
-    if (connus && !alias.some((a) => connus.has(a))) {
+    const fiche = d?.fiche ?? f?.fiche;
+    if (connus && !alias.some((a) => connus.has(a)) && !ficheDeroulable(fiche)) {
       lignesMuettes.push(libelle);
       continue;
     }
@@ -444,19 +454,40 @@ function rendementPoche(
     // Le calendrier du fonds d'abord — il porte les titres du référentiel du
     // gérant et les dividendes, que le gisement ignore. Le gisement ensuite,
     // pour tout ce que le fonds ne détient plus.
-    const detaches =
-      alias.map((a) => revenus.get(a)).find((v) => v && v.length > 0) ??
-      (avecGisement ? fluxDuReferentiel(alias, debut, fin) : []);
+    const detaches = (() => {
+      const duFonds = alias.map((a) => revenus.get(a)).find((v) => v && v.length > 0);
+      if (duFonds && duFonds.length > 0) return duFonds;
+      if (!avecGisement) return [];
+      const duGisement = fluxDuReferentiel(alias, debut, fin);
+      if (duGisement.length > 0) return duGisement;
+      // DERNIER REPLI : LA FICHE. Un emprunt non coté vendu en cours de
+      // période n'est nulle part ailleurs — ni à la cote, ni au guichet UMOA,
+      // et le calendrier du fonds ne le déroule plus dès qu'il quitte
+      // l'inventaire. Sa fiche, elle, porte coupure, taux, échéance et profil.
+      return fiche ? fluxDeLaFiche(fiche, debut, fin) : [];
+    })();
     const revenuTotal = detaches.reduce((s, r) => s + r.parTitre, 0);
 
-    // UN REVENU PLUS GROS QUE LE TITRE LUI-MEME DENONCE LA FICHE, PAS LE
-    // MARCHE. Un titre encore détenu n'a pas pu rendre plus que son propre
-    // prix : ses tranches d'amortissement sont des FRACTIONS du capital, son
-    // coupon quelques points. La fiche de BEFI-ALIOS FINANCE porte un nominal
-    // de 50 000 000 000 F — la taille de l'émission entière saisie dans la
-    // case du titre —, et la poche de FCP AURORE SECURITE II affichait
-    // + 5 075 %.
-    if (reference > 0 && revenuTotal > reference) {
+    // UN REVENU HORS DE PROPORTION AVEC LE TITRE DENONCE LA FICHE, PAS LE
+    // MARCHE. La fiche de BEFI-ALIOS FINANCE porte un nominal de
+    // 50 000 000 000 F — la taille de l'émission entière saisie dans la case
+    // du titre —, et la poche de FCP AURORE SECURITE II affichait + 5 075 %.
+    //
+    // LE SEUIL N'EST PAS LE MEME SELON QU'ON DETIENT ENCORE LE TITRE :
+    //
+    //   ENCORE DETENU A LA FIN : il n'a pas pu rendre plus que son propre
+    //   prix. Ses tranches d'amortissement sont des FRACTIONS du capital, son
+    //   coupon quelques points.
+    //
+    //   PARTI AVANT LA FIN : il a pu être REMBOURSE, et un remboursement vaut
+    //   le pair plus un coupon — donc davantage qu'un prix acheté sous le
+    //   pair. GW0000000707, OAT bissau-guinéenne échue le 20 juin 2026, valait
+    //   10 332 F au 31 décembre dont 332 F de couru ; elle a rendu 10 625 F,
+    //   soit 10 000 F de nominal et 625 F de coupon. Un rapport de 1,03, que
+    //   le seuil précédent refusait à tort. On laisse passer jusqu'à une fois
+    //   et demie : au-delà, aucun remboursement ne l'explique.
+    const plafond = q0 > 0 && q1 > 0 ? 1 : 1.5;
+    if (reference > 0 && revenuTotal > reference * plafond) {
       lignesIncoherentes.push(libelle);
       continue;
     }

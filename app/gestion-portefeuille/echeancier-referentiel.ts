@@ -24,6 +24,9 @@ import "server-only";
 
 import { loadBonds, loadListedBondEvents, loadListedBonds } from "@/lib/dataLoader";
 import { getFutureCashFlows, parseDate } from "@/lib/bondMath";
+import { generateBondLifecycleEvents } from "@/lib/listedBondsTypes";
+import { ficheEnObligation } from "./esv-data";
+import type { CustomSecurity } from "./portfolio-types";
 
 /**
  * Un flux détaché, daté, exprimé PAR TITRE.
@@ -152,4 +155,43 @@ export function fluxDuReferentiel(
     );
   }
   return [];
+}
+
+/**
+ * L'échéancier d'un titre du REFERENTIEL DU GERANT, déroulé depuis sa fiche.
+ *
+ * UN NON COTE VENDU N'EST NULLE PART AILLEURS. Le gisement ne le connaît pas —
+ * il n'est ni à la cote ni au guichet UMOA — et le calendrier du fonds ne le
+ * déroule plus dès qu'il quitte l'inventaire. Sa fiche, elle, porte tout ce
+ * qu'il faut : coupure, taux, échéance, profil et date de premier
+ * amortissement. On la déroule donc avec le générateur du site, le même que
+ * pour la cote, plutôt que d'écrire un second échéancier qui finirait par en
+ * diverger.
+ *
+ * Rend une liste vide quand la fiche est trop incomplète pour dérouler quoi
+ * que ce soit — sans échéance ni coupure, il n'y a pas de flux à déduire.
+ */
+export function fluxDeLaFiche(
+  fiche: CustomSecurity,
+  debut: string,
+  fin: string,
+): RevenuTitre[] {
+  const bond = ficheEnObligation(fiche);
+  if (!bond) return [];
+  const surTitre = bond.amortizationMode === "T";
+  const out: RevenuTitre[] = [];
+  for (const e of generateBondLifecycleEvents(bond)) {
+    if (e.date < debut || e.date > fin) continue;
+    const m = Number(e.amount);
+    if (!Number.isFinite(m) || m === 0) continue;
+    const capital = e.eventType === "amortissement" || e.eventType === "remboursement";
+    if (capital && surTitre) continue;
+    out.push({ date: e.date, parTitre: m, capital });
+  }
+  return out;
+}
+
+/** Vrai quand la fiche porte de quoi dérouler un échéancier. */
+export function ficheDeroulable(fiche: CustomSecurity | undefined): boolean {
+  return !!fiche && ficheEnObligation(fiche) != null;
 }
