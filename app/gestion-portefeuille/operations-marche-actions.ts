@@ -13,6 +13,12 @@ import { revalidatePath } from "next/cache";
 import type { ActionResult } from "@/lib/admin/types";
 
 import { estNiveau1, MSG_NIVEAU1 } from "./guard";
+import {
+  caracteristiquesNonCote,
+  EMETTEUR_NON_COTES,
+  LIBELLE_NON_COTES,
+  titresNonCotes,
+} from "./operations-marche-non-cotes";
 import { autoriser, type ClientServeur } from "./operations-marche-garde";
 import { construirePointTresorerie } from "./tresorerie-data";
 import {
@@ -124,12 +130,26 @@ export async function listerTitresAction(
     return { ok: true, data: { etats: [], titres: adjudicationsOuvertes(aujourdhui) } };
   }
 
-  const etats = marche === "mtp" ? etatsMtp() : [];
+  // LE REFERENTIEL DU GERANT EST UN EMETTEUR COMME UN AUTRE. Les titres de
+  // gré à gré — FCTC, emprunts d'entreprise placés en privé — ne figurent à
+  // aucun calendrier public, et n'avaient donc aucune case où entrer. Ils
+  // prennent leur place au bout de la liste des États : après les huit, parce
+  // qu'un émetteur souverain reste le cas courant.
+  const etats =
+    marche === "mtp"
+      ? [...etatsMtp(), { code: EMETTEUR_NON_COTES, nom: LIBELLE_NON_COTES }]
+      : [];
 
   if (!cession) {
     if (marche === "mfr") return { ok: true, data: { etats: [], titres: titresMfr() } };
     const choisi = pays || etats[0]?.code || "";
-    return { ok: true, data: { etats, titres: choisi ? titresMtp(choisi) : [] } };
+    const titres =
+      choisi === EMETTEUR_NON_COTES
+        ? await titresNonCotes()
+        : choisi
+          ? titresMtp(choisi)
+          : [];
+    return { ok: true, data: { etats, titres } };
   }
 
   // POUR UNE VENTE, L'ÉTAT NE FILTRE PAS. Un fonds détient souvent des titres
@@ -137,7 +157,15 @@ export async function listerTitresAction(
   // qu'il veut vendre, c'est lui faire chercher ce que l'inventaire sait déjà.
   // On balaie donc tous les États et on ne garde que le cessible.
   const gisement =
-    marche === "mfr" ? titresMfr() : etats.flatMap((e) => titresMtp(e.code));
+    marche === "mfr"
+      ? titresMfr()
+      : [
+          ...etats.filter((e) => e.code !== EMETTEUR_NON_COTES).flatMap((e) => titresMtp(e.code)),
+          // LES NON COTÉS SE VENDENT AUSSI, et c'est même là qu'on les
+          // retrouve le plus souvent : un emprunt de gré à gré se garde
+          // jusqu'à l'échéance, ou se cède d'un bloc.
+          ...(await titresNonCotes()),
+        ];
 
   const titres = await titresCessibles(
     cession.fundId,
@@ -162,7 +190,15 @@ export async function caracteristiquesTitreAction(
   dateOperation: string,
 ): Promise<ActionResult<CaracteristiquesTitre>> {
   if (!(await estNiveau1())) return { ok: false, error: MSG_NIVEAU1 };
-  const c = caracteristiques(marche, cle, pays, dateOperation);
+  // UN TITRE DE GRÉ À GRÉ N'EST DANS AUCUN RÉFÉRENTIEL PUBLIC : ses
+  // caractéristiques viennent de la fiche du gérant, et le couru s'y calcule
+  // sur SA valeur nominale — un emprunt privé se place en grosses coupures,
+  // et la convention de 10 000 F de la cote y rendrait des courus mille fois
+  // trop petits.
+  const c =
+    marche === "mtp" && pays === EMETTEUR_NON_COTES
+      ? await caracteristiquesNonCote(cle, dateOperation)
+      : caracteristiques(marche, cle, pays, dateOperation);
   if (!c) return { ok: false, error: "Titre introuvable dans le référentiel." };
   return { ok: true, data: c };
 }

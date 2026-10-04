@@ -1281,9 +1281,13 @@ export default function OperationsMarchePanel({
             </Champ>
           )}
 
-          {/* MTP : l'État d'abord, puis ses titres. */}
+          {/* MTP : L'EMETTEUR D'ABORD, PUIS SES TITRES.
+              « État » ne suffit plus comme intitulé : le référentiel du gérant
+              y figure désormais au même rang, sous « Autres instruments non
+              cotés », pour tout ce qui se négocie de gré à gré et n'est ni OAT
+              ni BAT. */}
           {marche === "mtp" && (
-            <Champ label="État émetteur">
+            <Champ label="Émetteur">
               <select
                 value={pays}
                 onChange={(e) => changerPays(e.target.value)}
