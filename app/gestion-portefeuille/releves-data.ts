@@ -18,7 +18,6 @@ import {
   fondsDuNomDeFichier,
   rattacherEtablissement,
   rattacherFonds,
-  titulaireGenerique,
   type Candidat,
 } from "./releves-rapprochement";
 import type { GrilleSoldes } from "./tresorerie-grille";
@@ -123,11 +122,24 @@ export function rattacherLectures(
       probleme: null,
     };
 
-    // LE TITULAIRE D'ABORD, LE NOM DU FICHIER ENSUITE, et seulement si le
-    // titulaire ne nomme QUE la société de gestion — cf. `titulaireGenerique`.
+    // LE TITULAIRE D'ABORD, LE NOM DU FICHIER ENSUITE — dès que le titulaire
+    // n'a désigné aucun fonds, qu'il nomme la société de gestion ou tout
+    // autre chose.
+    //
+    // IL NOMME SOUVENT TOUT AUTRE CHOSE. Coris Bank intitule les comptes du
+    // FCP TAWFIR HALAL « WADIA STE ANONYME- S.A / F.I » — le terme de la
+    // finance islamique, pas le portefeuille. Aucun rapprochement de noms ne
+    // mènera jamais de l'un à l'autre, et seul le fichier le dit : il
+    // s'appelle « TH CORISBANK BN (79) ».
+    //
+    // LE GARDE-FOU N'EST PAS ICI, IL EST DANS `fondsDuNomDeFichier` : un
+    // fichier « ECO NSIA AM » n'y rend rien, parce que le mot qui précède
+    // l'abréviation est celui de la société de gestion. C'est ce qui empêche
+    // le solde du compte maison d'entrer dans la ligne d'Aurore Monétaris, et
+    // c'est une règle sur le FICHIER, pas sur le titulaire.
     let fondsTrouve = rattacherFonds(lu.intitule, fonds);
     let parFichier = false;
-    if (!fondsTrouve.trouve && titulaireGenerique(lu.intitule)) {
+    if (!fondsTrouve.trouve) {
       const suggere = fondsDuNomDeFichier(lu.fichier);
       if (suggere) {
         const second = rattacherFonds(suggere, fonds);

@@ -95,7 +95,15 @@ function signature(s: string): string[] {
       for (const p of pays.split(" ")) if (!out.includes(p)) out.push(p);
       continue;
     }
-    if (VIDES.has(m) || m.length < 2) continue;
+    // UNE LETTRE SEULE NE DISTINGUE RIEN — sauf quand c'est un CHIFFRE ROMAIN.
+    //
+    // « S.A » et « F.I » laissent traîner des initiales qu'aucun nom de fonds
+    // ne porte, et les garder ferait du bruit. Mais « FCP AURORE SECURITE V »
+    // perdait son V : sa signature devenait celle de « FCP AURORE SECURITE »,
+    // les deux fonds étaient indiscernables, et TOUT relevé d'Aurore Sécurité
+    // était écarté comme ambigu. II, III et IV survivaient par leur longueur ;
+    // V et X, non.
+    if (VIDES.has(m) || (m.length < 2 && m !== "v" && m !== "x")) continue;
     if (!out.includes(m)) out.push(m);
   }
   return out;
@@ -226,12 +234,29 @@ export function rattacherEtablissement(
 }
 
 /**
- * Le fonds que désigne un titulaire de compte — par EQUIVALENCE.
+ * Le fonds que désigne un titulaire de compte.
  *
- * Les deux noms doivent porter les mêmes mots distinctifs, aux tolérances de
- * `memeMot` près. C'est strict, et c'est voulu : par inclusion, « FCP AURORE
- * SECURITE » aurait désigné « FCP AURORE SECURITE II », et le solde d'un
- * portefeuille serait entré dans la ligne d'un autre.
+ * DEUX PASSES, ET L'ORDRE EST TOUT.
+ *
+ *   L'EQUIVALENCE D'ABORD. Les deux noms portent les mêmes mots distinctifs,
+ *   aux tolérances de `memeMot` près. Elle doit passer en premier, et elle
+ *   seule décide quand elle trouve : « FCP AURORE SECURITE » est un fonds à
+ *   part entière, et par inclusion il aurait aussi désigné « FCP AURORE
+ *   SECURITE II » — le solde d'un portefeuille serait entré dans la ligne d'un
+ *   autre.
+ *
+ *   L'INCLUSION ENSUITE, et seulement si l'équivalence n'a rien trouvé. Les
+ *   banques abrègent : AFG Bank Mali intitule un compte « FCP AURORE
+ *   OBLIGATIONS » et NSIA Banque Togo « FCP MONETARIS », quand les fonds
+ *   s'appellent « FCP AURORE OBLIGATIONS SOUVERAINES » et « FCP AURORE
+ *   MONETARIS ». Tous les mots du titulaire se retrouvent dans le nom du
+ *   fonds ; le fonds en ajoute.
+ *
+ * ON RETIENT CELUI QUI AJOUTE LE MOINS. « FCP AURORE OBLIGATIONS » est inclus
+ * dans « ... SOUVERAINES » comme dans « ... SOUVERAINES II » ; le premier
+ * n'ajoute qu'un mot, le second deux, et c'est le premier qu'on veut. A
+ * égalité, on refuse : « FCP AURORE » n'ajoute qu'un mot à MONETARIS, à
+ * OPPORTUNITES et à SECURITE, et rien ne permet de choisir.
  */
 export function rattacherFonds(titulaire: string, candidats: Candidat[]): Resultat {
   const cherche = signature(titulaire);
@@ -239,17 +264,29 @@ export function rattacherFonds(titulaire: string, candidats: Candidat[]): Result
     return { trouve: false, raison: `« ${titulaire} » ne porte aucun mot distinctif.` };
   }
 
-  const gagnants = candidats.filter((c) => {
-    const sienne = signature(c.libelle);
-    if (sienne.length !== cherche.length) return false;
-    return cherche.every((m) => sienne.some((s) => memeMot(m, s)));
-  });
+  const signatures = candidats.map((c) => ({ c, sienne: signature(c.libelle) }));
+  const porte = (sienne: string[]) => cherche.every((m) => sienne.some((s) => memeMot(m, s)));
 
-  return tranche(
-    titulaire,
-    gagnants,
-    `« ${titulaire} » ne correspond à aucun fonds géré.`,
-  );
+  const equivalents = signatures
+    .filter(({ sienne }) => sienne.length === cherche.length && porte(sienne))
+    .map(({ c }) => c);
+  if (equivalents.length > 0) {
+    return tranche(titulaire, equivalents, "");
+  }
+
+  const inclus = signatures
+    .filter(({ sienne }) => sienne.length > cherche.length && porte(sienne))
+    .map((x) => ({ ...x, ajoute: x.sienne.length - cherche.length }));
+  if (inclus.length > 0) {
+    const moindre = Math.min(...inclus.map((x) => x.ajoute));
+    return tranche(
+      titulaire,
+      inclus.filter((x) => x.ajoute === moindre).map((x) => x.c),
+      "",
+    );
+  }
+
+  return { trouve: false, raison: `« ${titulaire} » ne correspond à aucun fonds géré.` };
 }
 
 /**
@@ -280,20 +317,6 @@ export const ABREVIATIONS: Record<string, string> = {
  */
 const SOCIETE = new Set(["nsia", "asset", "management"]);
 
-/**
- * Le titulaire ne nomme-t-il QUE la société de gestion ?
- *
- * C'EST LA CONDITION DU RECOURS AU NOM DE FICHIER, et elle a été ajoutée après
- * coup : « NSIA ASSET MANAGEMENT CASH », chez Ecobank, est un vrai compte de
- * la maison, pas un fonds. Le fichier s'appelant « ECO NSIA AM », le recours
- * y lisait « AM » et posait le solde du compte maison dans la ligne d'Aurore
- * Monétaris. Un mot de trop dans le titulaire — « CASH », « DEPENSES » — et le
- * compte désigne autre chose : on ne devine plus rien.
- */
-export function titulaireGenerique(intitule: string): boolean {
-  const s = signature(intitule);
-  return s.length > 0 && s.every((m) => SOCIETE.has(m));
-}
 
 /**
  * Le fonds que suggère un nom de fichier, ou "" s'il n'en suggère aucun.
