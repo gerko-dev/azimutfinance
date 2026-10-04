@@ -88,6 +88,13 @@ __pycache__/
 /_tmp_*.mjs
 /_test_*
 
+# Donnees de fonds deposees pour import - JAMAIS versionnees : inventaires
+# ligne a ligne, valeurs liquidatives, releves bancaires. Le depot est public.
+/Inventaires/
+/inventaires/
+/VL/
+/vl/
+
 # Diagnostic temporaire (routes app/api/diagnostic) - ne pas versionner :
 # ces fichiers portent les inventaires et les valorisations des fonds.
 convergence-debug.json

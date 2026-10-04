@@ -1,3 +1,4 @@
+import ImportGroupe from "@/components/gestion-portefeuille/ImportGroupe";
 import ImportationPanel from "@/components/gestion-portefeuille/ImportationPanel";
 import SelecteurFonds from "@/components/gestion-portefeuille/SelecteurFonds";
 
@@ -66,6 +67,13 @@ export default async function ImportationPage({
           />
         )}
       </div>
+
+      {/* LE LOT D'ABORD, LE FONDS ENSUITE.
+          Un arrêté arrive en bloc — quinze inventaires, quinze états de VL, le
+          même jour — et c'est le geste le plus fréquent. Le chargement fonds
+          par fonds reste dessous : il sert à corriger une ligne, pas à monter
+          un arrêté. */}
+      {options.length > 0 && <ImportGroupe fonds={options} />}
 
       {choisi ? (
         <ImportationPanel

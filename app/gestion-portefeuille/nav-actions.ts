@@ -159,3 +159,56 @@ export async function importNavAction(
     data: { imported: points.length, minDate: points[0].date, maxDate: points[points.length - 1].date },
   };
 }
+
+/**
+ * Enregistre des points de VL DEJA LUS, pour l'import groupé.
+ *
+ * `importNavAction` prend un fichier ; ici le fichier a déjà été lu par la
+ * route de dépôt, et le relire pour l'écrire l'aurait fait traverser le réseau
+ * deux fois. Le reste est identique — même upsert par (fonds, date), donc un
+ * arrêté réimporté corrige au lieu de doubler.
+ *
+ * LE CONTENU VIENT DU CLIENT, et ce n'est pas un danger : chaque point est
+ * reconstruit champ par champ, le fonds est vérifié comme partout ailleurs, et
+ * rien d'autre que des nombres et des dates n'entre en base.
+ */
+export async function enregistrerPointsNavAction(
+  fundId: string,
+  points: {
+    date: string;
+    vl: number | null;
+    parts: number | null;
+    actifNet: number | null;
+    actifBrut: number | null;
+  }[],
+): Promise<ActionResult<{ enregistres: number }>> {
+  const ctx = await requireFund(fundId);
+  if (!ctx.ok) return { ok: false, error: ctx.error };
+
+  const nombre = (v: unknown): number | null =>
+    typeof v === "number" && Number.isFinite(v) ? v : null;
+
+  const lignes = points
+    .filter((p) => /^\d{4}-\d{2}-\d{2}$/.test((p?.date ?? "").trim()))
+    .map((p) => ({
+      owner_id: ctx.userId,
+      fund_id: fundId,
+      as_of_date: p.date.trim(),
+      vl: nombre(p.vl),
+      nombre_parts: nombre(p.parts),
+      actif_net: nombre(p.actifNet),
+      actif_brut: nombre(p.actifBrut),
+    }));
+  if (lignes.length === 0) return { ok: false, error: "Aucune ligne de VL exploitable." };
+
+  const LOT = 500;
+  for (let i = 0; i < lignes.length; i += LOT) {
+    const { error } = await ctx.supabase
+      .from("fund_nav_history")
+      .upsert(lignes.slice(i, i + LOT), { onConflict: "fund_id,as_of_date" });
+    if (error) return { ok: false, error: error.message };
+  }
+
+  revalidatePath(`/gestion-portefeuille/fonds/${fundId}`);
+  return { ok: true, data: { enregistres: lignes.length } };
+}

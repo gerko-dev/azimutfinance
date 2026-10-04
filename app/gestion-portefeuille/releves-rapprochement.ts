@@ -290,6 +290,47 @@ export function rattacherFonds(titulaire: string, candidats: Candidat[]): Result
 }
 
 /**
+ * Le fonds NOMME DANS UN TEXTE LIBRE — un nom de fichier, le plus souvent.
+ *
+ * « Inventaire du FCP AURORE SECURITE II au 3062026.xlsx » porte le nom du
+ * fonds au milieu d'un intitulé qui ne lui appartient pas. On ne peut pas
+ * rapprocher par équivalence : la signature du fichier porte « inventaire »,
+ * « au » et une date que le fonds n'a pas.
+ *
+ * ON CHERCHE DONC L'INVERSE : le fonds dont TOUS les mots se retrouvent dans
+ * le texte. Et l'on garde CELUI QUI EN PLACE LE PLUS — « AURORE SECURITE » et
+ * « AURORE SECURITE II » sont tous deux contenus dans le fichier de SECURITE
+ * II, et c'est le second qu'il faut. À égalité, on refuse.
+ *
+ * Cette forme ne suppose aucune convention de nommage : elle marche sur
+ * « Inventaire du X au … » comme sur « Etat valeur liquadative X », et sur ce
+ * que le gérant écrira demain.
+ */
+export function fondsDansLeTexte(texte: string, candidats: Candidat[]): Resultat {
+  const mots = signature(texte);
+  if (mots.length === 0) {
+    return { trouve: false, raison: `« ${texte} » ne porte aucun mot distinctif.` };
+  }
+
+  const places = candidats
+    .map((c) => ({ c, sienne: signature(c.libelle) }))
+    .filter(
+      ({ sienne }) =>
+        sienne.length > 0 && sienne.every((s) => mots.some((m) => memeMot(m, s))),
+    );
+  if (places.length === 0) {
+    return { trouve: false, raison: `« ${texte} » ne nomme aucun fonds géré.` };
+  }
+
+  const plus = Math.max(...places.map((x) => x.sienne.length));
+  return tranche(
+    texte,
+    places.filter((x) => x.sienne.length === plus).map((x) => x.c),
+    "",
+  );
+}
+
+/**
  * Les abréviations que le gérant met dans les noms de fichier.
  *
  * ELLES SONT UN RECOURS, PAS UNE REGLE. Six banques nomment le compte par son
