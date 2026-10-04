@@ -998,13 +998,10 @@ export default function OperationsMarchePanel({
       </nav>
 
       {onglet === "importation" && (
-        <ImportOperationsMarche
-          fonds={fonds}
-          fondsId={fondsId}
-          onChangerFonds={changerFonds}
-          sgi={sgi}
-          parametres={parametres}
-        />
+        /* L'IMPORT EST MULTIFONDS : il ne suit pas le sélecteur de l'écran.
+           Un rapport du dépositaire couvre une séance — achats d'un fonds,
+           ventes de deux autres — et chaque ligne va au carnet de SON fonds. */
+        <ImportOperationsMarche sgi={sgi} parametres={parametres} />
       )}
 
       {onglet === "depositaire" && (

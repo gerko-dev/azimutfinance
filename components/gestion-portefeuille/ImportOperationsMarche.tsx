@@ -61,17 +61,11 @@ function compatible(o: OrdreOuvert, l: LigneImport): boolean {
 }
 
 export default function ImportOperationsMarche({
-  fonds,
-  fondsId,
-  onChangerFonds,
   sgi,
   parametres,
 }: {
-  fonds: { id: string; nom: string }[];
-  /** Fonds dont on rapproche les ordres — partagé avec le formulaire de
-   *  saisie, pour qu'un seul choix vaille sur tout l'écran. */
-  fondsId: string;
-  onChangerFonds: (id: string) => void;
+  // PAS DE FONDS EN ENTREE. Le rapport porte les siens, et il en porte
+  // souvent trois : lui en imposer un obligeait à le repasser autant de fois.
   sgi: Partenaire[];
   parametres: ParametresMarche;
 }) {
@@ -79,9 +73,6 @@ export default function ImportOperationsMarche({
   const [enCours, demarrer] = useTransition();
 
   const [apercu, setApercu] = useState<ApercuImport | null>(null);
-  /** Fonds sur lequel l'aperçu a été calculé. En changer rend le
-   *  rapprochement caduc : les ordres ne sont plus les mêmes. */
-  const [fondsApercu, setFondsApercu] = useState("");
   const [nomFichier, setNomFichier] = useState("");
   const [erreur, setErreur] = useState<string | null>(null);
   const [bilan, setBilan] = useState<{
@@ -116,25 +107,17 @@ export default function ImportOperationsMarche({
     setTauxTps(String(p.tauxTps));
   };
 
-  const changerFonds = (id: string) => {
-    onChangerFonds(id);
-    // L'aperçu portait sur les ordres d'un autre portefeuille : le garder
-    // afficherait des rapprochements qui n'existent plus.
-    setApercu(null);
-    setBilan(null);
-  };
-
   const lire = (formData: FormData) => {
     setErreur(null);
     setBilan(null);
     const f = formData.get("fichier");
     setNomFichier(f instanceof File ? f.name : "");
-    const cible = fondsId;
     demarrer(async () => {
-      const res = await previsualiserImportOperationsAction(cible, formData);
+      // LE FICHIER DIT SES FONDS. Le rapport du dépositaire couvre une séance,
+      // pas un portefeuille : on ne lui en impose plus un.
+      const res = await previsualiserImportOperationsAction(formData);
       if (res.ok) {
         setApercu(res.data);
-        setFondsApercu(cible);
         setEcartees(new Set());
         setChoix({});
       } else {
@@ -199,6 +182,7 @@ export default function ImportOperationsMarche({
   /** Les affectations réellement envoyées. */
   const affectations = useMemo(() => {
     const out: {
+      fondsId: string;
       ordreId: string;
       date: string;
       quantite: number;
@@ -210,6 +194,7 @@ export default function ImportOperationsMarche({
       const e = etat.parLigne.get(k);
       if (!e || !e.ordreId || e.trop || l.deja || ecartees.has(k)) continue;
       out.push({
+        fondsId: l.fondsId,
         ordreId: e.ordreId,
         date: l.date,
         quantite: l.quantite,
@@ -237,7 +222,7 @@ export default function ImportOperationsMarche({
     setErreur(null);
     setBilan(null);
     demarrer(async () => {
-      const res = await rapprocherImportOperationsAction(fondsApercu, affectations, {
+      const res = await rapprocherImportOperationsAction(affectations, {
         sgi: sgiNom,
         tauxCourtage: n(tauxCourtage),
         tauxTps: n(tauxTps),
@@ -258,8 +243,6 @@ export default function ImportOperationsMarche({
     });
   };
 
-  const fondsChoisi = fonds.find((f) => f.id === fondsId);
-  const fondsFichier = apercu?.fondsFichier ?? "";
   const ordresParId = useMemo(
     () => new Map((apercu?.ordres ?? []).map((o) => [o.id, o])),
     [apercu],
@@ -291,24 +274,10 @@ export default function ImportOperationsMarche({
           </p>
         </div>
 
+        {/* PAS DE SELECTEUR DE FONDS : le fichier porte les siens, et un
+            rapport couvre souvent trois portefeuilles. En imposer un obligeait
+            à repasser le même fichier autant de fois qu'il y a de fonds. */}
         <form action={lire} className="flex flex-wrap items-end gap-3">
-          <label className="flex flex-col gap-1 min-w-[14rem]">
-            <span className={etiquette}>Fonds</span>
-            <select
-              className={champ}
-              value={fondsId}
-              onChange={(e) => changerFonds(e.target.value)}
-            >
-              {fonds.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.nom}
-                </option>
-              ))}
-            </select>
-            <span className="text-[9px] text-slate-400">
-              C&apos;est dans ses ordres ouverts que le rapprochement se cherche
-            </span>
-          </label>
           <label className="flex flex-col gap-1">
             <span className={etiquette}>Fichier Excel</span>
             <input
@@ -442,10 +411,22 @@ export default function ImportOperationsMarche({
               <Taux label="TPS" valeur={tauxTps} onChange={setTauxTps} />
               <Taux label="BRVM" valeur={tauxBrvm} onChange={setTauxBrvm} />
               <Taux label="DC/BR" valeur={tauxDcbr} onChange={setTauxDcbr} />
-              {fondsFichier && (
-                <p className="text-[10px] text-slate-400 self-end">
-                  Le fichier annonce «&nbsp;{fondsFichier}&nbsp;»
-                  {fondsChoisi ? ` — rapproché dans « ${fondsChoisi.nom} »` : ""}
+              {/* CE QUE LE FICHIER COUVRE, ET CE QU'ON EN A FAIT. Un
+                  intitulé qu'on n'a pas su rattacher se voit ici, avant de
+                  descendre chercher ses lignes dans le tableau. */}
+              {apercu.fondsDuFichier.length > 0 && (
+                <p className="text-[10px] text-slate-400 self-end max-w-md">
+                  Le fichier couvre{" "}
+                  {apercu.fondsDuFichier.map((f, i) => (
+                    <span key={f.intitule}>
+                      {i > 0 && " · "}
+                      <span className={f.fondsId ? "text-slate-500" : "text-amber-700"}>
+                        «&nbsp;{f.intitule}&nbsp;»
+                        {f.fondsId ? ` → ${f.fondsNom}` : " → aucun fonds géré"} (
+                        {f.lignes})
+                      </span>
+                    </span>
+                  ))}
                 </p>
               )}
             </div>
@@ -459,6 +440,11 @@ export default function ImportOperationsMarche({
                   <tr>
                     <th className="px-2 py-2 w-8"></th>
                     <th className="px-2 py-2 text-left font-medium">Date</th>
+                    {/* LE FONDS SITUE LA LIGNE, et il est indispensable depuis
+                        qu'un rapport en couvre plusieurs : deux ventes du même
+                        titre au même cours le même jour peuvent appartenir à
+                        deux portefeuilles. */}
+                    <th className="px-2 py-2 text-left font-medium">Fonds</th>
                     <th className="px-2 py-2 text-left font-medium">Titre</th>
                     <th className="px-2 py-2 text-left font-medium">Sens</th>
                     <th className="px-2 py-2 text-right font-medium">Quantité</th>
@@ -475,7 +461,14 @@ export default function ImportOperationsMarche({
                     const id = e?.ordreId ?? "";
                     const retenue = !l.deja && !!id && !e?.trop && !ecartees.has(k);
                     const ordre = ordresParId.get(id);
+                    // LA LISTE NE PROPOSE QUE LES ORDRES DU FONDS DE LA
+                    // LIGNE. Un rapport couvre plusieurs portefeuilles, et
+                    // offrir le carnet entier inviterait à poser l'exécution
+                    // d'un fonds sur l'ordre d'un autre — ce que le serveur
+                    // refuserait, mais trop tard pour être utile.
                     const candidats = apercu.ordres.filter(
+                      (o) => o.fondsId === l.fondsId,
+                    ).filter(
                       (o) => compatible(o, l) || o.id === id,
                     );
 
@@ -510,6 +503,15 @@ export default function ImportOperationsMarche({
                           />
                         </td>
                         <td className="px-2 py-1.5 tabular-nums text-slate-600">{l.date}</td>
+                        <td className="px-2 py-1.5">
+                          {l.fondsNom ? (
+                            <span className="text-slate-700">{l.fondsNom}</span>
+                          ) : (
+                            <span className="text-amber-700" title={l.fondsFichier}>
+                              {l.fondsFichier || "sans fonds"}
+                            </span>
+                          )}
+                        </td>
                         <td className="px-2 py-1.5">
                           <span className="font-medium text-slate-900">{l.symbole}</span>
                           <span className="text-slate-400"> · {l.libelle}</span>

@@ -15,12 +15,25 @@
 // Une exécution par GROUPE du rapport. Un ordre de 5 000 SONATEL servi à
 // treize prix reçoit treize exécutions sur le même ordre — c'est exactement ce
 // que le modèle prévoit, chaque exécution portant son prix propre.
+//
+// UN RAPPORT COUVRE PLUSIEURS FONDS, et l'import les suit tous. Le dépositaire
+// rend compte d'une séance, pas d'un portefeuille : celui du 29 septembre
+// porte des achats pour TAWFIR HALAL et des ventes pour le FONDS DIVERSIFIE et
+// NSIA ASSURANCES OPTIMUM. Demander au gérant de choisir un fonds l'obligeait
+// à passer trois fois le même fichier, et surtout : rien n'empêchait de poser
+// les ventes d'un fonds sur les ordres d'un autre, puisque le fonds du fichier
+// ne servait qu'à AVERTIR.
+//
+// Le fonds de chaque ligne vient donc du FICHIER, et chaque ligne est
+// confrontée aux ordres de SON fonds.
 
 import { revalidatePath } from "next/cache";
 
 import type { ActionResult } from "@/lib/admin/types";
 
-import { autoriser } from "./operations-marche-garde";
+import { autoriser, type ClientServeur } from "./operations-marche-garde";
+import { loadMyFunds } from "./data";
+import { fondsDansLeTexte, rattacherFonds } from "./releves-rapprochement";
 import { parseOperationsMarcheBuffer, type OrdreImporte } from "./operations-marche-parse";
 import { titresMfr } from "./operations-marche-titres";
 import { loadOperationsMarche } from "./operations-marche-data";
@@ -35,9 +48,12 @@ import {
   type Instrument,
 } from "./operations-marche-types";
 
-/** Un ordre du fonds encore en attente, tel que l'écran le propose au choix. */
+/** Un ordre encore en attente, tel que l'écran le propose au choix. */
 export type OrdreOuvert = {
   id: string;
+  /** Le fonds qui le porte : la liste déroulante d'une ligne ne doit proposer
+   *  que les ordres de SON fonds. */
+  fondsId: string;
   dateOperation: string;
   description: DescriptionOperation;
   sens: "achat" | "vente";
@@ -49,8 +65,13 @@ export type OrdreOuvert = {
   prix: number;
 };
 
-/** Une ligne du rapport, rapprochée d'un ordre du fonds. */
+/** Une ligne du rapport, rapprochée d'un ordre de SON fonds. */
 export type LigneImport = OrdreImporte & {
+  /** Le fonds que le rapport désigne, résolu au référentiel du gérant. Vide
+   *  quand le nom du fichier ne correspond à aucun fonds géré — la ligne est
+   *  alors montrée, et non rapprochée. */
+  fondsId: string;
+  fondsNom: string;
   /** Titre reconnu au référentiel BRVM. Null quand le mnémonique est inconnu. */
   code: string;
   libelle: string;
@@ -67,12 +88,13 @@ export type LigneImport = OrdreImporte & {
 
 export type ApercuImport = {
   lignes: LigneImport[];
-  /** Les ordres MFR encore ouverts du fonds, pour la liste déroulante. */
+  /** Les ordres MFR encore ouverts, TOUS FONDS CONFONDUS, chacun portant le
+   *  sien : l'écran filtre par ligne. */
   ordres: OrdreOuvert[];
   transactionsLues: number;
   avertissements: string[];
-  /** Nom du fonds tel que le fichier l'écrit — à rapprocher de celui choisi. */
-  fondsFichier: string;
+  /** Les fonds que le fichier nomme, et ce qu'on en a fait. */
+  fondsDuFichier: { intitule: string; fondsId: string; fondsNom: string; lignes: number }[];
 };
 
 /** Ce que le rapport apporte sur les CONDITIONS de l'opération, et que l'ordre
@@ -90,6 +112,10 @@ export type ReglagesImport = {
 };
 
 export type Affectation = {
+  /** Le fonds de l'ordre visé. Il est REVERIFIE au serveur : une affectation
+   *  vient du navigateur, et poser l'exécution d'un fonds sur l'ordre d'un
+   *  autre est précisément ce qu'il ne faut jamais pouvoir faire. */
+  fondsId: string;
   ordreId: string;
   date: string;
   quantite: number;
@@ -114,24 +140,36 @@ function memeTitre(
 }
 
 /**
- * Lit le fichier et le confronte aux ordres en attente du fonds.
+ * Lit le fichier et le confronte aux ordres en attente — DE CHAQUE FONDS.
  *
  * RIEN N'EST ÉCRIT ICI. Le gérant doit pouvoir voir ce que le fichier
  * contient, et surtout ce qu'il n'a PAS su rapprocher, avant d'engager quoi
  * que ce soit. Une ligne sans ordre en face est presque toujours un ordre
  * oublié à la saisie — c'est une information, pas une erreur d'import.
+ *
+ * LE FONDS VIENT DU FICHIER. Le dépositaire rend compte d'une séance : son
+ * rapport porte les achats d'un portefeuille et les ventes de deux autres. On
+ * résout donc chaque intitulé au référentiel du gérant, et l'on confronte
+ * chaque ligne aux ordres de SON fonds. Un intitulé qu'on ne sait pas rattacher
+ * laisse ses lignes visibles et non rapprochées — les taire reviendrait à dire
+ * que le rapport ne les portait pas.
  */
 export async function previsualiserImportOperationsAction(
-  fundId: string,
   formData: FormData,
 ): Promise<ActionResult<ApercuImport>> {
-  const acces = await autoriser(fundId);
-  if ("erreur" in acces) return { ok: false, error: acces.erreur };
-
   const fichier = formData.get("fichier");
   if (!(fichier instanceof File) || fichier.size === 0) {
     return { ok: false, error: "Choisis le rapport d'exécution à rapprocher." };
   }
+
+  const fonds = await loadMyFunds();
+  if (fonds.length === 0) {
+    return { ok: false, error: "Aucun fonds géré : il n'y a aucun carnet où poser ces exécutions." };
+  }
+  // La garde d'accès du module, posée une fois sur le premier fonds : elle ne
+  // dépend pas du portefeuille, et `loadMyFunds` ne rend déjà que les nôtres.
+  const acces = await autoriser(fonds[0].id);
+  if ("erreur" in acces) return { ok: false, error: acces.erreur };
 
   let resultat;
   try {
@@ -152,62 +190,111 @@ export async function previsualiserImportOperationsAction(
     if (s && !parSymbole.has(s)) parSymbole.set(s, t);
   }
 
-  // LES ORDRES QUI ATTENDENT ENCORE. Un ordre clôturé ne se sert plus, un
-  // ordre entièrement servi non plus. La PÉREMPTION, elle, n'écarte pas :
-  // le rapport est daté, et un ordre « jour » du 22 septembre est périmé
-  // aujourd'hui tout en ayant parfaitement été exécuté ce jour-là.
-  const toutes = await loadOperationsMarche(fundId);
-  const ouverts = toutes.filter(
-    (o) =>
-      marcheDe(o.description) === "mfr" && o.clotureLe === null && quantiteRestante(o) > 0,
-  );
+  // ── LES FONDS QUE LE FICHIER NOMME ──────────────────────────────────────
+  //
+  // DEUX SENS DE LECTURE, comme partout où l'on rapproche un nom : le
+  // dépositaire écrit tantôt plus que le nom du fonds, tantôt moins — « FCP
+  // Fonds Diversifie » pour « FCP NSIA FONDS DIVERSIFIE », « Tawfir Halal »
+  // pour « FCP TAWFIR HALAL ».
+  const candidats = fonds.map((f) => ({ cle: f.id, libelle: f.nom }));
+  const resolu = new Map<string, { fondsId: string; fondsNom: string }>();
+  for (const intitule of new Set(resultat.ordres.map((o) => o.fondsFichier))) {
+    const r = (() => {
+      const direct = rattacherFonds(intitule, candidats);
+      if (direct.trouve) return direct;
+      return fondsDansLeTexte(intitule, candidats);
+    })();
+    resolu.set(
+      intitule,
+      r.trouve
+        ? { fondsId: r.cle, fondsNom: fonds.find((f) => f.id === r.cle)?.nom ?? "" }
+        : { fondsId: "", fondsNom: "" },
+    );
+  }
 
-  const ordres: OrdreOuvert[] = ouverts
-    .map((o) => ({
-      id: o.id,
-      dateOperation: o.dateOperation,
-      description: o.description,
-      sens: sensDe(o.description),
-      code: o.code,
-      libelle: o.libelle,
-      quantite: o.quantite,
-      restante: quantiteRestante(o),
-      prix: o.prix,
-    }))
-    .sort((a, b) => a.dateOperation.localeCompare(b.dateOperation));
+  // ── LES CARNETS, UN PAR FONDS CONCERNE ──────────────────────────────────
+  //
+  // On ne charge QUE les fonds que le fichier nomme : lire les quinze carnets
+  // pour un rapport qui en concerne trois ferait payer douze lectures inutiles
+  // à chaque aperçu.
+  const concernes = [...new Set([...resolu.values()].map((r) => r.fondsId))].filter(Boolean);
+  const carnets = new Map<
+    string,
+    { ouverts: OrdreOuvert[]; reste: Map<string, number>; deja: Set<string> }
+  >();
+  for (const id of concernes) {
+    const toutes = await loadOperationsMarche(id);
+    // LES ORDRES QUI ATTENDENT ENCORE. Un ordre clôturé ne se sert plus, un
+    // ordre entièrement servi non plus. La PÉREMPTION, elle, n'écarte pas :
+    // le rapport est daté, et un ordre « jour » du 22 septembre est périmé
+    // aujourd'hui tout en ayant parfaitement été exécuté ce jour-là.
+    const ouverts: OrdreOuvert[] = toutes
+      .filter(
+        (o) =>
+          marcheDe(o.description) === "mfr" && o.clotureLe === null && quantiteRestante(o) > 0,
+      )
+      .map((o) => ({
+        id: o.id,
+        fondsId: id,
+        dateOperation: o.dateOperation,
+        description: o.description,
+        sens: sensDe(o.description),
+        code: o.code,
+        libelle: o.libelle,
+        quantite: o.quantite,
+        restante: quantiteRestante(o),
+        prix: o.prix,
+      }))
+      .sort((a, b) => a.dateOperation.localeCompare(b.dateOperation));
 
-  // Ce que chaque ordre peut encore absorber, décompté AU FIL du rapport :
-  // treize lignes SONATEL se servent sur le même ordre, et les traiter
-  // indépendamment l'épuiserait treize fois.
-  const reste = new Map(ordres.map((o) => [o.id, o.restante]));
-
-  // Les exécutions DÉJÀ enregistrées, pour reconnaître un fichier repassé.
-  const dejaEnregistrees = new Set<string>();
-  for (const o of toutes) {
-    for (const e of o.executions) {
-      dejaEnregistrees.add(`${o.id}|${e.dateExecution}|${e.quantite}|${e.prix || o.prix}`);
+    // Les exécutions DÉJÀ enregistrées, pour reconnaître un fichier repassé.
+    const deja = new Set<string>();
+    for (const o of toutes) {
+      for (const e of o.executions) {
+        deja.add(`${o.id}|${e.dateExecution}|${e.quantite}|${e.prix || o.prix}`);
+      }
     }
+    carnets.set(id, {
+      ouverts,
+      // Ce que chaque ordre peut encore absorber, décompté AU FIL du rapport :
+      // treize lignes SONATEL se servent sur le même ordre, et les traiter
+      // indépendamment l'épuiserait treize fois.
+      reste: new Map(ouverts.map((o) => [o.id, o.restante])),
+      deja,
+    });
   }
 
   const inconnus = new Set<string>();
   const lignes: LigneImport[] = resultat.ordres.map((g) => {
     const t = parSymbole.get(cle(g.symbole));
     if (!t) inconnus.add(g.symbole);
+    const attache = resolu.get(g.fondsFichier) ?? { fondsId: "", fondsNom: "" };
     const base = {
       ...g,
+      ...attache,
       code: t ? t.isin || t.cle : g.symbole,
       libelle: t ? t.libelle : g.symbole,
       instrument: t ? t.instrument : null,
     };
 
+    const carnet = attache.fondsId ? carnets.get(attache.fondsId) : undefined;
+    if (!carnet) {
+      return {
+        ...base,
+        ordreId: null,
+        deja: false,
+        raison: `« ${g.fondsFichier || "sans nom"} » ne correspond à aucun fonds géré`,
+      };
+    }
+
     // Les ordres du bon sens, sur le bon titre, passés AVANT l'exécution :
     // un ordre ne peut pas être servi la veille du jour où il est donné.
-    const candidats = ordres.filter(
+    const possibles = carnet.ouverts.filter(
       (o) => o.sens === g.sens && memeTitre(o, base) && o.dateOperation <= g.date,
     );
 
-    const dejaVue = candidats.find((o) =>
-      dejaEnregistrees.has(`${o.id}|${g.date}|${g.quantite}|${g.prix}`),
+    const dejaVue = possibles.find((o) =>
+      carnet.deja.has(`${o.id}|${g.date}|${g.quantite}|${g.prix}`),
     );
     if (dejaVue) {
       return { ...base, ordreId: dejaVue.id, raison: null, deja: true };
@@ -216,16 +303,16 @@ export async function previsualiserImportOperationsAction(
     // LE PLUS ANCIEN D'ABORD, parmi ceux qui ont encore la place. Un carnet se
     // sert dans l'ordre où il a été garni, et c'est la règle la moins
     // surprenante quand deux ordres portent sur le même titre.
-    const retenu = candidats.find((o) => (reste.get(o.id) ?? 0) >= g.quantite);
+    const retenu = possibles.find((o) => (carnet.reste.get(o.id) ?? 0) >= g.quantite);
     if (retenu) {
-      reste.set(retenu.id, (reste.get(retenu.id) ?? 0) - g.quantite);
+      carnet.reste.set(retenu.id, (carnet.reste.get(retenu.id) ?? 0) - g.quantite);
       return { ...base, ordreId: retenu.id, raison: null, deja: false };
     }
 
-    const place = candidats.reduce((s, o) => s + (reste.get(o.id) ?? 0), 0);
+    const place = possibles.reduce((s, o) => s + (carnet.reste.get(o.id) ?? 0), 0);
     const raison = !t
       ? "titre absent du référentiel BRVM"
-      : candidats.length === 0
+      : possibles.length === 0
         ? `aucun ordre de ${g.sens === "achat" ? "achat" : "vente"} ouvert sur ce titre au ${g.date}`
         : `les ordres ouverts ne laissent que ${place} titre${place > 1 ? "s" : ""} à servir`;
 
@@ -236,15 +323,29 @@ export async function previsualiserImportOperationsAction(
   for (const s of inconnus) {
     avertissements.push(`« ${s} » ne correspond à aucun titre du référentiel BRVM.`);
   }
+  for (const [intitule, r] of resolu) {
+    if (!r.fondsId) {
+      avertissements.push(
+        `« ${intitule} » ne correspond à aucun fonds géré : ses lignes sont montrées, non rapprochées.`,
+      );
+    }
+  }
+
+  const fondsDuFichier = [...resolu.entries()].map(([intitule, r]) => ({
+    intitule,
+    fondsId: r.fondsId,
+    fondsNom: r.fondsNom,
+    lignes: lignes.filter((l) => l.fondsFichier === intitule).length,
+  }));
 
   return {
     ok: true,
     data: {
       lignes,
-      ordres,
+      ordres: [...carnets.values()].flatMap((c) => c.ouverts),
       transactionsLues: resultat.transactionsLues,
       avertissements,
-      fondsFichier: resultat.ordres[0]?.fondsFichier ?? "",
+      fondsDuFichier,
     },
   };
 }
@@ -261,21 +362,79 @@ export async function previsualiserImportOperationsAction(
  * les trente-six autres. Le bilan dit laquelle, et pourquoi.
  */
 export async function rapprocherImportOperationsAction(
-  fundId: string,
   affectations: Affectation[],
   reglages: ReglagesImport,
 ): Promise<
   ActionResult<{ executions: number; doublons: number; ordresMisAJour: number; refus: string[] }>
 > {
-  const acces = await autoriser(fundId);
-  if ("erreur" in acces) return { ok: false, error: acces.erreur };
-  const { supabase, userId } = acces;
-
   if (affectations.length === 0) {
     return { ok: false, error: "Aucune ligne rapprochée à enregistrer." };
   }
 
+  // CHAQUE AFFECTATION DIT SON FONDS, ET ON LE VERIFIE. Elle vient du
+  // navigateur : un identifiant de fonds qui ne serait pas celui du gérant, ou
+  // un ordre qui n'appartiendrait pas au fonds annoncé, poserait l'exécution
+  // d'un portefeuille sur le carnet d'un autre. `loadMyFunds` borne les fonds
+  // acceptables, et le carnet de chaque fonds borne les ordres.
+  const mesFonds = new Set((await loadMyFunds()).map((f) => f.id));
+  const parFonds = new Map<string, Affectation[]>();
+  const refusAmont: string[] = [];
+  for (const a of affectations) {
+    if (!mesFonds.has(a.fondsId)) {
+      refusAmont.push(`Ordre ${a.ordreId} : fonds inconnu ou non géré.`);
+      continue;
+    }
+    (parFonds.get(a.fondsId) ?? parFonds.set(a.fondsId, []).get(a.fondsId)!).push(a);
+  }
+  if (parFonds.size === 0) {
+    return { ok: false, error: refusAmont[0] ?? "Aucune ligne rapprochée à enregistrer." };
+  }
+
+  const acces = await autoriser([...parFonds.keys()][0]);
+  if ("erreur" in acces) return { ok: false, error: acces.erreur };
+  const { supabase, userId } = acces;
+
   const parametres = await chargerParametresMarche();
+
+  let executions = 0;
+  let doublons = 0;
+  const refus: string[] = [...refusAmont];
+  let ordresMisAJour = 0;
+
+  // UN FONDS APRES L'AUTRE, chacun avec son carnet. Un compteur commun aurait
+  // confondu deux ordres homonymes de portefeuilles différents.
+  for (const [fundId, lot] of parFonds) {
+    const r = await ecrireLot(
+      { supabase, userId, fundId },
+      lot,
+      reglages,
+      parametres,
+    );
+    executions += r.executions;
+    doublons += r.doublons;
+    ordresMisAJour += r.ordresMisAJour;
+    refus.push(...r.refus);
+  }
+
+  if (executions > 0 || ordresMisAJour > 0) {
+    for (const fundId of parFonds.keys()) {
+      revalidatePath(`/gestion-portefeuille/fonds/${fundId}`);
+    }
+    revalidatePath("/gestion-portefeuille/operations-marche");
+    revalidatePath("/gestion-portefeuille/tresorerie");
+  }
+
+  return { ok: true, data: { executions, doublons, ordresMisAJour, refus } };
+}
+
+/** Le lot d'un seul fonds : tout ce qui suit était déjà là, et ne change pas. */
+async function ecrireLot(
+  ctx: { supabase: ClientServeur; userId: string; fundId: string },
+  affectations: Affectation[],
+  reglages: ReglagesImport,
+  parametres: Awaited<ReturnType<typeof chargerParametresMarche>>,
+): Promise<{ executions: number; doublons: number; ordresMisAJour: number; refus: string[] }> {
+  const { supabase, userId, fundId } = ctx;
   const toutes = await loadOperationsMarche(fundId);
   const parId = new Map(toutes.map((o) => [o.id, o]));
 
@@ -393,11 +552,5 @@ export async function rapprocherImportOperationsAction(
     else ordresMisAJour = count ?? ordresTouches.size;
   }
 
-  if (executions > 0 || ordresMisAJour > 0) {
-    revalidatePath(`/gestion-portefeuille/fonds/${fundId}`);
-    revalidatePath("/gestion-portefeuille/operations-marche");
-    revalidatePath("/gestion-portefeuille/tresorerie");
-  }
-
-  return { ok: true, data: { executions, doublons, ordresMisAJour, refus } };
+  return { executions, doublons, ordresMisAJour, refus };
 }
