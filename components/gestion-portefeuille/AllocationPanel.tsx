@@ -350,13 +350,28 @@ export default function AllocationPanel({
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+          {/* LA BASE D'ALLOCATION N'EST PAS L'ACTIF NET, et la tuile ne doit
+              plus les confondre. Ce qu'un comité répartit, c'est un
+              PORTEFEUILLE : le total inventaire, liquidité prise au solde réel
+              du point de trésorerie. L'actif net, lui, porte le passif du
+              fonds et les régularisations du dépositaire — c'est la base des
+              limites réglementaires, pas celle des décisions. */}
           <Tuile
-            libelle={tableau.classeParente ? "Poche allouée" : "Actif net"}
+            libelle={tableau.classeParente ? "Poche allouée" : "Total inventaire"}
             valeur={montant(tableau.assiette)}
             detail={
-              tableau.classeParente
-                ? `${pct(tableau.actifNet > 0 ? tableau.assiette / tableau.actifNet : 0)} de l'actif net`
-                : undefined
+              tableau.actifNet != null && tableau.actifNet > 0
+                ? `${pct(tableau.assiette / tableau.actifNet)} de l'actif net`
+                : "base des allocations"
+            }
+          />
+          <Tuile
+            libelle="Actif net publié"
+            valeur={tableau.actifNet != null ? montant(tableau.actifNet) : "—"}
+            detail={
+              tableau.actifNet != null
+                ? `VL du ${dateFr(tableau.dateActifNet)} · base réglementaire`
+                : "aucune valeur liquidative importée"
             }
           />
           <Tuile
@@ -552,17 +567,20 @@ export default function AllocationPanel({
                 <th className="text-right px-3 py-2.5 font-medium">Valeur actuelle</th>
                 <th className="text-right px-3 py-2.5 font-medium">
                   Alloc. actuelle
-                  {tableau.classeParente && (
-                    <span className="block text-[9px] font-normal text-slate-500">
-                      de la poche
-                    </span>
-                  )}
+                  <span className="block text-[9px] font-normal text-slate-500">
+                    {tableau.classeParente ? "de la poche" : "du total inventaire"}
+                  </span>
                 </th>
-                {tableau.classeParente && (
-                  <th className="text-right px-3 py-2.5 font-medium">
-                    % actif net
-                  </th>
-                )}
+                {/* DEUX BASES, ET ELLES NE SE CONFONDENT PAS. L'allocation se
+                    décide sur le total inventaire ; la réglementation, elle,
+                    s'exprime en part de l'actif net publié. La colonne figure
+                    sur tous les axes : c'est elle qu'on confronte aux limites. */}
+                <th
+                  className="text-right px-3 py-2.5 font-medium"
+                  title="Part dans l'actif net de la valeur liquidative — base des limites réglementaires, distincte de la base d'allocation."
+                >
+                  % actif net
+                </th>
                 <th className="text-right px-3 py-2.5 font-medium">Alloc. validée</th>
                 <th className="text-right px-3 py-2.5 font-medium">TRO</th>
                 <th className="text-left px-3 py-2.5 font-medium">Opération à réaliser</th>
@@ -640,11 +658,9 @@ export default function AllocationPanel({
                   <td className="px-3 py-2 text-right tabular-nums text-slate-800">
                     {pct(l.allocationActuelle)}
                   </td>
-                  {tableau.classeParente && (
-                    <td className="px-3 py-2 text-right tabular-nums text-slate-500">
-                      {pct(l.allocationActifNet)}
-                    </td>
-                  )}
+                  <td className="px-3 py-2 text-right tabular-nums text-slate-500">
+                    {l.allocationActifNet == null ? "—" : pct(l.allocationActifNet)}
+                  </td>
                   <td className="px-3 py-2 text-right tabular-nums">
                     {edition ? (
                       <input
@@ -722,11 +738,11 @@ export default function AllocationPanel({
                 <td className="px-3 py-2 text-right tabular-nums">
                   {tableau.assiette > 0 ? "100,00 %" : "—"}
                 </td>
-                {tableau.classeParente && (
-                  <td className="px-3 py-2 text-right tabular-nums text-slate-500">
-                    {pct(tableau.actifNet > 0 ? tableau.assiette / tableau.actifNet : 0)}
-                  </td>
-                )}
+                <td className="px-3 py-2 text-right tabular-nums text-slate-500">
+                  {tableau.actifNet != null && tableau.actifNet > 0
+                    ? pct(tableau.assiette / tableau.actifNet)
+                    : "—"}
+                </td>
                 <td
                   className={`px-3 py-2 text-right tabular-nums ${
                     edition

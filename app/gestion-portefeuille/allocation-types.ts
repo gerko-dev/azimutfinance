@@ -127,12 +127,24 @@ export type LigneAllocation = {
   valeurPrecedente: number | null;
   allocationPrecedente: number | null;
   valeurActuelle: number;
-  /** Part dans l'assiette de l'axe : la classe pour un sous-axe, l'actif net
-   *  pour l'axe des classes. */
+  /** Part dans l'assiette de l'axe : la classe pour un sous-axe, le TOTAL
+   *  INVENTAIRE pour l'axe des classes. C'est la base des décisions
+   *  d'allocation. */
   allocationActuelle: number;
-  /** Part dans l'ACTIF NET, quel que soit l'axe. Ce que regarde la
-   *  réglementation, qui raisonne toujours en pourcentage de l'actif. */
-  allocationActifNet: number;
+  /**
+   * Part dans l'ACTIF NET PUBLIE, quel que soit l'axe.
+   *
+   * CE N'EST PAS LA MEME BASE que l'allocation, et il ne faut pas les
+   * confondre. L'allocation se décide sur le total inventaire — la somme de ce
+   * que le fonds détient. L'actif net, lui, est celui de la valeur
+   * liquidative : il porte le passif du fonds et les régularisations du
+   * dépositaire, et c'est en pourcentage de LUI que la réglementation
+   * s'exprime. Les deux diffèrent, parfois de plusieurs points.
+   *
+   * Null quand aucune valeur liquidative n'a été importée : inventer un
+   * dénominateur donnerait un ratio réglementaire faux.
+   */
+  allocationActifNet: number | null;
   allocationValidee: number | null;
   ecart: number | null;
   valeurCible: number | null;
@@ -158,11 +170,28 @@ export type TableauAllocation = {
   /** Classe d'actif à laquelle l'axe se rapporte, null pour l'axe des classes. */
   classeParente: PortfolioSection | null;
   lignes: LigneAllocation[];
-  /** Assiette de l'axe : valorisation de la classe, ou actif net pour l'axe
-   *  des classes. C'est le dénominateur des allocations de l'axe. */
+  /** Assiette de l'axe : valorisation de la classe, ou TOTAL INVENTAIRE pour
+   *  l'axe des classes. C'est le dénominateur des allocations de l'axe. */
   assiette: number;
   assiettePrecedente: number | null;
-  actifNet: number;
+  /**
+   * TOTAL INVENTAIRE : la somme de ce que le fonds détient, liquidité prise au
+   * solde réel du point de trésorerie. C'est la base sur laquelle les
+   * allocations sont définies.
+   */
+  totalInventaire: number;
+  /**
+   * ACTIF NET PUBLIE, celui de la valeur liquidative. Il porte le passif du
+   * fonds et les régularisations du dépositaire, et diffère donc du total
+   * inventaire. Null tant qu'aucune VL n'a été importée.
+   *
+   * ON NE S'EN SERT PAS POUR ALLOUER — seulement pour dire ce que chaque poste
+   * pèse au regard de la réglementation, qui raisonne en pourcentage de
+   * l'actif net.
+   */
+  actifNet: number | null;
+  /** Date de l'actif net retenu, pour que l'écran puisse dire d'où il vient. */
+  dateActifNet: string | null;
   tresorerieAInvestir: number;
   sommeCibles: number;
   /** Cibles de l'axe de niveau supérieur, par poste de rattachement. Sur l'axe

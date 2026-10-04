@@ -20,6 +20,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { loadListedBonds, loadStocks, loadUmoaEmissions } from "@/lib/dataLoader";
 
 import { loadCustomSecurities, loadFundPortfolios } from "./portfolio-data";
+import { loadNavHistory } from "./nav-data";
 import { construirePointTresorerie } from "./tresorerie-data";
 import type {
   CustomSecurity,
@@ -479,6 +480,39 @@ function valorisations(
   return m;
 }
 
+/**
+ * Le SOLDE BANCAIRE saisi à une date, tous comptes confondus.
+ *
+ * Les soldes sont historisés par date d'arrêté : on prend le jeu de cette
+ * date, ou le dernier qui la précède. Rend null quand aucun n'a jamais été
+ * saisi avant cette date — l'appelant retombe alors sur l'inventaire.
+ */
+async function soldeBancaireAu(fundId: string, date: string): Promise<number | null> {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const { data } = await supabase
+      .from("fund_treasury_balances")
+      .select("as_of_date, soldes")
+      .eq("fund_id", fundId)
+      .lte("as_of_date", date)
+      .order("as_of_date", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!data) return null;
+    let total = 0;
+    let vu = false;
+    for (const v of Object.values((data.soldes ?? {}) as Record<string, unknown>)) {
+      if (typeof v === "number" && Number.isFinite(v)) {
+        total += v;
+        vu = true;
+      }
+    }
+    return vu ? total : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function construireTableauAllocation(
   fundId: string,
   axe: AxeAllocation = "classe",
@@ -616,30 +650,81 @@ export async function construireTableauAllocation(
     customParId,
   );
 
-  // Actif net : toutes classes confondues, quel que soit l'axe. La trésorerie
-  // à investir en fait partie — elle est simplement encore en liquidités.
+  // ── LA COLONNE PRECEDENTE PARLE LA MEME LANGUE ──────────────────────────
   //
-  // LE SOLDE REEL REMPLACE LA LIQUIDITE D'INVENTAIRE DANS LE TOTAL AUSSI. Le
-  // faire sur la seule ligne aurait donné des poids qui ne somment plus à
-  // 100 %, et une assiette cible calculée sur un actif net que le tableau ne
-  // montre nulle part.
-  const actifNet =
+  // Comparer une liquidité prise au point de trésorerie à une liquidité prise
+  // à l'inventaire ne mesure pas un mouvement : cela mesure un changement de
+  // définition. Le TRO de la ligne devenait illisible.
+  //
+  // Les soldes bancaires sont HISTORISES, un jeu par date d'arrêté : on prend
+  // celui de la date de l'inventaire précédent, ou le dernier qui la précède.
+  //
+  // CE QU'ON NE RECONSTRUIT PAS, et il faut le savoir : les engagements de
+  // cette date-là. Le solde réel les déduit du solde bancaire — achats
+  // validés, achats réalisés non réglés — et ces engagements ne sont pas
+  // stockés, ils se recalculent sur le carnet d'ordres du jour. La colonne
+  // précédente porte donc le SOLDE BANCAIRE, le solde réel sans ses
+  // déductions. Sur un arrêté où rien n'était engagé, les deux coïncident.
+  let soldePrecedent: number | null = null;
+  if (classeParente === null && precedent) {
+    soldePrecedent = await soldeBancaireAu(fundId, precedent.asOfDate);
+    if (soldePrecedent != null) valPrecedentes.set("tresorerie", soldePrecedent);
+  }
+
+  // ── TOTAL INVENTAIRE : LA BASE DES ALLOCATIONS ──────────────────────────
+  //
+  // C'est la somme de ce que le fonds DETIENT, toutes classes confondues, la
+  // liquidité prise au solde réel. Les allocations se définissent par rapport
+  // à lui, et non par rapport à l'actif net : ce qu'un comité répartit, c'est
+  // un portefeuille, pas une valeur liquidative.
+  //
+  // La trésorerie à investir en fait partie — elle est simplement encore en
+  // liquidités. Et le solde réel remplace la liquidité d'inventaire dans le
+  // TOTAL aussi : ne corriger que la ligne aurait donné des poids qui ne
+  // somment plus à 100 %.
+  const totalInventaire =
     (actuel?.positions ?? []).reduce((s, p) => s + num(p.valuation), 0) +
     tresorerieAInvestir +
     (soldeReelTresorerie != null ? soldeReelTresorerie - tresorerieInventaire : 0);
-  const actifNetPrecedent = precedent
-    ? precedent.positions.reduce((s, p) => s + num(p.valuation), 0)
+  const totalPrecedent = precedent
+    ? precedent.positions.reduce((s, p) => s + num(p.valuation), 0) +
+      (soldePrecedent != null
+        ? soldePrecedent - (valorisations(precedent, "classe", precedent.asOfDate, refs, customParId).get("tresorerie") ?? 0)
+        : 0)
     : null;
+
+  // ── ACTIF NET PUBLIE : CE QUE LA REGLEMENTATION REGARDE ─────────────────
+  //
+  // Celui de la valeur liquidative, et il n'est PAS le total inventaire : il
+  // porte le passif du fonds et les régularisations du dépositaire. Les deux
+  // diffèrent, parfois de plusieurs points, et les confondre ferait publier un
+  // ratio réglementaire faux.
+  //
+  // On ne s'en sert jamais pour allouer — seulement pour dire ce que chaque
+  // poste pèse au regard des limites.
+  let actifNet: number | null = null;
+  let dateActifNet: string | null = null;
+  try {
+    for (const point of await loadNavHistory(fundId)) {
+      if (point.date > dateRef) break;
+      if (point.actifNet != null && point.actifNet > 0) {
+        actifNet = point.actifNet;
+        dateActifNet = point.date;
+      }
+    }
+  } catch {
+    /* historique indisponible : le ratio réglementaire reste vide */
+  }
 
   // Assiette de l'axe : la classe pour un sous-axe, l'actif net pour l'axe des
   // classes. Un sous-axe alloue L'INTÉRIEUR de sa poche, pas l'actif entier.
   const assiette =
     classeParente === null
-      ? actifNet
+      ? totalInventaire
       : [...valActuelles.values()].reduce((s, v) => s + v, 0);
   const assiettePrecedente =
     classeParente === null
-      ? actifNetPrecedent
+      ? totalPrecedent
       : precedent
         ? [...valPrecedentes.values()].reduce((s, v) => s + v, 0)
         : null;
@@ -662,7 +747,7 @@ export async function construireTableauAllocation(
     classeParente === null
       ? assiette
       : cibleClasseParente !== null
-        ? cibleClasseParente * actifNet
+        ? cibleClasseParente * totalInventaire
         : assiette;
 
   if (classeParente !== null && cibleClasseParente === null && tresorerieAInvestir > 0) {
@@ -726,7 +811,7 @@ export async function construireTableauAllocation(
       allocationPrecedente,
       valeurActuelle,
       allocationActuelle,
-      allocationActifNet: actifNet > 0 ? valeurActuelle / actifNet : 0,
+      allocationActifNet: actifNet != null && actifNet > 0 ? valeurActuelle / actifNet : null,
       allocationValidee: cible,
       ecart,
       valeurCible,
@@ -805,7 +890,9 @@ export async function construireTableauAllocation(
     nonRapprochees,
     assiette,
     assiettePrecedente,
+    totalInventaire,
     actifNet,
+    dateActifNet,
     tresorerieAInvestir,
     sommeCibles,
     ciblesGroupe,
