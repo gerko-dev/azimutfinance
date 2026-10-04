@@ -20,7 +20,7 @@ import "server-only";
 
 import { parseInventoryBuffer } from "./portfolio-parse";
 import { parseNavBuffer } from "./nav-parse";
-import { matchPositions } from "./portfolio-match";
+import { matchPositions, normName } from "./portfolio-match";
 import { fondsDansLeTexte, type Candidat } from "./releves-rapprochement";
 import type { CustomSecurity, ImportedPosition } from "./portfolio-types";
 import type { NavPoint } from "./nav-types";
@@ -46,6 +46,16 @@ export type FichierImporte = {
   totalValorisation?: number;
   /** Lignes rattachées / non rattachées, pour que l'écran le dise. */
   comptes?: { total: number; rattachees: number; nonRattachees: number };
+  /**
+   * LES TITRES QUE CET INVENTAIRE FERA NAITRE AU REFERENTIEL.
+   *
+   * Tout libellé d'inventaire absent du référentiel y entre à
+   * l'enregistrement, sous son nom d'inventaire — c'est la règle du module, et
+   * elle épargne au gérant de tout ressaisir. Mais elle se fait en silence :
+   * on ne savait pas, AVANT de valider, ce qu'on s'apprêtait à créer. Quinze
+   * inventaires peuvent ouvrir cent fiches sans qu'on l'ait vu venir.
+   */
+  aCreer?: { code: string; libelle: string; section: string }[];
   points?: NavPoint[];
   premiereDate?: string;
   derniereDate?: string;
@@ -170,6 +180,7 @@ export async function lireFichierDuLot(
       if (lu.positions.length === 0) continue;
       const positions = matchPositions(lu.positions, customs, base.fondsId);
       const total = positions.reduce((s, p) => s + (p.valuation ?? 0), 0);
+      const aCreer = titresAOuvrir(positions, customs);
       return {
         ...base,
         nature: "inventaire",
@@ -182,6 +193,7 @@ export async function lireFichierDuLot(
           ).length,
           nonRattachees: positions.filter((p) => p.matchKind === "unmatched").length,
         },
+        aCreer,
         avertissements: lu.avertissements,
         probleme: rattachement.trouve ? null : rattachement.raison,
       };
@@ -195,6 +207,42 @@ export async function lireFichierDuLot(
     probleme:
       "Ni inventaire ni état de valeur liquidative : aucun des deux lecteurs n'y a trouvé de ligne.",
   };
+}
+
+/**
+ * Les lignes qui n'ont PAS encore de fiche au référentiel.
+ *
+ * LA REGLE EST CELLE DE L'ENREGISTREMENT, à la lettre, sans quoi l'aperçu
+ * annoncerait autre chose que ce qui se passera : la clef est le CODE quand la
+ * ligne en porte un, le NOM EXACT sinon ; le référentiel est indexé sous les
+ * deux. Une ligne déjà rapprochée d'un titre du site compte quand même, si le
+ * gérant n'en a pas encore la fiche — c'est bien une fiche qui va naître.
+ */
+function titresAOuvrir(
+  positions: ImportedPosition[],
+  customs: CustomSecurity[],
+): { code: string; libelle: string; section: string }[] {
+  const connus = new Set<string>();
+  for (const c of customs) {
+    const code = (c.code ?? "").trim().toLowerCase();
+    if (code) connus.add(code);
+    const nom = normName(c.name ?? "");
+    if (nom) connus.add(nom);
+  }
+
+  const out: { code: string; libelle: string; section: string }[] = [];
+  const vus = new Set<string>();
+  for (const p of positions) {
+    const clef = (p.rawCode ?? "").trim().toLowerCase() || normName(p.rawLabel ?? "");
+    if (!clef || connus.has(clef) || vus.has(clef)) continue;
+    vus.add(clef);
+    out.push({
+      code: (p.rawCode ?? "").trim(),
+      libelle: (p.rawLabel || p.matchLabel || "").trim(),
+      section: p.section,
+    });
+  }
+  return out;
 }
 
 /** La date que le lot propose : celle que portent le plus de fichiers. */

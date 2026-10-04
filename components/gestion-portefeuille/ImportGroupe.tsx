@@ -65,6 +65,7 @@ export default function ImportGroupe({
 
   const fondsDe = (f: FichierImporte) => corriges[f.fichier] ?? f.fondsId;
 
+
   const dateDe = (f: FichierImporte) => dates[f.fichier] ?? "";
   /** Un inventaire sans date n'a pas d'arrêté : il ne s'enregistre pas. */
   const dateManquante = (f: FichierImporte) =>
@@ -74,6 +75,36 @@ export default function ImportGroupe({
     !f.probleme && !!fondsDe(f) && !!f.nature && !dateManquante(f);
   const importables = (lecture ?? []).filter(complet);
   const bloquants = (lecture ?? []).filter((f) => !complet(f));
+
+  /**
+   * LES FICHES QUE L'ENREGISTREMENT VA OUVRIR, tout le lot confondu.
+   *
+   * Un titre détenu par six fonds n'ouvre qu'UNE fiche — elles se partagent au
+   * niveau du gérant — et la compter six fois aurait affolé le compteur. On
+   * déduplique donc sur la même clef que l'enregistrement : le code, ou le nom
+   * exact à défaut. Et l'on garde QUI l'apporte : c'est ce qui permet d'aller
+   * voir le bon inventaire quand un libellé surprend.
+   */
+  const aCreer = (() => {
+    const parClef = new Map<
+      string,
+      { code: string; libelle: string; section: string; fonds: Set<string> }
+    >();
+    for (const f of importables) {
+      if (f.nature !== "inventaire") continue;
+      for (const t of f.aCreer ?? []) {
+        const clef = t.code.trim().toLowerCase() || t.libelle.trim().toLowerCase();
+        const deja = parClef.get(clef);
+        if (deja) deja.fonds.add(f.fondsNom || f.fichier);
+        else
+          parClef.set(clef, { ...t, fonds: new Set([f.fondsNom || f.fichier]) });
+      }
+    }
+    return [...parClef.values()].sort(
+      (a, b) => a.section.localeCompare(b.section) || a.libelle.localeCompare(b.libelle, "fr"),
+    );
+  })();
+  const [voirACreer, setVoirACreer] = useState(false);
 
   const deposer = async (choisis: FileList | null) => {
     if (!choisis || choisis.length === 0) return;
@@ -431,8 +462,8 @@ export default function ImportGroupe({
                       <td className="px-3 py-1.5 text-right tabular-nums text-slate-600 whitespace-nowrap">
                         {f.nature === "inventaire" && f.comptes
                           ? `${f.comptes.total} ligne(s)${
-                              f.comptes.nonRattachees > 0
-                                ? ` · ${f.comptes.nonRattachees} non rattachée(s)`
+                              (f.aCreer?.length ?? 0) > 0
+                                ? ` · ${f.aCreer?.length} à créer`
                                 : ""
                             } · ${fmt0.format(Math.round(f.totalValorisation ?? 0))} F`
                           : f.nature === "vl"
@@ -482,6 +513,69 @@ export default function ImportGroupe({
                   )),
                 )}
             </ul>
+          )}
+
+          {/* CE QUE L'ENREGISTREMENT VA CREER, AVANT DE LE CREER.
+              Tout libellé d'inventaire absent du référentiel y entre à
+              l'enregistrement, sous son nom d'inventaire. C'est la bonne règle
+              — le gérant n'a rien à ressaisir — mais elle se faisait en
+              silence : quinze inventaires peuvent ouvrir cent fiches sans
+              qu'on l'ait vu venir, et un libellé fautif devient une fiche
+              fautive qu'il faudra retrouver. */}
+          {aCreer.length > 0 && (
+            <div className="border-t border-slate-200 bg-blue-50/50">
+              <button
+                type="button"
+                onClick={() => setVoirACreer((v) => !v)}
+                className="w-full flex items-center gap-2 px-4 py-2 text-left text-[11px] text-blue-900 hover:bg-blue-50"
+              >
+                <span className="font-semibold">
+                  {aCreer.length} titre(s) seront créés au référentiel
+                </span>
+                <span className="text-blue-700">
+                  — absents aujourd&apos;hui, ils y entreront sous leur libellé
+                  d&apos;inventaire.
+                </span>
+                <span className="ml-auto text-blue-700">
+                  {voirACreer ? "masquer" : "voir la liste"}
+                </span>
+              </button>
+              {voirACreer && (
+                <div className="max-h-[30vh] overflow-auto border-t border-blue-200">
+                  <table className="w-full text-[10px]">
+                    <thead className="bg-white text-slate-500 sticky top-0">
+                      <tr>
+                        <th className="text-left px-3 py-1 font-medium">Libellé</th>
+                        <th className="text-left px-3 py-1 font-medium">Code</th>
+                        <th className="text-left px-3 py-1 font-medium">Classe</th>
+                        <th className="text-left px-3 py-1 font-medium">Apporté par</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-blue-100">
+                      {aCreer.map((t) => (
+                        <tr key={`${t.code}|${t.libelle}`}>
+                          <td className="px-3 py-1 text-slate-800">{t.libelle}</td>
+                          <td className="px-3 py-1 text-slate-500 tabular-nums">
+                            {t.code || <span className="text-slate-400">déduit du nom</span>}
+                          </td>
+                          <td className="px-3 py-1 text-slate-500">{t.section}</td>
+                          <td className="px-3 py-1 text-slate-500">
+                            {[...t.fonds].join(" · ")}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {lecture.some((f) => f.nature === "inventaire") && aCreer.length === 0 && (
+            <p className="px-4 py-2 text-[11px] text-emerald-700 bg-emerald-50 border-t border-emerald-200">
+              Aucun titre à créer : tous les libellés de ces inventaires sont déjà au
+              référentiel.
+            </p>
           )}
 
           {bloquants.length > 0 && (
