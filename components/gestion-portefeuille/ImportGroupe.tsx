@@ -5,7 +5,10 @@ import { useRouter } from "next/navigation";
 
 import type { FichierImporte } from "@/app/gestion-portefeuille/import-groupe-data";
 import type { PortfolioSlot } from "@/app/gestion-portefeuille/portfolio-types";
-import { savePortfolioAction } from "@/app/gestion-portefeuille/portfolio-actions";
+import {
+  reclassifyFundPortfoliosAction,
+  savePortfolioAction,
+} from "@/app/gestion-portefeuille/portfolio-actions";
 import { enregistrerPointsNavAction } from "@/app/gestion-portefeuille/nav-actions";
 
 /**
@@ -142,8 +145,43 @@ export default function ImportGroupe({
           }));
         }
       }
+      // ── SECOND PASSAGE : ON RAPPROCHE CE QUI VIENT D'ENTRER ───────────
+      //
+      // UN TITRE ABSENT DU REFERENTIEL Y ENTRE EN S'ENREGISTRANT, mais la
+      // ligne qui l'a apporté, elle, a été rapprochée AVANT qu'il existe :
+      // elle reste « non reconnue » en base. C'est pourquoi il fallait
+      // jusqu'ici réimporter une seconde fois.
+      //
+      // Et c'est pire en lot : une obligation détenue par six fonds n'est
+      // créée qu'une fois — au premier enregistrement — et les cinq autres
+      // inventaires gardent leur ligne non reconnue, alors que la fiche
+      // existe désormais.
+      //
+      // On repasse donc sur chaque fonds une fois TOUT enregistré. Le
+      // référentiel est alors complet, et le rapprochement se fait avec le
+      // BON fonds — ce qui remet d'aplomb les comptes de trésorerie d'un
+      // fichier dont on aurait corrigé le rattachement à la main.
+      const aReclasser = [
+        ...new Set(
+          importables.filter((f) => f.nature === "inventaire").map((f) => fondsDe(f)),
+        ),
+      ];
+      let reclasses = 0;
+      for (const id of aReclasser) {
+        setAvancement(`rapprochement ${++reclasses} / ${aReclasser.length}`);
+        try {
+          await reclassifyFundPortfoliosAction(id);
+        } catch {
+          /* le rapprochement se rejoue à tout moment : il ne bloque rien */
+        }
+      }
+      setAvancement("");
+
       setMessage(
         `${faits} fichier(s) enregistré(s) sur ${importables.length}.` +
+          (aReclasser.length > 0
+            ? ` ${aReclasser.length} portefeuille(s) rapproché(s) du référentiel après coup.`
+            : "") +
           (faits < importables.length ? " Les échecs sont détaillés à chaque ligne." : ""),
       );
       router.refresh();
@@ -295,7 +333,7 @@ export default function ImportGroupe({
                         {id && id !== f.fondsId && (
                           <span
                             className="ml-1.5 text-[9px] text-blue-700 cursor-help"
-                            title="Rattachement corrigé à la main. Les titres suivront ; les comptes de trésorerie, eux, ont été rapprochés avec le fonds détecté à la lecture — si ce fonds était le mauvais, redépose le fichier."
+                            title="Rattachement corrigé à la main. Le rapprochement est rejoué sur le bon fonds après l'enregistrement, comptes de trésorerie compris."
                           >
                             corrigé
                           </span>
