@@ -604,6 +604,17 @@ export default function OperationsMarchePanel({
     if (marche === "mtp") chargerTitres("mtp", pays, vente, fondsId);
   };
 
+  /**
+   * L'ÉMETTEUR TEL QUE LE SERVEUR L'ATTEND.
+   *
+   * Pour un titre de gré à gré, ce n'est pas un État mais le référentiel du
+   * gérant. Lui passer le pays resté en mémoire — « BJ » — faisait chercher un
+   * ISIN bissau-guinéen dans le guichet UMOA, et l'écran annonçait « titre
+   * introuvable dans le référentiel » sur un titre parfaitement présent.
+   */
+  const emetteurCourant = () =>
+    marche === "mtp" && sourceMtp === "non_cote" ? EMETTEUR_NON_COTES : pays;
+
   const choisirTitre = (cle: string) => {
     setTitreCle(cle);
     if (!cle) {
@@ -637,7 +648,7 @@ export default function OperationsMarchePanel({
       const res = await caracteristiquesTitreAction(
         marche === "mtp" ? "mtp" : "mfr",
         cle,
-        pays,
+        emetteurCourant(),
         dateOperation,
       );
       if (res.ok) {
@@ -666,7 +677,7 @@ export default function OperationsMarchePanel({
       const res = await caracteristiquesTitreAction(
         marche === "mtp" ? "mtp" : "mfr",
         titreCle,
-        pays,
+        emetteurCourant(),
         d,
       );
       if (res.ok) {
@@ -1401,7 +1412,9 @@ export default function OperationsMarchePanel({
                 marche === "primaire"
                   ? "Adjudication"
                   : marche === "mtp"
-                    ? "Titre public"
+                    ? sourceMtp === "non_cote"
+                      ? "Titre"
+                      : "Titre public"
                     : instrument === "actions"
                       ? "Action"
                       : "Obligation cotée"

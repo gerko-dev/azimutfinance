@@ -123,7 +123,15 @@ export async function caracteristiquesNonCote(
   // coupure de 10 000 F : un emprunt privé se place en grosses coupures —
   // SOROUBAT à 5 000 000, APRIL OIL à 50 000 000 — et la convention de la cote
   // y rendrait des courus mille fois trop petits.
+  const echeance = (a.maturityDate ?? "").trim();
+  // UN TITRE ECHU NE COURT PLUS. Sans ce garde-fou, une fiche restée au
+  // référentiel après son remboursement — SOROUBAT, échue en février —
+  // continuait d'accumuler : deux cent quarante-deux jours de courus sur un
+  // titre qui n'existe plus.
+  const echu = !!echeance && echeance < dateOperation;
+
   const couruParTitre = (() => {
+    if (echu) return 0;
     if (!bond || !(nominal > 0) || !(taux > 0)) return 0;
     const dernier = dernierDetachement(bond.issueDate, a.maturityDate ?? "", dateOperation);
     if (!dernier) return 0;
@@ -135,9 +143,8 @@ export async function caracteristiquesNonCote(
     return (nominal * taux * Math.min(jours, 365)) / 365;
   })();
 
-  const dernier = bond
-    ? dernierDetachement(bond.issueDate, a.maturityDate ?? "", dateOperation)
-    : "";
+  const dernier =
+    bond && !echu ? dernierDetachement(bond.issueDate, echeance, dateOperation) : "";
   const jours = dernier
     ? Math.max(
         0,
@@ -155,17 +162,22 @@ export async function caracteristiquesNonCote(
     instrument: "mtp",
     nominal: nominal > 0 ? nominal : 0,
     tauxCoupon: Number.isFinite(taux) ? taux : 0,
-    echeance: (a.maturityDate ?? "").trim(),
+    echeance,
     couruParTitre,
     dernierDetachement: dernier,
     joursCourus: jours,
-    avertissement: !bond
-      ? "La fiche de ce titre n'a ni échéance ni valeur nominale : aucun couru ne peut être " +
-        "calculé. Complète-la au référentiel, ou saisis les courus d'après l'avis d'opéré."
-      : !(taux > 0)
-        ? "Aucun taux d'intérêt au référentiel : les courus ne peuvent pas être calculés."
-        : "Titre de gré à gré : les caractéristiques viennent de TA fiche, et non d'un " +
-          "référentiel public. Vérifie-les contre l'avis d'opéré.",
+    avertissement: echu
+      ? `Ce titre est échu depuis le ${echeance} : aucun intérêt ne court plus. ` +
+        "Vérifie l'échéance au référentiel si tu le négocies encore."
+      : !bond
+        ? "La fiche de ce titre n'a ni échéance ni valeur nominale : aucun couru ne peut être " +
+          "calculé. Complète-la au référentiel, ou saisis les courus d'après l'avis d'opéré."
+        : !(nominal > 0)
+          ? "Aucune valeur nominale au référentiel : les courus ne peuvent pas être calculés."
+          : !(taux > 0)
+            ? "Aucun taux d'intérêt au référentiel : les courus ne peuvent pas être calculés."
+            : "Titre de gré à gré : les caractéristiques viennent de TA fiche, et non d'un " +
+              "référentiel public. Vérifie-les contre l'avis d'opéré.",
   };
 }
 

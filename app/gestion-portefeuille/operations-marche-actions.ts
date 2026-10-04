@@ -152,18 +152,23 @@ export async function listerTitresAction(
   // de plusieurs émetteurs, et lui demander de retrouver lequel a émis celui
   // qu'il veut vendre, c'est lui faire chercher ce que l'inventaire sait déjà.
   // On balaie donc tous les États et on ne garde que le cessible.
+  // LE GISEMENT SUIT L'INSTRUMENT, MEME POUR UNE VENTE.
+  //
+  // « Autres instruments non cotés » veut dire CE QUI N'EST NI OAT NI BAT NI
+  // COTÉ : y proposer quand même le guichet UMOA-Titres rendait le choix
+  // inopérant, et rien n'aurait empêché de céder une OAT depuis une liste
+  // censée n'en contenir aucune.
+  //
+  // L'ÉTAT, LUI, NE FILTRE TOUJOURS PAS UNE VENTE DE TITRE PUBLIC : un fonds
+  // détient souvent des titres de plusieurs émetteurs, et lui demander lequel
+  // a émis celui qu'il veut vendre, c'est lui faire chercher ce que
+  // l'inventaire sait déjà. On balaie donc les huit.
   const gisement =
     marche === "mfr"
       ? titresMfr()
-      : [
-          ...etats.flatMap((e) => titresMtp(e.code)),
-          // LES NON COTÉS SE VENDENT AUSSI, et c'est même là qu'on les
-          // retrouve le plus souvent : un emprunt de gré à gré se garde
-          // jusqu'à l'échéance, ou se cède d'un bloc. Pour une vente, on les
-          // joint à tout le gisement : l'écran ne filtre plus par émetteur,
-          // puisque l'inventaire dit déjà ce que le fonds peut céder.
-          ...(await titresNonCotes()),
-        ];
+      : pays === EMETTEUR_NON_COTES
+        ? await titresNonCotes()
+        : etats.flatMap((e) => titresMtp(e.code));
 
   const titres = await titresCessibles(
     cession.fundId,
