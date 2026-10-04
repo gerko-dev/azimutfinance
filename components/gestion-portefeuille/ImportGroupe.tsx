@@ -247,6 +247,18 @@ export default function ImportGroupe({
 
   /** Celles dont la fiche reste à ouvrir. */
   const aCreer = groupes.filter((g) => aOuvrir.has(g.clef));
+
+  /**
+   * LE LOT A-T-IL DEJA ETE ENREGISTRE ?
+   *
+   * Tout ce qui précède l'enregistrement sert à RELIRE : les lignes, les
+   * fiches à ouvrir, le compteur de titres. Une fois le lot écrit, ces outils
+   * n'ont plus d'objet — pire, ils invitent à revoir une décision déjà prise,
+   * et le compteur annonce fièrement que tout est au référentiel alors qu'on
+   * vient soi-même de l'y mettre. Ils disparaissent donc, et ne reviennent
+   * qu'au dépôt suivant.
+   */
+  const dejaEnregistre = Object.values(etats).some((e) => e.etat === "fait");
   const [voirLignes, setVoirLignes] = useState(false);
 
   const deposer = async (choisis: FileList | null) => {
@@ -670,7 +682,7 @@ export default function ImportGroupe({
               épargne la ressaisie. Mais elle se faisait en silence. Le
               compteur le dit maintenant avant le clic, et la fiche se crée
               dès ici quand on veut en préciser les caractéristiques. */}
-          {groupes.length > 0 && (
+          {groupes.length > 0 && !dejaEnregistre && (
             <div className="border-t border-slate-200">
               <button
                 type="button"
