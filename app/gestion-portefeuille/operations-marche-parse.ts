@@ -38,6 +38,15 @@ export type OrdreImporte = {
   /** Nombre de transactions élémentaires derrière cette ligne. Affiché : un
    *  ordre servi en cent-huit fois ne se lit pas comme un ordre unique. */
   transactions: number;
+  /** N° d'ordre du dépositaire, quand le rapport le porte. C'est LUI qui fait
+   *  l'ordre : deux exécutions qui le partagent sont un seul ordre, quels que
+   *  soient leurs prix. Vide quand le fichier ne le donne pas. */
+  reference: string;
+  /** Prix extrêmes des exécutions regroupées. Égaux dans le cas courant ; un
+   *  écart dit que l'ordre a été servi à plusieurs cours, et le prix affiché
+   *  est alors leur moyenne pondérée. */
+  prixMin: number;
+  prixMax: number;
   /** Nom du fonds tel qu'écrit dans le fichier. Sert à AVERTIR quand il ne
    *  correspond pas au fonds choisi à l'écran — pas à décider à sa place. */
   fondsFichier: string;
@@ -50,10 +59,15 @@ export type ResultatImportOperations = {
   avertissements: string[];
 };
 
-/** En-têtes cherchés, en minuscules sans accent. Les colonnes du dépositaire
- *  que le module n'exploite pas — numéro de transaction, compte DC/BR,
- *  référence d'affectation, n° d'ordre — ne figurent pas ici : les nommer
- *  n'aurait servi qu'à faire échouer la lecture le jour où l'une change. */
+/** En-têtes cherchés, en minuscules sans accent et sans ponctuation. Les
+ *  colonnes que le module n'exploite pas — numéro de transaction, compte
+ *  DC/BR, référence d'affectation — ne figurent pas ici : les nommer n'aurait
+ *  servi qu'à faire échouer la lecture le jour où l'une change.
+ *
+ *  LE N° D'ORDRE, LUI, EST CAPITAL, et il a longtemps manqué : c'est la seule
+ *  colonne qui dise quelles exécutions appartiennent au MÊME ordre. Sans elle,
+ *  on regroupait au jugé — par titre, jour et prix — et un ordre servi à trois
+ *  cours ressortait en trois ordres. */
 const ENTETES: Record<string, string> = {
   symbole: "code symbole",
   heure: "heure de transactions",
@@ -61,6 +75,7 @@ const ENTETES: Record<string, string> = {
   cours: "cours",
   valeur: "valeur",
   type: "type",
+  ordre: "nordre",
 };
 
 const sansAccent = (s: string) =>
@@ -136,8 +151,12 @@ function reperer(ws: ExcelJS.Worksheet): Entete | null {
       const t = sansAccent(texte(cell.value));
       if (!t) return;
       derniereNommee = Math.max(derniereNommee, c);
+      // « N°ordre », « N° Ordre », « N°  d'ordre » : le dépositaire ponctue
+      // comme il veut. On compare sur les seules lettres et chiffres.
+      const nu = t.replace(/[^a-z0-9]/g, "");
       for (const [clef, attendu] of Object.entries(ENTETES)) {
-        if (!col[clef] && t === attendu) col[clef] = c;
+        if (!col[clef] && (t === attendu || nu === attendu.replace(/[^a-z0-9]/g, "")))
+          col[clef] = c;
       }
     });
     // Le volume, le cours et le type suffisent à reconnaître la ligne
@@ -193,7 +212,10 @@ export async function parseOperationsMarcheBuffer(
   let fondsFichier = "";
   let transactionsLues = 0;
   let ignorees = 0;
-  const groupes = new Map<string, OrdreImporte>();
+  /** `valeurLignes` ne sort pas d'ici : elle sert au seul contrôle de
+   *  bouclage, et l'exposer inviterait à l'afficher à côté de « Valeur ». */
+  type Groupe = OrdreImporte & { valeurLignes: number };
+  const groupes = new Map<string, Groupe>();
 
   for (let r = ligne + 1; r <= ws.rowCount; r++) {
     const row = ws.getRow(r);
@@ -239,15 +261,38 @@ export async function parseOperationsMarcheBuffer(
     const valeur = col.valeur ? nombre(row.getCell(col.valeur).value) : quantite * prix;
     const sens: "achat" | "vente" = estAchat ? "achat" : "vente";
 
-    // LA CLEF : titre, date, prix — et le sens, qu'on y ajoute parce qu'un
-    // achat et une vente du même titre au même prix le même jour sont deux
-    // faits opposés, que les additionner effacerait l'un et l'autre.
-    const clef = `${symbole}|${date}|${sens}|${prix}`;
+    // ── LA CLEF, ET ELLE A CHANGÉ DEUX FOIS ──────────────────────────────
+    //
+    // LE N° D'ORDRE FAIT L'ORDRE quand le rapport le porte. C'est la seule
+    // désignation qui dise quelles exécutions appartiennent au même ordre, et
+    // elle règle du même coup les deux défauts de l'ancienne clef :
+    //
+    //   LE PRIX N'EN FAIT PAS PARTIE. Un ordre servi à trois cours — SMBC du
+    //   29 septembre, 1 475 titres entre 16 925 et 16 950 — ressortait en
+    //   TROIS ordres de 67, 259 et 1 149 titres. Le gérant lisait trois lignes
+    //   là où son carnet en porte une, et aucune ne donnait la bonne quantité.
+    //
+    //   LE FONDS EN FAIT PARTIE, ce qui n'était pas le cas et coûtait plus
+    //   cher encore : un même rapport couvre plusieurs portefeuilles, et les
+    //   ventes de CIEC du 29 septembre — 1 941 titres pour le FONDS DIVERSIFIE,
+    //   1 941 pour NSIA ASSURANCES OPTIMUM, au même cours — se confondaient en
+    //   une ligne de 3 882 attribuée à un seul fonds.
+    //
+    // À DÉFAUT DE RÉFÉRENCE, on regroupe par fonds, titre, jour et sens — sans
+    // le prix. C'est la définition d'un ordre, et l'étendue des cours est
+    // rendue à côté pour qu'un regroupement abusif se voie.
+    const reference = col.ordre ? texte(row.getCell(col.ordre).value) : "";
+    const clef = reference
+      ? `ref:${reference}`
+      : `${fondsFichier}|${symbole}|${date}|${sens}`;
     const deja = groupes.get(clef);
     if (deja) {
       deja.quantite += quantite;
       deja.valeur += valeur;
       deja.transactions += 1;
+      deja.valeurLignes += quantite * prix;
+      deja.prixMin = Math.min(deja.prixMin, prix);
+      deja.prixMax = Math.max(deja.prixMax, prix);
     } else {
       groupes.set(clef, {
         symbole,
@@ -256,13 +301,24 @@ export async function parseOperationsMarcheBuffer(
         quantite,
         prix,
         valeur,
+        valeurLignes: quantite * prix,
         transactions: 1,
         fondsFichier,
+        reference,
+        prixMin: prix,
+        prixMax: prix,
       });
     }
   }
 
-  const ordres = [...groupes.values()].sort(
+  // LE PRIX D'UN ORDRE SERVI À PLUSIEURS COURS EST LEUR MOYENNE PONDÉRÉE.
+  // C'est le prix auquel le fonds a réellement traité, et celui que porte
+  // l'avis d'opéré.
+  for (const o of groupes.values()) {
+    if (o.quantite > 0) o.prix = o.valeurLignes / o.quantite;
+  }
+
+  const complets = [...groupes.values()].sort(
     (a, b) =>
       a.date.localeCompare(b.date) ||
       a.symbole.localeCompare(b.symbole) ||
@@ -273,8 +329,11 @@ export async function parseOperationsMarcheBuffer(
   // écart dit que la colonne « Valeur » du fichier porte autre chose que le
   // brut — des frais, par exemple —, auquel cas les montants calculés ici ne
   // correspondront pas à l'avis d'opéré. Mieux vaut le dire que le taire.
-  for (const o of ordres) {
-    const attendu = o.quantite * o.prix;
+  for (const o of complets) {
+    // On compare la colonne « Valeur » du fichier à la somme des quantité ×
+    // prix LIGNE À LIGNE — et non à quantité × prix moyen, qui lui serait égal
+    // par construction et ne contrôlerait donc plus rien.
+    const attendu = o.valeurLignes;
     if (attendu > 0 && Math.abs(o.valeur - attendu) / attendu > 0.001) {
       avertissements.push(
         `${o.symbole} au ${o.date} à ${o.prix} : le fichier porte ` +
@@ -284,9 +343,16 @@ export async function parseOperationsMarcheBuffer(
     }
   }
 
-  if (ordres.length === 0 && ignorees === 0) {
+  if (complets.length === 0 && ignorees === 0) {
     avertissements.push("Aucune transaction trouvée sous l'en-tête.");
   }
 
+  // `valeurLignes` reste au contrôle : la rendre inviterait à l'afficher à
+  // côté de « Valeur », où elle n'apprendrait rien de plus.
+  const ordres: OrdreImporte[] = complets.map((o) => {
+    const rendu = { ...o } as Partial<typeof o>;
+    delete rendu.valeurLignes;
+    return rendu as OrdreImporte;
+  });
   return { ordres, transactionsLues, avertissements };
 }

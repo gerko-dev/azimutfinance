@@ -36,9 +36,17 @@ const champ =
   "w-full text-xs border border-slate-300 rounded px-2 py-1.5 focus:border-blue-400 focus:outline-none";
 const etiquette = "text-[10px] uppercase tracking-wider text-slate-500";
 
-/** Identité d'une ligne. Le quadruplet du regroupement : deux lignes ne
- *  peuvent pas le partager, c'est précisément ce qui les a séparées. */
-const cleLigne = (l: LigneImport) => `${l.symbole}|${l.date}|${l.sens}|${l.prix}`;
+/**
+ * Identité d'une ligne — LE N° D'ORDRE DU DEPOSITAIRE quand il y en a un.
+ *
+ * Le quadruplet titre-jour-sens-prix ne suffit plus, et ne suffisait déjà pas :
+ * un même rapport couvre plusieurs portefeuilles, et deux ventes d'ORAC du
+ * 29 septembre au même cours — 1 147 titres pour le FONDS DIVERSIFIE, 1 148
+ * pour NSIA ASSURANCES OPTIMUM — le partagent mot pour mot. Deux lignes
+ * distinctes auraient porté la même clef, et React en aurait perdu une.
+ */
+const cleLigne = (l: LigneImport) =>
+  l.reference || `${l.fondsFichier}|${l.symbole}|${l.date}|${l.sens}`;
 
 const maj = (s: string) => s.trim().toUpperCase();
 
@@ -275,10 +283,11 @@ export default function ImportOperationsMarche({
             Rapprocher un rapport d&apos;exécution
           </h2>
           <p className="text-[11px] text-slate-500 mt-0.5">
-            Le rapport du dépositaire, une ligne par transaction. Les transactions
-            du <strong>même titre, au même prix, le même jour</strong> forment une
-            exécution, qui vient se poser sur l&apos;<strong>ordre déjà saisi</strong>{" "}
-            qui l&apos;attend. Aucune opération n&apos;est créée.
+            Le rapport du dépositaire, une ligne par transaction. Celles qui portent
+            le <strong>même n° d&apos;ordre</strong> forment une exécution — quels que
+            soient leurs cours, le prix affiché étant alors leur moyenne pondérée —
+            qui vient se poser sur l&apos;<strong>ordre déjà saisi</strong> qui
+            l&apos;attend. Aucune opération n&apos;est créée.
           </p>
         </div>
 
@@ -519,6 +528,15 @@ export default function ImportOperationsMarche({
                         </td>
                         <td className="px-2 py-1.5 text-right tabular-nums">
                           {fmt0.format(l.prix)}
+                          {/* UN ORDRE SERVI A PLUSIEURS COURS le dit : le prix
+                              affiché est alors une moyenne pondérée, et une
+                              moyenne qu'on ne signale pas se lit comme un
+                              cours traité. */}
+                          {l.prixMin !== l.prixMax && (
+                            <span className="block text-[9px] text-slate-400">
+                              {fmt0.format(l.prixMin)} → {fmt0.format(l.prixMax)}
+                            </span>
+                          )}
                           {ordre && ordre.prix !== l.prix && (
                             <span
                               className="text-slate-400"
