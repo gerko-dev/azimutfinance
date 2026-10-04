@@ -42,6 +42,7 @@ import {
   LIBELLES_VALIDITE,
   dateLimiteOrdre,
   etatOrdre,
+  LIBELLES_ETAT,
   LIBELLES_MODALITE,
   marcheDe,
   montantOperation,
@@ -53,6 +54,7 @@ import {
   sensDe,
   type DenouementDepositaire,
   type DescriptionOperation,
+  type EtatOrdre,
   type Instrument,
   type ModaliteSouscription,
   descriptionDenouement,
@@ -96,6 +98,46 @@ const TAUX_ACTIONS = { courtage: 0.004, tps: 0.1 };
 
 /** Onglets de l'écran. Les deux derniers sont des RÉCAPITULATIFS : rien ne s'y
  *  saisit, tout se corrige sur l'ordre. */
+/**
+ * Un en-tête qui trie.
+ *
+ * LA FLÈCHE NE S'AFFICHE QUE SUR LA COLONNE ACTIVE. Un chevron gris sur
+ * chaque colonne dit « on peut trier » et noie celle qui trie réellement ;
+ * c'est le curseur et le survol qui annoncent la possibilité.
+ */
+function EnTeteTri({
+  col,
+  tri,
+  onTrier,
+  aDroite,
+  children,
+}: {
+  col: ColonneTri;
+  tri: { col: ColonneTri; desc: boolean };
+  onTrier: (c: ColonneTri) => void;
+  aDroite?: boolean;
+  children: React.ReactNode;
+}) {
+  const actif = tri.col === col;
+  return (
+    <th className={`px-3 py-2 font-medium ${aDroite ? "text-right" : "text-left"}`}>
+      <button
+        type="button"
+        onClick={() => onTrier(col)}
+        className={`inline-flex items-center gap-1 hover:text-slate-900 ${
+          actif ? "text-slate-900" : ""
+        }`}
+      >
+        {children}
+        {actif && <span className="text-[9px]">{tri.desc ? "▼" : "▲"}</span>}
+      </button>
+    </th>
+  );
+}
+
+/** Les colonnes sur lesquelles le carnet se trie. */
+type ColonneTri = "date" | "fonds" | "titre" | "ordonnee" | "servie" | "montant" | "etat";
+
 type Onglet =
   | "operations"
   | "saisie"
@@ -236,6 +278,94 @@ export default function OperationsMarchePanel({
   // Les deux s'excluent : un même ordre ne peut pas être à la fois une cession
   // temporaire et un prêt.
   const [onglet, setOnglet] = useState<Onglet>("operations");
+
+  // ── LE CARNET SE TRIE ET SE FILTRE ────────────────────────────────────
+  //
+  // IL A GRANDI. Quinze fonds, plusieurs mois d'ordres : la liste complète ne
+  // répond plus à « où en est l'achat de SONATEL du 12 » ni à « que reste-t-il
+  // d'ouvert sur Aurore Sécurité ». On la cherchait à l'œil, en faisant
+  // défiler.
+  //
+  // LES FILTRES SE CUMULENT, et c'est le seul comportement qui ne surprenne
+  // pas : chacun retranche, aucun ne remplace.
+  const [fFonds, setFFonds] = useState("");
+  const [fEtat, setFEtat] = useState<EtatOrdre | "">("");
+  const [fSens, setFSens] = useState<"achat" | "vente" | "">("");
+  const [fDu, setFDu] = useState("");
+  const [fAu, setFAu] = useState("");
+  const [fTexte, setFTexte] = useState("");
+  /** Colonne de tri, et son sens. Un second clic retourne la colonne. */
+  const [tri, setTri] = useState<{ col: ColonneTri; desc: boolean }>({
+    col: "date",
+    desc: true,
+  });
+
+  /**
+   * LE CARNET TEL QU'ON LE REGARDE : filtré, puis trié.
+   *
+   * `operations` reste entier — les compteurs d'onglets et les autres vues
+   * comptent le carnet, pas la vue qu'on en a. Seul le tableau des opérations
+   * travaille sur celle-ci.
+   */
+  const operationsVues = useMemo(() => {
+    const texte = fTexte.trim().toLowerCase();
+    const retenues = operations.filter((o) => {
+      if (fFonds && o.fondsId !== fFonds) return false;
+      if (fEtat && etatOrdre(o) !== fEtat) return false;
+      if (fSens && sensDe(o.description) !== fSens) return false;
+      if (fDu && o.dateOperation < fDu) return false;
+      if (fAu && o.dateOperation > fAu) return false;
+      // LE TEXTE CHERCHE LE TITRE, pas tout le reste : un carnet se parcourt
+      // par valeur, et chercher aussi dans les notes ramenerait des lignes
+      // qu'on ne saurait pas expliquer.
+      if (texte && !`${o.code} ${o.libelle}`.toLowerCase().includes(texte)) return false;
+      return true;
+    });
+
+    const valeur = (o: OperationAvecFonds): string | number => {
+      switch (tri.col) {
+        case "fonds":
+          return o.fondsNom ?? "";
+        case "titre":
+          return o.libelle || o.code || "";
+        case "ordonnee":
+          return o.quantite;
+        case "servie":
+          return quantiteExecutee(o);
+        case "montant":
+          return montantOperation(o);
+        case "etat":
+          return LIBELLES_ETAT[etatOrdre(o)];
+        default:
+          return o.dateOperation;
+      }
+    };
+    const signe = tri.desc ? -1 : 1;
+    return [...retenues].sort((a, b) => {
+      const va = valeur(a);
+      const vb = valeur(b);
+      const c =
+        typeof va === "number" && typeof vb === "number"
+          ? va - vb
+          : String(va).localeCompare(String(vb), "fr");
+      // A VALEUR EGALE, LA DATE DEPARTAGE, et toujours dans le meme sens :
+      // sans cela, deux ordres du meme fonds s'echangeaient a chaque rendu.
+      return c !== 0 ? c * signe : -a.dateOperation.localeCompare(b.dateOperation);
+    });
+  }, [operations, fFonds, fEtat, fSens, fDu, fAu, fTexte, tri]);
+
+  const filtresActifs = !!(fFonds || fEtat || fSens || fDu || fAu || fTexte.trim());
+  const viderFiltres = () => {
+    setFFonds("");
+    setFEtat("");
+    setFSens("");
+    setFDu("");
+    setFAu("");
+    setFTexte("");
+  };
+  /** Un clic trie ; un second retourne la colonne. */
+  const trierPar = (col: ColonneTri) =>
+    setTri((p) => (p.col === col ? { col, desc: !p.desc } : { col, desc: col === "date" }));
   /** Réméré que l'opération en cours de saisie vient dénouer, ou null.
    *  Ne se choisit pas : il vient du bouton « Dénouer » de l'onglet Rémérés. */
   const [denoueRemereDe, setDenoueRemereDe] = useState<string | null>(null);
@@ -801,9 +931,13 @@ export default function OperationsMarchePanel({
       return suivant;
     });
 
+  // « TOUT » VEUT DIRE CE QU'ON VOIT. Cocher des lignes masquées par un
+  // filtre, puis les supprimer d'un clic, serait la pire surprise du module.
   const toutSelectionner = () =>
     setSelection((s) =>
-      s.size === operations.length ? new Set() : new Set(operations.map((o) => o.id)),
+      s.size === operationsVues.length
+        ? new Set()
+        : new Set(operationsVues.map((o) => o.id)),
     );
 
   const supprimerSelection = () => {
@@ -1536,6 +1670,102 @@ export default function OperationsMarchePanel({
           onglet === "operations" ? "" : "hidden"
         }`}
       >
+        {/* ── FILTRER, PUIS TRIER ───────────────────────────────────────
+            Le carnet a grandi : quinze fonds, plusieurs mois d'ordres. On le
+            cherchait à l'œil, en faisant défiler. Les filtres se CUMULENT —
+            chacun retranche, aucun ne remplace — et le compteur dit toujours
+            ce qu'on regarde sur ce qu'il y a. */}
+        <div className="flex flex-wrap items-end gap-2 px-3 py-2 border-b border-slate-200 bg-slate-50">
+          <label className="flex flex-col gap-0.5">
+            <span className="text-[9px] uppercase tracking-wider text-slate-500">Fonds</span>
+            <select
+              value={fFonds}
+              onChange={(e) => setFFonds(e.target.value)}
+              className="text-[11px] border border-slate-300 rounded px-1.5 py-1 bg-white max-w-[14rem]"
+            >
+              <option value="">Tous</option>
+              {fonds.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.nom}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="flex flex-col gap-0.5">
+            <span className="text-[9px] uppercase tracking-wider text-slate-500">État</span>
+            <select
+              value={fEtat}
+              onChange={(e) => setFEtat(e.target.value as EtatOrdre | "")}
+              className="text-[11px] border border-slate-300 rounded px-1.5 py-1 bg-white"
+            >
+              <option value="">Tous</option>
+              {(Object.keys(LIBELLES_ETAT) as EtatOrdre[]).map((e) => (
+                <option key={e} value={e}>
+                  {LIBELLES_ETAT[e]}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="flex flex-col gap-0.5">
+            <span className="text-[9px] uppercase tracking-wider text-slate-500">Sens</span>
+            <select
+              value={fSens}
+              onChange={(e) => setFSens(e.target.value as "achat" | "vente" | "")}
+              className="text-[11px] border border-slate-300 rounded px-1.5 py-1 bg-white"
+            >
+              <option value="">Tous</option>
+              <option value="achat">Achat</option>
+              <option value="vente">Vente</option>
+            </select>
+          </label>
+
+          <label className="flex flex-col gap-0.5">
+            <span className="text-[9px] uppercase tracking-wider text-slate-500">Du</span>
+            <input
+              type="date"
+              value={fDu}
+              onChange={(e) => setFDu(e.target.value)}
+              className="text-[11px] border border-slate-300 rounded px-1.5 py-1 bg-white"
+            />
+          </label>
+          <label className="flex flex-col gap-0.5">
+            <span className="text-[9px] uppercase tracking-wider text-slate-500">Au</span>
+            <input
+              type="date"
+              value={fAu}
+              onChange={(e) => setFAu(e.target.value)}
+              className="text-[11px] border border-slate-300 rounded px-1.5 py-1 bg-white"
+            />
+          </label>
+
+          <label className="flex flex-col gap-0.5 min-w-[11rem]">
+            <span className="text-[9px] uppercase tracking-wider text-slate-500">Titre</span>
+            <input
+              value={fTexte}
+              onChange={(e) => setFTexte(e.target.value)}
+              placeholder="SNTS, Sonatel…"
+              className="text-[11px] border border-slate-300 rounded px-1.5 py-1 bg-white"
+            />
+          </label>
+
+          <div className="ml-auto flex items-center gap-2 pb-1">
+            <span className="text-[11px] text-slate-500 tabular-nums">
+              {operationsVues.length} / {operations.length}
+            </span>
+            {filtresActifs && (
+              <button
+                type="button"
+                onClick={viderFiltres}
+                className="text-[11px] text-blue-700 hover:text-blue-900 underline"
+              >
+                tout afficher
+              </button>
+            )}
+          </div>
+        </div>
+
         {/* ── Ce qui est sélectionné, et ce qu'on peut en faire ──────────
             La barre n'apparaît QUE s'il y a une sélection : une barre d'outils
             permanente et vide n'apprend rien et vole une ligne à l'écran. */}
@@ -1601,7 +1831,8 @@ export default function OperationsMarchePanel({
                   <input
                     type="checkbox"
                     checked={
-                      operations.length > 0 && selection.size === operations.length
+                      operationsVues.length > 0 &&
+                      selection.size === operationsVues.length
                     }
                     ref={(el) => {
                       // L'ÉTAT INTERMÉDIAIRE : ni tout ni rien. Sans lui, une
@@ -1609,34 +1840,50 @@ export default function OperationsMarchePanel({
                       // suivant coche tout au lieu de décocher.
                       if (el)
                         el.indeterminate =
-                          selection.size > 0 && selection.size < operations.length;
+                          selection.size > 0 && selection.size < operationsVues.length;
                     }}
                     onChange={toutSelectionner}
-                    disabled={operations.length === 0}
+                    disabled={operationsVues.length === 0}
                     aria-label="Tout sélectionner"
                   />
                 </th>
-                <th className="text-left px-3 py-2 font-medium">Date</th>
-                <th className="text-left px-3 py-2 font-medium">Fonds</th>
+                <EnTeteTri col="date" tri={tri} onTrier={trierPar}>
+                  Date
+                </EnTeteTri>
+                <EnTeteTri col="fonds" tri={tri} onTrier={trierPar}>
+                  Fonds
+                </EnTeteTri>
                 <th className="text-left px-3 py-2 font-medium">Nature</th>
-                <th className="text-left px-3 py-2 font-medium">Titre</th>
-                <th className="text-right px-3 py-2 font-medium">Ordonnée</th>
-                <th className="text-right px-3 py-2 font-medium">Servie</th>
-                <th className="text-left px-3 py-2 font-medium">État</th>
-                <th className="text-right px-3 py-2 font-medium">Montant</th>
+                <EnTeteTri col="titre" tri={tri} onTrier={trierPar}>
+                  Titre
+                </EnTeteTri>
+                <EnTeteTri col="ordonnee" tri={tri} onTrier={trierPar} aDroite>
+                  Ordonnée
+                </EnTeteTri>
+                <EnTeteTri col="servie" tri={tri} onTrier={trierPar} aDroite>
+                  Servie
+                </EnTeteTri>
+                <EnTeteTri col="etat" tri={tri} onTrier={trierPar}>
+                  État
+                </EnTeteTri>
+                <EnTeteTri col="montant" tri={tri} onTrier={trierPar} aDroite>
+                  Montant
+                </EnTeteTri>
                 <th className="text-left px-3 py-2 font-medium">Règlement</th>
                 <th className="px-3 py-2" />
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {operations.length === 0 && (
+              {operationsVues.length === 0 && (
                 <tr>
                   <td colSpan={11} className="px-3 py-6 text-center text-slate-400">
-                    Aucune opération saisie.
+                    {operations.length === 0
+                      ? "Aucune opération saisie."
+                      : "Aucune opération ne répond à ces filtres."}
                   </td>
                 </tr>
               )}
-              {operations.map((o) => {
+              {operationsVues.map((o) => {
                 const servie = quantiteExecutee(o);
                 const reste = quantiteRestante(o);
                 const etat = etatOrdre(o);
