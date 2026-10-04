@@ -43,7 +43,18 @@ export default function ImportGroupe({
   const router = useRouter();
   const [enCours, demarrer] = useTransition();
   const [lecture, setLecture] = useState<FichierImporte[] | null>(null);
-  const [date, setDate] = useState("");
+  /**
+   * UNE DATE PAR INVENTAIRE, pas une pour tout le lot.
+   *
+   * Un arrêté arrive le plus souvent d'un bloc, à la même date — mais pas
+   * toujours : un fonds livre en retard, un autre est arrêté à un jour
+   * différent, et une seule date pour quinze inventaires les y forçait tous.
+   * Chaque ligne porte donc la sienne, déduite de son nom de fichier, et
+   * modifiable. La date commune n'est plus qu'un RACCOURCI pour les remplir
+   * d'un coup.
+   */
+  const [dates, setDates] = useState<Record<string, string>>({});
+  const [dateCommune, setDateCommune] = useState("");
   const [slot, setSlot] = useState<PortfolioSlot>("fin");
   const [erreur, setErreur] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -53,10 +64,16 @@ export default function ImportGroupe({
   const [corriges, setCorriges] = useState<Record<string, string>>({});
 
   const fondsDe = (f: FichierImporte) => corriges[f.fichier] ?? f.fondsId;
-  const nomDe = (id: string) => fonds.find((x) => x.id === id)?.nom ?? "";
 
-  const importables = (lecture ?? []).filter((f) => !f.probleme && fondsDe(f) && f.nature);
-  const bloquants = (lecture ?? []).filter((f) => f.probleme || !fondsDe(f) || !f.nature);
+  const dateDe = (f: FichierImporte) => dates[f.fichier] ?? "";
+  /** Un inventaire sans date n'a pas d'arrêté : il ne s'enregistre pas. */
+  const dateManquante = (f: FichierImporte) =>
+    f.nature === "inventaire" && !/^\d{4}-\d{2}-\d{2}$/.test(dateDe(f));
+
+  const complet = (f: FichierImporte) =>
+    !f.probleme && !!fondsDe(f) && !!f.nature && !dateManquante(f);
+  const importables = (lecture ?? []).filter(complet);
+  const bloquants = (lecture ?? []).filter((f) => !complet(f));
 
   const deposer = async (choisis: FileList | null) => {
     if (!choisis || choisis.length === 0) return;
@@ -85,8 +102,19 @@ export default function ImportGroupe({
         setErreur(json?.erreur ?? `Lecture impossible (${r.status}).`);
         return;
       }
-      setLecture(json.fichiers as FichierImporte[]);
-      setDate(json.dateProposee ?? new Date().toISOString().slice(0, 10));
+      const fichiers = json.fichiers as FichierImporte[];
+      const defaut = json.dateProposee ?? new Date().toISOString().slice(0, 10);
+      setLecture(fichiers);
+      setDateCommune(defaut);
+      // LA DATE DU FICHIER L'EMPORTE SUR CELLE DU LOT : c'est elle qui est
+      // écrite noir sur blanc dans le nom, et le lot n'en est qu'un résumé.
+      setDates(
+        Object.fromEntries(
+          fichiers
+            .filter((f) => f.nature === "inventaire")
+            .map((f) => [f.fichier, f.dateFichier ?? defaut]),
+        ),
+      );
     } catch (err) {
       setErreur(`Lecture interrompue : ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -113,7 +141,7 @@ export default function ImportGroupe({
           if (f.nature === "inventaire") {
             const r = await savePortfolioAction(fondsId, {
               slot,
-              asOfDate: date,
+              asOfDate: dateDe(f),
               label: f.fichier,
               totalValuation: f.totalValorisation ?? 0,
               positions: f.positions ?? [],
@@ -235,17 +263,35 @@ export default function ImportGroupe({
       {lecture && lecture.length > 0 && (
         <>
           <div className="flex flex-wrap items-end gap-4 px-4 py-2.5 bg-slate-50 border-b border-slate-200">
-            {/* LA DATE NE VAUT QUE POUR LES INVENTAIRES : un état de VL porte
-                ses propres dates, une par ligne, et rien ici ne les remplace. */}
-            <label className="text-[11px] text-slate-600">
-              Date des inventaires
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="block mt-0.5 px-2 py-1 rounded border border-slate-300 text-slate-900 text-xs"
-              />
-            </label>
+            {/* UN RACCOURCI, PAS LA SOURCE. Chaque inventaire porte sa
+                propre date, dans sa ligne ; celle-ci sert à les remplir d'un
+                coup quand l'arrêté est le même pour tous — le cas courant. Un
+                état de VL n'est pas concerné : il porte ses dates à l'intérieur,
+                une par ligne, et rien ici ne les touche. */}
+            <div className="flex items-end gap-1.5">
+              <label className="text-[11px] text-slate-600">
+                Date commune
+                <input
+                  type="date"
+                  value={dateCommune}
+                  onChange={(e) => setDateCommune(e.target.value)}
+                  className="block mt-0.5 px-2 py-1 rounded border border-slate-300 text-slate-900 text-xs"
+                />
+              </label>
+              <button
+                type="button"
+                disabled={enCours || !dateCommune}
+                onClick={() =>
+                  setDates((d) =>
+                    Object.fromEntries(Object.keys(d).map((k) => [k, dateCommune])),
+                  )
+                }
+                className="px-2 py-1 text-[11px] font-medium border border-slate-300 text-slate-700 rounded hover:bg-white disabled:opacity-50"
+                title="Pose cette date sur tous les inventaires du lot."
+              >
+                appliquer à tous
+              </button>
+            </div>
             <label className="text-[11px] text-slate-600">
               Arrêté
               <select
@@ -261,8 +307,9 @@ export default function ImportGroupe({
               </select>
             </label>
             <p className="text-[10px] text-slate-500 max-w-md">
-              Un inventaire REMPLACE celui du même arrêté : réimporter corrige, ne double
-              pas. Les états de VL portent leurs propres dates — celle-ci ne les touche pas.
+              Chaque inventaire porte SA date, lue dans son nom de fichier et modifiable à
+              sa ligne. Un inventaire REMPLACE celui du même fonds et du même arrêté :
+              réimporter corrige, ne double pas.
             </p>
             <button
               type="button"
@@ -283,6 +330,7 @@ export default function ImportGroupe({
                   <th className="text-left px-3 py-2 font-medium">Fichier</th>
                   <th className="text-left px-3 py-2 font-medium">Nature</th>
                   <th className="text-left px-3 py-2 font-medium">Fonds</th>
+                  <th className="text-left px-3 py-2 font-medium">Date d&apos;arrêté</th>
                   <th className="text-right px-3 py-2 font-medium">Contenu</th>
                   <th className="text-left px-3 py-2 font-medium">État</th>
                 </tr>
@@ -339,6 +387,47 @@ export default function ImportGroupe({
                           </span>
                         )}
                       </td>
+                      <td className="px-3 py-1.5 whitespace-nowrap">
+                        {/* LA DATE SE VALIDE LIGNE A LIGNE. Celle du nom de
+                            fichier est une proposition, pas une vérité : elle
+                            s'affiche pour être relue, et se corrige ici. */}
+                        {f.nature === "inventaire" ? (
+                          <>
+                            <input
+                              type="date"
+                              value={dateDe(f)}
+                              onChange={(e) =>
+                                setDates((d) => ({ ...d, [f.fichier]: e.target.value }))
+                              }
+                              className={`px-1.5 py-0.5 rounded border text-[11px] tabular-nums ${
+                                dateManquante(f)
+                                  ? "border-amber-400 bg-amber-50"
+                                  : "border-slate-300 text-slate-800"
+                              }`}
+                            />
+                            {f.dateFichier && dateDe(f) !== f.dateFichier && (
+                              <span
+                                className="ml-1.5 text-[9px] text-blue-700 cursor-help"
+                                title={`Le nom du fichier porte le ${f.dateFichier}.`}
+                              >
+                                corrigée
+                              </span>
+                            )}
+                            {!f.dateFichier && (
+                              <span
+                                className="ml-1.5 text-[9px] text-slate-400 cursor-help"
+                                title="Aucune date lisible dans le nom du fichier : celle-ci vient de la date commune."
+                              >
+                                déduite
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-[10px] text-slate-400">
+                            dates du fichier
+                          </span>
+                        )}
+                      </td>
                       <td className="px-3 py-1.5 text-right tabular-nums text-slate-600 whitespace-nowrap">
                         {f.nature === "inventaire" && f.comptes
                           ? `${f.comptes.total} ligne(s)${
@@ -363,10 +452,12 @@ export default function ImportGroupe({
                           <span className="text-emerald-700">✓ {etat.detail}</span>
                         ) : etat?.etat === "echec" ? (
                           <span className="text-rose-700">{etat.detail}</span>
-                        ) : (
-                          <span className="text-slate-400">
-                            prêt{nomDe(id) && f.dateFichier ? ` · ${f.dateFichier}` : ""}
+                        ) : dateManquante(f) ? (
+                          <span className="text-amber-800">
+                            Date d&apos;arrêté manquante — renseigne-la.
                           </span>
+                        ) : (
+                          <span className="text-slate-400">prêt</span>
                         )}
                       </td>
                     </tr>
