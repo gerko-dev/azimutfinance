@@ -6,19 +6,22 @@ import type { ExportSoldes } from "@/app/gestion-portefeuille/soldes-export";
 
 // === Le classeur d'export des soldes ======================================
 //
-// IL EST CALQUÉ SUR LE CLASSEUR DU GÉRANT, ligne pour ligne et colonne pour
-// colonne. Le solde du FCP AURORE OPPORTUNITES tombe en C10 parce que c'est là
-// qu'il est dans sa feuille ; celui de NSIA FONDS DIVERSIFIE en C56 pour la
-// même raison. Le copier-coller n'a donc rien à viser : on sélectionne la
-// plage d'un fonds et on la colle à la même adresse.
+// UN BLOC PAR FONDS, SEPARES D'UNE SEULE LIGNE. Le premier jet reproduisait
+// les NUMEROS DE LIGNE du classeur — solde d'OPPORTUNITES en 10, de NSIA FONDS
+// DIVERSIFIE en 56 — pour qu'un collage retombe a la meme adresse. Mais le
+// gerant colle FONDS PAR FONDS : il selectionne une ligne et la pose ou il
+// faut. Les quarante-quatre lignes vides entre deux blocs ne servaient donc a
+// rien, sinon a faire defiler.
 //
-// RIEN D'AUTRE N'EST ÉCRIT DANS CETTE FEUILLE. Pas de titre, pas de total, pas
-// de poste à côté : tout ce qu'on ajouterait serait collé par mégarde
-// par-dessus une formule du classeur. Les en-têtes de banque figurent, eux,
-// juste au-dessus des soldes — non pour être collés, mais pour vérifier d'un
-// coup d'œil que les colonnes tombent en face.
+// LES COLONNES, ELLES, GARDENT LEUR PLACE. La premiere banque reste en C comme
+// dans la feuille : copier C:Z d'une ligne et la coller en C de l'autre tombe
+// juste sans reflechir.
 //
-// UNE DEUXIÈME FEUILLE DIT CE QUI N'A PAS SUIVI : les blocs sans fonds, les
+// CHAQUE BLOC DIT OU IL VA. « FCP AURORE OPPORTUNITES — ligne 10 » : le nom
+// seul obligerait a chercher le bloc dans la feuille, et quinze blocs se
+// ressemblent.
+//
+// UNE DEUXIEME FEUILLE DIT CE QUI N'A PAS SUIVI : les blocs sans fonds, les
 // colonnes sans compte, les comptes sans colonne. Un export muet sur ses trous
 // est un export qu'on croit complet.
 
@@ -29,17 +32,22 @@ export async function buildSoldesExcel(donnees: ExportSoldes): Promise<Buffer> {
   wb.creator = "AzimutFinance — gestion de portefeuille";
   wb.created = new Date();
 
-  // ── Feuille 1 : le calque ───────────────────────────────────────────────
+  // ── Feuille 1 : les blocs, à la suite ───────────────────────────────────
   const ws = wb.addWorksheet("Point de trésorerie");
+  let ligne = 1;
   for (const l of donnees.lignes) {
-    const entetes = ws.getRow(l.ligneSolde - 1);
-    const soldes = ws.getRow(l.ligneSolde);
+    const entetes = ws.getRow(ligne);
+    const soldes = ws.getRow(ligne + 1);
+    // Deux lignes de bloc, une de respiration.
+    ligne += 3;
 
-    // Le nom du fonds, à gauche de ses en-têtes : il ne se colle pas, il
-    // SITUE. Sans lui, quinze lignes de nombres se ressemblent toutes.
-    entetes.getCell(l.colonneDebut - 1).value = l.intitule;
-    soldes.getCell(l.colonneDebut - 1).value = "SOLDE";
-    soldes.getCell(l.colonneDebut - 1).font = { bold: true };
+    // Le nom du fonds ET SA LIGNE DANS LE CLASSEUR : le nom seul obligerait à
+    // chercher le bloc dans la feuille, et quinze blocs se ressemblent.
+    const titre = entetes.getCell(1);
+    titre.value = `${l.intitule} — ligne ${l.ligneSolde}`;
+    titre.font = { bold: true };
+    soldes.getCell(1).value = "SOLDE";
+    soldes.getCell(1).font = { bold: true };
 
     l.entetes.forEach((e, i) => {
       const cEntete = entetes.getCell(l.colonneDebut + i);
@@ -59,7 +67,14 @@ export async function buildSoldesExcel(donnees: ExportSoldes): Promise<Buffer> {
     entetes.commit();
     soldes.commit();
   }
-  for (let c = 1; c <= 30; c++) ws.getColumn(c).width = c <= 2 ? 30 : 16;
+  // La colonne A porte les intitulés de fonds, les deux suivantes rien : la
+  // première banque reste en C, comme dans la feuille.
+  ws.getColumn(1).width = 44;
+  ws.getColumn(2).width = 4;
+  for (let c = 3; c <= 30; c++) ws.getColumn(c).width = 16;
+  // Les en-têtes de chaque bloc restent lisibles quand on fait défiler les
+  // quinze fonds : le volet se fige sur la colonne des intitulés.
+  ws.views = [{ state: "frozen", xSplit: 1 }];
 
   // ── Feuille 2 : ce qui n'a pas suivi ────────────────────────────────────
   const ctrl = wb.addWorksheet("Contrôle");
