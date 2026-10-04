@@ -61,6 +61,20 @@ function versDecimal(saisie: string): number | null {
   return Number.isFinite(n) ? n / 100 : null;
 }
 
+/**
+ * UNE CASE VIDE EST UNE CIBLE A ZERO, et non une cible absente.
+ *
+ * Le gérant qui décide « plus rien en OPCVM » vide la case : c'est une
+ * DECISION, et elle doit s'enregistrer comme telle. Le module l'écartait de
+ * l'envoi, le poste gardait son ancienne cible — ou n'en avait jamais — et
+ * l'écran affichait un tiret là où le comité avait tranché zéro. L'écart à la
+ * cible, le montant à réaliser et le TRO restaient muets sur la ligne qu'il
+ * fallait précisément solder.
+ */
+function cibleSaisie(saisie: string): number {
+  return versDecimal(saisie) ?? 0;
+}
+
 export default function AllocationPanel({
   fundId,
   initialAllocation,
@@ -171,10 +185,7 @@ export default function AllocationPanel({
     setEdition(true);
   };
 
-  const sommeSaisie = Object.values(saisies).reduce(
-    (s, v) => s + (versDecimal(v) ?? 0),
-    0,
-  );
+  const sommeSaisie = Object.values(saisies).reduce((s, v) => s + cibleSaisie(v), 0);
 
   const recharger = (tresorerieDecimal: number) =>
     start(async () => {
@@ -190,9 +201,10 @@ export default function AllocationPanel({
     }
     setConfirmationSecteur(false);
     start(async () => {
-      const cibles = Object.entries(saisies)
-        .map(([bucket, v]) => ({ bucket, cible: versDecimal(v) }))
-        .filter((c): c is { bucket: string; cible: number } => c.cible !== null);
+      const cibles = Object.entries(saisies).map(([bucket, v]) => ({
+        bucket,
+        cible: cibleSaisie(v),
+      }));
 
       const r = await enregistrerCiblesAction(fundId, cibles, { dimension: axe });
       if (!r.ok) {
@@ -221,9 +233,7 @@ export default function AllocationPanel({
       tableau.lignes.filter((l) => l.groupe).map((l) => [l.bucket, l.groupe as string]),
     );
     const saisiesOuEnregistre = edition
-      ? Object.entries(saisies)
-          .map(([bucket, v]) => ({ bucket, cible: versDecimal(v) }))
-          .filter((c): c is { bucket: string; cible: number } => c.cible !== null)
+      ? Object.entries(saisies).map(([bucket, v]) => ({ bucket, cible: cibleSaisie(v) }))
       : tableau.lignes
           .filter((l) => l.allocationValidee !== null)
           .map((l) => ({ bucket: l.bucket, cible: l.allocationValidee as number }));

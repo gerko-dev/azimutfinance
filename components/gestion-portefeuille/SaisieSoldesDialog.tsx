@@ -62,6 +62,16 @@ export default function SaisieSoldesDialog({
   // en attente du mois suivant.
   const [lecture, setLecture] = useState<LectureReleves | null>(null);
   const [applique, setApplique] = useState(0);
+  /**
+   * LES CASES REMPLIES PAR LE RELEVE, tant qu'elles n'ont pas été enregistrées.
+   *
+   * Un solde reporté automatiquement et un solde tapé à la main se ressemblent
+   * à l'écran, et c'est précisément ce qu'il ne faut pas : le gérant relit la
+   * grille avant d'enregistrer, et il doit voir d'un coup d'œil ce que la
+   * machine a posé. Une case qu'il corrige ensuite sort de l'ensemble — elle
+   * est redevenue la sienne.
+   */
+  const [reportees, setReportees] = useState<Set<string>>(new Set());
   /** Avancement du dépôt : « 3 / 12 banques ». Vide quand rien n'est en cours. */
   const [avancement, setAvancement] = useState("");
 
@@ -206,19 +216,21 @@ export default function SaisieSoldesDialog({
    */
   const appliquer = () => {
     if (!lecture) return;
+    const marquees = new Set<string>();
     setValeurs((v) => {
       const suite = { ...v };
       for (const p of lecture.propositions) {
         if (p.solde === null) continue;
-        suite[cellule(p.fondsId, p.etablissement)] = formaterSaisie(
-          String(Math.round(p.solde)),
-        );
+        const k = cellule(p.fondsId, p.etablissement);
+        suite[k] = formaterSaisie(String(Math.round(p.solde)));
+        marquees.add(k);
       }
       return suite;
     });
+    setReportees(marquees);
     setApplique(lecture.propositions.length);
     setMessage(
-      `${lecture.propositions.length} solde(s) reporté(s) dans la grille. ` +
+      `${lecture.propositions.length} solde(s) reporté(s) dans la grille, signalés en ambre. ` +
         `Rien n'est enregistré tant que tu n'as pas cliqué « Enregistrer les soldes ».`,
     );
   };
@@ -249,6 +261,9 @@ export default function SaisieSoldesDialog({
         );
         return;
       }
+      // ENREGISTRES, DONC PLUS « REPORTES ». La couleur dit « à relire avant
+      // d'enregistrer » : la garder après coup la viderait de son sens.
+      setReportees(new Set());
       setMessage(`Soldes enregistrés au ${res.data.as_of_date} pour ${res.data.enregistres} fonds.`);
       router.refresh();
     });
@@ -370,11 +385,29 @@ export default function SaisieSoldesDialog({
                       <td key={b.cle} className="px-1 py-1">
                         <input
                           value={valeurs[k] ?? ""}
-                          onChange={(e) =>
-                            setValeurs((v) => ({ ...v, [k]: formaterSaisie(e.target.value) }))
-                          }
+                          onChange={(e) => {
+                            setValeurs((v) => ({ ...v, [k]: formaterSaisie(e.target.value) }));
+                            // Corrigée à la main : la case n'est plus celle du
+                            // relevé, et elle cesse de s'annoncer comme telle.
+                            if (reportees.has(k)) {
+                              setReportees((s) => {
+                                const suite = new Set(s);
+                                suite.delete(k);
+                                return suite;
+                              });
+                            }
+                          }}
                           inputMode="numeric"
-                          className="w-full text-right px-1.5 py-1 rounded border border-slate-300 tabular-nums focus:border-blue-400 focus:outline-none"
+                          title={
+                            reportees.has(k)
+                              ? "Solde reporté du relevé, pas encore enregistré."
+                              : undefined
+                          }
+                          className={`w-full text-right px-1.5 py-1 rounded border tabular-nums focus:outline-none ${
+                            reportees.has(k)
+                              ? "border-amber-400 bg-amber-50 text-amber-900 font-medium focus:border-amber-500"
+                              : "border-slate-300 focus:border-blue-400"
+                          }`}
                         />
                       </td>
                     );
@@ -513,7 +546,15 @@ export default function SaisieSoldesDialog({
             </div>
           )}
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* LA LEGENDE N'APPARAIT QUE QUAND ELLE SERT : une couleur qu'on
+                explique en permanence finit par ne plus se voir. */}
+            {reportees.size > 0 && (
+              <span className="flex items-center gap-1.5 text-[11px] text-amber-800 mr-auto">
+                <span className="inline-block w-3.5 h-3.5 rounded border border-amber-400 bg-amber-50" />
+                {reportees.size} solde(s) reporté(s) du relevé, à relire — non enregistré(s)
+              </span>
+            )}
             <button
               type="button"
               onClick={enregistrer}
