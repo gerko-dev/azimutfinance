@@ -73,7 +73,7 @@ export default async function ImportationPage({
           même jour — et c'est le geste le plus fréquent. Le chargement fonds
           par fonds reste dessous : il sert à corriger une ligne, pas à monter
           un arrêté. */}
-      {options.length > 0 && <ImportGroupe fonds={options} />}
+      {options.length > 0 && <ImportGroupe fonds={options} cours={cours} />}
 
       {choisi ? (
         <ImportationPanel

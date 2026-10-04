@@ -1,10 +1,28 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import type { FichierImporte } from "@/app/gestion-portefeuille/import-groupe-data";
-import type { PortfolioSlot } from "@/app/gestion-portefeuille/portfolio-types";
+import type {
+  CustomSecurity,
+  ImportedPosition,
+  MatchKind,
+  PortfolioSection,
+  PortfolioSlot,
+  ReferenceMatch,
+} from "@/app/gestion-portefeuille/portfolio-types";
+import { listCustomSecuritiesAction } from "@/app/gestion-portefeuille/portfolio-actions";
+import { coursDe, type CoursSite } from "@/app/gestion-portefeuille/cours-types";
+import {
+  CustomSecurityForm,
+  PositionRowView,
+  SECTION_ORDER,
+  SectionTable,
+  initialDeLaLigne,
+  normName,
+  subtotalOf,
+} from "./ReferentielTitre";
 import {
   reclassifyFundPortfoliosAction,
   savePortfolioAction,
@@ -37,8 +55,11 @@ type Etat = "attente" | "encours" | "fait" | "echec";
 
 export default function ImportGroupe({
   fonds,
+  cours,
 }: {
   fonds: { id: string; nom: string }[];
+  /** Derniers cours du site, pour que la ligne dise si son prix a dérivé. */
+  cours: Map<string, CoursSite>;
 }) {
   const router = useRouter();
   const [enCours, demarrer] = useTransition();
@@ -62,6 +83,90 @@ export default function ImportGroupe({
   const [etats, setEtats] = useState<Record<string, { etat: Etat; detail: string }>>({});
   /** Rattachements corrigés à la main, par fichier. */
   const [corriges, setCorriges] = useState<Record<string, string>>({});
+  /** Le référentiel du gérant, pour que « Modifier » retrouve la fiche. */
+  const [fichesParId, setFichesParId] = useState<Map<string, CustomSecurity>>(new Map());
+  /** La ligne dont le formulaire est ouvert, par sa clef. */
+  const [resolue, setResolue] = useState<string | null>(null);
+
+  useEffect(() => {
+    let vivant = true;
+    listCustomSecuritiesAction().then((r) => {
+      if (vivant && r.ok) setFichesParId(new Map(r.data.map((c) => [c.id, c])));
+    });
+    return () => {
+      vivant = false;
+    };
+  }, []);
+
+  /**
+   * LA CLEF D'UNE LIGNE, celle de l'enregistrement : le code quand elle en
+   * porte un, le nom exact sinon. Deux lignes qui la partagent partageront
+   * leur fiche — c'est donc elle, et pas autre chose, qui doit grouper.
+   */
+  const cleDe = (p: ImportedPosition): string =>
+    (p.rawCode ?? "").trim().toLowerCase() || normName(p.rawLabel ?? "");
+
+  /** Les clefs qui n'ont pas encore de fiche, d'après la lecture du serveur. */
+  const aOuvrir = new Set<string>(
+    (lecture ?? []).flatMap((f) =>
+      (f.aCreer ?? []).map((x) => x.code.trim().toLowerCase() || normName(x.libelle)),
+    ),
+  );
+
+  /**
+   * UNE FICHE CREEE VAUT POUR TOUT LE LOT.
+   *
+   * Le titre vient d'entrer au référentiel : toutes les lignes qui le
+   * désignent — dans six inventaires s'il le faut — s'y rattachent d'un coup.
+   * Les laisser « à créer » aurait fait croire qu'on allait l'ouvrir six fois.
+   */
+  const appliquerFiche = (clef: string, creee: CustomSecurity) => {
+    setFichesParId((m) => new Map(m).set(creee.id, creee));
+    setLecture((prev) =>
+      (prev ?? []).map((f) => ({
+        ...f,
+        positions: f.positions?.map((p) =>
+          cleDe(p) === clef
+            ? {
+                ...p,
+                rawCode: (p.rawCode ?? "").trim() || creee.code,
+                matchKind: "custom" as MatchKind,
+                matchId: creee.id,
+                matchLabel: creee.name,
+                matchHref: "",
+                customSecurityId: creee.id,
+                matchCode: creee.code,
+              }
+            : p,
+        ),
+        aCreer: f.aCreer?.filter(
+          (x) => (x.code.trim().toLowerCase() || normName(x.libelle)) !== clef,
+        ),
+      })),
+    );
+    setResolue(null);
+  };
+
+  /** Rattache la ligne à un titre du référentiel du site, sans fiche locale. */
+  const appliquerLien = (clef: string, m: ReferenceMatch) => {
+    setLecture((prev) =>
+      (prev ?? []).map((f) => ({
+        ...f,
+        positions: f.positions?.map((p) =>
+          cleDe(p) === clef
+            ? {
+                ...p,
+                matchKind: m.kind,
+                matchId: m.id,
+                matchLabel: m.label,
+                matchCode: m.code ?? p.matchCode,
+              }
+            : p,
+        ),
+      })),
+    );
+    setResolue(null);
+  };
 
   const fondsDe = (f: FichierImporte) => corriges[f.fichier] ?? f.fondsId;
 
@@ -85,26 +190,64 @@ export default function ImportGroupe({
    * exact à défaut. Et l'on garde QUI l'apporte : c'est ce qui permet d'aller
    * voir le bon inventaire quand un libellé surprend.
    */
-  const aCreer = (() => {
-    const parClef = new Map<
+  /**
+   * LES LIGNES DU LOT, GROUPEES PAR TITRE.
+   *
+   * UN TITRE DETENU PAR SIX FONDS EST UNE SEULE FICHE — elles se partagent au
+   * niveau du gérant — donc une seule ligne à l'écran. L'afficher six fois
+   * aurait demandé six fois la même décision, et laissé croire qu'on crée six
+   * fiches.
+   *
+   * La clef de regroupement est celle de l'ENREGISTREMENT, à la lettre : le
+   * code quand la ligne en porte un, le nom exact sinon. Un groupement plus
+   * fin que la fiche montrerait des lignes qu'on ne peut pas traiter
+   * séparément ; un groupement plus large en fusionnerait deux qui vivront
+   * leur vie.
+   *
+   * Les quantités et les valorisations se SOMMENT sur les fonds : c'est
+   * l'exposition de la maison au titre, et c'est ce qu'on veut voir en relisant
+   * un arrêté.
+   */
+  const groupes = (() => {
+    const par = new Map<
       string,
-      { code: string; libelle: string; section: string; fonds: Set<string> }
+      {
+        clef: string;
+        p: ImportedPosition;
+        fonds: Set<string>;
+        quantite: number;
+        valorisation: number;
+      }
     >();
     for (const f of importables) {
       if (f.nature !== "inventaire") continue;
-      for (const t of f.aCreer ?? []) {
-        const clef = t.code.trim().toLowerCase() || t.libelle.trim().toLowerCase();
-        const deja = parClef.get(clef);
-        if (deja) deja.fonds.add(f.fondsNom || f.fichier);
-        else
-          parClef.set(clef, { ...t, fonds: new Set([f.fondsNom || f.fichier]) });
+      for (const pos of f.positions ?? []) {
+        const clef = cleDe(pos);
+        if (!clef) continue;
+        const deja = par.get(clef);
+        if (deja) {
+          deja.fonds.add(f.fondsNom || f.fichier);
+          deja.quantite += pos.quantity ?? 0;
+          deja.valorisation += pos.valuation ?? 0;
+        } else {
+          par.set(clef, {
+            clef,
+            p: pos,
+            fonds: new Set([f.fondsNom || f.fichier]),
+            quantite: pos.quantity ?? 0,
+            valorisation: pos.valuation ?? 0,
+          });
+        }
       }
     }
-    return [...parClef.values()].sort(
-      (a, b) => a.section.localeCompare(b.section) || a.libelle.localeCompare(b.libelle, "fr"),
+    return [...par.values()].sort((a, b) =>
+      (a.p.rawLabel || "").localeCompare(b.p.rawLabel || "", "fr"),
     );
   })();
-  const [voirACreer, setVoirACreer] = useState(false);
+
+  /** Celles dont la fiche reste à ouvrir. */
+  const aCreer = groupes.filter((g) => aOuvrir.has(g.clef));
+  const [voirLignes, setVoirLignes] = useState(false);
 
   const deposer = async (choisis: FileList | null) => {
     if (!choisis || choisis.length === 0) return;
@@ -515,67 +658,116 @@ export default function ImportGroupe({
             </ul>
           )}
 
-          {/* CE QUE L'ENREGISTREMENT VA CREER, AVANT DE LE CREER.
-              Tout libellé d'inventaire absent du référentiel y entre à
-              l'enregistrement, sous son nom d'inventaire. C'est la bonne règle
-              — le gérant n'a rien à ressaisir — mais elle se faisait en
-              silence : quinze inventaires peuvent ouvrir cent fiches sans
-              qu'on l'ait vu venir, et un libellé fautif devient une fiche
-              fautive qu'il faudra retrouver. */}
-          {aCreer.length > 0 && (
-            <div className="border-t border-slate-200 bg-blue-50/50">
+          {/* ── LES LIGNES DU LOT, UNE PAR TITRE ─────────────────────────
+              On relit un arrêté comme on relisait un inventaire : classe par
+              classe, ligne par ligne, avec le prix du site en regard et le
+              bouton qui ouvre la fiche. La différence est qu'ici une ligne
+              vaut pour TOUS les fonds qui portent ce titre — ils partagent la
+              même fiche, et la décision se prend une fois.
+
+              TOUT LIBELLE ABSENT DU REFERENTIEL Y ENTRE A L'ENREGISTREMENT,
+              sous son nom d'inventaire : c'est la règle du module, et elle
+              épargne la ressaisie. Mais elle se faisait en silence. Le
+              compteur le dit maintenant avant le clic, et la fiche se crée
+              dès ici quand on veut en préciser les caractéristiques. */}
+          {groupes.length > 0 && (
+            <div className="border-t border-slate-200">
               <button
                 type="button"
-                onClick={() => setVoirACreer((v) => !v)}
-                className="w-full flex items-center gap-2 px-4 py-2 text-left text-[11px] text-blue-900 hover:bg-blue-50"
+                onClick={() => setVoirLignes((v) => !v)}
+                className={`w-full flex flex-wrap items-center gap-2 px-4 py-2 text-left text-[11px] ${
+                  aCreer.length > 0
+                    ? "bg-blue-50/60 text-blue-900 hover:bg-blue-50"
+                    : "bg-slate-50 text-slate-700 hover:bg-slate-100"
+                }`}
               >
                 <span className="font-semibold">
-                  {aCreer.length} titre(s) seront créés au référentiel
+                  {groupes.length} titre(s) dans ce lot
                 </span>
-                <span className="text-blue-700">
-                  — absents aujourd&apos;hui, ils y entreront sous leur libellé
-                  d&apos;inventaire.
-                </span>
-                <span className="ml-auto text-blue-700">
-                  {voirACreer ? "masquer" : "voir la liste"}
+                {aCreer.length > 0 ? (
+                  <span className="text-blue-700">
+                    dont <strong>{aCreer.length} à créer au référentiel</strong> — absents
+                    aujourd&apos;hui, ils y entreront sous leur libellé d&apos;inventaire.
+                  </span>
+                ) : (
+                  <span className="text-emerald-700">
+                    tous sont déjà au référentiel.
+                  </span>
+                )}
+                <span className="ml-auto underline">
+                  {voirLignes ? "masquer les lignes" : "voir les lignes"}
                 </span>
               </button>
-              {voirACreer && (
-                <div className="max-h-[30vh] overflow-auto border-t border-blue-200">
-                  <table className="w-full text-[10px]">
-                    <thead className="bg-white text-slate-500 sticky top-0">
-                      <tr>
-                        <th className="text-left px-3 py-1 font-medium">Libellé</th>
-                        <th className="text-left px-3 py-1 font-medium">Code</th>
-                        <th className="text-left px-3 py-1 font-medium">Classe</th>
-                        <th className="text-left px-3 py-1 font-medium">Apporté par</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-blue-100">
-                      {aCreer.map((t) => (
-                        <tr key={`${t.code}|${t.libelle}`}>
-                          <td className="px-3 py-1 text-slate-800">{t.libelle}</td>
-                          <td className="px-3 py-1 text-slate-500 tabular-nums">
-                            {t.code || <span className="text-slate-400">déduit du nom</span>}
-                          </td>
-                          <td className="px-3 py-1 text-slate-500">{t.section}</td>
-                          <td className="px-3 py-1 text-slate-500">
-                            {[...t.fonds].join(" · ")}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+
+              {voirLignes && (
+                <div className="px-4 py-3 space-y-4 bg-white border-t border-slate-200">
+                  <p className="text-[10px] text-slate-500">
+                    Les quantités et les valorisations sont CUMULEES sur les fonds qui
+                    portent le titre : c&apos;est l&apos;exposition de la maison. La colonne
+                    « Fonds » dit lesquels.
+                  </p>
+                  {SECTION_ORDER.filter((sec) =>
+                    groupes.some((g) => g.p.section === sec),
+                  ).map((sec) => (
+                    <SectionTable
+                      key={sec}
+                      section={sec}
+                      subtotal={subtotalOf(
+                        groupes.map((g) => ({
+                          section: g.p.section as PortfolioSection,
+                          valuation: g.valorisation,
+                        })),
+                        sec,
+                      )}
+                    >
+                      {groupes.map((g) =>
+                        g.p.section === sec ? (
+                          <PositionRowView
+                            key={g.clef}
+                            row={{
+                              ...g.p,
+                              quantity: g.quantite,
+                              valuation: g.valorisation,
+                            }}
+                            cours={coursDe(cours, g.p.matchIsin, g.p.matchCode, g.p.rawCode)}
+                            resolveButton={
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setResolue(resolue === g.clef ? null : g.clef)
+                                }
+                                className={`text-[10px] px-1.5 py-0.5 rounded border ${
+                                  aOuvrir.has(g.clef)
+                                    ? "border-blue-300 text-blue-700 hover:bg-blue-50"
+                                    : "border-slate-300 text-slate-500 hover:bg-slate-50"
+                                }`}
+                                title={[...g.fonds].join(" · ")}
+                              >
+                                {resolue === g.clef
+                                  ? "Fermer"
+                                  : aOuvrir.has(g.clef)
+                                    ? "Créer la fiche"
+                                    : "Modifier"}
+                              </button>
+                            }
+                            customForm={
+                              resolue === g.clef ? (
+                                <CustomSecurityForm
+                                  initial={initialDeLaLigne(g.p, fichesParId)}
+                                  onCancel={() => setResolue(null)}
+                                  onCreated={(creee) => appliquerFiche(g.clef, creee)}
+                                  onLinked={(m) => appliquerLien(g.clef, m)}
+                                />
+                              ) : null
+                            }
+                          />
+                        ) : null,
+                      )}
+                    </SectionTable>
+                  ))}
                 </div>
               )}
             </div>
-          )}
-
-          {lecture.some((f) => f.nature === "inventaire") && aCreer.length === 0 && (
-            <p className="px-4 py-2 text-[11px] text-emerald-700 bg-emerald-50 border-t border-emerald-200">
-              Aucun titre à créer : tous les libellés de ces inventaires sont déjà au
-              référentiel.
-            </p>
           )}
 
           {bloquants.length > 0 && (

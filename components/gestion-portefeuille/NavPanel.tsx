@@ -1,12 +1,11 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Area, AreaChart, CartesianGrid, Tooltip, XAxis, YAxis } from "recharts";
 import { ResponsiveContainer } from "@/components/ui/ChartContainer";
 import {
   deleteNavPointAction,
-  importNavAction,
   upsertNavPointAction,
   type NavPointInput,
 } from "@/app/gestion-portefeuille/nav-actions";
@@ -34,11 +33,7 @@ export default function NavPanel({
   initialHistory?: NavPoint[];
 }) {
   const router = useRouter();
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
   const [metric, setMetric] = useState<Metric>("vl");
-  const [importing, startImport] = useTransition();
 
   // Édition manuelle des points de VL.
   const [editingDate, setEditingDate] = useState<string | null>(null); // date en cours d'édition
@@ -104,63 +99,16 @@ export default function NavPanel({
     [history, metric],
   );
 
-  const handleImport = () => {
-    const file = fileRef.current?.files?.[0];
-    if (!file) {
-      setError("Sélectionne d'abord un fichier .xlsx.");
-      return;
-    }
-    setError(null);
-    setInfo(null);
-    const fd = new FormData();
-    fd.append("file", file);
-    startImport(async () => {
-      const res = await importNavAction(fundId, fd);
-      if (!res.ok) {
-        setError(res.error);
-        return;
-      }
-      setInfo(`${res.data.imported} points importés (${res.data.minDate} → ${res.data.maxDate}).`);
-      if (fileRef.current) fileRef.current.value = "";
-      router.refresh();
-    });
-  };
 
-  // Tableau : les points les plus récents en premier.
   const recent = useMemo(() => [...history].reverse().slice(0, 60), [history]);
 
   return (
     <div className="space-y-5">
       {/* Import */}
-      <section className="bg-white border border-slate-200 rounded-lg p-4">
-        <h3 className="text-sm font-semibold text-slate-800 mb-1">
-          Importer l&apos;historique de valeur liquidative
-        </h3>
-        <p className="text-[11px] text-slate-500 mb-3">
-          Fichier Excel : Date · Valeur Liquidative · Nombre de Parts · Actif Net · Actif Brut.
-          L&apos;import est additif : les nouvelles dates sont ajoutées, les dates déjà présentes
-          sont mises à jour.
-        </p>
-        <div className="flex items-center gap-3 flex-wrap">
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".xlsx,.xlsm"
-            className="text-[12px] text-slate-500 file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border-0 file:bg-slate-100 file:text-slate-700 file:text-sm hover:file:bg-slate-200"
-          />
-          <button
-            type="button"
-            onClick={handleImport}
-            disabled={importing}
-            className="px-4 py-2 text-sm font-medium rounded-md border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 transition disabled:opacity-50"
-          >
-            {importing ? "Import…" : "Importer"}
-          </button>
-          {error && <span className="text-[12px] text-red-600">{error}</span>}
-          {info && <span className="text-[12px] text-emerald-600">✓ {info}</span>}
-        </div>
-      </section>
-
+      {/* L'IMPORT A QUITTE CET ECRAN, comme celui des inventaires : les
+          etats de valeur liquidative arrivent avec eux, et se deposent en
+          tete de page, en lot. Ici on LIT l'historique, on corrige un point,
+          on en ajoute un a la main. */}
       {history.length > 0 && (
         <>
           {/* Synthèse */}
