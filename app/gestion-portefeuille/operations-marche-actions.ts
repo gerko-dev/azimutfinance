@@ -15,10 +15,9 @@ import type { ActionResult } from "@/lib/admin/types";
 import { estNiveau1, MSG_NIVEAU1 } from "./guard";
 import {
   caracteristiquesNonCote,
-  EMETTEUR_NON_COTES,
-  LIBELLE_NON_COTES,
   titresNonCotes,
 } from "./operations-marche-non-cotes";
+import { EMETTEUR_NON_COTES } from "./operations-marche-non-cotes-cles";
 import { autoriser, type ClientServeur } from "./operations-marche-garde";
 import { construirePointTresorerie } from "./tresorerie-data";
 import {
@@ -130,15 +129,12 @@ export async function listerTitresAction(
     return { ok: true, data: { etats: [], titres: adjudicationsOuvertes(aujourdhui) } };
   }
 
-  // LE REFERENTIEL DU GERANT EST UN EMETTEUR COMME UN AUTRE. Les titres de
-  // gré à gré — FCTC, emprunts d'entreprise placés en privé — ne figurent à
-  // aucun calendrier public, et n'avaient donc aucune case où entrer. Ils
-  // prennent leur place au bout de la liste des États : après les huit, parce
-  // qu'un émetteur souverain reste le cas courant.
-  const etats =
-    marche === "mtp"
-      ? [...etatsMtp(), { code: EMETTEUR_NON_COTES, nom: LIBELLE_NON_COTES }]
-      : [];
+  // LA LISTE DES ÉTATS NE PORTE QUE DES ÉTATS. Le référentiel du gérant se
+  // choisit à l'INSTRUMENT — « Autres instruments non cotés » —, parce qu'un
+  // emprunt de gré à gré n'a pas d'État émetteur et que lui en demander un
+  // n'aurait eu aucune réponse juste. L'écran passe alors `EMETTEUR_NON_COTES`
+  // en guise de pays, et c'est la seule chose qui change.
+  const etats = marche === "mtp" ? etatsMtp() : [];
 
   if (!cession) {
     if (marche === "mfr") return { ok: true, data: { etats: [], titres: titresMfr() } };
@@ -160,10 +156,12 @@ export async function listerTitresAction(
     marche === "mfr"
       ? titresMfr()
       : [
-          ...etats.filter((e) => e.code !== EMETTEUR_NON_COTES).flatMap((e) => titresMtp(e.code)),
+          ...etats.flatMap((e) => titresMtp(e.code)),
           // LES NON COTÉS SE VENDENT AUSSI, et c'est même là qu'on les
           // retrouve le plus souvent : un emprunt de gré à gré se garde
-          // jusqu'à l'échéance, ou se cède d'un bloc.
+          // jusqu'à l'échéance, ou se cède d'un bloc. Pour une vente, on les
+          // joint à tout le gisement : l'écran ne filtre plus par émetteur,
+          // puisque l'inventaire dit déjà ce que le fonds peut céder.
           ...(await titresNonCotes()),
         ];
 

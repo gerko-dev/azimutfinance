@@ -63,6 +63,10 @@ import {
   type SaisieRemere,
   type Validite,
 } from "@/app/gestion-portefeuille/operations-marche-types";
+import {
+  EMETTEUR_NON_COTES,
+  LIBELLE_NON_COTES,
+} from "@/app/gestion-portefeuille/operations-marche-non-cotes-cles";
 import ChampMontant from "./ChampMontant";
 import VoletsMtp, { type EtatVolets } from "./VoletsMtp";
 import { RecapPrets, RecapRemeres } from "./RecapVolets";
@@ -404,6 +408,21 @@ export default function OperationsMarchePanel({
   // ── Choix du titre ───────────────────────────────────────────────────────
   const [etats] = useState<Etat[]>(etatsInitiaux);
   const [pays, setPays] = useState(etatsInitiaux[0]?.code ?? "");
+  /**
+   * D'OU VIENNENT LES TITRES D'UN ORDRE MTP.
+   *
+   * « public » : le guichet UMOA-Titres, OAT et BAT d'un État.
+   * « non_cote » : le RÉFÉRENTIEL DU GÉRANT — FCTC, emprunts d'entreprise
+   * placés de gré à gré, créances titrisées. Ces titres ne figurent à aucun
+   * calendrier public et n'avaient donc aucune case où entrer, alors même que
+   * l'inventaire les porte.
+   *
+   * C'EST UN CHOIX D'ECRAN, PAS UN INSTRUMENT DE PLUS. L'ordre reste un ordre
+   * de marché des titres publics — même convention de dénouement, même poste
+   * de trésorerie — et il s'enregistre comme tel. Ce qui change est la LISTE
+   * où l'on va chercher le titre, et elle seule.
+   */
+  const [sourceMtp, setSourceMtp] = useState<"public" | "non_cote">("public");
   const [titres, setTitres] = useState<OptionTitre[]>(titresInitiaux);
   const [titreCle, setTitreCle] = useState("");
   const [titresEtat, setTitresEtat] = useState<"chargement" | "pret">("pret");
@@ -560,6 +579,29 @@ export default function OperationsMarchePanel({
     setPays(p);
     oublierTitre();
     chargerTitres("mtp", p, sensDe(description) === "vente", fondsId);
+  };
+
+  /**
+   * Changer d'instrument change la LISTE DES TITRES, et donc invalide celui
+   * qui était choisi : le garder laisserait à l'écran un ISIN et des courus
+   * qui ne correspondent plus.
+   */
+  const changerInstrument = (valeur: string) => {
+    oublierTitre();
+    const vente = sensDe(description) === "vente";
+    if (valeur === "non_cote") {
+      // L'instrument PERSISTÉ reste « mtp » : c'est bien un ordre de marché
+      // des titres publics, et en inventer un quatrième aurait demandé une
+      // convention de dénouement, un poste de trésorerie et une migration —
+      // pour une distinction qui ne porte que sur l'origine du titre.
+      setSourceMtp("non_cote");
+      setInstrument("mtp");
+      chargerTitres("mtp", EMETTEUR_NON_COTES, vente, fondsId);
+      return;
+    }
+    setSourceMtp("public");
+    setInstrument(valeur as Instrument);
+    if (marche === "mtp") chargerTitres("mtp", pays, vente, fondsId);
   };
 
   const choisirTitre = (cle: string) => {
@@ -1232,16 +1274,16 @@ export default function OperationsMarchePanel({
             </select>
           </Champ>
 
+          {/* L'INSTRUMENT DIT AUSSI OU CHERCHER LE TITRE.
+              Sur le marché des titres publics, « Autres instruments non
+              cotés » ouvre le référentiel du gérant : tout ce qui se négocie
+              de gré à gré et n'est ni OAT ni BAT. L'ordre reste un ordre MTP —
+              même convention de dénouement, même poste de trésorerie ; seule
+              la liste des titres change. */}
           <Champ label="Instrument">
             <select
-              value={instrument}
-              onChange={(e) => {
-                setInstrument(e.target.value as Instrument);
-                // Le titre choisi n'est plus dans la liste : le garder
-                // laisserait à l'écran un ISIN et des courus qui ne
-                // correspondent plus à la nature sélectionnée.
-                oublierTitre();
-              }}
+              value={marche === "mtp" && sourceMtp === "non_cote" ? "non_cote" : instrument}
+              onChange={(e) => changerInstrument(e.target.value)}
               className={champ}
             >
               {instrumentsAdmis.map((i) => (
@@ -1249,11 +1291,16 @@ export default function OperationsMarchePanel({
                   {LIBELLES_INSTRUMENT[i]}
                 </option>
               ))}
+              {marche === "mtp" && (
+                <option value="non_cote">{LIBELLE_NON_COTES}</option>
+              )}
             </select>
             <span className={aide}>
               {marche === "mfr"
                 ? "MFR : actions et obligations cotées"
-                : "MTP : OAT et BAT"}
+                : sourceMtp === "non_cote"
+                  ? "Les titres de ton référentiel qui ne sont ni OAT ni BAT"
+                  : "MTP : OAT et BAT du guichet UMOA-Titres"}
             </span>
           </Champ>
 
@@ -1286,8 +1333,11 @@ export default function OperationsMarchePanel({
               y figure désormais au même rang, sous « Autres instruments non
               cotés », pour tout ce qui se négocie de gré à gré et n'est ni OAT
               ni BAT. */}
-          {marche === "mtp" && (
-            <Champ label="Émetteur">
+          {/* L'ÉMETTEUR NE SE CHOISIT QUE POUR LES TITRES PUBLICS : un
+              emprunt de gré à gré n'appartient à aucun des huit États, et lui
+              demander lequel n'aurait eu aucune réponse juste. */}
+          {marche === "mtp" && sourceMtp === "public" && (
+            <Champ label="État émetteur">
               <select
                 value={pays}
                 onChange={(e) => changerPays(e.target.value)}

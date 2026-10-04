@@ -28,15 +28,13 @@ import type { CustomSecurity } from "./portfolio-types";
 import type { CaracteristiquesTitre, OptionTitre } from "./operations-marche-titres";
 import type { Instrument } from "./operations-marche-types";
 
-/**
- * Le code d'émetteur qui désigne le référentiel du gérant.
- *
- * Il voisine avec « CI », « SN », « BF »… dans la liste des États : deux
- * caractères n'auraient pas suffi à le distinguer sans risque d'un code pays
- * futur, et un mot entier se lit.
- */
-export const EMETTEUR_NON_COTES = "NONCOTES";
-export const LIBELLE_NON_COTES = "Autres instruments non cotés";
+// Le code d'émetteur vit dans un module SANS « server-only » : l'écran de
+// saisie en a besoin, et il est client.
+export {
+  EMETTEUR_NON_COTES,
+  LIBELLE_NON_COTES,
+} from "./operations-marche-non-cotes-cles";
+
 
 /** La fiche décrit-elle un titre de gré à gré, hors cote et hors guichet ? */
 function estNonCote(c: CustomSecurity): boolean {
