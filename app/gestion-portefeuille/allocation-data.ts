@@ -20,6 +20,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { loadListedBonds, loadStocks, loadUmoaEmissions } from "@/lib/dataLoader";
 
 import { loadCustomSecurities, loadFundPortfolios } from "./portfolio-data";
+import { construirePointTresorerie } from "./tresorerie-data";
 import type {
   CustomSecurity,
   PortfolioSection,
@@ -559,6 +560,42 @@ export async function construireTableauAllocation(
     l.sort((a, b) => b.valorisation - a.valorisation);
   }
 
+  // ── LA LIQUIDITE VIENT DU TABLEAU DE TRESORERIE, PAS DE L'INVENTAIRE ─────
+  //
+  // L'INVENTAIRE NE DIT PAS CE DONT LE FONDS DISPOSE. Il porte les soldes des
+  // comptes à la date d'arrêté, et ne sait rien des engagements déjà pris :
+  // achats validés, achats réalisés non réglés, autres engagements. Allouer
+  // une poche de liquidité qui est en réalité déjà promise revient à proposer
+  // d'investir de l'argent qui va sortir.
+  //
+  // Le SOLDE REEL du point de trésorerie est, lui, ce dont le fonds dispose
+  // vraiment une fois ses engagements honorés : c'est le chiffre sur lequel
+  // une décision d'allocation se prend.
+  //
+  // L'ACTIF NET SUIT, sans quoi les poids ne sommeraient plus à 100 % : la
+  // part d'inventaire qu'on retire est remplacée par le solde réel, et le
+  // total se recompose exactement.
+  const tresorerieInventaire = valActuelles.get("tresorerie") ?? 0;
+  let soldeReelTresorerie: number | null = null;
+  if (classeParente === null) {
+    try {
+      const point = await construirePointTresorerie(fundId, "", dateRef);
+      const ligne = point?.lignes.find((l) => l.libelle === "SOLDEREEL");
+      if (typeof ligne?.total === "number" && Number.isFinite(ligne.total)) {
+        soldeReelTresorerie = ligne.total;
+      }
+    } catch {
+      /* point indisponible : on retombe sur l'inventaire, et on le dit */
+    }
+    if (soldeReelTresorerie != null) {
+      valActuelles.set("tresorerie", soldeReelTresorerie);
+    } else {
+      avertissements.push(
+        "Le point de trésorerie n'a pas pu être construit : la liquidité affichée est celle de l'inventaire, engagements non déduits.",
+      );
+    }
+  }
+
   // La trésorerie à investir est de la liquidité DÉTENUE qui n'est pas encore
   // à l'inventaire. Sur l'axe des classes, elle doit donc figurer sur la ligne
   // de liquidité : ne la porter que sur l'assiette cible — ce qu'on faisait —
@@ -581,9 +618,15 @@ export async function construireTableauAllocation(
 
   // Actif net : toutes classes confondues, quel que soit l'axe. La trésorerie
   // à investir en fait partie — elle est simplement encore en liquidités.
+  //
+  // LE SOLDE REEL REMPLACE LA LIQUIDITE D'INVENTAIRE DANS LE TOTAL AUSSI. Le
+  // faire sur la seule ligne aurait donné des poids qui ne somment plus à
+  // 100 %, et une assiette cible calculée sur un actif net que le tableau ne
+  // montre nulle part.
   const actifNet =
     (actuel?.positions ?? []).reduce((s, p) => s + num(p.valuation), 0) +
-    tresorerieAInvestir;
+    tresorerieAInvestir +
+    (soldeReelTresorerie != null ? soldeReelTresorerie - tresorerieInventaire : 0);
   const actifNetPrecedent = precedent
     ? precedent.positions.reduce((s, p) => s + num(p.valuation), 0)
     : null;
