@@ -272,6 +272,49 @@ function Contenu({
   const [fluxOuverts, setFluxOuverts] = useState(false);
   const [spotsOuverts, setSpotsOuverts] = useState(false);
   const [nivellementsOuverts, setNivellementsOuverts] = useState(false);
+  const [exportEnCours, setExportEnCours] = useState(false);
+  const [exportErreur, setExportErreur] = useState<string | null>(null);
+
+  /**
+   * L'EXPORT DES SOLDES PART DU CLASSEUR ET Y RETOURNE.
+   *
+   * On y dépose le classeur de gestion de trésorerie, le serveur y relève la
+   * structure de la feuille « Point de trésorerie » — quel fonds, quelle
+   * ligne, quelles banques et dans quel ordre — et rend un fichier calqué
+   * dessus, soldes remplis. Le copier-coller n'a plus rien à viser.
+   *
+   * C'EST UN ENVOI, PAS UN LIEN : un classeur de quatre mégaoctets ne se passe
+   * pas en paramètre d'URL. Le fichier revient donc en réponse, et on le pose
+   * dans le navigateur à la main.
+   */
+  const exporterSoldes = async (classeur: File) => {
+    setExportErreur(null);
+    setExportEnCours(true);
+    try {
+      const corps = new FormData();
+      corps.append("classeur", classeur);
+      if (point.dateFin) corps.append("arrete", point.dateFin);
+      const r = await fetch("/gestion-portefeuille/tresorerie/export-soldes", {
+        method: "POST",
+        body: corps,
+      });
+      if (!r.ok) {
+        setExportErreur((await r.text()) || `Échec (${r.status}).`);
+        return;
+      }
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `soldes-point-tresorerie-${point.dateFin ?? "arrete"}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setExportErreur(err instanceof Error ? err.message : String(err));
+    } finally {
+      setExportEnCours(false);
+    }
+  };
   // L'infobulle survolée, ou null. Elle est posée à l'ENTRÉE dans la cellule
   // et n'est plus recalculée ensuite : suivre la souris aurait fait clignoter
   // une bulle de trois cents pixels sur un tableau dont les cellules en font
@@ -484,6 +527,39 @@ function Contenu({
           >
             Export engagements
           </a>
+          {/* L'EXPORT DES SOLDES DEMANDE LE CLASSEUR, et ce n'est pas un
+              caprice : l'ordre des colonnes de chaque fonds n'obeit a aucune
+              regle — c'est l'histoire du portefeuille — et le site ne peut pas
+              le deviner. Exporter dans NOTRE ordre obligerait a realigner
+              colonne par colonne avant de coller, c'est-a-dire a refaire le
+              travail qu'on veut supprimer, avec le risque de poser le solde
+              d'une banque sur une autre.
+              Le classeur est lu en memoire pour sa structure, jamais ecrit ni
+              conserve. */}
+          <label
+            className={`px-3 py-1 rounded text-[11px] font-medium border cursor-pointer transition ${
+              exportEnCours
+                ? "border-slate-200 text-slate-400"
+                : "border-slate-300 text-slate-700 hover:bg-slate-50"
+            }`}
+            title="Dépose ton classeur de gestion de trésorerie : le fichier rendu est calqué sur sa feuille « Point de trésorerie », soldes remplis, prêt à coller."
+          >
+            {exportEnCours ? "Génération…" : "Export soldes"}
+            <input
+              type="file"
+              accept=".xlsm,.xlsx"
+              className="hidden"
+              disabled={exportEnCours}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                e.target.value = "";
+                if (f) void exporterSoldes(f);
+              }}
+            />
+          </label>
+          {exportErreur && (
+            <span className="text-[11px] text-rose-700">{exportErreur}</span>
+          )}
           {point.soldesSaisisLe && (
             <span className="text-[11px] text-slate-500">
               Derniers soldes saisis : {point.soldesSaisisLe}
