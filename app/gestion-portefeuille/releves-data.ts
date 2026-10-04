@@ -13,12 +13,7 @@ import "server-only";
 // un solde à huit chiffres écrit sans qu'on l'ait vu passer n'est pas une
 // automatisation, c'est une erreur en attente.
 
-import { readFile, readdir } from "fs/promises";
-import { join } from "path";
-
-import { lignesDuPdf } from "@/lib/releves/pdfLignes";
-
-import { interpreterReleve, type ReleveLu } from "./releves-parse";
+import type { ReleveLu } from "./releves-parse";
 import {
   fondsDuNomDeFichier,
   rattacherEtablissement,
@@ -27,9 +22,6 @@ import {
   type Candidat,
 } from "./releves-rapprochement";
 import type { GrilleSoldes } from "./tresorerie-grille";
-
-/** Le dossier des relevés, à la racine du dépôt. */
-export const DOSSIER_RELEVES = "Relevés";
 
 /**
  * Un relevé lu, AVANT tout rattachement.
@@ -78,28 +70,13 @@ export type LectureReleves = {
   ecartees: PropositionSolde[];
 };
 
-/** Les sous-dossiers de date, du plus récent au plus ancien. */
-async function dossiersDeDate(racine: string): Promise<string[]> {
-  const entrees = await readdir(join(racine, DOSSIER_RELEVES), {
-    withFileTypes: true,
-  });
-  return entrees
-    .filter((e) => e.isDirectory())
-    .map((e) => e.name)
-    // LE NOM DU DOSSIER EST SA DATE, donc l'ordre alphabétique est l'ordre
-    // chronologique — à condition qu'il soit écrit en ISO. Un dossier nommé
-    // autrement se range où il peut : on le garde, mais il ne passera pas
-    // devant une date bien formée.
-    .sort((a, b) => b.localeCompare(a));
-}
-
 /**
  * Rattache des relevés déjà lus aux cases de la grille.
  *
  * PUR, ET SEUL A DECIDER. Ni fichier ni base : on lui donne ce qui a été lu et
  * la grille visée, il rend ce qui tombe dans une case et ce qui n'y tombe pas,
- * avec la raison. Les deux chemins — dossier du poste, dépôt par le navigateur
- * — passent par lui, donc ils ne peuvent pas diverger.
+ * avec la raison. C'est le SEUL endroit où un relevé se voit attribuer une
+ * banque, un fonds et une case : la route qui ouvre les PDF ne fait que lire.
  */
 export function rattacherLectures(
   lus: ReleveBrut[],
@@ -205,65 +182,6 @@ export function rattacherLectures(
   ecartees.sort(ordre);
 
   return { dossier, fichiers: lus.length, propositions, ecartees };
-}
-
-/**
- * Lit les relevés du dossier le plus récent et les rattache à la grille.
- *
- * `racine` est le répertoire du dépôt : il est passé plutôt que déduit pour
- * que la fonction reste testable hors du serveur.
- */
-export async function lireReleves(
-  racine: string,
-  grille: GrilleSoldes,
-  dossierVoulu?: string,
-): Promise<LectureReleves | { erreur: string }> {
-  let dates: string[];
-  try {
-    dates = await dossiersDeDate(racine);
-  } catch {
-    return {
-      erreur:
-        `Aucun dossier « ${DOSSIER_RELEVES} » ici. Les relevés se lisent sur la machine ` +
-        `qui fait tourner le site : en ligne, ce dossier n'existe pas.`,
-    };
-  }
-  if (dates.length === 0) {
-    return { erreur: `Le dossier « ${DOSSIER_RELEVES} » ne contient aucune date.` };
-  }
-  const dossier = dossierVoulu && dates.includes(dossierVoulu) ? dossierVoulu : dates[0];
-  const base = join(racine, DOSSIER_RELEVES, dossier);
-
-  // LIRE, PUIS RATTACHER. Le dossier du poste ne fait que produire des
-  // `ReleveBrut` ; tout le reste — la banque, le fonds, la case — est décidé
-  // par `rattacherLectures`, que le dépôt depuis le navigateur emprunte aussi.
-  // Deux chemins, un seul jugement : ils ne peuvent pas diverger.
-  const lus: ReleveBrut[] = [];
-  for (const e of await readdir(base, { withFileTypes: true })) {
-    if (!e.isDirectory()) continue;
-    const dossierBanque = e.name;
-    for (const f of await readdir(join(base, dossierBanque))) {
-      if (!f.toLowerCase().endsWith(".pdf")) continue;
-      const fichier = `${dossierBanque}/${f}`;
-      try {
-        const octets = new Uint8Array(await readFile(join(base, dossierBanque, f)));
-        lus.push({
-          ...interpreterReleve(await lignesDuPdf(octets)),
-          fichier,
-          dossierBanque,
-        });
-      } catch (err) {
-        lus.push({
-          ...RELEVE_ILLISIBLE,
-          fichier,
-          dossierBanque,
-          probleme: `PDF illisible : ${err instanceof Error ? err.message : String(err)}`,
-        });
-      }
-    }
-  }
-
-  return rattacherLectures(lus, grille, dossier);
 }
 
 /** Ce qu'on retient d'un PDF qu'on n'a pas pu ouvrir. */

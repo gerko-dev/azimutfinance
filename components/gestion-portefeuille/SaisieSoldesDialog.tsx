@@ -12,7 +12,6 @@ import { useRouter } from "next/navigation";
 
 import { enregistrerSoldesMultiFondsAction } from "@/app/gestion-portefeuille/tresorerie-actions";
 import {
-  lireRelevesAction,
   rattacherRelevesAction,
 } from "@/app/gestion-portefeuille/releves-actions";
 import type {
@@ -93,28 +92,6 @@ export default function SaisieSoldesDialog({
 
   const totalFonds = (l: GrilleSoldes["lignes"][number]) =>
     l.comptes.reduce((s, b) => s + lire(valeurs[cellule(l.fondsId, b)] ?? ""), 0);
-
-  /** Lit le dossier de relevés le plus récent, sans rien écrire. */
-  const lireLesReleves = () => {
-    setErreur(null);
-    setMessage(null);
-    setApplique(0);
-    demarrer(async () => {
-      const res = await lireRelevesAction(date);
-      if (!res.ok) {
-        setLecture(null);
-        setErreur(res.error);
-        return;
-      }
-      setLecture(res.data);
-      if (res.data.propositions.length === 0) {
-        setErreur(
-          `Aucun des ${res.data.fichiers} relevés du dossier ${res.data.dossier} ne se rattache ` +
-            `à une case de la grille. Le détail est ci-dessous.`,
-        );
-      }
-    });
-  };
 
   /**
    * Lit un dossier de relevés CHOISI DANS LE NAVIGATEUR.
@@ -216,17 +193,23 @@ export default function SaisieSoldesDialog({
    */
   const appliquer = () => {
     if (!lecture) return;
+
+    // LES CASES SE CALCULENT AVANT, PAS DANS LE UPDATER. React n'exécute la
+    // fonction passée à `setValeurs` qu'au rendu suivant : remplir l'ensemble
+    // des cases marquées à l'intérieur le laissait VIDE au moment où on le
+    // posait dans l'état, et la mutation tardive ne déclenchait aucun rendu
+    // puisque la référence n'avait pas changé. Les couleurs n'apparaissaient
+    // donc jamais — ni après un dépôt de dossier, ni autrement.
     const marquees = new Set<string>();
-    setValeurs((v) => {
-      const suite = { ...v };
-      for (const p of lecture.propositions) {
-        if (p.solde === null) continue;
-        const k = cellule(p.fondsId, p.etablissement);
-        suite[k] = formaterSaisie(String(Math.round(p.solde)));
-        marquees.add(k);
-      }
-      return suite;
-    });
+    const reportes: Record<string, string> = {};
+    for (const p of lecture.propositions) {
+      if (p.solde === null) continue;
+      const k = cellule(p.fondsId, p.etablissement);
+      reportes[k] = formaterSaisie(String(Math.round(p.solde)));
+      marquees.add(k);
+    }
+
+    setValeurs((v) => ({ ...v, ...reportes }));
     setReportees(marquees);
     setApplique(lecture.propositions.length);
     setMessage(
@@ -286,23 +269,16 @@ export default function SaisieSoldesDialog({
             </p>
           </div>
           <div className="flex items-center gap-3">
-            {/* LE DOSSIER DIT SA DATE, on ne la redemande pas : le bouton lit
-                toujours le sous-dossier le plus récent de « Relevés ». */}
-            <button
-              type="button"
-              onClick={lireLesReleves}
-              disabled={enCours}
-              className="px-3 py-1.5 text-[11px] font-medium border border-blue-300 text-blue-700 rounded hover:bg-blue-50 disabled:opacity-50"
-              title="Lit les relevés PDF déposés dans le dossier « Relevés », et propose les soldes."
-            >
-              {enCours ? "Lecture…" : "Lire relevé"}
-            </button>
-            {/* LE SECOND CHEMIN, pour le site en ligne : là-bas, le dossier
-                « Relevés » du poste n'existe pas. Le navigateur donne le
-                chemin relatif de chaque fichier quand on choisit un DOSSIER,
-                et c'est lui qui nomme la banque. */}
+            {/* UN SEUL CHEMIN DE LECTURE, CELUI DU NAVIGATEUR.
+                Le bouton « Lire relevé » lisait un dossier « Relevés » sur le
+                DISQUE DU SERVEUR : commode en local, inexistant sur le site
+                déployé, et doublon du dépôt depuis le jour où celui-ci a su
+                faire la même chose. Deux boutons pour une seule tâche, dont un
+                qui ne marche qu'à un endroit, se retirent.
+                Le navigateur donne le chemin relatif de chaque fichier quand
+                on choisit un DOSSIER, et c'est lui qui nomme la banque. */}
             <label
-              className={`px-3 py-1.5 text-[11px] font-medium border border-slate-300 text-slate-700 rounded cursor-pointer hover:bg-slate-50 ${
+              className={`px-3 py-1.5 text-[11px] font-medium border border-blue-300 text-blue-700 rounded cursor-pointer hover:bg-blue-50 ${
                 enCours || avancement ? "opacity-50 pointer-events-none" : ""
               }`}
               title="Choisis le dossier de la date — celui qui contient un sous-dossier par banque."
