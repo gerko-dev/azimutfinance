@@ -77,6 +77,7 @@ import type { OperationAvecFonds } from "@/app/gestion-portefeuille/operations-m
 import type { OptionTitre } from "@/app/gestion-portefeuille/operations-marche-titres";
 import type { Partenaire } from "@/app/gestion-portefeuille/partenaires-types";
 import LigneOrdre from "./LigneOrdre";
+import EnTeteTri from "./EnTeteTri";
 import type { ParametresMarche } from "@/app/gestion-portefeuille/parametres-marche-types";
 import ComptesReglement from "./ComptesReglement";
 import {
@@ -102,43 +103,6 @@ const TAUX_ACTIONS = { courtage: 0.004, tps: 0.1 };
 
 /** Onglets de l'écran. Les deux derniers sont des RÉCAPITULATIFS : rien ne s'y
  *  saisit, tout se corrige sur l'ordre. */
-/**
- * Un en-tête qui trie.
- *
- * LA FLÈCHE NE S'AFFICHE QUE SUR LA COLONNE ACTIVE. Un chevron gris sur
- * chaque colonne dit « on peut trier » et noie celle qui trie réellement ;
- * c'est le curseur et le survol qui annoncent la possibilité.
- */
-function EnTeteTri({
-  col,
-  tri,
-  onTrier,
-  aDroite,
-  children,
-}: {
-  col: ColonneTri;
-  tri: { col: ColonneTri; desc: boolean };
-  onTrier: (c: ColonneTri) => void;
-  aDroite?: boolean;
-  children: React.ReactNode;
-}) {
-  const actif = tri.col === col;
-  return (
-    <th className={`px-3 py-2 font-medium ${aDroite ? "text-right" : "text-left"}`}>
-      <button
-        type="button"
-        onClick={() => onTrier(col)}
-        className={`inline-flex items-center gap-1 hover:text-slate-900 ${
-          actif ? "text-slate-900" : ""
-        }`}
-      >
-        {children}
-        {actif && <span className="text-[9px]">{tri.desc ? "▼" : "▲"}</span>}
-      </button>
-    </th>
-  );
-}
-
 /** Les colonnes sur lesquelles le carnet se trie. */
 type ColonneTri = "date" | "fonds" | "titre" | "ordonnee" | "servie" | "montant" | "etat";
 
@@ -881,7 +845,12 @@ export default function OperationsMarchePanel({
 
   const executer = (
     o: OperationAvecFonds,
-    saisie: { dateExecution: string; dateDenouement: string; quantite: number },
+    saisie: {
+      dateExecution: string;
+      dateDenouement: string;
+      quantite: number;
+      prix: number;
+    },
   ) => {
     setErreur(null);
     demarrer(async () => {
@@ -1198,8 +1167,13 @@ export default function OperationsMarchePanel({
       {onglet === "primaire" && (
         <RecapPrimaire
           operations={operations}
+          parametres={parametres}
+          enCours={enCours}
           onModifier={modifier}
           onRapprocher={rapprocherOrdre}
+          onSupprimer={supprimer}
+          onAttribuer={executer}
+          onSupprimerExecution={retirerExecution}
         />
       )}
 
