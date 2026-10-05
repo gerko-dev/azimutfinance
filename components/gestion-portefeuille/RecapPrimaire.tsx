@@ -23,6 +23,7 @@ import { useMemo, useState } from "react";
 
 import {
   LIBELLES_MODALITE,
+  type ModaliteSouscription,
   dateDenouement,
   montantExecution,
   montantOperation,
@@ -37,6 +38,12 @@ import {
 import type { OperationAvecFonds } from "@/app/gestion-portefeuille/operations-marche-data";
 import ChampMontant from "./ChampMontant";
 import EnTeteTri, { type Tri } from "./EnTeteTri";
+import BarreFiltres, {
+  FILTRES_VIDES,
+  retient,
+  type Filtres,
+  type Selecteur,
+} from "./FiltresTableau";
 
 const fmt0 = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
 const montantFr = (v: number) => fmt0.format(Math.round(v));
@@ -70,6 +77,15 @@ type ColonnePrimaire =
  * Le règlement précède l'attribution : « Réglé » n'est donc pas un état final
  * mais une étape, et il peut coexister avec une attribution encore attendue.
  */
+/** Les étapes, dans l'ordre où elles arrivent. Sert aussi à les proposer. */
+const ETAPES = [
+  "Engagée",
+  "Réglée, en attente",
+  "Servie en partie",
+  "Attribuée",
+  "Clôturée",
+] as const;
+
 function etape(o: OperationMarche): { libelle: string; ton: string; rang: number } {
   const servie = quantiteExecutee(o);
   if (o.clotureLe)
@@ -83,8 +99,35 @@ function etape(o: OperationMarche): { libelle: string; ton: string; rang: number
   return { libelle: "Engagée", ton: "bg-amber-100 text-amber-800", rang: 0 };
 }
 
+/**
+ * CE QU'ON FILTRE ICI, dans les mots du primaire.
+ *
+ * L'ÉTAPE plutôt que l'état d'un ordre : une souscription n'est pas réalisée
+ * ou périmée, elle est engagée, réglée, servie. La MODALITÉ parce que c'est
+ * la question qu'on pose à ce tableau — qu'ai-je pris à l'adjudication, et
+ * qu'ai-je pris de gré à gré.
+ */
+const SELECTEURS: Selecteur[] = [
+  {
+    cle: "etape",
+    libelle: "État",
+    options: ETAPES.map((e) => ({ valeur: e, libelle: e })),
+    valeurDe: (o) => etape(o).libelle,
+  },
+  {
+    cle: "modalite",
+    libelle: "Modalité",
+    options: (Object.keys(LIBELLES_MODALITE) as ModaliteSouscription[]).map((m) => ({
+      valeur: m,
+      libelle: LIBELLES_MODALITE[m].split(" — ")[0],
+    })),
+    valeurDe: (o) => o.modalite ?? "",
+  },
+];
+
 export default function RecapPrimaire({
   operations,
+  fonds,
   parametres,
   enCours,
   onModifier,
@@ -94,6 +137,7 @@ export default function RecapPrimaire({
   onSupprimerExecution,
 }: {
   operations: OperationAvecFonds[];
+  fonds: { id: string; nom: string }[];
   parametres: ParametresMarche;
   enCours: boolean;
   onModifier: (o: OperationAvecFonds) => void;
@@ -119,9 +163,15 @@ export default function RecapPrimaire({
   // garde-fou. Ici chaque ligne est un engagement de trésorerie qu'on vient de
   // régler, et il n'y a pas de sélection : le bouton se confirme.
   const [aSupprimer, setASupprimer] = useState<string | null>(null);
+  const [filtres, setFiltres] = useState<Filtres>(FILTRES_VIDES);
+
+  const souscriptions = useMemo(
+    () => operations.filter((o) => o.description === "SOUSCRIPTION_MP"),
+    [operations],
+  );
 
   const lignes = useMemo(() => {
-    const souscriptions = operations.filter((o) => o.description === "SOUSCRIPTION_MP");
+    const retenues = souscriptions.filter((o) => retient(o, filtres, SELECTEURS));
     const valeur = (o: OperationAvecFonds): string | number => {
       switch (tri.col) {
         case "fonds":
@@ -145,7 +195,7 @@ export default function RecapPrimaire({
       }
     };
     const signe = tri.desc ? -1 : 1;
-    return [...souscriptions].sort((a, b) => {
+    return [...retenues].sort((a, b) => {
       const va = valeur(a);
       const vb = valeur(b);
       const c =
@@ -157,7 +207,7 @@ export default function RecapPrimaire({
       // rendu.
       return c !== 0 ? c * signe : -a.dateOperation.localeCompare(b.dateOperation);
     });
-  }, [operations, tri]);
+  }, [souscriptions, filtres, tri]);
 
   const trierPar = (col: ColonnePrimaire) =>
     setTri((p) => (p.col === col ? { col, desc: !p.desc } : { col, desc: col === "date" }));
@@ -173,6 +223,14 @@ export default function RecapPrimaire({
       </p>
 
       <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
+        <BarreFiltres
+          fonds={fonds}
+          selecteurs={SELECTEURS}
+          valeurs={filtres}
+          onChange={setFiltres}
+          vus={lignes.length}
+          total={souscriptions.length}
+        />
         <div className="overflow-x-auto">
           <table className="w-full text-[11px] border-collapse">
             <thead className="bg-slate-100 text-slate-600">
@@ -212,8 +270,15 @@ export default function RecapPrimaire({
               {lignes.length === 0 ? (
                 <tr>
                   <td colSpan={11} className="px-3 py-6 text-center text-slate-400">
-                    Aucune souscription au primaire. Choisis «&nbsp;Souscription marché
-                    primaire&nbsp;» dans l&apos;onglet «&nbsp;Saisir un ordre&nbsp;».
+                    {souscriptions.length === 0 ? (
+                      <>
+                        Aucune souscription au primaire. Choisis
+                        «&nbsp;Souscription marché primaire&nbsp;» dans
+                        l&apos;onglet «&nbsp;Saisir un ordre&nbsp;».
+                      </>
+                    ) : (
+                      "Aucune souscription ne répond à ces filtres."
+                    )}
                   </td>
                 </tr>
               ) : (

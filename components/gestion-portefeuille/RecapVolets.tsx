@@ -20,9 +20,17 @@ import {
   interetPret,
   montantRemere,
   remereNoue,
+  type SensRemere,
+  type StatutPret,
 } from "@/app/gestion-portefeuille/operations-marche-types";
 import type { OperationAvecFonds } from "@/app/gestion-portefeuille/operations-marche-data";
 import EnTeteTri, { type Tri } from "./EnTeteTri";
+import BarreFiltres, {
+  FILTRES_VIDES,
+  retient,
+  type Filtres,
+  type Selecteur,
+} from "./FiltresTableau";
 
 const fmt0 = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
 const montantFr = (v: number) => fmt0.format(Math.round(v));
@@ -30,7 +38,6 @@ const dateFr = (d: string | null) =>
   d ? new Date(`${d}T00:00:00`).toLocaleDateString("fr-FR") : "—";
 
 const th = "text-left px-3 py-2 font-medium";
-const thNum = "text-right px-3 py-2 font-medium";
 const td = "px-3 py-2";
 const tdNum = "px-3 py-2 text-right tabular-nums";
 
@@ -51,6 +58,7 @@ function Cadre({
   explication,
   vide,
   videAide,
+  barre,
   enTetes,
   children,
 }: {
@@ -58,6 +66,8 @@ function Cadre({
   explication: string;
   vide: boolean;
   videAide: string;
+  /** La barre de filtres, DANS le cadre : elle appartient au tableau. */
+  barre?: React.ReactNode;
   enTetes: React.ReactNode;
   children: React.ReactNode;
 }) {
@@ -65,6 +75,7 @@ function Cadre({
     <div className="space-y-3">
       <p className="text-[11px] text-slate-500">{explication}</p>
       <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
+        {barre}
         <div className="overflow-x-auto">
           <table className="w-full text-[11px] border-collapse">
             <thead className="bg-slate-100 text-slate-600">
@@ -88,20 +99,138 @@ function Cadre({
   );
 }
 
+/** Les colonnes sur lesquelles le registre des rémérés se trie. */
+type ColonneRemere =
+  | "date"
+  | "fonds"
+  | "contrepartie"
+  | "titre"
+  | "quantite"
+  | "entree"
+  | "sortie"
+  | "sens"
+  | "fin"
+  | "montant"
+  | "etat";
+
+/**
+ * CE QU'ON FILTRE SUR UN RÉMÉRÉ, dans ses propres mots.
+ *
+ * L'ÉTAT a trois valeurs et non deux : un dénouement saisi mais pas encore
+ * exécuté n'est ni en cours ni soldé — rien n'est réglé, et le réméré pèse
+ * toujours. Le SENS dit de quel côté le cash est parti, et c'est la question
+ * qu'on pose d'abord à ce tableau.
+ */
+/** Ce qu'on filtre sur un prêt : les titres sont revenus, ou ils ne le sont
+ *  pas — et l'intérêt a été encaissé, ou il reste à encaisser. */
+const SELECTEURS_PRET: Selecteur[] = [
+  {
+    cle: "statut",
+    libelle: "Statut",
+    options: (Object.keys(LIBELLES_STATUT_PRET) as StatutPret[]).map((s) => ({
+      valeur: s,
+      libelle: LIBELLES_STATUT_PRET[s],
+    })),
+    valeurDe: (o) => o.pret?.statut ?? "",
+  },
+  {
+    cle: "interet",
+    libelle: "Intérêt",
+    options: [
+      { valeur: "a_recevoir", libelle: "À recevoir" },
+      { valeur: "recu", libelle: "Rapproché" },
+    ],
+    valeurDe: (o) => (o.pret?.interetRapprocheLe ? "recu" : "a_recevoir"),
+  },
+];
+
+const SELECTEURS_REMERE: Selecteur[] = [
+  {
+    cle: "etat",
+    libelle: "État",
+    options: [
+      { valeur: "en_cours", libelle: "En cours" },
+      { valeur: "denouement_saisi", libelle: "Dénouement saisi" },
+      { valeur: "denoue", libelle: "Dénoué" },
+    ],
+    valeurDe: (o) =>
+      o.remere?.denouementEnAttente ? "denouement_saisi" : (o.remere?.statut ?? ""),
+  },
+  {
+    cle: "sens",
+    libelle: "Sens",
+    options: (Object.keys(LIBELLES_SENS_REMERE) as SensRemere[]).map((s) => ({
+      valeur: s,
+      libelle: LIBELLES_SENS_REMERE[s].split(" — ")[0],
+    })),
+    valeurDe: (o) => o.remere?.sens ?? "",
+  },
+];
+
 export function RecapRemeres({
   operations,
+  fonds,
   onModifier,
   onDenouer,
 }: {
   operations: OperationAvecFonds[];
+  fonds: { id: string; nom: string }[];
   onModifier: (o: OperationAvecFonds) => void;
   /** Ouvre l'opération MTP de sens inverse qui soldera le réméré. */
   onDenouer: (o: OperationAvecFonds) => void;
 }) {
+  const [tri, setTri] = useState<Tri<ColonneRemere>>({ col: "date", desc: true });
+  const [filtres, setFiltres] = useState<Filtres>(FILTRES_VIDES);
+
   // UN RÉMÉRÉ N'ENTRE DANS LA LISTE QU'UNE FOIS SON ORDRE EXÉCUTÉ : tant
   // qu'il n'est pas servi, rien n'a été cédé et la cession temporaire n'a pas
   // eu lieu. L'ordre reste visible dans l'onglet Opérations, où il s'exécute.
-  const lignes = operations.filter(remereNoue);
+  const noues = useMemo(() => operations.filter(remereNoue), [operations]);
+
+  const lignes = useMemo(() => {
+    const retenues = noues.filter((o) => retient(o, filtres, SELECTEURS_REMERE));
+    const valeur = (o: OperationAvecFonds): string | number => {
+      const r = o.remere!;
+      switch (tri.col) {
+        case "fonds":
+          return o.fondsNom ?? "";
+        case "contrepartie":
+          return r.contrepartie ?? "";
+        case "titre":
+          return o.libelle || o.code || "";
+        case "quantite":
+          return o.quantite;
+        case "entree":
+          return o.prix;
+        case "sortie":
+          return r.prixSortie;
+        case "sens":
+          return r.sens;
+        case "fin":
+          return r.dateFin ?? "";
+        case "montant":
+          return montantRemere(o, r);
+        case "etat":
+          // EN COURS D'ABORD : c'est ce qui demande une action.
+          return r.statut === "en_cours" ? (r.denouementEnAttente ? 1 : 0) : 2;
+        default:
+          return o.dateOperation;
+      }
+    };
+    const signe = tri.desc ? -1 : 1;
+    return [...retenues].sort((a, b) => {
+      const va = valeur(a);
+      const vb = valeur(b);
+      const c =
+        typeof va === "number" && typeof vb === "number"
+          ? va - vb
+          : String(va).localeCompare(String(vb), "fr");
+      return c !== 0 ? c * signe : -a.dateOperation.localeCompare(b.dateOperation);
+    });
+  }, [noues, filtres, tri]);
+
+  const trierPar = (col: ColonneRemere) =>
+    setTri((p) => (p.col === col ? { col, desc: !p.desc } : { col, desc: col === "date" }));
 
   return (
     <Cadre
@@ -109,19 +238,51 @@ export function RecapRemeres({
       videAide="Coche la case sur une opération MTP, puis exécute l'ordre : un réméré ne se noue qu'une fois les titres cédés."
       explication="Une cession temporaire : le titre part, il reviendra au prix de sortie à la date de fin. Au point de trésorerie, l'ordre pèse dans « achats / ventes à réméré validés » tant qu'il n'est pas servi, puis dans les achats et ventes réalisés. Le dénouement se comporte, lui, comme une opération MTP ordinaire."
       vide={lignes.length === 0}
+      barre={
+        <BarreFiltres
+          fonds={fonds}
+          selecteurs={SELECTEURS_REMERE}
+          valeurs={filtres}
+          onChange={setFiltres}
+          vus={lignes.length}
+          total={noues.length}
+        />
+      }
       enTetes={
         <>
-          <th className={th}>Date</th>
-          <th className={th}>Fonds</th>
-          <th className={th}>Contrepartie</th>
-          <th className={th}>Titre</th>
-          <th className={thNum}>Quantité</th>
-          <th className={thNum}>Entrée</th>
-          <th className={thNum}>Sortie</th>
-          <th className={th}>Sens</th>
-          <th className={th}>Fin</th>
-          <th className={thNum}>Montant</th>
-          <th className={th}>État</th>
+          <EnTeteTri col="date" tri={tri} onTrier={trierPar}>
+            Date
+          </EnTeteTri>
+          <EnTeteTri col="fonds" tri={tri} onTrier={trierPar}>
+            Fonds
+          </EnTeteTri>
+          <EnTeteTri col="contrepartie" tri={tri} onTrier={trierPar}>
+            Contrepartie
+          </EnTeteTri>
+          <EnTeteTri col="titre" tri={tri} onTrier={trierPar}>
+            Titre
+          </EnTeteTri>
+          <EnTeteTri col="quantite" tri={tri} onTrier={trierPar} aDroite>
+            Quantité
+          </EnTeteTri>
+          <EnTeteTri col="entree" tri={tri} onTrier={trierPar} aDroite>
+            Entrée
+          </EnTeteTri>
+          <EnTeteTri col="sortie" tri={tri} onTrier={trierPar} aDroite>
+            Sortie
+          </EnTeteTri>
+          <EnTeteTri col="sens" tri={tri} onTrier={trierPar}>
+            Sens
+          </EnTeteTri>
+          <EnTeteTri col="fin" tri={tri} onTrier={trierPar}>
+            Fin
+          </EnTeteTri>
+          <EnTeteTri col="montant" tri={tri} onTrier={trierPar} aDroite>
+            Montant
+          </EnTeteTri>
+          <EnTeteTri col="etat" tri={tri} onTrier={trierPar}>
+            État
+          </EnTeteTri>
           <th className={th}>Dénouement</th>
           <th className="px-3 py-2" />
         </>
@@ -200,6 +361,7 @@ type ColonnePret =
 
 export function RecapPrets({
   operations,
+  fonds,
   enCours,
   onModifier,
   onReprendre,
@@ -207,6 +369,7 @@ export function RecapPrets({
   onSupprimer,
 }: {
   operations: OperationAvecFonds[];
+  fonds: { id: string; nom: string }[];
   enCours: boolean;
   onModifier: (o: OperationAvecFonds) => void;
   /** Pose — ou retire — la date de reprise. C'est elle qui fait le statut. */
@@ -221,14 +384,20 @@ export function RecapPrets({
   // DEUX CLICS POUR SUPPRIMER : il n'y a ici ni sélection ni corbeille, et le
   // geste emporte l'ordre MTP tout entier.
   const [aSupprimer, setASupprimer] = useState<string | null>(null);
+  const [filtres, setFiltres] = useState<Filtres>(FILTRES_VIDES);
   // LA REPRISE SE DATE. Les titres reviennent le jour où ils reviennent, et
   // c'est rarement celui où on le saisit : une reprise au 12 enregistrée le 20
   // faisait payer huit jours de prêt qui n'ont pas eu lieu. Le volet ne tient
   // qu'un prêt à la fois — on reprend l'un, puis l'autre.
   const [reprise, setReprise] = useState<{ id: string; date: string } | null>(null);
 
+  const prets = useMemo(
+    () => operations.filter((o) => o.pret !== null),
+    [operations],
+  );
+
   const lignes = useMemo(() => {
-    const prets = operations.filter((o) => o.pret !== null);
+    const retenus = prets.filter((o) => retient(o, filtres, SELECTEURS_PRET));
     const valeur = (o: OperationAvecFonds): string | number => {
       const p = o.pret!;
       switch (tri.col) {
@@ -256,7 +425,7 @@ export function RecapPrets({
       }
     };
     const signe = tri.desc ? -1 : 1;
-    return [...prets].sort((a, b) => {
+    return [...retenus].sort((a, b) => {
       const va = valeur(a);
       const vb = valeur(b);
       const c =
@@ -267,7 +436,7 @@ export function RecapPrets({
       // sans cela deux prêts du même fonds s'échangeraient à chaque rendu.
       return c !== 0 ? c * signe : -a.dateOperation.localeCompare(b.dateOperation);
     });
-  }, [operations, tri]);
+  }, [prets, filtres, tri]);
 
   const trierPar = (col: ColonnePret) =>
     setTri((p) => (p.col === col ? { col, desc: !p.desc } : { col, desc: col === "date" }));
@@ -278,6 +447,16 @@ export function RecapPrets({
       videAide="Coche la case sur une opération MTP, dans l'onglet « Saisir un ordre »."
       explication="Un registre, pas un flux : prêter des titres ne déplace pas de cash au moment où le prêt se noue. L'INTÉRÊT, lui, rentre : calculé sur la valeur des titres prêtés, au taux du prêt, en base 360 — de la date du prêt à sa fin, ou à la reprise quand elle a eu lieu —, il se loge dans « Autres flux entrants » au point de trésorerie, et n'en sort qu'une fois constaté sur le relevé."
       vide={lignes.length === 0}
+      barre={
+        <BarreFiltres
+          fonds={fonds}
+          selecteurs={SELECTEURS_PRET}
+          valeurs={filtres}
+          onChange={setFiltres}
+          vus={lignes.length}
+          total={prets.length}
+        />
+      }
       enTetes={
         <>
           <EnTeteTri col="date" tri={tri} onTrier={trierPar}>

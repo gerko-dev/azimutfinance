@@ -79,6 +79,12 @@ import type { OptionTitre } from "@/app/gestion-portefeuille/operations-marche-t
 import type { Partenaire } from "@/app/gestion-portefeuille/partenaires-types";
 import LigneOrdre from "./LigneOrdre";
 import EnTeteTri from "./EnTeteTri";
+import BarreFiltres, {
+  FILTRES_VIDES,
+  retient,
+  type Filtres,
+  type Selecteur,
+} from "./FiltresTableau";
 import type { ParametresMarche } from "@/app/gestion-portefeuille/parametres-marche-types";
 import ComptesReglement from "./ComptesReglement";
 import {
@@ -104,6 +110,31 @@ const TAUX_ACTIONS = { courtage: 0.004, tps: 0.1 };
 
 /** Onglets de l'écran. Les deux derniers sont des RÉCAPITULATIFS : rien ne s'y
  *  saisit, tout se corrige sur l'ordre. */
+/**
+ * CE QU'ON FILTRE SUR UN ORDRE, dans ses propres mots : son ÉTAT — passé,
+ * partiellement servi, réalisé, périmé, clos — et son SENS.
+ */
+const SELECTEURS: Selecteur[] = [
+  {
+    cle: "etat",
+    libelle: "État",
+    options: (Object.keys(LIBELLES_ETAT) as EtatOrdre[]).map((e) => ({
+      valeur: e,
+      libelle: LIBELLES_ETAT[e],
+    })),
+    valeurDe: (o) => etatOrdre(o),
+  },
+  {
+    cle: "sens",
+    libelle: "Sens",
+    options: [
+      { valeur: "achat", libelle: "Achat" },
+      { valeur: "vente", libelle: "Vente" },
+    ],
+    valeurDe: (o) => sensDe(o.description),
+  },
+];
+
 /** Les colonnes sur lesquelles le carnet se trie. */
 type ColonneTri = "date" | "fonds" | "titre" | "ordonnee" | "servie" | "montant" | "etat";
 
@@ -257,12 +288,7 @@ export default function OperationsMarchePanel({
   //
   // LES FILTRES SE CUMULENT, et c'est le seul comportement qui ne surprenne
   // pas : chacun retranche, aucun ne remplace.
-  const [fFonds, setFFonds] = useState("");
-  const [fEtat, setFEtat] = useState<EtatOrdre | "">("");
-  const [fSens, setFSens] = useState<"achat" | "vente" | "">("");
-  const [fDu, setFDu] = useState("");
-  const [fAu, setFAu] = useState("");
-  const [fTexte, setFTexte] = useState("");
+  const [filtres, setFiltres] = useState<Filtres>(FILTRES_VIDES);
   /** Colonne de tri, et son sens. Un second clic retourne la colonne. */
   const [tri, setTri] = useState<{ col: ColonneTri; desc: boolean }>({
     col: "date",
@@ -277,19 +303,7 @@ export default function OperationsMarchePanel({
    * travaille sur celle-ci.
    */
   const operationsVues = useMemo(() => {
-    const texte = fTexte.trim().toLowerCase();
-    const retenues = operations.filter((o) => {
-      if (fFonds && o.fondsId !== fFonds) return false;
-      if (fEtat && etatOrdre(o) !== fEtat) return false;
-      if (fSens && sensDe(o.description) !== fSens) return false;
-      if (fDu && o.dateOperation < fDu) return false;
-      if (fAu && o.dateOperation > fAu) return false;
-      // LE TEXTE CHERCHE LE TITRE, pas tout le reste : un carnet se parcourt
-      // par valeur, et chercher aussi dans les notes ramenerait des lignes
-      // qu'on ne saurait pas expliquer.
-      if (texte && !`${o.code} ${o.libelle}`.toLowerCase().includes(texte)) return false;
-      return true;
-    });
+    const retenues = operations.filter((o) => retient(o, filtres, SELECTEURS));
 
     const valeur = (o: OperationAvecFonds): string | number => {
       switch (tri.col) {
@@ -321,17 +335,7 @@ export default function OperationsMarchePanel({
       // sans cela, deux ordres du meme fonds s'echangeaient a chaque rendu.
       return c !== 0 ? c * signe : -a.dateOperation.localeCompare(b.dateOperation);
     });
-  }, [operations, fFonds, fEtat, fSens, fDu, fAu, fTexte, tri]);
-
-  const filtresActifs = !!(fFonds || fEtat || fSens || fDu || fAu || fTexte.trim());
-  const viderFiltres = () => {
-    setFFonds("");
-    setFEtat("");
-    setFSens("");
-    setFDu("");
-    setFAu("");
-    setFTexte("");
-  };
+  }, [operations, filtres, tri]);
   /** Un clic trie ; un second retourne la colonne. */
   const trierPar = (col: ColonneTri) =>
     setTri((p) => (p.col === col ? { col, desc: !p.desc } : { col, desc: col === "date" }));
@@ -1178,6 +1182,7 @@ export default function OperationsMarchePanel({
       {onglet === "primaire" && (
         <RecapPrimaire
           operations={operations}
+          fonds={fonds}
           parametres={parametres}
           enCours={enCours}
           onModifier={modifier}
@@ -1191,6 +1196,7 @@ export default function OperationsMarchePanel({
       {onglet === "remeres" && (
         <RecapRemeres
           operations={operations}
+          fonds={fonds}
           onModifier={modifier}
           onDenouer={denouer}
         />
@@ -1198,6 +1204,7 @@ export default function OperationsMarchePanel({
       {onglet === "prets" && (
         <RecapPrets
           operations={operations}
+          fonds={fonds}
           enCours={enCours}
           onModifier={modifier}
           onReprendre={reprendre}
@@ -1725,101 +1732,14 @@ export default function OperationsMarchePanel({
           onglet === "operations" ? "" : "hidden"
         }`}
       >
-        {/* ── FILTRER, PUIS TRIER ───────────────────────────────────────
-            Le carnet a grandi : quinze fonds, plusieurs mois d'ordres. On le
-            cherchait à l'œil, en faisant défiler. Les filtres se CUMULENT —
-            chacun retranche, aucun ne remplace — et le compteur dit toujours
-            ce qu'on regarde sur ce qu'il y a. */}
-        <div className="flex flex-wrap items-end gap-2 px-3 py-2 border-b border-slate-200 bg-slate-50">
-          <label className="flex flex-col gap-0.5">
-            <span className="text-[9px] uppercase tracking-wider text-slate-500">Fonds</span>
-            <select
-              value={fFonds}
-              onChange={(e) => setFFonds(e.target.value)}
-              className="text-[11px] border border-slate-300 rounded px-1.5 py-1 bg-white max-w-[14rem]"
-            >
-              <option value="">Tous</option>
-              {fonds.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.nom}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="flex flex-col gap-0.5">
-            <span className="text-[9px] uppercase tracking-wider text-slate-500">État</span>
-            <select
-              value={fEtat}
-              onChange={(e) => setFEtat(e.target.value as EtatOrdre | "")}
-              className="text-[11px] border border-slate-300 rounded px-1.5 py-1 bg-white"
-            >
-              <option value="">Tous</option>
-              {(Object.keys(LIBELLES_ETAT) as EtatOrdre[]).map((e) => (
-                <option key={e} value={e}>
-                  {LIBELLES_ETAT[e]}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="flex flex-col gap-0.5">
-            <span className="text-[9px] uppercase tracking-wider text-slate-500">Sens</span>
-            <select
-              value={fSens}
-              onChange={(e) => setFSens(e.target.value as "achat" | "vente" | "")}
-              className="text-[11px] border border-slate-300 rounded px-1.5 py-1 bg-white"
-            >
-              <option value="">Tous</option>
-              <option value="achat">Achat</option>
-              <option value="vente">Vente</option>
-            </select>
-          </label>
-
-          <label className="flex flex-col gap-0.5">
-            <span className="text-[9px] uppercase tracking-wider text-slate-500">Du</span>
-            <input
-              type="date"
-              value={fDu}
-              onChange={(e) => setFDu(e.target.value)}
-              className="text-[11px] border border-slate-300 rounded px-1.5 py-1 bg-white"
-            />
-          </label>
-          <label className="flex flex-col gap-0.5">
-            <span className="text-[9px] uppercase tracking-wider text-slate-500">Au</span>
-            <input
-              type="date"
-              value={fAu}
-              onChange={(e) => setFAu(e.target.value)}
-              className="text-[11px] border border-slate-300 rounded px-1.5 py-1 bg-white"
-            />
-          </label>
-
-          <label className="flex flex-col gap-0.5 min-w-[11rem]">
-            <span className="text-[9px] uppercase tracking-wider text-slate-500">Titre</span>
-            <input
-              value={fTexte}
-              onChange={(e) => setFTexte(e.target.value)}
-              placeholder="SNTS, Sonatel…"
-              className="text-[11px] border border-slate-300 rounded px-1.5 py-1 bg-white"
-            />
-          </label>
-
-          <div className="ml-auto flex items-center gap-2 pb-1">
-            <span className="text-[11px] text-slate-500 tabular-nums">
-              {operationsVues.length} / {operations.length}
-            </span>
-            {filtresActifs && (
-              <button
-                type="button"
-                onClick={viderFiltres}
-                className="text-[11px] text-blue-700 hover:text-blue-900 underline"
-              >
-                tout afficher
-              </button>
-            )}
-          </div>
-        </div>
+        <BarreFiltres
+          fonds={fonds}
+          selecteurs={SELECTEURS}
+          valeurs={filtres}
+          onChange={setFiltres}
+          vus={operationsVues.length}
+          total={operations.length}
+        />
 
         {/* ── Ce qui est sélectionné, et ce qu'on peut en faire ──────────
             La barre n'apparaît QUE s'il y a une sélection : une barre d'outils
