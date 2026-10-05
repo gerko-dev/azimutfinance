@@ -15,12 +15,13 @@
 // c'était faire sortir le flux du point à un jour choisi arbitrairement. Elle
 // se pose donc d'un bouton sur la ligne, quand le relevé la donne.
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import {
   comptesPartsAction,
   vlDisponiblesAction,
+  vlALaDateAction,
   enregistrerFluxPartAction,
   modifierFluxPartAction,
   reglerFluxPartAction,
@@ -180,6 +181,23 @@ export default function PartsPanel({
    *  retapée à la main finit par diverger de celle de l'historique. */
   const [vls, setVls] = useState<{ date: string; vl: number }[]>(vlsInitiales);
   const [dateVl, setDateVl] = useState("");
+  /**
+   * VL RETROUVEE pour une date absente des deux cents dernieres.
+   *
+   * La liste chargee couvre moins d'un an sur un fonds quotidien ; une
+   * souscription qu'on regularise sur un exercice anterieur tombe en dehors.
+   * On va alors la chercher a la date exacte, plutot que de refuser une date
+   * parfaitement valide.
+   */
+  const [vlRetrouvee, setVlRetrouvee] = useState<{ date: string; vl: number } | null>(
+    null,
+  );
+  /** Les dates dont la recherche a conclu qu'AUCUNE VL n'y a ete publiee,
+   *  avec la derniere connue avant elles. Le reste se deduit. */
+  const [vlAbsente, setVlAbsente] = useState<{
+    date: string;
+    precedente: { date: string; vl: number } | null;
+  } | null>(null);
   /** Engagement pris à l'entrée envers un client sensible. Son propre état et
    *  sa propre clé : `ChampTaux` garde son texte et ne se resynchronise pas. */
   const [performanceCible, setPerformanceCible] = useState(0);
@@ -203,8 +221,13 @@ export default function PartsPanel({
     setComptesReglement([]);
     poserTaux(defautFrais(fonds.find((f) => f.id === id), sens));
     // LES VL APPARTIENNENT AU FONDS : garder celles d'avant aurait laissé
-    // souscrire à la valeur liquidative d'un autre portefeuille.
+    // souscrire à la valeur liquidative d'un autre portefeuille. La VL
+    // retrouvée à une date libre et l'absence constatée en relèvent autant :
+    // retaper la même date sur un autre fonds aurait ressorti la VL du
+    // précédent, sans un aller-retour pour la démentir.
     setDateVl("");
+    setVlRetrouvee(null);
+    setVlAbsente(null);
     setComptesEtat("chargement");
     demarrer(async () => {
       const [resComptes, resVls] = await Promise.all([
@@ -237,9 +260,50 @@ export default function PartsPanel({
     [sens, bureau, certitude],
   );
 
-  /** VL retenue, et les parts qu'elle donne. DÉDUITES : le gérant choisit une
+  /** VL retenue, et les parts qu'elle donne. DÉDUITES : le gérant pose une
    *  date, le reste en découle. */
-  const vlChoisie = vls.find((v) => v.date === dateVl);
+  const vlChoisie =
+    vls.find((v) => v.date === dateVl) ??
+    (vlRetrouvee && vlRetrouvee.date === dateVl ? vlRetrouvee : undefined);
+
+  /** Une date complete et plausible. La frappe au clavier produit des dates
+   *  intermediaires valides — « 0002-01-01 » — qu'il ne faut pas aller
+   *  chercher : ce serait un aller-retour par chiffre tape. */
+  const dateVlPosee = /^\d{4}-\d{2}-\d{2}$/.test(dateVl) && dateVl >= "1990-01-01";
+
+  /** Ce qu'il faut dire du champ, DEDUIT de ce qu'on sait : la VL est connue,
+   *  on la cherche encore, ou il n'y en a pas. */
+  const etatVl: "repos" | "cherche" | "absente" = !dateVlPosee || vlChoisie
+    ? "repos"
+    : vlAbsente?.date === dateVl
+      ? "absente"
+      : "cherche";
+
+  /**
+   * LA DATE POSEE, ON VA CHERCHER SA VL — et seulement si ce qu'on a en
+   * mémoire ne la porte pas. L'effet couvre les trois façons dont la date
+   * arrive : tapée au clavier, reprise à la modification d'un flux ancien, ou
+   * effacée.
+   */
+  useEffect(() => {
+    if (!fondsId || !dateVlPosee) return;
+    if (vls.some((v) => v.date === dateVl)) return;
+    if (vlRetrouvee?.date === dateVl || vlAbsente?.date === dateVl) return;
+    let annule = false;
+    void (async () => {
+      const r = await vlALaDateAction(fondsId, dateVl);
+      if (annule) return;
+      if (r.ok && r.data.exacte) {
+        setVlRetrouvee(r.data.exacte);
+        return;
+      }
+      setVlRetrouvee(null);
+      setVlAbsente({ date: dateVl, precedente: r.ok ? r.data.precedente : null });
+    })();
+    return () => {
+      annule = true;
+    };
+  }, [fondsId, dateVl, dateVlPosee, vls, vlRetrouvee, vlAbsente]);
   const parts = partsDuFlux({ montant: n(montant), tauxFrais, vl: vlChoisie?.vl ?? null });
 
   const reinitialiser = () => {
@@ -871,31 +935,47 @@ export default function PartsPanel({
               </span>
             </Champ>
 
-            {/* LA VL SE CHOISIT PARMI CELLES PUBLIÉES, jamais ne se tape : une
-                date sans VL ne convertit aucun montant en parts, et une VL
-                retapée finit par diverger de celle de l'historique — donc du
-                reporting. Le champ voisin ne fait que montrer ce qui en
-                découle. */}
+            {/* LA DATE SE SAISIT, LA VL SE RETROUVE.
+                La liste déroulante ne portait que les deux cents dernières
+                valeurs — moins d'un an sur un fonds quotidien — et une
+                souscription qu'on régularise sur un exercice antérieur n'y
+                figurait pas. Le champ accepte donc n'importe quelle date, et
+                la VL va se chercher à cette date-là.
+                CE QUI NE CHANGE PAS : la VL ne se tape toujours pas. Une VL
+                retapée finit par diverger de l'historique — donc du reporting
+                — et rien ne le signalerait. Le champ voisin ne fait que
+                montrer ce qui en découle. */}
             <Champ label="Date de VL">
-              <select
+              <input
+                type="date"
                 value={dateVl}
                 onChange={(e) => setDateVl(e.target.value)}
+                list="vls-publiees"
                 className={champ}
-              >
-                <option value="">— Aucune pour l&apos;instant —</option>
+              />
+              {/* Les dates déjà publiées restent proposées à la frappe : on
+                  gagne la saisie libre sans perdre le choix rapide. */}
+              <datalist id="vls-publiees">
                 {vls.map((v) => (
                   <option key={v.date} value={v.date}>
-                    {dateFr(v.date)}
+                    {fmt2.format(v.vl)}
                   </option>
                 ))}
-                {dateVl && !vls.some((v) => v.date === dateVl) && (
-                  <option value={dateVl}>{dateFr(dateVl)} (hors historique)</option>
-                )}
-              </select>
-              <span className={aide}>
-                {vls.length === 0
-                  ? "Ce fonds n'a pas d'historique de VL"
-                  : "Un ordre reçu avant la prochaine valorisation n'en a pas encore"}
+              </datalist>
+              <span
+                className={etatVl === "absente" ? "text-[9px] text-amber-700" : aide}
+              >
+                {etatVl === "cherche"
+                  ? "Recherche de la VL à cette date…"
+                  : etatVl === "absente"
+                    ? vlAbsente?.precedente
+                      ? `Aucune VL publiée ce jour-là. La dernière est du ${dateFr(
+                          vlAbsente.precedente.date,
+                        )} (${fmt2.format(vlAbsente.precedente.vl)}).`
+                      : "Aucune VL publiée à cette date, ni avant."
+                    : vls.length === 0
+                      ? "Ce fonds n'a pas d'historique de VL"
+                      : "Vide tant que l'ordre attend la prochaine valorisation"}
               </span>
             </Champ>
 

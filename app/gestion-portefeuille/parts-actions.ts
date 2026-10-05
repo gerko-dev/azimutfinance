@@ -95,6 +95,50 @@ export async function vlDisponiblesAction(
   return { ok: true, data: vls };
 }
 
+/**
+ * La VL d'une date PRECISE, et la derniere publiee avant elle.
+ *
+ * LA DATE SE SAISIT DESORMAIS, elle ne se choisit plus dans une liste. Deux
+ * cents valeurs couvrent moins d'un an pour un fonds quotidien : une
+ * souscription qu'on regularise sur un exercice anterieur n'y figurait pas, et
+ * la liste etait de toute facon longue a derouler pour une date qu'on connait.
+ *
+ * MAIS LA VL, ELLE, NE SE TAPE TOUJOURS PAS. Elle se retrouve a la date
+ * demandee : une VL retapee finit par diverger de l'historique, donc du
+ * reporting, et rien ne le signale.
+ *
+ * `precedente` sert au message : « aucune VL le 15, la derniere est du 12 »
+ * dit au gerant ce qu'il cherche, la ou « aucune VL » le laisse deviner.
+ */
+export async function vlALaDateAction(
+  fundId: string,
+  date: string,
+): Promise<
+  ActionResult<{
+    exacte: { date: string; vl: number } | null;
+    precedente: { date: string; vl: number } | null;
+  }>
+> {
+  const acces = await autoriser(fundId);
+  if ("erreur" in acces) return { ok: false, error: acces.erreur };
+  if (!EST_DATE.test(date)) return { ok: false, error: "Date mal formée." };
+
+  // UN SEUL ALLER-RETOUR : la derniere VL publiee a cette date ou avant. Si sa
+  // date est celle demandee, c'est la bonne ; sinon c'est la precedente, et
+  // c'est precisement ce qu'on veut dire.
+  const points = await loadDernieresVl(fundId, 1, date);
+  const p = points.find((x) => x.vl != null && x.vl > 0);
+  if (!p || p.vl == null) return { ok: true, data: { exacte: null, precedente: null } };
+  const trouvee = { date: p.date, vl: p.vl };
+  return {
+    ok: true,
+    data:
+      p.date === date
+        ? { exacte: trouvee, precedente: null }
+        : { exacte: null, precedente: trouvee },
+  };
+}
+
 /** Controles PARTAGES par la creation et la modification. */
 function valider(saisie: SaisieFluxPart): string | null {
   if (!EST_DATE.test(saisie.dateOperation)) return "Renseigne la date de l'ordre.";
