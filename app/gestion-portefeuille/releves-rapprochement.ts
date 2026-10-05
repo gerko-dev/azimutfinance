@@ -12,6 +12,13 @@
 //   (CBI-Sénégal) ». On cherche donc une INCLUSION : tous les mots du dossier
 //   doivent se retrouver dans la fiche, qui peut en porter d'autres.
 //
+//   MAIS L'EQUIVALENCE PASSE D'ABORD, LA AUSSI — parce qu'une SUCCURSALE
+//   porte le nom de sa maison mère EN PLUS du sien. « NSIA Banque Bénin »
+//   est une fiche ; « NSIA Banque Bénin (succ. Togo) » en est une autre, et
+//   par inclusion le dossier « NSIA BANQUE BENIN » désignait les deux. Il
+//   désigne la maison mère, et c'est la seule lecture possible : la
+//   succursale, elle, se nomme par SON pays — « NSIA BANQUE TOGO ».
+//
 //   LE FONDS est NOMME EN ENTIER. Le relevé dit « FCP AURORE SECURITE », et la
 //   maison gère un « FCP AURORE SECURITE II ». Par inclusion, le premier
 //   désignerait le second : il faut donc une EQUIVALENCE, mot pour mot. Un
@@ -205,15 +212,14 @@ export function rattacherEtablissement(
     return { trouve: false, raison: `« ${dossier} » ne porte aucun mot distinctif.` };
   }
 
-  const gagnants = candidats.filter((c) => {
-    const sienne = signature(c.libelle);
+  // TROIS FACONS DE RETROUVER UN MOT, et il a fallu les trois pour couvrir
+  // les quinze orthographes de Coris Bank rencontrées en deux ans :
+  //   — le mot lui-même, aux tolérances de `memeMot` ;
+  //   — le mot COLLE dans la fiche : « CORISBANK » pour « Coris Bank » ;
+  //   — deux mots consécutifs de la fiche recollés, ce qui rattrape la
+  //     faute de frappe sur la soudure : « CORSBANK », « CORIBANK ».
+  const porte = (sienne: string[]) => {
     const colle = sienne.join("");
-    // TROIS FACONS DE RETROUVER UN MOT, et il a fallu les trois pour couvrir
-    // les quinze orthographes de Coris Bank rencontrées en deux ans :
-    //   — le mot lui-même, aux tolérances de `memeMot` ;
-    //   — le mot COLLE dans la fiche : « CORISBANK » pour « Coris Bank » ;
-    //   — deux mots consécutifs de la fiche recollés, ce qui rattrape la
-    //     faute de frappe sur la soudure : « CORSBANK », « CORIBANK ».
     const recolle = sienne.map((s, i) => s + (sienne[i + 1] ?? ""));
     return cherche.every(
       (m) =>
@@ -224,11 +230,33 @@ export function rattacherEtablissement(
         (m.length >= 6 && colle.includes(m)) ||
         recolle.some((s) => memeMot(m, s)),
     );
-  });
+  };
+
+  const avec = candidats.map((c) => ({ c, sienne: signature(c.libelle) }));
+
+  // ── L'EQUIVALENCE D'ABORD, et elle seule décide quand elle trouve ──────
+  //
+  // UNE SUCCURSALE PORTE LE NOM DE SA MAISON MERE EN PLUS DU SIEN. Trois
+  // fiches disent « NSIA Banque Bénin » : la banque béninoise, sa succursale
+  // sénégalaise et sa succursale togolaise. Par inclusion, le dossier « NSIA
+  // BANQUE BENIN » les désignait toutes les trois, et le relevé ressortait
+  // non rattaché faute de pouvoir choisir.
+  //
+  // IL DESIGNE LA MAISON MERE, et c'est la seule lecture possible : elle est
+  // la seule dont le nom soit EXACTEMENT celui-là. Une succursale se nomme
+  // par SON pays — « NSIA BANQUE TOGO » —, et ce nom-là ne désigne qu'elle,
+  // par l'inclusion, comme avant.
+  //
+  // Même règle que pour les fonds, et pour la même raison : sans elle, un
+  // nom entier se fait voler par un nom qui en porte davantage.
+  const equivalents = avec
+    .filter(({ sienne }) => sienne.length === cherche.length && porte(sienne))
+    .map((x) => x.c);
+  if (equivalents.length > 0) return tranche(dossier, equivalents, "");
 
   return tranche(
     dossier,
-    gagnants,
+    avec.filter(({ sienne }) => porte(sienne)).map((x) => x.c),
     `« ${dossier} » ne correspond à aucun compte du référentiel. Ajoute la fiche de cette banque, ou renomme le dossier comme elle.`,
   );
 }
