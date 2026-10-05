@@ -258,31 +258,9 @@ export default function FCPMarketView(props: Props) {
    *              expose davantage. Le classement n'est loyal qu'entre pairs. */
   const [rankMode, setRankMode] = useState<"global" | "risque">("global");
 
-  // === Pool du classement ===
-  //
-  // ON N'ECARTE PLUS LES VL ANCIENNES, ON LES DATE.
-  //
-  // Le classement ne retenait que les fonds dont la dernière VL avait moins
-  // de quinze jours. Les sociétés de gestion ne publient pas au même rythme —
-  // et le BOC ne les reprend pas toutes à la même date : SIX FONDS SUR DIX
-  // disparaissaient du classement, dont Attijari Actions, première
-  // performance du marché. On ne les voyait nulle part, sans un mot
-  // d'explication, alors que le Bulletin officiel les cote.
-  //
-  // UNE PERFORMANCE ANCIENNE N'EST PAS UNE PERFORMANCE FAUSSE : elle est
-  // mesurée à une autre date, et c'est ce qu'il faut dire. Chaque ligne porte
-  // donc la date de la VL qui la calcule, et le classement les garde toutes —
-  // comme le BOC lui-même, qui cote chaque fonds à sa dernière VL connue.
-  //
-  // Reste l'interrupteur, pour qui veut comparer à date égale : il retrouve
-  // l'ancien comportement, mais il se choisit.
-  const [vlFraiches, setVlFraiches] = useState(false);
+  // === Pool éligible : avec AUM au refDate ET non stale ===
   const eligibleCards = useMemo(
-    () => (vlFraiches ? cardsAtRef.filter((c) => !c.isStale) : cardsAtRef),
-    [cardsAtRef, vlFraiches]
-  );
-  const nbPerimes = useMemo(
-    () => cardsAtRef.filter((c) => c.isStale).length,
+    () => cardsAtRef.filter((c) => !c.isStale),
     [cardsAtRef]
   );
 
@@ -651,15 +629,8 @@ export default function FCPMarketView(props: Props) {
         <div>
           <h2 className="text-lg font-semibold text-slate-900">Classement des fonds</h2>
           <p className="text-xs text-slate-500">
-            Tri par performance · chaque fonds est mesuré à SA dernière VL
-            connue, dont la date figure sur sa ligne
-            {nbPerimes > 0 && !vlFraiches && (
-              <>
-                {" "}
-                — {nbPerimes} fonds n&apos;ont pas publié depuis le{" "}
-                {fmtDateFR(stalenessCutoff)}
-              </>
-            )}
+            Tri par performance · fonds avec dernière VL ≥{" "}
+            {fmtDateFR(stalenessCutoff)} (sinon exclus)
             {rankMode === "risque" && (
               <>
                 {" "}
@@ -717,20 +688,6 @@ export default function FCPMarketView(props: Props) {
               ))}
             </div>
           </div>
-          <label className="flex items-center gap-2 shrink-0 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={vlFraiches}
-              onChange={(e) => setVlFraiches(e.target.checked)}
-              className="accent-slate-900"
-            />
-            <span className="text-xs text-slate-600">
-              VL de moins de 15 jours seulement
-              <span className="block text-[10px] text-slate-400">
-                pour comparer à date égale
-              </span>
-            </span>
-          </label>
           <div className="flex items-center gap-2 shrink-0">
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
               Catégorie
@@ -903,27 +860,12 @@ export default function FCPMarketView(props: Props) {
                         </span>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums">
-                      <span
-                        className={`text-sm font-bold ${
-                          v !== null && v >= 0 ? "text-emerald-700" : "text-rose-700"
-                        }`}
-                      >
-                        {fmtPct(v, 2)}
-                      </span>
-                      {/* LA DATE DE LA MESURE, et non un avertissement : deux
-                          fonds ne sont pas arrêtés le même jour, et c'est la
-                          seule chose qui le dise. Elle ne s'affiche que
-                          lorsqu'elle s'écarte du marché — la répéter sur les
-                          cent lignes à jour la rendrait invisible. */}
-                      {c.isStale && c.latestVLDate && (
-                        <span
-                          className="block text-[10px] text-amber-700"
-                          title={`Dernière VL publiée le ${fmtDateFR(c.latestVLDate)} — la performance est mesurée à cette date`}
-                        >
-                          au {fmtDateFR(c.latestVLDate)}
-                        </span>
-                      )}
+                    <td
+                      className={`px-3 py-2 text-right text-sm font-bold tabular-nums ${
+                        v !== null && v >= 0 ? "text-emerald-700" : "text-rose-700"
+                      }`}
+                    >
+                      {fmtPct(v, 2)}
                     </td>
                   </tr>
                 );

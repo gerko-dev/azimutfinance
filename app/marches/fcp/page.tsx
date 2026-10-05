@@ -142,19 +142,11 @@ export default async function Page() {
   const periodKeys: PeriodKey[] = ["lastPeriod", "ytd", "m3", "m6", "m9", "y1"];
   const categoryStats: CategoryStat[] = FCP_CATEGORIES.map((cat) => {
     const inCat = cardsAtRef.filter((c) => c.categorieAtRef === cat);
-    // LA MEDIANE PORTE SUR LES FONDS QU'ON ANNONCE, et sur eux tous.
-    //
-    // Elle ne retenait que ceux dont la VL avait moins de quinze jours, quand
-    // la vignette affiche « N fonds » juste a cote : la categorie Actions
-    // disait vingt-cinq fonds et medianait sur neuf. Les societes de gestion
-    // ne publient pas au meme rythme, et ecarter plus de la moitie d'une
-    // categorie deforme davantage sa mediane que de melanger des dates
-    // d'arrete — chaque fonds est mesure a SA derniere VL, que sa ligne du
-    // classement date.
+    const eligible = inCat.filter((c) => !c.isStale);
     const perfMedian = {} as Record<PeriodKey, number | null>;
     for (const k of periodKeys) {
       perfMedian[k] = median(
-        inCat.map((c) => c.perf[k]).filter((v): v is number => v !== null)
+        eligible.map((c) => c.perf[k]).filter((v): v is number => v !== null)
       );
     }
     return {
