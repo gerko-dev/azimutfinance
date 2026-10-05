@@ -11,6 +11,8 @@
 // Tout ce qui se corrige se corrige donc sur l'ordre, dans l'onglet
 // Opérations. D'où le bouton unique de chaque ligne.
 
+import { useMemo, useState } from "react";
+
 import {
   LIBELLES_SENS_REMERE,
   LIBELLES_STATUT_PRET,
@@ -19,6 +21,7 @@ import {
   remereNoue,
 } from "@/app/gestion-portefeuille/operations-marche-types";
 import type { OperationAvecFonds } from "@/app/gestion-portefeuille/operations-marche-data";
+import EnTeteTri, { type Tri } from "./EnTeteTri";
 
 const fmt0 = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
 const montantFr = (v: number) => fmt0.format(Math.round(v));
@@ -181,17 +184,84 @@ export function RecapRemeres({
   );
 }
 
+/** Les colonnes sur lesquelles le registre des prêts se trie. */
+type ColonnePret =
+  | "date"
+  | "fonds"
+  | "contrepartie"
+  | "titre"
+  | "quantite"
+  | "taux"
+  | "fin"
+  | "statut"
+  | "interet"
+  | "reprise";
+
 export function RecapPrets({
   operations,
+  enCours,
   onModifier,
   onReprendre,
+  onSupprimer,
 }: {
   operations: OperationAvecFonds[];
+  enCours: boolean;
   onModifier: (o: OperationAvecFonds) => void;
   /** Pose — ou retire — la date de reprise. C'est elle qui fait le statut. */
   onReprendre: (o: OperationAvecFonds, date: string | null) => void;
+  /** SUPPRIME L'ORDRE ENTIER. Un prêt n'est pas un objet à part : c'est un
+   *  ordre MTP augmenté, et le détacher de son ordre n'aurait aucun sens. */
+  onSupprimer: (o: OperationAvecFonds) => void;
 }) {
-  const lignes = operations.filter((o) => o.pret !== null);
+  const [tri, setTri] = useState<Tri<ColonnePret>>({ col: "date", desc: true });
+  // DEUX CLICS POUR SUPPRIMER : il n'y a ici ni sélection ni corbeille, et le
+  // geste emporte l'ordre MTP tout entier.
+  const [aSupprimer, setASupprimer] = useState<string | null>(null);
+
+  const lignes = useMemo(() => {
+    const prets = operations.filter((o) => o.pret !== null);
+    const valeur = (o: OperationAvecFonds): string | number => {
+      const p = o.pret!;
+      switch (tri.col) {
+        case "fonds":
+          return o.fondsNom ?? "";
+        case "contrepartie":
+          return p.contrepartie ?? "";
+        case "titre":
+          return o.libelle || o.code || "";
+        case "quantite":
+          return o.quantite;
+        case "taux":
+          return p.tauxCommission;
+        case "fin":
+          return p.dateFin ?? "";
+        case "statut":
+          // EN COURS D'ABORD : c'est ce qui demande une action.
+          return p.statut === "en_cours" ? 0 : 1;
+        case "interet":
+          return p.interetARecevoir;
+        case "reprise":
+          return p.dateReprise ?? "";
+        default:
+          return o.dateOperation;
+      }
+    };
+    const signe = tri.desc ? -1 : 1;
+    return [...prets].sort((a, b) => {
+      const va = valeur(a);
+      const vb = valeur(b);
+      const c =
+        typeof va === "number" && typeof vb === "number"
+          ? va - vb
+          : String(va).localeCompare(String(vb), "fr");
+      // À valeur égale, la date départage, et toujours dans le même sens :
+      // sans cela deux prêts du même fonds s'échangeraient à chaque rendu.
+      return c !== 0 ? c * signe : -a.dateOperation.localeCompare(b.dateOperation);
+    });
+  }, [operations, tri]);
+
+  const trierPar = (col: ColonnePret) =>
+    setTri((p) => (p.col === col ? { col, desc: !p.desc } : { col, desc: col === "date" }));
 
   return (
     <Cadre
@@ -201,16 +271,36 @@ export function RecapPrets({
       vide={lignes.length === 0}
       enTetes={
         <>
-          <th className={th}>Date</th>
-          <th className={th}>Fonds</th>
-          <th className={th}>Contrepartie</th>
-          <th className={th}>Titre</th>
-          <th className={thNum}>Quantité</th>
-          <th className={thNum}>Taux prêt</th>
-          <th className={th}>Fin</th>
-          <th className={th}>Statut</th>
-          <th className={thNum}>Intérêt à recevoir</th>
-          <th className={th}>Reprise</th>
+          <EnTeteTri col="date" tri={tri} onTrier={trierPar}>
+            Date
+          </EnTeteTri>
+          <EnTeteTri col="fonds" tri={tri} onTrier={trierPar}>
+            Fonds
+          </EnTeteTri>
+          <EnTeteTri col="contrepartie" tri={tri} onTrier={trierPar}>
+            Contrepartie
+          </EnTeteTri>
+          <EnTeteTri col="titre" tri={tri} onTrier={trierPar}>
+            Titre
+          </EnTeteTri>
+          <EnTeteTri col="quantite" tri={tri} onTrier={trierPar} aDroite>
+            Quantité
+          </EnTeteTri>
+          <EnTeteTri col="taux" tri={tri} onTrier={trierPar} aDroite>
+            Taux prêt
+          </EnTeteTri>
+          <EnTeteTri col="fin" tri={tri} onTrier={trierPar}>
+            Fin
+          </EnTeteTri>
+          <EnTeteTri col="statut" tri={tri} onTrier={trierPar}>
+            Statut
+          </EnTeteTri>
+          <EnTeteTri col="interet" tri={tri} onTrier={trierPar} aDroite>
+            Intérêt à recevoir
+          </EnTeteTri>
+          <EnTeteTri col="reprise" tri={tri} onTrier={trierPar}>
+            Reprise
+          </EnTeteTri>
           <th className="px-3 py-2" />
         </>
       }
@@ -250,7 +340,8 @@ export function RecapPrets({
                 <button
                   type="button"
                   onClick={() => onReprendre(o, new Date().toISOString().slice(0, 10))}
-                  className="text-[11px] font-medium text-blue-700 hover:underline mr-3"
+                  disabled={enCours}
+                  className="text-[11px] font-medium text-blue-700 hover:underline disabled:opacity-50 mr-3"
                 >
                   Reprendre
                 </button>
@@ -258,7 +349,8 @@ export function RecapPrets({
                 <button
                   type="button"
                   onClick={() => onReprendre(o, null)}
-                  className="text-[11px] text-slate-500 hover:text-slate-900 hover:underline mr-3"
+                  disabled={enCours}
+                  className="text-[11px] text-slate-500 hover:text-slate-900 hover:underline disabled:opacity-50 mr-3"
                 >
                   Rouvrir
                 </button>
@@ -266,10 +358,48 @@ export function RecapPrets({
               <button
                 type="button"
                 onClick={() => onModifier(o)}
-                className="text-[11px] text-slate-500 hover:text-slate-900 hover:underline"
+                disabled={enCours}
+                className="text-[11px] text-slate-500 hover:text-slate-900 hover:underline disabled:opacity-50 mr-3"
               >
                 Modifier
               </button>
+              {/* SUPPRIMER EMPORTE L'ORDRE, et avec lui le prêt : les deux ne
+                  font qu'un. Pour garder la trace du mouvement de titres et
+                  n'effacer que le prêt, c'est la case qu'il faut décocher au
+                  formulaire. */}
+              {aSupprimer === o.id ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setASupprimer(null);
+                      onSupprimer(o);
+                    }}
+                    disabled={enCours}
+                    className="text-[11px] font-medium text-rose-700 hover:underline disabled:opacity-50 mr-2"
+                    title="Supprimer l'ordre et le prêt qu'il porte"
+                  >
+                    Confirmer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setASupprimer(null)}
+                    disabled={enCours}
+                    className="text-[11px] text-slate-500 hover:underline disabled:opacity-50"
+                  >
+                    Annuler
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setASupprimer(o.id)}
+                  disabled={enCours}
+                  className="text-[11px] text-rose-600 hover:text-rose-800 hover:underline disabled:opacity-50"
+                >
+                  Supprimer
+                </button>
+              )}
             </td>
           </tr>
         );

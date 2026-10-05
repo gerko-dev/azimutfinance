@@ -1187,8 +1187,10 @@ export default function OperationsMarchePanel({
       {onglet === "prets" && (
         <RecapPrets
           operations={operations}
+          enCours={enCours}
           onModifier={modifier}
           onReprendre={reprendre}
+          onSupprimer={supprimer}
         />
       )}
 
