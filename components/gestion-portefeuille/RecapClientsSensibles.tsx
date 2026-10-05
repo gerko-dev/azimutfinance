@@ -4,8 +4,16 @@
 //
 // UNE PROMESSE, ET CE QU'ELLE EST DEVENUE. Chaque souscription d'un client
 // sensible porte une performance cible, convenue à l'entrée. Cet onglet met en
-// regard ce qui avait été promis et ce que le fonds a réellement fait depuis,
-// client par client.
+// regard ce qui avait été promis et ce que le fonds a réellement fait depuis.
+//
+// DEUX LECTURES, ET LA PREMIÈRE EST CELLE DU CLIENT. Il entre plusieurs fois,
+// dans plusieurs fonds, reprend une partie de sa mise, remet six mois plus
+// tard. Mesurer chaque souscription contre la VL du jour répond à « combien
+// cette ligne-là a-t-elle rapporté » ; lui demande « combien M'avez-vous
+// rapporté ». D'où le bloc PAR CLIENT, en tête : le TRI de ses paiements dans
+// chaque fonds, puis la somme des produits de ces performances par leurs
+// poids. Le détail par souscription le suit, pour instruire la promesse
+// ligne à ligne.
 //
 // L'ÉCART EST LA COLONNE QUI COMPTE. Un client sous sa cible est un client qui
 // partira, et le trésorier le saura trop tard : c'est ici qu'on le voit venir.
@@ -20,6 +28,11 @@ import {
   type FluxPartAvecFonds,
 } from "@/app/gestion-portefeuille/parts-types";
 import { LIBELLES_BUREAU } from "@/app/gestion-portefeuille/parts-types";
+import {
+  suiviClientsSensibles,
+  type PositionClientFonds,
+  type SuiviClientSensible,
+} from "@/app/gestion-portefeuille/clients-sensibles";
 
 const fmt0 = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
 const fmt2 = new Intl.NumberFormat("fr-FR", {
@@ -293,6 +306,10 @@ export default function RecapClientsSensibles({
     return !l.sorti && e != null && e < 0;
   }).length;
 
+  // LE CLIENT, AVANT SES SOUSCRIPTIONS. Tous ses mouvements, tous fonds
+  // confondus : c'est l'ordre dans lequel il se présente au rendez-vous.
+  const clients = suiviClientsSensibles(flux, vlCourantes, aujourdhui);
+
   return (
     <div className="space-y-3">
       <p className="text-[11px] text-slate-500">
@@ -317,6 +334,31 @@ export default function RecapClientsSensibles({
         )}
       </p>
 
+      {/* ── PAR CLIENT ────────────────────────────────────────────────── */}
+      {clients.length > 0 && (
+        <div className="space-y-3">
+          <p className="text-[11px] text-slate-500">
+            Pour chaque fonds, la performance est le{" "}
+            <strong>TRI de ses paiements</strong> — souscriptions en moins,
+            rachats en plus, valorisation du jour en plus — à leurs dates
+            réelles. C&apos;est le rendement que son argent a obtenu, et non
+            celui de la part&nbsp;: un retrait avant une bonne année ne lui est
+            pas crédité. La performance <strong>globale</strong> est la somme
+            des produits des performances par leurs poids, le poids d&apos;un
+            fonds étant le <strong>capital qu&apos;il y a versé</strong>.
+            L&apos;objectif global se pondère exactement pareil, sans quoi
+            l&apos;écart ne comparerait rien.
+          </p>
+          {clients.map((c) => (
+            <FicheClient key={c.client} c={c} />
+          ))}
+        </div>
+      )}
+
+      {/* ── DÉTAIL PAR SOUSCRIPTION ───────────────────────────────────── */}
+      <h3 className="text-xs font-semibold text-slate-900 uppercase tracking-wider pt-2">
+        Détail par souscription
+      </h3>
       <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
         <div className="overflow-x-auto">
           <table className="w-full text-[11px] border-collapse">
@@ -469,4 +511,163 @@ export default function RecapClientsSensibles({
       </div>
     </div>
   );
+}
+
+/** Un client, ses positions par fonds, et son résultat d'ensemble. */
+function FicheClient({ c }: { c: SuiviClientSensible }) {
+  const td = "px-3 py-1.5";
+  const tdNum = "px-3 py-1.5 text-right tabular-nums";
+  const th = "text-left px-3 py-2 font-medium whitespace-nowrap";
+  const thNum = "text-right px-3 py-2 font-medium whitespace-nowrap";
+
+  return (
+    <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
+      <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 flex flex-wrap items-baseline justify-between gap-3">
+        <div>
+          <span className="text-xs font-semibold text-slate-900">{c.client}</span>
+          {c.bureau && (
+            <span className="ml-2 text-[10px] text-slate-500">
+              {LIBELLES_BUREAU[c.bureau as keyof typeof LIBELLES_BUREAU] ?? c.bureau}
+            </span>
+          )}
+          <span className="ml-2 text-[10px] text-slate-400">
+            {c.fonds.length} fonds
+          </span>
+        </div>
+        <div className="text-[11px] text-slate-600 tabular-nums">
+          versé {montantFr(c.souscritTotal)}
+          {c.racheteTotal > 0 && <> · repris {montantFr(c.racheteTotal)}</>}
+          {c.valorisationTotale !== null && (
+            <> · vaut {montantFr(c.valorisationTotale)} F</>
+          )}
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-[11px] border-collapse">
+          <thead className="bg-slate-100 text-slate-600">
+            <tr>
+              <th className={th}>Fonds</th>
+              <th className={th}>Depuis</th>
+              <th className={thNum}>Versé</th>
+              <th className={thNum}>Repris</th>
+              <th className={thNum}>Valorisation</th>
+              <th className={thNum}>Poids</th>
+              <th className={thNum}>Performance</th>
+              <th className={thNum}>Objectif</th>
+              <th className={thNum}>Écart</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {c.fonds.map((p) => (
+              <LignePosition
+                key={p.fondsId}
+                p={p}
+                poids={c.souscritTotal > 0 ? p.souscrit / c.souscritTotal : null}
+              />
+            ))}
+          </tbody>
+          {/* LE GLOBAL EST UN PIED DE TABLEAU, pas une ligne de plus : il ne
+              se lit pas au même rang que les fonds, il les résume. */}
+          <tfoot>
+            <tr className="bg-slate-50 border-t-2 border-slate-300 font-semibold text-slate-900">
+              <td className={td} colSpan={2}>
+                Ensemble du client
+              </td>
+              <td className={tdNum}>{montantFr(c.souscritTotal)}</td>
+              <td className={tdNum}>
+                {c.racheteTotal > 0 ? montantFr(c.racheteTotal) : "—"}
+              </td>
+              <td className={tdNum}>
+                {c.valorisationTotale !== null ? montantFr(c.valorisationTotale) : "—"}
+              </td>
+              <td className={tdNum}>100 %</td>
+              <td className={tdNum}>{pct(c.perfGlobale)}</td>
+              <td className={tdNum}>{pct(c.objectifGlobal)}</td>
+              <td className={`${tdNum} ${tonEcart(c.ecartGlobal)}`}>
+                {pointsFr(c.ecartGlobal)}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      {c.reserves.length > 0 && (
+        <div className="px-3 py-1.5 border-t border-slate-100 space-y-0.5">
+          {c.reserves.map((r) => (
+            <p key={r} className="text-[10px] text-amber-700">
+              {r}
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LignePosition({
+  p,
+  poids,
+}: {
+  p: PositionClientFonds;
+  poids: number | null;
+}) {
+  const td = "px-3 py-1.5";
+  const tdNum = "px-3 py-1.5 text-right tabular-nums";
+  return (
+    <tr className="hover:bg-slate-50">
+      <td className={td}>
+        <div className="font-medium text-slate-800">{p.fondsNom}</div>
+        <div className="text-[10px] text-slate-400">
+          {p.mouvements} mouvement(s)
+          {p.soldee && " · position soldée"}
+        </div>
+      </td>
+      <td className={td}>
+        {dateFr(p.premiereEntree)}
+        <span className="block text-[10px] text-slate-400">{p.jours} j</span>
+      </td>
+      <td className={tdNum}>{montantFr(p.souscrit)}</td>
+      <td className={tdNum}>{p.rachete > 0 ? montantFr(p.rachete) : "—"}</td>
+      <td className={tdNum}>
+        {p.valorisation !== null ? montantFr(p.valorisation) : "—"}
+        {p.dateValorisation && (
+          <span className="block text-[10px] text-slate-400">
+            au {dateFr(p.dateValorisation)}
+          </span>
+        )}
+      </td>
+      <td className={`${tdNum} text-slate-500`}>
+        {poids === null ? "—" : pct(poids)}
+      </td>
+      <td className={`${tdNum} font-medium`}>{pct(p.perf)}</td>
+      <td className={tdNum}>{pct(p.objectif)}</td>
+      <td className={`${tdNum} ${tonEcart(p.ecart)}`}>
+        {pointsFr(p.ecart)}
+        {/* LA RÉSERVE SOUS LE CHIFFRE QU'ELLE CONCERNE : un tiret sans
+            explication se lit comme une panne. */}
+        {p.reserve && (
+          <span className="block text-[10px] text-amber-700 font-normal text-left max-w-[16rem]">
+            {p.reserve}
+          </span>
+        )}
+      </td>
+    </tr>
+  );
+}
+
+/** Un écart de taux s'exprime en POINTS, jamais en pour cent : « 2 % d'écart »
+ *  et « 2 points d'écart » ne sont pas la même chose, et la confusion est
+ *  exactement celle qui fait discuter un comité une demi-heure. */
+function pointsFr(v: number | null): string {
+  if (v == null) return "—";
+  const x = v * 100;
+  return `${x > 0 ? "+" : x < 0 ? "−" : ""}${Math.abs(x).toLocaleString("fr-FR", {
+    maximumFractionDigits: 2,
+  })} pts`;
+}
+
+function tonEcart(v: number | null): string {
+  if (v == null) return "text-slate-400";
+  return v >= 0 ? "text-emerald-700" : "text-rose-700";
 }
