@@ -21,13 +21,17 @@ import type { TableauProposition } from "@/app/gestion-portefeuille/proposition-
 import AllocationPanel from "./AllocationPanel";
 import PropositionPanel from "./PropositionPanel";
 import OperationsPanel from "./OperationsPanel";
+import InterfondsPanel from "./InterfondsPanel";
 
-type Onglet = "validee" | "proposition" | "operations";
+type Onglet = "validee" | "proposition" | "operations" | "interfonds";
 
 const ONGLETS: { cle: Onglet; libelle: string }[] = [
   { cle: "validee", libelle: "Allocation validée" },
   { cle: "proposition", libelle: "Proposition d'allocation" },
   { cle: "operations", libelle: "Opérations à réaliser" },
+  // QUATRIEME ECRAN, ET DERNIER DU CYCLE : une fois su ce qu'il faut passer,
+  // reste a savoir si la contrepartie est dehors ou dans la maison.
+  { cle: "interfonds", libelle: "Entre fonds" },
 ];
 
 function Indisponible({ quoi }: { quoi: string }) {
@@ -116,6 +120,13 @@ export default function AllocationMultifonds({
         ) : (
           <Indisponible quoi="Plan d'opérations" />
         ))}
+
+      {/* PAS DE `key` SUR LE FONDS, et c'est voulu : ce panneau lit TOUS les
+          portefeuilles, et son calcul ne dépend pas de celui qu'on regarde.
+          Le remonter à chaque changement de fonds relancerait quinze lectures
+          d'inventaire pour afficher la même chose. Il surligne simplement le
+          fonds courant dans ses lignes. */}
+      {onglet === "interfonds" && <InterfondsPanel fondsId={fondsId} />}
     </div>
   );
 }
