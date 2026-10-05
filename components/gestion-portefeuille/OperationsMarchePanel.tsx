@@ -30,6 +30,7 @@ import {
   rapprocherDenouementAction,
   rapprocherExecutionAction,
   rapprocherOperationAction,
+  rapprocherInteretPretAction,
   reprendrePretAction,
   supprimerExecutionAction,
   supprimerOperationMarcheAction,
@@ -891,6 +892,16 @@ export default function OperationsMarchePanel({
     });
   };
 
+  /** Lettre — ou délettre — l'intérêt d'un prêt constaté sur le relevé. */
+  const rapprocherInteret = (o: OperationAvecFonds, date: string | null) => {
+    setErreur(null);
+    demarrer(async () => {
+      const res = await rapprocherInteretPretAction(o.fondsId, o.id, date);
+      if (!res.ok) setErreur(res.error);
+      else router.refresh();
+    });
+  };
+
   /**
    * Lettre — ou délettre — TOUTE une date de dénouement.
    *
@@ -1190,6 +1201,7 @@ export default function OperationsMarchePanel({
           enCours={enCours}
           onModifier={modifier}
           onReprendre={reprendre}
+          onRapprocherInteret={rapprocherInteret}
           onSupprimer={supprimer}
         />
       )}

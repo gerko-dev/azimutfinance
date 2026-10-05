@@ -756,6 +756,50 @@ export async function reprendrePretAction(
 }
 
 /**
+ * Lettre l'INTERET d'un pret de titres : il a ete constate sur le releve.
+ *
+ * Preter ne deplace pas de cash, mais le pret rapporte, et cet interet se loge
+ * dans « Autres flux entrants » au point de tresorerie tant qu'il n'est pas
+ * encaisse. Une fois sur le releve, le solde bancaire saisi le contient deja :
+ * l'y laisser le compterait deux fois.
+ *
+ * `null` defait le lettrage, pour corriger une fausse manoeuvre.
+ */
+export async function rapprocherInteretPretAction(
+  fundId: string,
+  operationId: string,
+  date: string | null,
+): Promise<ActionResult<{ id: string }>> {
+  const acces = await autoriser(fundId);
+  if ("erreur" in acces) return { ok: false, error: acces.erreur };
+  const { supabase, userId } = acces;
+
+  if (date !== null && !EST_DATE.test(date))
+    return { ok: false, error: "Renseigne la date de constatation." };
+
+  // Le filtre passe par l'ORDRE : la table des prets ne porte pas le fonds.
+  const { data: ordre } = await supabase
+    .from("fund_market_operations")
+    .select("id")
+    .eq("id", operationId)
+    .eq("fund_id", fundId)
+    .eq("owner_id", userId)
+    .maybeSingle();
+  if (!ordre) return { ok: false, error: "Opération introuvable." };
+
+  const { error } = await supabase
+    .from("fund_market_loans")
+    .update({ interet_rapproche_le: date })
+    .eq("operation_id", operationId)
+    .eq("owner_id", userId);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/gestion-portefeuille/operations-marche");
+  revalidatePath("/gestion-portefeuille/tresorerie");
+  return { ok: true, data: { id: operationId } };
+}
+
+/**
  * Rapproche un ORDRE : son reglement a ete constate sur le releve.
  *
  * MARCHE PRIMAIRE UNIQUEMENT, parce que c'est le seul ou l'on regle AVANT

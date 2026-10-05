@@ -184,6 +184,18 @@ export type Pret = SaisiePret & {
   statut: StatutPret;
   /** Déduit du taux et de la durée, base 360 — cf. `interetPret`. */
   interetARecevoir: number;
+  /**
+   * Date à laquelle l'intérêt a été CONSTATÉ SUR LE RELEVÉ.
+   *
+   * Tant qu'elle est nulle, l'intérêt pèse dans « Autres flux entrants » au
+   * point de trésorerie. Une fois posée, le solde bancaire saisi le contient
+   * déjà : l'y laisser le compterait deux fois. C'est un lettrage, pas une
+   * annulation — on la retire et l'intérêt repèse.
+   *
+   * Ni dans `SaisiePret` ni dans le formulaire : elle ne se saisit pas avec le
+   * prêt, elle se pose après, sur la ligne, comme tout rapprochement.
+   */
+  interetRapprocheLe: string | null;
 };
 
 /** Nombre de jours CALENDAIRES entre deux dates ISO. */
@@ -219,6 +231,33 @@ export function interetPret(
   const jours = joursEntre(o.dateOperation, fin);
   if (jours <= 0) return 0;
   return (o.quantite * o.prix * p.tauxCommission * jours) / 360;
+}
+
+/**
+ * L'intérêt d'un prêt pèse-t-il encore au point de trésorerie, à cette date ?
+ *
+ * TROIS CONDITIONS, et la même fonction pour le calcul et pour l'écran : sinon
+ * le tableau et le registre finissent par ne plus être d'accord sur ce qui
+ * reste à encaisser.
+ *
+ *  - il y a une ÉCHÉANCE — reprise si elle a eu lieu, fin prévue sinon : sans
+ *    terme, on ne sait pas quand l'argent rentre ;
+ *  - cette échéance tombe au plus tard à l'arrêté : un prêt qui se dénoue le
+ *    mois prochain n'a rien à faire dans un point arrêté aujourd'hui ;
+ *  - l'intérêt n'a pas été RAPPROCHÉ à cette date-là. Un lettrage postérieur
+ *    à l'arrêté n'efface pas un flux qui, ce jour-là, n'était pas encore
+ *    encaissé.
+ */
+export function interetPretPese(
+  p: { dateFin: string | null; dateReprise: string | null; interetRapprocheLe: string | null },
+  dateArrete: string | null,
+): boolean {
+  const echeance = p.dateReprise ?? p.dateFin;
+  if (!echeance) return false;
+  if (dateArrete && echeance > dateArrete) return false;
+  if (p.interetRapprocheLe && (!dateArrete || p.interetRapprocheLe <= dateArrete))
+    return false;
+  return true;
 }
 
 /** Statut d'un prêt, DÉDUIT : les titres sont revenus, ou ils ne le sont pas. */

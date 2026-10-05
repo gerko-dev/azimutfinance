@@ -26,6 +26,7 @@ import {
   ordreRapproche,
   partRestantePese,
   interetPret,
+  interetPretPese,
   posteEngageDe,
   posteRealise,
   posteRemereDenouement,
@@ -128,7 +129,12 @@ type LignePret = {
   date_fin: string | null;
   taux_commission: number | string;
   date_reprise: string | null;
+  /** Absente tant que `fund-prets-interet-rapproche.sql` n'a pas été joué. */
+  interet_rapproche_le?: string | null;
 };
+
+/** Le prêt tel qu'il sort de la base : sa saisie, plus son lettrage. */
+type PretCharge = SaisiePret & { interetRapprocheLe: string | null };
 
 function versRemere(l: LigneRepo): SaisieRemere {
   return {
@@ -139,12 +145,13 @@ function versRemere(l: LigneRepo): SaisieRemere {
   };
 }
 
-function versPret(l: LignePret): SaisiePret {
+function versPret(l: LignePret): PretCharge {
   return {
     dateFin: l.date_fin ?? null,
     contrepartie: l.contrepartie ?? "",
     tauxCommission: nb(l.taux_commission),
     dateReprise: l.date_reprise ?? null,
+    interetRapprocheLe: l.interet_rapproche_le ?? null,
   };
 }
 
@@ -194,7 +201,7 @@ function versOperation(
   l: Ligne,
   executions: Execution[],
   remere: SaisieRemere | null = null,
-  pret: SaisiePret | null = null,
+  pret: PretCharge | null = null,
   comptes: VentilationCompte[] = [],
 ): OperationMarche {
   const base = {
@@ -326,10 +333,12 @@ async function chargerVentilations(
 async function chargerVolets(
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
   operationIds: string[],
-): Promise<{ repos: Map<string, SaisieRemere>; prets: Map<string, SaisiePret> }> {
+): Promise<{ repos: Map<string, SaisieRemere>; prets: Map<string, PretCharge> }> {
   const repos = new Map<string, SaisieRemere>();
-  const prets = new Map<string, SaisiePret>();
+  const prets = new Map<string, PretCharge>();
   if (operationIds.length === 0) return { repos, prets };
+
+  const COLONNES_PRET = "operation_id, contrepartie, date_fin, taux_commission, date_reprise";
 
   const [r, p] = await Promise.all([
     supabase
@@ -338,14 +347,28 @@ async function chargerVolets(
       .in("operation_id", operationIds),
     supabase
       .from("fund_market_loans")
-      .select("operation_id, contrepartie, date_fin, taux_commission, date_reprise")
+      .select(`${COLONNES_PRET}, interet_rapproche_le`)
       .in("operation_id", operationIds),
   ]);
+
+  // LE LETTRAGE DE L'INTERET EST UNE COLONNE RECENTE, et une base ou la
+  // migration n'a pas encore ete jouee rendrait ici une erreur — pas des
+  // lignes sans la colonne. Tout le carnet disparaitrait alors de l'ecran,
+  // ordres compris, pour un champ accessoire. On relit sans lui : les prets
+  // s'affichent, leurs interets pesent, et seul le lettrage attend le script.
+  let lignesPret: unknown = p.data;
+  if (p.error) {
+    const secours = await supabase
+      .from("fund_market_loans")
+      .select(COLONNES_PRET)
+      .in("operation_id", operationIds);
+    lignesPret = secours.data;
+  }
 
   for (const l of (r.data ?? []) as unknown as LigneRepo[]) {
     repos.set(l.operation_id, versRemere(l));
   }
-  for (const l of (p.data ?? []) as unknown as LignePret[]) {
+  for (const l of (lignesPret ?? []) as unknown as LignePret[]) {
     prets.set(l.operation_id, versPret(l));
   }
   return { repos, prets };
@@ -608,6 +631,41 @@ export function agregerParPoste(
           .join(" · "),
       },
     );
+  }
+
+  // ── L'INTÉRÊT DES PRÊTS DE TITRES ─────────────────────────────────────
+  //
+  // PRÊTER NE DÉPLACE PAS DE CASH, MAIS RAPPORTE. Le prêt lui-même n'alimente
+  // aucun poste — c'est un registre, et le classeur n'en a pas —, mais au
+  // terme la contrepartie paie la commission, et cet argent-là rentre.
+  //
+  // IL SE LOGE DANS LES AUTRES FLUX ENTRANTS, parmi les flux théoriques.
+  // C'est leur définition qui le veut : certain dans son principe, pas encore
+  // encaissé, donc il ne pèse que sur le solde théorique — comme les coupons
+  // et les tombées de titres, qui sont dans le même cas.
+  //
+  // Le montant est celui du registre, calculé par `interetPret` : même
+  // fonction, mêmes jours, même base 360. En réécrire une seconde version ici
+  // aurait garanti que les deux divergent.
+  for (const o of operations) {
+    const p = o.pret;
+    if (!p) continue;
+    if (!interetPretPese(p, dateArrete)) continue;
+    const interet = interetPret(o, p);
+    if (interet <= 0) continue;
+    const echeance = p.dateReprise ?? p.dateFin ?? "";
+    ajouter("AUTRES_FLUX_ENTRANT", o, interet, {
+      date: echeance,
+      libelle: titre(o),
+      info: [
+        "intérêt de prêt de titres",
+        p.contrepartie ? `de ${p.contrepartie}` : "",
+        `${(p.tauxCommission * 100).toLocaleString("fr-FR", { maximumFractionDigits: 4 })} %`,
+        p.dateReprise ? `repris le ${p.dateReprise}` : "au terme prévu",
+      ]
+        .filter(Boolean)
+        .join(" · "),
+    });
   }
 
   return parPoste;

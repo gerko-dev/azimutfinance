@@ -419,13 +419,20 @@ export const LIGNES_POINT_TRESORERIE: DefinitionLigne[] = [
     explication:
       "Souscriptions annoncées par le bureau du Bénin, pas encore confirmées. Solde théorique seulement.",
   },
+  // DEUX SOURCES POUR UNE SEULE LIGNE, et c'est voulu : ce que le trésorier
+  // saisit à la main, et les INTÉRÊTS DES PRÊTS DE TITRES. Prêter ne déplace
+  // pas de cash — le prêt lui-même n'a donc aucun poste —, mais au terme la
+  // contrepartie paie sa commission. Cet argent est certain dans son principe
+  // et pas encore encaissé : c'est la définition même d'un flux théorique, et
+  // lui inventer une ligne à lui aurait allongé le tableau sans rien dire de
+  // plus.
   {
     libelle: "AUTRES_FLUX_ENTRANT",
     affichage: "Autres flux entrants",
     nature: "poste",
     source: "saisie",
     explication:
-      "Entrées PROBABLES saisies à la main. Elles ne pèsent que sur le solde théorique.",
+      "Entrées PROBABLES saisies à la main, et INTÉRÊTS DES PRÊTS DE TITRES dont le terme — reprise ou fin prévue — tombe au plus tard à l'arrêté. Un intérêt rapproché dans l'onglet « Prêt de titres » en sort : le solde bancaire le contient alors déjà. Elles ne pèsent que sur le solde théorique.",
   },
   // TOUT CE QUE LES TITRES RAPPORTENT, SUR UNE SEULE LIGNE : coupons,
   // dividendes, amortissements et remboursements. Le compte de résultat

@@ -11,12 +11,13 @@
 // Tout ce qui se corrige se corrige donc sur l'ordre, dans l'onglet
 // Opérations. D'où le bouton unique de chaque ligne.
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 
 import {
   LIBELLES_SENS_REMERE,
   LIBELLES_STATUT_PRET,
   LIBELLES_STATUT_REMERE,
+  interetPret,
   montantRemere,
   remereNoue,
 } from "@/app/gestion-portefeuille/operations-marche-types";
@@ -202,6 +203,7 @@ export function RecapPrets({
   enCours,
   onModifier,
   onReprendre,
+  onRapprocherInteret,
   onSupprimer,
 }: {
   operations: OperationAvecFonds[];
@@ -209,6 +211,8 @@ export function RecapPrets({
   onModifier: (o: OperationAvecFonds) => void;
   /** Pose — ou retire — la date de reprise. C'est elle qui fait le statut. */
   onReprendre: (o: OperationAvecFonds, date: string | null) => void;
+  /** Lettre — ou délettre — l'intérêt constaté sur le relevé bancaire. */
+  onRapprocherInteret: (o: OperationAvecFonds, date: string | null) => void;
   /** SUPPRIME L'ORDRE ENTIER. Un prêt n'est pas un objet à part : c'est un
    *  ordre MTP augmenté, et le détacher de son ordre n'aurait aucun sens. */
   onSupprimer: (o: OperationAvecFonds) => void;
@@ -217,6 +221,11 @@ export function RecapPrets({
   // DEUX CLICS POUR SUPPRIMER : il n'y a ici ni sélection ni corbeille, et le
   // geste emporte l'ordre MTP tout entier.
   const [aSupprimer, setASupprimer] = useState<string | null>(null);
+  // LA REPRISE SE DATE. Les titres reviennent le jour où ils reviennent, et
+  // c'est rarement celui où on le saisit : une reprise au 12 enregistrée le 20
+  // faisait payer huit jours de prêt qui n'ont pas eu lieu. Le volet ne tient
+  // qu'un prêt à la fois — on reprend l'un, puis l'autre.
+  const [reprise, setReprise] = useState<{ id: string; date: string } | null>(null);
 
   const lignes = useMemo(() => {
     const prets = operations.filter((o) => o.pret !== null);
@@ -267,7 +276,7 @@ export function RecapPrets({
     <Cadre
       titre="prêt de titres"
       videAide="Coche la case sur une opération MTP, dans l'onglet « Saisir un ordre »."
-      explication="Un registre, pas un flux : prêter des titres ne déplace pas de cash, et le point de trésorerie n'en porte donc aucun poste. L'intérêt à recevoir est calculé sur la valeur des titres prêtés, au taux du prêt, en base 360 — de la date du prêt à sa fin, ou à la reprise quand elle a eu lieu."
+      explication="Un registre, pas un flux : prêter des titres ne déplace pas de cash au moment où le prêt se noue. L'INTÉRÊT, lui, rentre : calculé sur la valeur des titres prêtés, au taux du prêt, en base 360 — de la date du prêt à sa fin, ou à la reprise quand elle a eu lieu —, il se loge dans « Autres flux entrants » au point de trésorerie, et n'en sort qu'une fois constaté sur le relevé."
       vide={lignes.length === 0}
       enTetes={
         <>
@@ -307,8 +316,10 @@ export function RecapPrets({
     >
       {lignes.map((o) => {
         const p = o.pret!;
+        const ouverte = reprise?.id === o.id;
         return (
-          <tr key={o.id} className="hover:bg-slate-50">
+          <Fragment key={o.id}>
+          <tr className="hover:bg-slate-50">
             <td className={td}>{dateFr(o.dateOperation)}</td>
             <td className={td}>{o.fondsNom}</td>
             <td className={td}>{p.contrepartie || "—"}</td>
@@ -330,27 +341,85 @@ export function RecapPrets({
                 libelle={LIBELLES_STATUT_PRET[p.statut]}
               />
             </td>
-            <td className={tdNum}>{montantFr(p.interetARecevoir)}</td>
+            <td className={tdNum}>
+              {montantFr(p.interetARecevoir)}
+              {/* OU VA CET ARGENT, ET QUAND IL EN SORT. Tant qu'il n'est pas
+                  constaté sur le relevé, l'intérêt pèse dans « Autres flux
+                  entrants » au point de trésorerie. Une fois lettré, le solde
+                  bancaire saisi le contient déjà : l'y laisser le compterait
+                  deux fois. C'est un lettrage, pas une annulation — il se
+                  défait. */}
+              {p.interetARecevoir > 0 &&
+                (p.interetRapprocheLe ? (
+                  <button
+                    type="button"
+                    onClick={() => onRapprocherInteret(o, null)}
+                    disabled={enCours}
+                    className="block ml-auto text-[9px] text-emerald-700 hover:text-emerald-900 disabled:opacity-50"
+                    title={`Intérêt constaté le ${p.interetRapprocheLe} — défaire`}
+                  >
+                    ✓ reçu le {dateFr(p.interetRapprocheLe)}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onRapprocherInteret(o, new Date().toISOString().slice(0, 10))
+                    }
+                    disabled={enCours}
+                    className="block ml-auto text-[9px] text-blue-700 hover:text-blue-900 disabled:opacity-50"
+                    title="Constaté sur le relevé : sort des flux théoriques, le solde le contient déjà"
+                  >
+                    rapprocher
+                  </button>
+                ))}
+            </td>
             <td className={td}>{dateFr(p.dateReprise)}</td>
             <td className="px-3 py-2 text-right whitespace-nowrap">
               {/* LA REPRISE SE FAIT ICI, pas au formulaire : la date est celle
                   du jour où les titres reviennent. « Rouvrir » la retire, pour
                   corriger une fausse manœuvre. */}
-              {p.statut === "en_cours" ? (
+              {/* REPRENDRE OUVRE UN VOLET, il n'écrit plus tout seul : la
+                  date de retour des titres se saisit, et l'intérêt la suit.
+                  « Corriger » rouvre le même volet sur un prêt déjà repris —
+                  une date fausse se rattrape sans avoir à tout défaire. */}
+              <button
+                type="button"
+                onClick={() =>
+                  setReprise(
+                    ouverte
+                      ? null
+                      : {
+                          id: o.id,
+                          // Reprise déjà saisie : on la reprend telle quelle.
+                          // Sinon le jour même, qui reste le cas courant.
+                          date: p.dateReprise ?? new Date().toISOString().slice(0, 10),
+                        },
+                  )
+                }
+                disabled={enCours}
+                className={`text-[11px] hover:underline disabled:opacity-50 mr-3 ${
+                  p.statut === "en_cours"
+                    ? "font-medium text-blue-700"
+                    : "text-slate-500 hover:text-slate-900"
+                }`}
+              >
+                {ouverte
+                  ? "Fermer"
+                  : p.statut === "en_cours"
+                    ? "Reprendre"
+                    : "Corriger"}
+              </button>
+              {p.statut !== "en_cours" && (
                 <button
                   type="button"
-                  onClick={() => onReprendre(o, new Date().toISOString().slice(0, 10))}
-                  disabled={enCours}
-                  className="text-[11px] font-medium text-blue-700 hover:underline disabled:opacity-50 mr-3"
-                >
-                  Reprendre
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => onReprendre(o, null)}
+                  onClick={() => {
+                    setReprise(null);
+                    onReprendre(o, null);
+                  }}
                   disabled={enCours}
                   className="text-[11px] text-slate-500 hover:text-slate-900 hover:underline disabled:opacity-50 mr-3"
+                  title="Retirer la reprise : le prêt redevient en cours"
                 >
                   Rouvrir
                 </button>
@@ -402,6 +471,88 @@ export function RecapPrets({
               )}
             </td>
           </tr>
+
+          {/* LE VOLET DE REPRISE. L'intérêt affiché est celui que la base
+              recalculera : même fonction, mêmes jours, même base 360 — le
+              gérant voit avant d'écrire ce que sa date coûte ou économise. */}
+          {ouverte && reprise && (
+            <tr className="bg-blue-50/50">
+              <td colSpan={11} className="px-3 py-2">
+                <div className="flex flex-wrap items-end gap-4">
+                  <label className="flex flex-col gap-1">
+                    <span className="text-[10px] uppercase tracking-wider text-slate-500">
+                      Date de reprise
+                    </span>
+                    <input
+                      type="date"
+                      value={reprise.date}
+                      onChange={(ev) =>
+                        setReprise({ id: o.id, date: ev.target.value })
+                      }
+                      className="text-xs border border-slate-300 rounded px-2 py-1.5 w-40 focus:border-blue-400 focus:outline-none"
+                    />
+                    <span className="text-[9px] text-slate-400">
+                      prêté le {dateFr(o.dateOperation)} · fin prévue{" "}
+                      {dateFr(p.dateFin)}
+                    </span>
+                  </label>
+
+                  <div className="text-[11px] text-slate-600 mb-1.5">
+                    Intérêt à recevoir{" "}
+                    <span className="font-semibold tabular-nums text-slate-900">
+                      {montantFr(
+                        interetPret(o, { ...p, dateReprise: reprise.date }),
+                      )}{" "}
+                      F
+                    </span>
+                    {/* CE QUE LA DATE CHANGE, dit en clair : au terme prévu,
+                        le prêt rapporte ceci ; repris plus tôt, cela. */}
+                    <span className="block text-[9px] text-slate-400">
+                      au terme prévu {montantFr(
+                        interetPret(o, { ...p, dateReprise: null }),
+                      )}{" "}
+                      F
+                    </span>
+                  </div>
+
+                  {/* UNE REPRISE AVANT LE PRET N'EN EST PAS UNE : l'intérêt
+                      tomberait à zéro sans rien dire. On refuse d'écrire. */}
+                  {reprise.date < o.dateOperation ? (
+                    <p className="text-[11px] text-rose-700 mb-1.5">
+                      Les titres ne peuvent pas revenir avant d&apos;être partis :
+                      le prêt date du {dateFr(o.dateOperation)}.
+                    </p>
+                  ) : (
+                    p.dateFin &&
+                    reprise.date > p.dateFin && (
+                      <p className="text-[11px] text-amber-700 mb-1.5">
+                        Reprise après la fin prévue du {dateFr(p.dateFin)} :
+                        l&apos;intérêt court jusqu&apos;à cette date.
+                      </p>
+                    )
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const date = reprise.date;
+                      setReprise(null);
+                      onReprendre(o, date);
+                    }}
+                    disabled={
+                      enCours || !reprise.date || reprise.date < o.dateOperation
+                    }
+                    className="mb-1.5 px-3 py-1.5 text-xs font-medium bg-blue-700 text-white rounded hover:bg-blue-800 disabled:opacity-50"
+                  >
+                    {p.statut === "en_cours"
+                      ? "Enregistrer la reprise"
+                      : "Corriger la reprise"}
+                  </button>
+                </div>
+              </td>
+            </tr>
+          )}
+          </Fragment>
         );
       })}
     </Cadre>
