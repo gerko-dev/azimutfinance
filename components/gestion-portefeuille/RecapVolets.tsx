@@ -239,14 +239,50 @@ export function RecapRemeres({
       explication="Une cession temporaire : le titre part, il reviendra au prix de sortie à la date de fin. Au point de trésorerie, l'ordre pèse dans « achats / ventes à réméré validés » tant qu'il n'est pas servi, puis dans les achats et ventes réalisés. Le dénouement se comporte, lui, comme une opération MTP ordinaire."
       vide={lignes.length === 0}
       barre={
-        <BarreFiltres
-          fonds={fonds}
-          selecteurs={SELECTEURS_REMERE}
-          valeurs={filtres}
-          onChange={setFiltres}
-          vus={lignes.length}
-          total={noues.length}
-        />
+        <>
+          <BarreFiltres
+            fonds={fonds}
+            selecteurs={SELECTEURS_REMERE}
+            valeurs={filtres}
+            onChange={setFiltres}
+            vus={lignes.length}
+            total={noues.length}
+          />
+          {/* CE QUE LA CONTREPARTIE DEMANDE AVANT DE TRAITER : la liste des
+              OAT qu'on peut lui céder, avec de quoi les valoriser elle-même.
+              Le tableau se recopiait à la main.
+
+              UN LIEN, PAS UN FETCH : le navigateur reçoit le classeur en
+              pièce jointe, sous le nom que le serveur lui donne, sans passer
+              par un blob intermédiaire.
+
+              IL EXIGE UN FONDS, et c'est le filtre qui le désigne : un export
+              interfonds mélangerait des inventaires et des disponibilités qui
+              n'ont rien à voir — on ne cède pas les titres d'un portefeuille
+              pour le compte d'un autre. */}
+          <div className="flex flex-wrap items-center gap-2 px-3 py-2 border-b border-slate-200 bg-white">
+            {filtres.fonds ? (
+              <a
+                href={`/api/gestion-portefeuille/oat-cessibles?fund=${encodeURIComponent(
+                  filtres.fonds,
+                )}`}
+                className="px-3 py-1 rounded text-[11px] font-medium border border-emerald-300 text-emerald-700 hover:bg-emerald-50 transition"
+                title="Titre, quantité cessible, facial, échéance et prix de cession — police Consolas 9"
+              >
+                Exporter les OAT cessibles (.xlsx)
+              </a>
+            ) : (
+              <span className="px-3 py-1 rounded text-[11px] font-medium border border-slate-200 text-slate-400">
+                Exporter les OAT cessibles — choisis un fonds
+              </span>
+            )}
+            <span className="text-[10px] text-slate-500">
+              Quantités nettes des titres prêtés, pris en réméré et déjà
+              engagés à la vente. Prix de cession identique à celui des
+              opérations à réaliser.
+            </span>
+          </div>
+        </>
       }
       enTetes={
         <>

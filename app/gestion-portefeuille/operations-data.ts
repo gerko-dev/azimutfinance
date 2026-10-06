@@ -175,7 +175,7 @@ function courbeRecente(
  * adjudication cash exploitable, ou un titre deja echu. On bascule alors sur
  * la cote.
  */
-function prixTheorique(
+export function prixTheorique(
   bond: ListedBond | undefined,
   dateRef: string,
   emissions: EmissionUMOA[],
@@ -210,7 +210,7 @@ function prixTheorique(
  * les deux univers sont deliberement separes dans ce depot, amortissements et
  * courbes n'y obeissant pas aux memes regles.
  */
-function prixTheoriqueSouverain(
+export function prixTheoriqueSouverain(
   bond: Bond | undefined,
   dateRef: string,
   issuances: IssuanceResult[],
@@ -227,7 +227,7 @@ function prixTheoriqueSouverain(
   }
 }
 
-function dernierCoursObligation(
+export function dernierCoursObligation(
   isin: string,
   jusqua: string,
 ): { prix: number; date: string } | null {
@@ -247,7 +247,7 @@ function dernierCoursObligation(
  *  par rapport à la face d'émission d'un titre déjà amorti. */
 /** Nominal de reference. Le souverain non cote le porte aussi — sans lui, la
  *  decote de cession de ces titres se calculait sur un nominal presume. */
-function nominalCourant(
+export function nominalCourant(
   b: ListedBond | undefined,
   souverain: Bond | undefined,
   fallback: number,

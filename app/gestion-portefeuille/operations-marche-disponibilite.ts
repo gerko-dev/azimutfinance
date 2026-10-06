@@ -93,6 +93,19 @@ export const quantitesInventaire = cache(
   },
 );
 
+/**
+ * L'inventaire QUI FAIT FOI pour les cessions, positions comprises.
+ *
+ * `quantitesInventaire` n'en rend que les quantités, indexées : l'export des
+ * OAT a besoin des LIGNES elles-mêmes — leur ISIN, leur libellé, leur section.
+ * Les deux doivent désigner le même arrêté, faute de quoi l'export listerait
+ * des titres que le contrôle de cession ne connaîtrait pas.
+ */
+export const positionsDeReference = cache(
+  async (fundId: string): Promise<PortfolioSnapshot | null> =>
+    snapshotDeReference(await loadFundPortfolios(fundId)),
+);
+
 /** Une opération porte-t-elle sur ce titre ? */
 function memeTitre(o: OperationMarche, code: string, libelle: string): boolean {
   const c = cle(code);
