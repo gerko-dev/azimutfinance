@@ -11,28 +11,37 @@ import "server-only";
 // jusqu'au terme ; les obligations cotées ont leur propre marché. Ce qui se
 // cède en réméré, ce sont les OAT.
 //
-// ── LE PRIX NE SE DÉDUIT PAS D'UNE COURBE, IL SE DÉDUIT DE L'ACCORD ───────
+// ── LE PRIX SE DÉDUIT DU RENDEMENT, ET LE RENDEMENT DU MARCHÉ PRIMAIRE ────
 //
 // Un réméré n'est pas une vente : c'est un prêt gagé sur des titres. La
-// contrepartie avance de l'argent aujourd'hui, encaisse ce que le titre
-// rapporte pendant le terme, et REVEND AU PAIR à l'échéance du réméré. Son
-// rendement est donc négocié d'avance — 1,5 % sur la période — et c'est LUI
-// qui détermine le prix, pas l'inverse.
+// contrepartie DÉBOURSE un montant aujourd'hui, encaisse ce que le titre
+// rapporte pendant le terme, et REÇOIT au rachat. Entre les deux, elle veut le
+// rendement qu'elle obtiendrait ailleurs — et ailleurs, pour une banque de la
+// zone, c'est le guichet de l'État : LE RENDEMENT MOYEN DE SES TROIS
+// DERNIÈRES ADJUDICATIONS. Un réméré qui paierait moins ne se traite pas ; un
+// réméré qui paierait plus est de l'argent laissé sur la table.
 //
-// Trois choses composent ce rendement, et le prix est ce qui les fait tomber
-// juste :
+// ON RAISONNE EN MONTANTS RÉELLEMENT ÉCHANGÉS, pas en prix affiché :
 //
-//   les INTÉRÊTS COURUS sur la durée du réméré — taux facial × nominal × m/12
-//   l'AMORTISSEMENT éventuel tombant dans la fenêtre, qu'elle encaisse
-//   la DÉCOTE DE CESSION — l'écart entre le prix payé et le pair rendu
+//   déboursé au jour J   = prix + intérêts courus à ce jour
+//   encaissé au terme    = pair + intérêts courus au terme
+//                          + coupons détachés et amortissements de la période
 //
-//   (pair − P + intérêts + amortissement) / P = 1,5 %
-//        ⟹  P = (pair + intérêts + amortissement) / 1,015
+// et l'on cherche le prix tel que le rapport des deux soit le rendement visé
+// sur la durée :
 //
-// PLUS LE TITRE RAPPORTE PENDANT LA PÉRIODE, PLUS LA DÉCOTE EST FAIBLE : une
-// OAT à 6,5 % laisse 1,6 % de coupon couru sur trois mois, et la contrepartie
-// n'a presque plus besoin de décote pour atteindre son 1,5 %. C'est la
-// mécanique du réméré, et c'est ce que le prix doit refléter.
+//   encaissé / déboursé = (1 + r_annuel) ^ (mois / 12)
+//        ⟹  prix = encaissé / (1 + r_annuel)^(mois/12) − courus du jour
+//
+// LES COURUS DES DEUX CÔTÉS, ET C'EST LE POINT. Un titre cédé la veille de son
+// coupon porte onze mois d'intérêts : les ignorer à l'achat ferait payer la
+// contrepartie deux fois, et les ignorer au rachat les lui offrirait. Leur
+// VARIATION sur la période — plus les coupons effectivement détachés — est
+// exactement ce que le titre rapporte, sans double compte possible.
+//
+// LE TITRE QUI ÉCHOIT AVANT LE TERME ne se revend pas : il est remboursé. Ses
+// flux portent alors le capital, et le pair ne s'y ajoute pas — l'y ajouter
+// aurait compté le remboursement deux fois.
 //
 // LES QUANTITÉS SONT CELLES QU'ON PEUT RÉELLEMENT SORTIR. L'inventaire porte
 // des titres qui ne sont pas disponibles : ceux qui sont PRÊTÉS sont dehors,
@@ -40,8 +49,9 @@ import "server-only";
 // servie des ventes déjà passées est promise. Proposer un titre qu'on ne peut
 // pas livrer, c'est un échec de dénouement — et une contrepartie perdue.
 
-import { loadBonds } from "@/lib/dataLoader";
-import type { Bond } from "@/lib/bondsUEMOA";
+import { loadBonds, loadIssuances } from "@/lib/dataLoader";
+import { calculateAccruedInterest, parseDate } from "@/lib/bondMath";
+import type { Bond, BondCountry, IssuanceResult } from "@/lib/bondsUEMOA";
 
 import { loadCustomSecurities } from "./portfolio-data";
 import {
@@ -61,44 +71,58 @@ const num = (v: unknown, d = 0): number => {
   return d;
 };
 
-/**
- * RENDEMENT NÉGOCIÉ DE LA CONTREPARTIE, sur la durée du réméré.
- *
- * Ce n'est pas un taux annuel : c'est ce que la banque veut gagner entre la
- * cession et le rachat, que le terme soit à trois mois ou à six. L'annualiser
- * reviendrait à lui offrir deux fois moins sur un réméré court, ce qu'aucune
- * contrepartie n'accepte — la place traite au forfait de période.
- */
-export const RENDEMENT_CONTREPARTIE = 0.015;
+/** Nombre de SÉANCES d'adjudication retenues pour le rendement de référence. */
+export const NB_ADJUDICATIONS_REFERENCE = 3;
 
 /** Les deux termes qui se négocient. Rien d'autre ne se pratique. */
 export type DureeRemere = 3 | 6;
+
+/** Le rendement servi par un État à ses dernières adjudications. */
+export type ReferenceEtat = {
+  /** Rendement annuel, en décimal, pondéré par les montants adjugés. */
+  taux: number;
+  /** Les séances retenues, pour que le chiffre se vérifie. */
+  seances: { date: string; montant: number; taux: number }[];
+  /** Vrai quand aucune adjudication du pays n'était disponible et qu'on a pris
+   *  la moyenne régionale : le prix repose alors sur un emprunt de taux. */
+  parDefaut: boolean;
+};
 
 /** Une ligne du tableau demandé par la contrepartie. */
 export type LigneOat = {
   /** L'ISIN : c'est sous lui que la contrepartie connaît le titre. */
   titre: string;
   libelle: string;
+  pays: BondCountry;
   /** Ce qu'on peut réellement céder, prêts et rémérés déduits. */
   quantite: number;
   /** Taux facial, en décimal. */
   facial: number;
   /** Échéance du TITRE, ISO — à ne pas confondre avec le terme du réméré. */
   echeance: string;
-  /** Prix auquel on propose le titre, par titre. */
+  /** Prix PIED DE COUPON proposé, par titre : c'est la colonne du tableau. */
   prixCession: number;
 
   // ── Ce qui compose le prix, pour qu'il se vérifie ────────────────────────
-  /** Le pair : ce que la contrepartie rendra au terme. 10 000 F pour une OAT. */
+  /** Le pair : ce que la contrepartie rend au terme. 10 000 F pour une OAT. */
   pair: number;
-  /** Intérêts courus sur la durée du réméré, par titre. */
-  interetsCourus: number;
-  /** Amortissements tombant dans la fenêtre, hors remboursement final. */
-  amortissement: number;
-  /** 1 − prix / pair. */
+  /** Intérêts courus au jour de la cession, par titre. */
+  courusJour: number;
+  /** Intérêts courus au terme du réméré. Nuls si le titre a été remboursé. */
+  courusTerme: number;
+  /** Coupons détachés et amortissements encaissés pendant le réméré. */
+  fluxPeriode: number;
+  /** Prix + courus du jour : ce que la contrepartie sort réellement. */
+  debourse: number;
+  /** Ce qu'elle reçoit au terme, courus compris. */
+  encaisse: number;
+  /** 1 − prix / pair. Négative quand le titre vaut plus que le pair. */
   decote: number;
-  /** Le rendement obtenu — égal à la cible, sauf réserve. */
-  rendement: number;
+  /** Rendement annuel visé — celui du guichet de l'État. */
+  rendementCible: number;
+  /** Rendement annuel obtenu : le contrôle que le calcul tombe juste. */
+  rendementObtenu: number;
+  reference: ReferenceEtat;
   /** Ce qui nuance la ligne : échéance avant le terme, taux inconnu… */
   reserve: string | null;
   /** Le détail du calcul de disponibilité, pour la feuille des écartés. */
@@ -112,11 +136,12 @@ export type ExportOat = {
   /** Terme du réméré, en mois, et sa date. */
   dureeMois: DureeRemere;
   dateTerme: string;
-  rendementCible: number;
   lignes: LigneOat[];
   /** OAT détenues mais dont rien n'est cessible, et pourquoi. Un export muet
    *  sur ses trous est un export qu'on croit complet. */
   ecartees: LigneOat[];
+  /** Les rendements de référence employés, par pays. */
+  references: { pays: BondCountry; reference: ReferenceEtat }[];
   avertissements: string[];
 };
 
@@ -137,8 +162,74 @@ const normId = (s: string | null | undefined): string =>
   (s ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 
 /**
+ * Le rendement servi par chaque État à ses TROIS DERNIÈRES SÉANCES.
+ *
+ * PAR SÉANCE, ET NON PAR LIGNE. Une adjudication met souvent deux ou trois
+ * souches en vente le même jour : compter trois LIGNES reviendrait à ne
+ * regarder qu'une seule journée de marché, et à faire dépendre le prix d'une
+ * séance isolée.
+ *
+ * PONDÉRÉ PAR LES MONTANTS ADJUGÉS, comme partout ailleurs dans ce dépôt : une
+ * souche servie pour cinq milliards dit mieux le coût de l'État qu'une souche
+ * servie pour deux cents millions.
+ */
+function referencesParEtat(
+  issuances: IssuanceResult[],
+  jusqua: string,
+): Map<BondCountry, ReferenceEtat> {
+  const parPays = new Map<BondCountry, IssuanceResult[]>();
+  for (const i of issuances) {
+    if (!i.date || i.date > jusqua) continue;
+    if (!(i.weightedAvgYield > 0) || !(i.amount > 0)) continue;
+    const l = parPays.get(i.country) ?? [];
+    l.push(i);
+    parPays.set(i.country, l);
+  }
+
+  const moyenne = (lignes: IssuanceResult[]): ReferenceEtat | null => {
+    const dates = [...new Set(lignes.map((i) => i.date))]
+      .sort()
+      .slice(-NB_ADJUDICATIONS_REFERENCE);
+    if (dates.length === 0) return null;
+    const retenues = lignes.filter((i) => dates.includes(i.date));
+    const montant = retenues.reduce((s, i) => s + i.amount, 0);
+    if (!(montant > 0)) return null;
+    const taux = retenues.reduce((s, i) => s + i.weightedAvgYield * i.amount, 0) / montant;
+    const seances = dates.map((d) => {
+      const duJour = retenues.filter((i) => i.date === d);
+      const m = duJour.reduce((s, i) => s + i.amount, 0);
+      return {
+        date: d,
+        montant: m,
+        taux: duJour.reduce((s, i) => s + i.weightedAvgYield * i.amount, 0) / m,
+      };
+    });
+    return { taux, seances, parDefaut: false };
+  };
+
+  const sortie = new Map<BondCountry, ReferenceEtat>();
+  for (const [pays, lignes] of parPays) {
+    const r = moyenne(lignes);
+    if (r) sortie.set(pays, r);
+  }
+  return sortie;
+}
+
+/** Repli régional : la moyenne des dernières séances de TOUS les États. */
+function referenceRegionale(refs: Map<BondCountry, ReferenceEtat>): ReferenceEtat | null {
+  const toutes = [...refs.values()].flatMap((r) => r.seances);
+  const montant = toutes.reduce((s, x) => s + x.montant, 0);
+  if (!(montant > 0)) return null;
+  return {
+    taux: toutes.reduce((s, x) => s + x.taux * x.montant, 0) / montant,
+    seances: [...toutes].sort((a, b) => a.date.localeCompare(b.date)).slice(-NB_ADJUDICATIONS_REFERENCE),
+    parDefaut: true,
+  };
+}
+
+/**
  * Les OAT qu'un fonds peut céder, au prix qui donne à la contrepartie le
- * rendement convenu sur la durée choisie.
+ * rendement du guichet souverain sur la durée choisie.
  */
 export async function construireExportOat(
   fundId: string,
@@ -151,8 +242,8 @@ export async function construireExportOat(
   ]);
 
   const dateInventaire = snapshot?.asOfDate ?? null;
-  // LA DATE DU JOUR, et non celle de l'inventaire : un réméré se négocie
-  // aujourd'hui, et ses trois mois courent à partir d'aujourd'hui. L'arrêté ne
+  // LE JOUR DE L'EXPORT, et non la date de l'inventaire : la contrepartie
+  // débourse aujourd'hui, et les courus se comptent à aujourd'hui. L'arrêté ne
   // sert qu'aux quantités.
   const dateRef = new Date().toISOString().slice(0, 10);
   const dateTerme = dansNMois(dateRef, dureeMois);
@@ -164,9 +255,9 @@ export async function construireExportOat(
     dateRef,
     dureeMois,
     dateTerme,
-    rendementCible: RENDEMENT_CONTREPARTIE,
     lignes: [],
     ecartees: [],
+    references: [],
     avertissements,
   };
 
@@ -181,9 +272,14 @@ export async function construireExportOat(
     if (b.isin) souverainParIsin.set(b.isin.toUpperCase(), b);
   }
 
+  const refs = referencesParEtat(loadIssuances(), dateRef);
+  const regionale = referenceRegionale(refs);
+  const employees = new Map<BondCountry, ReferenceEtat>();
+
   const lignes: LigneOat[] = [];
   const ecartees: LigneOat[] = [];
   let horsOat = 0;
+  let sansReference = 0;
 
   for (const p of snapshot.positions) {
     if (p.section !== "obligation") continue;
@@ -208,53 +304,69 @@ export async function construireExportOat(
     const pair = nominalCourant(undefined, souverain, num(p.pru));
     const facial = souverain.couponRate;
 
-    // ── Ce que le titre rapporte à la contrepartie pendant le réméré ──────
-    //
-    // LES INTÉRÊTS COURUS, prorata temporis sur la durée convenue : c'est
-    // ainsi que la place les compte, et c'est vérifiable de tête — un facial
-    // de 6,25 % sur trois mois, c'est 156,25 F sur 10 000.
-    const interetsCourus = facial > 0 ? (pair * facial * dureeMois) / 12 : 0;
+    const reference = refs.get(souverain.country) ?? regionale;
+    if (!reference) {
+      sansReference++;
+      continue;
+    }
+    if (!reference.parDefaut) employees.set(souverain.country, reference);
 
-    // L'AMORTISSEMENT ÉVENTUEL, lu à l'échéancier du référentiel. Le
-    // remboursement FINAL en est exclu : s'il tombe dans la fenêtre, il n'y a
-    // pas de réméré à faire — le titre sera remboursé avant son terme, et la
-    // ligne part avec sa réserve.
-    const echeanceAvantTerme = !!souverain.maturityDate && souverain.maturityDate <= dateTerme;
-    const flux = fluxDuReferentiel([normId(cle), normId(souverain.isin)], dateRef, dateTerme);
-    const amortissement = echeanceAvantTerme
-      ? 0
-      : flux
-          .filter((f) => f.capital && f.date !== souverain.maturityDate)
-          .reduce((s, f) => s + f.parTitre, 0);
+    // ── Les deux montants qui s'échangent ────────────────────────────────
+    const courusJour = courus(souverain, dateRef, pair);
+    const echeanceAvantTerme =
+      !!souverain.maturityDate && souverain.maturityDate <= dateTerme;
+    const courusTerme = echeanceAvantTerme ? 0 : courus(souverain, dateTerme, pair);
 
-    // ── Le prix : celui qui donne son rendement à la contrepartie ─────────
-    const prixCession = (pair + interetsCourus + amortissement) / (1 + RENDEMENT_CONTREPARTIE);
+    // Coupons détachés et amortissements de la période. Le remboursement final
+    // en fait partie quand il tombe dans la fenêtre — c'est alors lui, et non
+    // le rachat, qui rend le capital.
+    const fluxPeriode = fluxDuReferentiel(
+      [normId(cle), normId(souverain.isin)],
+      suivant(dateRef),
+      dateTerme,
+    ).reduce((s, f) => s + f.parTitre, 0);
+
+    // LE PAIR NE S'AJOUTE PAS QUAND LE TITRE A DÉJÀ ÉTÉ REMBOURSÉ : son
+    // capital est déjà dans les flux de la période.
+    const encaisse = (echeanceAvantTerme ? 0 : pair + courusTerme) + fluxPeriode;
+    const facteur = Math.pow(1 + reference.taux, dureeMois / 12);
+    const debourse = encaisse / facteur;
+    const prixCession = debourse - courusJour;
+
     const decote = pair > 0 ? 1 - prixCession / pair : 0;
-    const rendement =
-      prixCession > 0
-        ? (pair - prixCession + interetsCourus + amortissement) / prixCession
-        : 0;
+    const rendementObtenu =
+      debourse > 0 ? Math.pow(encaisse / debourse, 12 / dureeMois) - 1 : 0;
 
     const reserve = echeanceAvantTerme
-      ? `Échéance du titre le ${souverain.maturityDate}, avant le terme du réméré (${dateTerme}) : il sera remboursé entre-temps.`
-      : facial > 0
-        ? null
-        : "Taux facial inconnu au référentiel : aucun intérêt couru n'entre dans le prix.";
+      ? `Échéance du titre le ${souverain.maturityDate}, avant le terme du réméré (${dateTerme}) : il sera remboursé entre-temps, il n'y a pas de rachat à faire.`
+      : reference.parDefaut
+        ? "Aucune adjudication récente de cet État : rendement de référence emprunté à la moyenne régionale."
+        : prixCession <= 0
+          ? "Prix négatif ou nul : vérifie le taux facial et l'échéancier au référentiel."
+          : facial > 0
+            ? null
+            : "Taux facial inconnu au référentiel : aucun intérêt couru n'entre dans le calcul.";
 
     const dispo = await disponibiliteCession(fundId, souverain.isin || cle, libelle);
 
     const ligne: LigneOat = {
       titre: souverain.isin || cle,
       libelle,
+      pays: souverain.country,
       quantite: Math.max(0, dispo.disponible),
       facial,
       echeance: souverain.maturityDate,
       prixCession,
       pair,
-      interetsCourus,
-      amortissement,
+      courusJour,
+      courusTerme,
+      fluxPeriode,
+      debourse,
+      encaisse,
       decote,
-      rendement,
+      rendementCible: reference.taux,
+      rendementObtenu,
+      reference,
       reserve,
       dispo,
     };
@@ -274,6 +386,11 @@ export async function construireExportOat(
       `${horsOat} ligne(s) souveraine(s) écartée(s) : ce ne sont pas des OAT (BAT, OTAR).`,
     );
   }
+  if (sansReference > 0) {
+    avertissements.push(
+      `${sansReference} ligne(s) sans aucun rendement de référence, ni national ni régional : aucun prix n'a pu être posé.`,
+    );
+  }
   const avecReserve = lignes.filter((l) => l.reserve !== null);
   if (avecReserve.length > 0) {
     avertissements.push(
@@ -283,7 +400,40 @@ export async function construireExportOat(
     );
   }
 
-  return { ...vide, lignes, ecartees };
+  return {
+    ...vide,
+    lignes,
+    ecartees,
+    references: [...employees.entries()]
+      .map(([pays, reference]) => ({ pays, reference }))
+      .sort((a, b) => a.pays.localeCompare(b.pays)),
+  };
+}
+
+/**
+ * Intérêts courus par titre à une date, sur le nominal de la fiche.
+ *
+ * `calculateAccruedInterest` travaille sur le nominal du RÉFÉRENTIEL ; on
+ * ramène au pair retenu ici, qui peut en différer si la fiche de position
+ * porte une autre coupure.
+ */
+function courus(bond: Bond, date: string, pair: number): number {
+  if (!(bond.couponRate > 0)) return 0;
+  try {
+    const { accruedInterest } = calculateAccruedInterest(bond, parseDate(date));
+    if (!Number.isFinite(accruedInterest) || accruedInterest < 0) return 0;
+    const n = bond.nominalValue > 0 ? bond.nominalValue : pair;
+    return (accruedInterest * pair) / n;
+  } catch {
+    return 0;
+  }
+}
+
+/** Le lendemain : les flux du jour même ont déjà été réglés. */
+function suivant(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
 }
 
 /** Nom du fichier : le fonds, le terme et l'arrêté, pour qu'il se classe seul. */

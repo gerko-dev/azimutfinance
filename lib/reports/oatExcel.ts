@@ -18,10 +18,15 @@ import type { ExportOat } from "@/app/gestion-portefeuille/oat-export";
 // recalculer dessus. Du texte l'obligerait à retaper la colonne.
 //
 // UNE DEUXIÈME FEUILLE MONTRE LE CALCUL. Le prix d'un réméré n'est pas une
-// cotation : il se déduit du rendement convenu, et le gérant doit pouvoir le
-// refaire de tête avant de l'envoyer. Les composantes sont donc posées
-// séparément — pair, intérêts courus, amortissement, décote — et la colonne
-// « Rendement » rend la cible : c'est le contrôle que le calcul tombe juste.
+// cotation : il se déduit du rendement visé, et le gérant doit pouvoir le
+// refaire avant de l'envoyer. On y pose les DEUX MONTANTS QUI S'ÉCHANGENT —
+// ce que la contrepartie débourse le jour J, courus compris, et ce qu'elle
+// reçoit au terme — puis le rendement obtenu, qui doit rendre la cible.
+//
+// UNE TROISIÈME DIT D'OÙ VIENT CETTE CIBLE : les trois dernières séances
+// d'adjudication de chaque État, avec leurs montants et leurs taux. Un
+// rendement de référence qu'on ne peut pas remonter jusqu'à sa source est un
+// rendement qu'on ne défend pas devant une contrepartie.
 
 const POLICE = { name: "Consolas", size: 9 } as const;
 const FMT_QTE = "#,##0";
@@ -70,9 +75,9 @@ export async function buildOatExcel(donnees: ExportOat): Promise<Buffer> {
     // relit pas, et l'info-bulle le dit sans encombrer le tableau.
     r.getCell(1).note =
       `${l.libelle}\n` +
-      `Pair ${l.pair.toLocaleString("fr-FR")} · courus ${l.interetsCourus.toFixed(2)}` +
-      (l.amortissement > 0 ? ` · amortissement ${l.amortissement.toFixed(2)}` : "") +
-      `\nDécote ${(l.decote * 100).toFixed(2)} % · rendement ${(l.rendement * 100).toFixed(2)} %` +
+      `Déboursé ${l.debourse.toFixed(2)} (prix + ${l.courusJour.toFixed(2)} de courus)\n` +
+      `Encaissé au terme ${l.encaisse.toFixed(2)}\n` +
+      `Décote ${(l.decote * 100).toFixed(2)} % · rendement ${(l.rendementObtenu * 100).toFixed(2)} % l'an` +
       (l.reserve ? `\n${l.reserve}` : "");
     if (l.reserve) r.getCell(1).font = { ...POLICE, color: { argb: "FFB45309" } };
   }
@@ -97,7 +102,16 @@ export async function buildOatExcel(donnees: ExportOat): Promise<Buffer> {
   ws.addRow([]);
   for (const texte of [
     `${donnees.fondsNom} — inventaire du ${donnees.dateInventaire ?? "?"} — quantités nettes des titres prêtés, pris en réméré et déjà engagés à la vente`,
-    `Prix calculé pour un réméré de ${donnees.dureeMois} mois (du ${donnees.dateRef} au ${donnees.dateTerme}), rachat au pair, rendement contrepartie ${(donnees.rendementCible * 100).toFixed(2)} % sur la période`,
+    `Prix pied de coupon, pour un réméré de ${donnees.dureeMois} mois (du ${donnees.dateRef} au ${donnees.dateTerme}), rachat au pair`,
+    `Rendement visé : celui des ${donnees.references.length > 0 ? "trois dernières adjudications de l'État émetteur" : "dernières adjudications souveraines"}${
+      donnees.references.length > 0
+        ? " — " +
+          donnees.references
+            .map((r) => `${r.pays} ${(r.reference.taux * 100).toFixed(2)} %`)
+            .join(", ")
+        : ""
+    }`,
+    "Le règlement se fait courus compris : ajouter les intérêts courus du jour au prix ci-dessus (feuille « Calcul »).",
   ]) {
     const r = ws.addRow([texte]);
     r.getCell(1).font = { ...POLICE, italic: true, color: { argb: "FF64748B" } };
@@ -109,51 +123,62 @@ export async function buildOatExcel(donnees: ExportOat): Promise<Buffer> {
   const calc = wb.addWorksheet("Calcul");
   calc.columns = [
     { key: "titre", width: 18 },
-    { key: "pair", width: 12 },
-    { key: "facial", width: 10 },
-    { key: "mois", width: 8 },
-    { key: "courus", width: 14 },
-    { key: "amort", width: 14 },
-    { key: "prix", width: 16 },
-    { key: "decote", width: 11 },
-    { key: "rdt", width: 12 },
+    { key: "pays", width: 7 },
+    { key: "pair", width: 11 },
+    { key: "facial", width: 9 },
+    { key: "courusJ", width: 13 },
+    { key: "prix", width: 14 },
+    { key: "debourse", width: 14 },
+    { key: "flux", width: 13 },
+    { key: "courusT", width: 13 },
+    { key: "encaisse", width: 14 },
+    { key: "decote", width: 10 },
+    { key: "cible", width: 11 },
+    { key: "obtenu", width: 11 },
   ];
   const eCalc = calc.addRow([
     "Titre",
+    "Pays",
     "Pair",
     "Facial",
-    "Mois",
-    "Intérêts courus",
-    "Amortissement",
-    "Prix de cession",
+    "Courus J",
+    "Prix",
+    "Déboursé J",
+    "Flux période",
+    "Courus terme",
+    "Encaissé terme",
     "Décote",
-    "Rendement",
+    "Cible an.",
+    "Obtenu an.",
   ]);
   eCalc.eachCell((c) => {
     c.font = { ...POLICE, bold: true };
-    c.alignment = { horizontal: "center" };
+    c.alignment = { horizontal: "center", wrapText: true };
     c.border = { bottom: { style: "thin" } };
   });
   for (const l of [...donnees.lignes, ...donnees.ecartees]) {
     const r = calc.addRow([
       l.titre,
+      l.pays,
       l.pair,
       l.facial,
-      donnees.dureeMois,
-      Number(l.interetsCourus.toFixed(2)),
-      Number(l.amortissement.toFixed(2)),
+      Number(l.courusJour.toFixed(2)),
       Number(l.prixCession.toFixed(2)),
+      Number(l.debourse.toFixed(2)),
+      Number(l.fluxPeriode.toFixed(2)),
+      Number(l.courusTerme.toFixed(2)),
+      Number(l.encaisse.toFixed(2)),
       l.decote,
-      l.rendement,
+      l.rendementCible,
+      l.rendementObtenu,
     ]);
     r.eachCell((c) => (c.font = { ...POLICE }));
-    r.getCell(2).numFmt = FMT_QTE;
-    r.getCell(3).numFmt = FMT_PCT;
-    r.getCell(5).numFmt = FMT_PRIX;
-    r.getCell(6).numFmt = FMT_PRIX;
-    r.getCell(7).numFmt = FMT_PRIX;
-    r.getCell(8).numFmt = FMT_PCT;
-    r.getCell(9).numFmt = FMT_PCT3;
+    r.getCell(3).numFmt = FMT_QTE;
+    r.getCell(4).numFmt = FMT_PCT;
+    for (const i of [5, 6, 7, 8, 9, 10]) r.getCell(i).numFmt = FMT_PRIX;
+    r.getCell(11).numFmt = FMT_PCT;
+    r.getCell(12).numFmt = FMT_PCT;
+    r.getCell(13).numFmt = FMT_PCT3;
     if (l.reserve) {
       r.getCell(1).font = { ...POLICE, color: { argb: "FFB45309" } };
       r.getCell(1).note = l.reserve;
@@ -161,17 +186,59 @@ export async function buildOatExcel(donnees: ExportOat): Promise<Buffer> {
   }
   calc.addRow([]);
   for (const texte of [
-    "Prix = (pair + intérêts courus + amortissement) ÷ (1 + rendement)",
-    `Rendement contrepartie = (pair − prix + intérêts courus + amortissement) ÷ prix = ${(donnees.rendementCible * 100).toFixed(2)} % sur ${donnees.dureeMois} mois`,
-    "Intérêts courus = pair × facial × mois ÷ 12. Amortissement : tranches de capital du référentiel tombant avant le terme, remboursement final exclu.",
-    "Décote NÉGATIVE = surcote : quand le titre rapporte plus que le rendement convenu sur la période — un facial de 6,5 % sur six mois en rapporte 3,25 % —, la contrepartie paie au-dessus du pair, puisqu'elle garde le coupon et rend le titre à 10 000.",
+    `Déboursé au jour J = prix + courus du jour. Encaissé au terme = pair + courus au terme + coupons et amortissements de la période (${donnees.dateRef} → ${donnees.dateTerme}).`,
+    "Prix = encaissé ÷ (1 + rendement annuel) ^ (mois ÷ 12) − courus du jour.",
+    "Rendement obtenu = (encaissé ÷ déboursé) ^ (12 ÷ mois) − 1. Il doit rendre la cible : c'est le contrôle.",
+    "Décote NÉGATIVE = surcote : le titre vaut plus que le pair parce qu'il porte un coupon supérieur au rendement du guichet.",
+    "Un titre échéant avant le terme n'a pas de rachat : son capital est dans les flux de la période, et le pair ne s'y ajoute pas.",
   ]) {
     const r = calc.addRow([texte]);
     r.getCell(1).font = { ...POLICE, italic: true, color: { argb: "FF64748B" } };
   }
   calc.views = [{ state: "frozen", ySplit: 1 }];
 
-  // ── Feuille 3 : ce qui n'a pas suivi ────────────────────────────────────
+  // ── Feuille 3 : le rendement de reference, seance par seance ────────────
+  //
+  // UN TAUX QU'ON NE PEUT PAS REMONTER JUSQU'A SA SOURCE est un taux qu'on ne
+  // defend pas devant une contrepartie.
+  if (donnees.references.length > 0) {
+    const ref = wb.addWorksheet("Adjudications");
+    ref.columns = [
+      { key: "pays", width: 8 },
+      { key: "date", width: 13 },
+      { key: "montant", width: 18 },
+      { key: "taux", width: 11 },
+    ];
+    const e = ref.addRow(["Pays", "Séance", "Montant adjugé", "Rendement"]);
+    e.eachCell((c) => {
+      c.font = { ...POLICE, bold: true };
+      c.border = { bottom: { style: "thin" } };
+    });
+    for (const { pays, reference } of donnees.references) {
+      for (const s of reference.seances) {
+        const r = ref.addRow([
+          pays,
+          new Date(`${s.date}T00:00:00Z`),
+          Math.round(s.montant),
+          s.taux,
+        ]);
+        r.eachCell((c) => (c.font = { ...POLICE }));
+        r.getCell(2).numFmt = FMT_DATE;
+        r.getCell(3).numFmt = FMT_QTE;
+        r.getCell(4).numFmt = FMT_PCT;
+      }
+      const moy = ref.addRow([pays, "Moyenne", null, reference.taux]);
+      moy.eachCell((c) => (c.font = { ...POLICE, bold: true }));
+      moy.getCell(4).numFmt = FMT_PCT;
+    }
+    ref.addRow([]);
+    const note = ref.addRow([
+      "Moyenne pondérée par les montants adjugés, sur les trois dernières SÉANCES de chaque État — une séance met souvent plusieurs souches en vente le même jour.",
+    ]);
+    note.getCell(1).font = { ...POLICE, italic: true, color: { argb: "FF64748B" } };
+  }
+
+  // ── Feuille 4 : ce qui n'a pas suivi ────────────────────────────────────
   //
   // Une OAT détenue mais incessible doit SE VOIR : sans cette feuille, le
   // gérant croit l'avoir oubliée, et la cherche dans l'inventaire.

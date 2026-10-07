@@ -307,9 +307,10 @@ export function RecapRemeres({
 
             <span className="text-[10px] text-slate-500">
               Quantités nettes des titres prêtés, pris en réméré et déjà
-              engagés à la vente. Prix tel que la contrepartie obtienne 1,50 %
-              sur la période — intérêts courus, amortissement et décote
-              compris, rachat au pair.
+              engagés à la vente. Prix tel que la contrepartie obtienne, sur la
+              période, le rendement annualisé des trois dernières adjudications
+              de l&apos;État émetteur — courus du jour et du terme compris,
+              rachat au pair.
             </span>
           </div>
         </>
