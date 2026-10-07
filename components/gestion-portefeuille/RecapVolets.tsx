@@ -181,6 +181,10 @@ export function RecapRemeres({
 }) {
   const [tri, setTri] = useState<Tri<ColonneRemere>>({ col: "date", desc: true });
   const [filtres, setFiltres] = useState<Filtres>(FILTRES_VIDES);
+  // LE TERME DU REMERE COMMANDE LE PRIX, il ne décore pas l'export : trois
+  // mois de coupon couru ou six, ce n'est pas la même décote. Trois par
+  // défaut, qui est le terme courant de la place.
+  const [moisRemere, setMoisRemere] = useState<"3" | "6">("3");
 
   // UN RÉMÉRÉ N'ENTRE DANS LA LISTE QU'UNE FOIS SON ORDRE EXÉCUTÉ : tant
   // qu'il n'est pas servi, rien n'a été cédé et la cession temporaire n'a pas
@@ -265,7 +269,7 @@ export function RecapRemeres({
               <a
                 href={`/api/gestion-portefeuille/oat-cessibles?fund=${encodeURIComponent(
                   filtres.fonds,
-                )}`}
+                )}&mois=${moisRemere}`}
                 className="px-3 py-1 rounded text-[11px] font-medium border border-emerald-300 text-emerald-700 hover:bg-emerald-50 transition"
                 title="Titre, quantité cessible, facial, échéance et prix de cession — police Consolas 9"
               >
@@ -276,10 +280,36 @@ export function RecapRemeres({
                 Exporter les OAT cessibles — choisis un fonds
               </span>
             )}
+
+            {/* LE TERME EST UN PARAMETRE DU PRIX, et il se choisit avant de
+                cliquer : six mois de coupon couru valent deux fois trois, et
+                la décote qui donne son rendement à la contrepartie n'est plus
+                la même. */}
+            <span className="text-[10px] uppercase tracking-wider text-slate-500">
+              Terme
+            </span>
+            <div className="inline-flex rounded border border-slate-200 overflow-hidden">
+              {(["3", "6"] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setMoisRemere(m)}
+                  className={`px-2 py-0.5 text-[11px] font-medium transition ${
+                    moisRemere === m
+                      ? "bg-slate-900 text-white"
+                      : "bg-white text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  {m} mois
+                </button>
+              ))}
+            </div>
+
             <span className="text-[10px] text-slate-500">
               Quantités nettes des titres prêtés, pris en réméré et déjà
-              engagés à la vente. Prix de cession identique à celui des
-              opérations à réaliser.
+              engagés à la vente. Prix tel que la contrepartie obtienne 1,50 %
+              sur la période — intérêts courus, amortissement et décote
+              compris, rachat au pair.
             </span>
           </div>
         </>

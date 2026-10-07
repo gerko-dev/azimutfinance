@@ -175,7 +175,7 @@ function courbeRecente(
  * adjudication cash exploitable, ou un titre deja echu. On bascule alors sur
  * la cote.
  */
-export function prixTheorique(
+function prixTheorique(
   bond: ListedBond | undefined,
   dateRef: string,
   emissions: EmissionUMOA[],
@@ -210,7 +210,7 @@ export function prixTheorique(
  * les deux univers sont deliberement separes dans ce depot, amortissements et
  * courbes n'y obeissant pas aux memes regles.
  */
-export function prixTheoriqueSouverain(
+function prixTheoriqueSouverain(
   bond: Bond | undefined,
   dateRef: string,
   issuances: IssuanceResult[],
@@ -227,7 +227,7 @@ export function prixTheoriqueSouverain(
   }
 }
 
-export function dernierCoursObligation(
+function dernierCoursObligation(
   isin: string,
   jusqua: string,
 ): { prix: number; date: string } | null {

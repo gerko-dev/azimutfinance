@@ -1,11 +1,12 @@
 /**
  * Export des OAT cessibles d'un fonds, au format attendu par la contrepartie.
  *
- * GET /api/gestion-portefeuille/oat-cessibles?fund=<uuid>
+ * GET /api/gestion-portefeuille/oat-cessibles?fund=<uuid>[&mois=3|6]
  *
  * Cinq colonnes — Titre, Quantité, Facial, Échéance, Prix de cession —, les
  * quantités nettes des titres prêtés, pris en réméré et déjà engagés à la
- * vente, et le prix de cession des opérations à réaliser.
+ * vente, et le prix qui donne à la contrepartie son rendement convenu sur la
+ * durée du réméré. `mois` est le terme : trois par défaut.
  *
  * La garde est explicite et NON déléguée au proxy : celui-ci ne protège que
  * /compte et /bienvenue, et laisse passer /api. Sans elle, un appel anonyme
@@ -15,7 +16,11 @@ import { NextResponse } from "next/server";
 
 import { getMyAdminLevel } from "@/lib/admin/auth";
 import { loadFundById } from "@/app/gestion-portefeuille/data";
-import { construireExportOat, nomFichierOat } from "@/app/gestion-portefeuille/oat-export";
+import {
+  construireExportOat,
+  nomFichierOat,
+  type DureeRemere,
+} from "@/app/gestion-portefeuille/oat-export";
 import { buildOatExcel } from "@/lib/reports/oatExcel";
 
 export const dynamic = "force-dynamic";
@@ -26,7 +31,12 @@ export async function GET(req: Request) {
     return NextResponse.json({ erreur: "Accès réservé." }, { status: 401 });
   }
 
-  const fundId = new URL(req.url).searchParams.get("fund");
+  const params = new URL(req.url).searchParams;
+  const fundId = params.get("fund");
+  // TROIS OU SIX MOIS, rien d'autre : ce sont les deux termes qui se traitent,
+  // et accepter un nombre libre donnerait un prix qu'aucune contrepartie
+  // n'aurait accepté de coter.
+  const mois: DureeRemere = params.get("mois") === "6" ? 6 : 3;
   if (!fundId) {
     return NextResponse.json({ erreur: "Paramètre `fund` manquant." }, { status: 400 });
   }
@@ -37,9 +47,9 @@ export async function GET(req: Request) {
   }
 
   try {
-    const donnees = await construireExportOat(fundId, fonds.nom);
+    const donnees = await construireExportOat(fundId, fonds.nom, mois);
     const classeur = await buildOatExcel(donnees);
-    const nom = nomFichierOat(fonds.nom, donnees.dateInventaire);
+    const nom = nomFichierOat(fonds.nom, mois, donnees.dateInventaire);
 
     return new NextResponse(new Uint8Array(classeur), {
       headers: {
