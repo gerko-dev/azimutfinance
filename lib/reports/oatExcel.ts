@@ -6,9 +6,12 @@ import type { ExportOat } from "@/app/gestion-portefeuille/oat-export";
 
 // === Le classeur des OAT cessibles ========================================
 //
-// CINQ COLONNES, DANS L'ORDRE DU TABLEAU QUE LA CONTREPARTIE ENVOIE : Titre,
-// Quantité, Facial, Échéance, Prix de cession. Rien de plus dans la première
-// feuille — ce qu'on y ajouterait, il faudrait l'effacer avant de transmettre.
+// SIX COLONNES : Titre, Quantité, Facial, Échéance, Prix de cession, et le
+// RENDEMENT INDUIT. Les cinq premières sont celles du tableau que la
+// contrepartie envoie ; la sixième est celle qu'elle calculerait elle-même.
+// Le prix se cote au multiple de cinq francs, ce qui écarte le rendement de
+// sa cible de quelques points de base : publier l'écart vaut mieux que de le
+// laisser découvrir.
 //
 // CONSOLAS 9 PARTOUT. Une police à chasse fixe aligne les ISIN et les
 // quantités colonne par colonne : on repère une faute de frappe dans
@@ -48,9 +51,17 @@ export async function buildOatExcel(donnees: ExportOat): Promise<Buffer> {
     { key: "facial", width: 10 },
     { key: "echeance", width: 13 },
     { key: "prix", width: 16 },
+    { key: "induit", width: 16 },
   ];
 
-  const entete = ws.addRow(["Titre", "Quantité", "Facial", "Échéance", "Prix de cession"]);
+  const entete = ws.addRow([
+    "Titre",
+    "Quantité",
+    "Facial",
+    "Échéance",
+    "Prix de cession",
+    "Rendement induit",
+  ]);
   entete.eachCell((c) => {
     c.font = { ...POLICE, bold: true };
     c.alignment = { horizontal: "center" };
@@ -63,21 +74,26 @@ export async function buildOatExcel(donnees: ExportOat): Promise<Buffer> {
       l.quantite,
       l.facial,
       l.echeance ? new Date(`${l.echeance}T00:00:00Z`) : null,
-      Number(l.prixCession.toFixed(2)),
+      l.prixCession,
+      l.rendementInduit,
     ]);
     r.eachCell((c) => (c.font = { ...POLICE }));
     r.getCell(2).numFmt = FMT_QTE;
     r.getCell(3).numFmt = FMT_PCT;
     r.getCell(4).numFmt = FMT_DATE;
-    r.getCell(5).numFmt = FMT_PRIX;
+    r.getCell(5).numFmt = FMT_QTE;
+    r.getCell(6).numFmt = FMT_PCT3;
     // LE LIBELLÉ EN COMMENTAIRE, PAS EN COLONNE : la contrepartie attend cinq
     // colonnes, et le titre se lit par son ISIN. Mais un ISIN seul ne se
     // relit pas, et l'info-bulle le dit sans encombrer le tableau.
     r.getCell(1).note =
       `${l.libelle}\n` +
+      `Résiduel ${l.dureeResiduelle.toFixed(1)} ans · référence ${l.pays} ${
+        l.reference.tenor ?? "?"
+      } ans à ${(l.rendementCible * 100).toFixed(2)} %\n` +
+      `Prix exact ${l.prixExact.toFixed(2)}, coté ${l.prixCession}\n` +
       `Déboursé ${l.debourse.toFixed(2)} (prix + ${l.courusJour.toFixed(2)} de courus)\n` +
-      `Encaissé au terme ${l.encaisse.toFixed(2)}\n` +
-      `Décote ${(l.decote * 100).toFixed(2)} % · rendement ${(l.rendementObtenu * 100).toFixed(2)} % l'an` +
+      `Encaissé au terme ${l.encaisse.toFixed(2)} · décote ${(l.decote * 100).toFixed(2)} %` +
       (l.reserve ? `\n${l.reserve}` : "");
     if (l.reserve) r.getCell(1).font = { ...POLICE, color: { argb: "FFB45309" } };
   }
@@ -85,32 +101,45 @@ export async function buildOatExcel(donnees: ExportOat): Promise<Buffer> {
   // Le total, détaché d'une ligne : il se lit, il ne se colle pas.
   if (donnees.lignes.length > 0) {
     ws.addRow([]);
+    const assiette = donnees.lignes.reduce((s, l) => s + l.quantite * l.prixCession, 0);
     const total = ws.addRow([
       `${donnees.lignes.length} OAT`,
       donnees.lignes.reduce((s, l) => s + l.quantite, 0),
       null,
       null,
-      Number(
-        donnees.lignes.reduce((s, l) => s + l.quantite * l.prixCession, 0).toFixed(2),
-      ),
+      Math.round(assiette),
+      // LE RENDEMENT D'ENSEMBLE, pondéré par ce que chaque ligne représente :
+      // c'est le taux de l'opération, et non la moyenne de taux de lignes qui
+      // ne pèsent pas le même poids.
+      assiette > 0
+        ? donnees.lignes.reduce(
+            (s, l) => s + l.rendementInduit * ((l.quantite * l.prixCession) / assiette),
+            0,
+          )
+        : null,
     ]);
     total.eachCell((c) => (c.font = { ...POLICE, bold: true }));
     total.getCell(2).numFmt = FMT_QTE;
-    total.getCell(5).numFmt = FMT_PRIX;
+    total.getCell(5).numFmt = FMT_QTE;
+    total.getCell(6).numFmt = FMT_PCT3;
   }
 
   ws.addRow([]);
   for (const texte of [
     `${donnees.fondsNom} — inventaire du ${donnees.dateInventaire ?? "?"} — quantités nettes des titres prêtés, pris en réméré et déjà engagés à la vente`,
     `Prix pied de coupon, pour un réméré de ${donnees.dureeMois} mois (du ${donnees.dateRef} au ${donnees.dateTerme}), rachat au pair`,
-    `Rendement visé : celui des ${donnees.references.length > 0 ? "trois dernières adjudications de l'État émetteur" : "dernières adjudications souveraines"}${
+    `Rendement visé : moyenne des trois dernières adjudications de l'État émetteur AU TÉNOR DE LA DURÉE RÉSIDUELLE${
       donnees.references.length > 0
         ? " — " +
           donnees.references
-            .map((r) => `${r.pays} ${(r.reference.taux * 100).toFixed(2)} %`)
+            .map(
+              (r) =>
+                `${r.pays} ${r.reference.tenor ?? "?"} ans ${(r.reference.taux * 100).toFixed(2)} %`,
+            )
             .join(", ")
         : ""
     }`,
+    `Prix coté au multiple de ${5} F : le rendement induit s'écarte de la cible de quelques points de base, et c'est lui qui se vérifie.`,
     "Le règlement se fait courus compris : ajouter les intérêts courus du jour au prix ci-dessus (feuille « Calcul »).",
   ]) {
     const r = ws.addRow([texte]);
@@ -127,14 +156,15 @@ export async function buildOatExcel(donnees: ExportOat): Promise<Buffer> {
     { key: "pair", width: 11 },
     { key: "facial", width: 9 },
     { key: "courusJ", width: 13 },
-    { key: "prix", width: 14 },
+    { key: "prixExact", width: 13 },
+    { key: "prix", width: 12 },
     { key: "debourse", width: 14 },
     { key: "flux", width: 13 },
     { key: "courusT", width: 13 },
     { key: "encaisse", width: 14 },
     { key: "decote", width: 10 },
     { key: "cible", width: 11 },
-    { key: "obtenu", width: 11 },
+    { key: "induit", width: 11 },
   ];
   const eCalc = calc.addRow([
     "Titre",
@@ -142,14 +172,15 @@ export async function buildOatExcel(donnees: ExportOat): Promise<Buffer> {
     "Pair",
     "Facial",
     "Courus J",
-    "Prix",
+    "Prix exact",
+    "Prix coté",
     "Déboursé J",
     "Flux période",
     "Courus terme",
     "Encaissé terme",
     "Décote",
     "Cible an.",
-    "Obtenu an.",
+    "Induit an.",
   ]);
   eCalc.eachCell((c) => {
     c.font = { ...POLICE, bold: true };
@@ -163,22 +194,24 @@ export async function buildOatExcel(donnees: ExportOat): Promise<Buffer> {
       l.pair,
       l.facial,
       Number(l.courusJour.toFixed(2)),
-      Number(l.prixCession.toFixed(2)),
+      Number(l.prixExact.toFixed(2)),
+      l.prixCession,
       Number(l.debourse.toFixed(2)),
       Number(l.fluxPeriode.toFixed(2)),
       Number(l.courusTerme.toFixed(2)),
       Number(l.encaisse.toFixed(2)),
       l.decote,
       l.rendementCible,
-      l.rendementObtenu,
+      l.rendementInduit,
     ]);
     r.eachCell((c) => (c.font = { ...POLICE }));
     r.getCell(3).numFmt = FMT_QTE;
     r.getCell(4).numFmt = FMT_PCT;
-    for (const i of [5, 6, 7, 8, 9, 10]) r.getCell(i).numFmt = FMT_PRIX;
-    r.getCell(11).numFmt = FMT_PCT;
+    for (const i of [5, 6, 8, 9, 10, 11]) r.getCell(i).numFmt = FMT_PRIX;
+    r.getCell(7).numFmt = FMT_QTE;
     r.getCell(12).numFmt = FMT_PCT;
-    r.getCell(13).numFmt = FMT_PCT3;
+    r.getCell(13).numFmt = FMT_PCT;
+    r.getCell(14).numFmt = FMT_PCT3;
     if (l.reserve) {
       r.getCell(1).font = { ...POLICE, color: { argb: "FFB45309" } };
       r.getCell(1).note = l.reserve;
@@ -187,8 +220,9 @@ export async function buildOatExcel(donnees: ExportOat): Promise<Buffer> {
   calc.addRow([]);
   for (const texte of [
     `Déboursé au jour J = prix + courus du jour. Encaissé au terme = pair + courus au terme + coupons et amortissements de la période (${donnees.dateRef} → ${donnees.dateTerme}).`,
-    "Prix = encaissé ÷ (1 + rendement annuel) ^ (mois ÷ 12) − courus du jour.",
-    "Rendement obtenu = (encaissé ÷ déboursé) ^ (12 ÷ mois) − 1. Il doit rendre la cible : c'est le contrôle.",
+    "Prix exact = encaissé ÷ (1 + rendement cible) ^ (mois ÷ 12) − courus du jour. Prix coté = arrondi au multiple de 5 F le plus proche.",
+    "Rendement induit = (encaissé ÷ (prix coté + courus du jour)) ^ (12 ÷ mois) − 1. Il s'écarte de la cible du seul fait de l'arrondi.",
+    "Cible = moyenne pondérée des trois dernières séances de l'État au ténor couvrant la durée résiduelle (moins de 3 ans → 3 ans, moins de 5 → 5 ans, etc.).",
     "Décote NÉGATIVE = surcote : le titre vaut plus que le pair parce qu'il porte un coupon supérieur au rendement du guichet.",
     "Un titre échéant avant le terme n'a pas de rachat : son capital est dans les flux de la période, et le pair ne s'y ajoute pas.",
   ]) {

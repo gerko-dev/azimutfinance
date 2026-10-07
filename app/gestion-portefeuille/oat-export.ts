@@ -21,6 +21,17 @@ import "server-only";
 // DERNIÈRES ADJUDICATIONS. Un réméré qui paierait moins ne se traite pas ; un
 // réméré qui paierait plus est de l'argent laissé sur la table.
 //
+// MAIS PAS N'IMPORTE LESQUELLES : CELLES DU MÊME TÉNOR. Un État n'emprunte pas
+// au même taux à trois ans et à dix. Comparer une OAT qui court encore neuf
+// ans au rendement d'une séance à trois ans, c'est lui prêter le coût d'un
+// autre emprunt — et sur une courbe pentue, l'écart se compte en points.
+//
+// LE TÉNOR SE PREND AU-DESSUS DE LA DURÉE RÉSIDUELLE, échelon par échelon :
+// moins de trois ans se réfère au trois ans, moins de cinq au cinq ans, et
+// ainsi de suite jusqu'au plus long que l'État a émis. On ne descend jamais
+// sous le trois ans : c'est le premier barreau de l'échelle souveraine, les
+// durées plus courtes relevant du guichet des bons.
+//
 // ON RAISONNE EN MONTANTS RÉELLEMENT ÉCHANGÉS, pas en prix affiché :
 //
 //   déboursé au jour J   = prix + intérêts courus à ce jour
@@ -42,6 +53,13 @@ import "server-only";
 // LE TITRE QUI ÉCHOIT AVANT LE TERME ne se revend pas : il est remboursé. Ses
 // flux portent alors le capital, et le pair ne s'y ajoute pas — l'y ajouter
 // aurait compté le remboursement deux fois.
+//
+// LE PRIX SE COTE AU MULTIPLE DE CINQ. Personne ne traite à 9 994,48 : la
+// place cote au pas de cinq francs, et un prix au centime se fait arrondir par
+// la contrepartie — dans le sens qui l'arrange. On arrondit donc nous-mêmes,
+// AU PLUS PROCHE, et l'on publie le RENDEMENT INDUIT : celui que le prix
+// arrondi produit réellement, qui s'écarte de la cible de quelques points de
+// base. C'est ce chiffre-là que la contrepartie vérifiera, pas le taux visé.
 //
 // LES QUANTITÉS SONT CELLES QU'ON PEUT RÉELLEMENT SORTIR. L'inventaire porte
 // des titres qui ne sont pas disponibles : ceux qui sont PRÊTÉS sont dehors,
@@ -77,16 +95,27 @@ export const NB_ADJUDICATIONS_REFERENCE = 3;
 /** Les deux termes qui se négocient. Rien d'autre ne se pratique. */
 export type DureeRemere = 3 | 6;
 
-/** Le rendement servi par un État à ses dernières adjudications. */
+/** Le rendement servi par un État à ses dernières adjudications d'un ténor. */
 export type ReferenceEtat = {
   /** Rendement annuel, en décimal, pondéré par les montants adjugés. */
   taux: number;
+  /** Ténor des séances retenues, en années. Null quand on n'a pas pu le
+   *  cibler et qu'on a pris toutes les adjudications du pays. */
+  tenor: number | null;
   /** Les séances retenues, pour que le chiffre se vérifie. */
   seances: { date: string; montant: number; taux: number }[];
-  /** Vrai quand aucune adjudication du pays n'était disponible et qu'on a pris
-   *  la moyenne régionale : le prix repose alors sur un emprunt de taux. */
-  parDefaut: boolean;
+  /** Ce qui s'est écarté de la règle, en clair. Null quand le ténor demandé
+   *  existait et que le pays avait ses trois séances. */
+  repli: string | null;
 };
+
+/** PREMIER BARREAU DE L'ÉCHELLE SOUVERAINE. En dessous, c'est le guichet des
+ *  bons — un autre marché, d'autres acheteurs, d'autres taux. */
+const TENOR_PLANCHER = 3;
+
+/** PAS DE COTATION. La place traite au multiple de cinq francs ; un prix au
+ *  centime se fait arrondir par la contrepartie, dans le sens qui l'arrange. */
+export const PAS_COTATION = 5;
 
 /** Une ligne du tableau demandé par la contrepartie. */
 export type LigneOat = {
@@ -100,8 +129,14 @@ export type LigneOat = {
   facial: number;
   /** Échéance du TITRE, ISO — à ne pas confondre avec le terme du réméré. */
   echeance: string;
-  /** Prix PIED DE COUPON proposé, par titre : c'est la colonne du tableau. */
+  /** Durée résiduelle du titre, en années : elle commande le ténor de
+   *  référence. */
+  dureeResiduelle: number;
+  /** Prix PIED DE COUPON proposé, par titre, ARRONDI au multiple de cinq :
+   *  c'est la colonne du tableau, et ce qui se traite. */
   prixCession: number;
+  /** Le prix avant arrondi, pour que l'écart se voie. */
+  prixExact: number;
 
   // ── Ce qui compose le prix, pour qu'il se vérifie ────────────────────────
   /** Le pair : ce que la contrepartie rend au terme. 10 000 F pour une OAT. */
@@ -118,10 +153,12 @@ export type LigneOat = {
   encaisse: number;
   /** 1 − prix / pair. Négative quand le titre vaut plus que le pair. */
   decote: number;
-  /** Rendement annuel visé — celui du guichet de l'État. */
+  /** Rendement annuel visé — celui du guichet de l'État, au ténor du titre. */
   rendementCible: number;
-  /** Rendement annuel obtenu : le contrôle que le calcul tombe juste. */
-  rendementObtenu: number;
+  /** RENDEMENT INDUIT : celui que le prix arrondi donne réellement à la
+   *  contrepartie. Il s'écarte de la cible de quelques points de base, et
+   *  c'est ce chiffre-là qu'elle vérifiera. */
+  rendementInduit: number;
   reference: ReferenceEtat;
   /** Ce qui nuance la ligne : échéance avant le terme, taux inconnu… */
   reserve: string | null;
@@ -161,8 +198,27 @@ function dansNMois(iso: string, mois: number): string {
 const normId = (s: string | null | undefined): string =>
   (s ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 
+/** Les adjudications exploitables, par pays, ténor arrondi à l'année. */
+type Gisement = Map<BondCountry, { tenor: number; ligne: IssuanceResult }[]>;
+
+function gisementAdjudications(issuances: IssuanceResult[], jusqua: string): Gisement {
+  const g: Gisement = new Map();
+  for (const i of issuances) {
+    if (!i.date || i.date > jusqua) continue;
+    if (!(i.weightedAvgYield > 0) || !(i.amount > 0)) continue;
+    if (!(i.maturity > 0)) continue;
+    const l = g.get(i.country) ?? [];
+    // LE TÉNOR À L'ANNÉE : le guichet annonce 36, 60 ou 84 mois, mais une
+    // souche réabondée sort à 58 ou 61. Les classer au mois ferait autant de
+    // ténors que de séances, et aucun n'aurait ses trois adjudications.
+    l.push({ tenor: Math.round(i.maturity), ligne: i });
+    g.set(i.country, l);
+  }
+  return g;
+}
+
 /**
- * Le rendement servi par chaque État à ses TROIS DERNIÈRES SÉANCES.
+ * La moyenne pondérée des TROIS DERNIÈRES SÉANCES d'un jeu d'adjudications.
  *
  * PAR SÉANCE, ET NON PAR LIGNE. Une adjudication met souvent deux ou trois
  * souches en vente le même jour : compter trois LIGNES reviendrait à ne
@@ -173,57 +229,107 @@ const normId = (s: string | null | undefined): string =>
  * souche servie pour cinq milliards dit mieux le coût de l'État qu'une souche
  * servie pour deux cents millions.
  */
-function referencesParEtat(
-  issuances: IssuanceResult[],
-  jusqua: string,
-): Map<BondCountry, ReferenceEtat> {
-  const parPays = new Map<BondCountry, IssuanceResult[]>();
-  for (const i of issuances) {
-    if (!i.date || i.date > jusqua) continue;
-    if (!(i.weightedAvgYield > 0) || !(i.amount > 0)) continue;
-    const l = parPays.get(i.country) ?? [];
-    l.push(i);
-    parPays.set(i.country, l);
-  }
-
-  const moyenne = (lignes: IssuanceResult[]): ReferenceEtat | null => {
-    const dates = [...new Set(lignes.map((i) => i.date))]
-      .sort()
-      .slice(-NB_ADJUDICATIONS_REFERENCE);
-    if (dates.length === 0) return null;
-    const retenues = lignes.filter((i) => dates.includes(i.date));
-    const montant = retenues.reduce((s, i) => s + i.amount, 0);
-    if (!(montant > 0)) return null;
-    const taux = retenues.reduce((s, i) => s + i.weightedAvgYield * i.amount, 0) / montant;
-    const seances = dates.map((d) => {
-      const duJour = retenues.filter((i) => i.date === d);
-      const m = duJour.reduce((s, i) => s + i.amount, 0);
-      return {
-        date: d,
-        montant: m,
-        taux: duJour.reduce((s, i) => s + i.weightedAvgYield * i.amount, 0) / m,
-      };
-    });
-    return { taux, seances, parDefaut: false };
+function moyenneDesSeances(
+  lignes: IssuanceResult[],
+): { taux: number; seances: ReferenceEtat["seances"] } | null {
+  const dates = [...new Set(lignes.map((i) => i.date))]
+    .sort()
+    .slice(-NB_ADJUDICATIONS_REFERENCE);
+  if (dates.length === 0) return null;
+  const retenues = lignes.filter((i) => dates.includes(i.date));
+  const montant = retenues.reduce((s, i) => s + i.amount, 0);
+  if (!(montant > 0)) return null;
+  const seances = dates.map((d) => {
+    const duJour = retenues.filter((i) => i.date === d);
+    const m = duJour.reduce((s, i) => s + i.amount, 0);
+    return {
+      date: d,
+      montant: m,
+      taux: duJour.reduce((s, i) => s + i.weightedAvgYield * i.amount, 0) / m,
+    };
+  });
+  return {
+    taux: retenues.reduce((s, i) => s + i.weightedAvgYield * i.amount, 0) / montant,
+    seances,
   };
-
-  const sortie = new Map<BondCountry, ReferenceEtat>();
-  for (const [pays, lignes] of parPays) {
-    const r = moyenne(lignes);
-    if (r) sortie.set(pays, r);
-  }
-  return sortie;
 }
 
-/** Repli régional : la moyenne des dernières séances de TOUS les États. */
-function referenceRegionale(refs: Map<BondCountry, ReferenceEtat>): ReferenceEtat | null {
-  const toutes = [...refs.values()].flatMap((r) => r.seances);
-  const montant = toutes.reduce((s, x) => s + x.montant, 0);
-  if (!(montant > 0)) return null;
+/**
+ * Le rendement de référence d'un titre : son État, son ténor.
+ *
+ * TROIS REPLIS, ET CHACUN SE DIT. Le ténor demandé peut n'avoir jamais été
+ * adjugé par ce pays — on prend alors le plus proche ; le pays peut n'avoir
+ * aucune adjudication exploitable — on prend la zone. Un prix bâti sur un
+ * emprunt de taux reste un prix, mais il doit s'annoncer comme tel.
+ */
+function referencePourTitre(
+  gisement: Gisement,
+  pays: BondCountry,
+  dureeResiduelle: number,
+): ReferenceEtat | null {
+  const duPays = gisement.get(pays) ?? [];
+
+  // L'ÉCHELLE : les ténors que cet État a réellement émis, au-dessus du
+  // plancher. On monte au premier qui couvre la durée résiduelle.
+  const echelle = [...new Set(duPays.map((x) => x.tenor))]
+    .filter((t) => t >= TENOR_PLANCHER)
+    .sort((a, b) => a - b);
+  const vise = Math.max(dureeResiduelle, TENOR_PLANCHER);
+
+  if (echelle.length > 0) {
+    const exact = echelle.find((t) => t >= vise);
+    // Au-delà du plus long ténor émis, c'est lui qui sert : une OAT à vingt
+    // ans n'a pas de référence plus longue que le dix ans du guichet.
+    const tenor = exact ?? echelle[echelle.length - 1];
+    const m = moyenneDesSeances(duPays.filter((x) => x.tenor === tenor).map((x) => x.ligne));
+    if (m) {
+      return {
+        ...m,
+        tenor,
+        repli:
+          exact === undefined
+            ? `Durée résiduelle de ${dureeResiduelle.toFixed(1)} ans au-delà du plus long ténor adjugé (${tenor} ans) : c'est lui qui sert de référence.`
+            : null,
+      };
+    }
+  }
+
+  // Le pays a des adjudications, mais aucune au-dessus du plancher : on prend
+  // tout ce qu'il a, et on le dit.
+  const tout = moyenneDesSeances(duPays.map((x) => x.ligne));
+  if (tout) {
+    return {
+      ...tout,
+      tenor: null,
+      repli: `Aucune adjudication de cet État à ${TENOR_PLANCHER} ans ou plus : moyenne de toutes ses séances récentes.`,
+    };
+  }
+  return null;
+}
+
+/**
+ * Repli régional : le même ténor, mais chez tous les États de l'Union.
+ */
+function referenceRegionale(
+  gisement: Gisement,
+  dureeResiduelle: number,
+): ReferenceEtat | null {
+  const toutes = [...gisement.values()].flat();
+  const echelle = [...new Set(toutes.map((x) => x.tenor))]
+    .filter((t) => t >= TENOR_PLANCHER)
+    .sort((a, b) => a - b);
+  const vise = Math.max(dureeResiduelle, TENOR_PLANCHER);
+  const tenor = echelle.find((t) => t >= vise) ?? echelle[echelle.length - 1] ?? null;
+  const lignes = (tenor === null ? toutes : toutes.filter((x) => x.tenor === tenor)).map(
+    (x) => x.ligne,
+  );
+  const m = moyenneDesSeances(lignes);
+  if (!m) return null;
   return {
-    taux: toutes.reduce((s, x) => s + x.taux * x.montant, 0) / montant,
-    seances: [...toutes].sort((a, b) => a.date.localeCompare(b.date)).slice(-NB_ADJUDICATIONS_REFERENCE),
-    parDefaut: true,
+    ...m,
+    tenor,
+    repli:
+      "Aucune adjudication récente de cet État : rendement emprunté à la moyenne régionale du même ténor.",
   };
 }
 
@@ -272,9 +378,11 @@ export async function construireExportOat(
     if (b.isin) souverainParIsin.set(b.isin.toUpperCase(), b);
   }
 
-  const refs = referencesParEtat(loadIssuances(), dateRef);
-  const regionale = referenceRegionale(refs);
-  const employees = new Map<BondCountry, ReferenceEtat>();
+  const gisement = gisementAdjudications(loadIssuances(), dateRef);
+  // LES RÉFÉRENCES EMPLOYÉES, par pays ET par ténor : deux OAT du même État à
+  // trois et à dix ans ne se réfèrent pas à la même séance, et la feuille qui
+  // les justifie doit porter les deux.
+  const employees = new Map<string, { pays: BondCountry; reference: ReferenceEtat }>();
 
   const lignes: LigneOat[] = [];
   const ecartees: LigneOat[] = [];
@@ -304,12 +412,20 @@ export async function construireExportOat(
     const pair = nominalCourant(undefined, souverain, num(p.pru));
     const facial = souverain.couponRate;
 
-    const reference = refs.get(souverain.country) ?? regionale;
+    // LA DURÉE RÉSIDUELLE commande le ténor de référence : un État n'emprunte
+    // pas au même taux à trois ans et à dix.
+    const dureeResiduelle = anneesJusqua(dateRef, souverain.maturityDate);
+    const reference =
+      referencePourTitre(gisement, souverain.country, dureeResiduelle) ??
+      referenceRegionale(gisement, dureeResiduelle);
     if (!reference) {
       sansReference++;
       continue;
     }
-    if (!reference.parDefaut) employees.set(souverain.country, reference);
+    employees.set(`${souverain.country}|${reference.tenor ?? "?"}`, {
+      pays: souverain.country,
+      reference,
+    });
 
     // ── Les deux montants qui s'échangent ────────────────────────────────
     const courusJour = courus(souverain, dateRef, pair);
@@ -330,17 +446,24 @@ export async function construireExportOat(
     // capital est déjà dans les flux de la période.
     const encaisse = (echeanceAvantTerme ? 0 : pair + courusTerme) + fluxPeriode;
     const facteur = Math.pow(1 + reference.taux, dureeMois / 12);
-    const debourse = encaisse / facteur;
-    const prixCession = debourse - courusJour;
+    const prixExact = encaisse / facteur - courusJour;
+    // AU PLUS PROCHE, et non vers le bas : arrondir systématiquement à la
+    // baisse offrirait jusqu'à cinq francs par titre à la contrepartie — deux
+    // millions sur une ligne de quatre cent mille titres. L'écart de rendement
+    // qui en résulte se publie, c'est tout l'objet du rendement induit.
+    const prixCession = Math.round(prixExact / PAS_COTATION) * PAS_COTATION;
 
+    // LE DÉBOURSÉ SE RECALCULE SUR LE PRIX ARRONDI : c'est lui qui se règle, et
+    // c'est de lui que découle le rendement que la contrepartie touchera.
+    const debourse = prixCession + courusJour;
     const decote = pair > 0 ? 1 - prixCession / pair : 0;
-    const rendementObtenu =
+    const rendementInduit =
       debourse > 0 ? Math.pow(encaisse / debourse, 12 / dureeMois) - 1 : 0;
 
     const reserve = echeanceAvantTerme
       ? `Échéance du titre le ${souverain.maturityDate}, avant le terme du réméré (${dateTerme}) : il sera remboursé entre-temps, il n'y a pas de rachat à faire.`
-      : reference.parDefaut
-        ? "Aucune adjudication récente de cet État : rendement de référence emprunté à la moyenne régionale."
+      : reference.repli
+        ? reference.repli
         : prixCession <= 0
           ? "Prix négatif ou nul : vérifie le taux facial et l'échéancier au référentiel."
           : facial > 0
@@ -356,7 +479,9 @@ export async function construireExportOat(
       quantite: Math.max(0, dispo.disponible),
       facial,
       echeance: souverain.maturityDate,
+      dureeResiduelle,
       prixCession,
+      prixExact,
       pair,
       courusJour,
       courusTerme,
@@ -365,7 +490,7 @@ export async function construireExportOat(
       encaisse,
       decote,
       rendementCible: reference.taux,
-      rendementObtenu,
+      rendementInduit,
       reference,
       reserve,
       dispo,
@@ -404,9 +529,10 @@ export async function construireExportOat(
     ...vide,
     lignes,
     ecartees,
-    references: [...employees.entries()]
-      .map(([pays, reference]) => ({ pays, reference }))
-      .sort((a, b) => a.pays.localeCompare(b.pays)),
+    references: [...employees.values()].sort(
+      (a, b) =>
+        a.pays.localeCompare(b.pays) || (a.reference.tenor ?? 0) - (b.reference.tenor ?? 0),
+    ),
   };
 }
 
@@ -427,6 +553,13 @@ function courus(bond: Bond, date: string, pair: number): number {
   } catch {
     return 0;
   }
+}
+
+/** Années entre deux dates, zéro si l'échéance est passée ou inconnue. */
+function anneesJusqua(debut: string, echeance: string): number {
+  if (!echeance) return 0;
+  const ms = new Date(`${echeance}T00:00:00Z`).getTime() - new Date(`${debut}T00:00:00Z`).getTime();
+  return Number.isFinite(ms) ? Math.max(0, ms / (365.25 * 86_400_000)) : 0;
 }
 
 /** Le lendemain : les flux du jour même ont déjà été réglés. */
