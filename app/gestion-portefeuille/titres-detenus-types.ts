@@ -80,8 +80,17 @@ export type TitreDetenu = {
   dateInventaire: string | null;
 };
 
-export type InventaireTitres = {
+/**
+ * Ce qu'un fonds rend : ses lignes, et la date de l'arrêté qui les porte.
+ *
+ * UN FONDS A LA FOIS. Les quinze portefeuilles se lisaient dans un seul appel,
+ * qui demandait une minute pendant laquelle l'écran ne montrait rien — et,
+ * passé la limite d'une action serveur, ne montrait jamais rien. L'écran les
+ * demande donc un par un et remplit sa liste à mesure.
+ */
+export type TitresDunFonds = {
+  fondsId: string;
+  fondsNom: string;
+  dateInventaire: string | null;
   titres: TitreDetenu[];
-  fonds: { id: string; nom: string; dateInventaire: string | null }[];
-  avertissements: string[];
 };

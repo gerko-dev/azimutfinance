@@ -79,6 +79,7 @@ export default async function ImportationPage({
         <ImportationPanel
           fondsId={choisi.id}
           fondsNom={choisi.nom}
+          fonds={options}
           inventaires={inventaires}
           vl={vl}
           cours={cours}

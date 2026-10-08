@@ -14,15 +14,18 @@
 // postérieurs à l'arrêté. Les quatre termes ont leur colonne — un chiffre
 // qu'on ne peut pas décomposer est un chiffre qu'on soupçonne.
 //
-// LE CALCUL EST À LA DEMANDE : il lit l'inventaire et le carnet de TOUS les
-// fonds, et qui vient charger un fichier n'a pas à le payer.
+// LE CALCUL EST À LA DEMANDE, ET FONDS PAR FONDS. Il lit l'inventaire et le
+// carnet de chaque portefeuille : les quinze dans un seul appel demandaient une
+// minute pendant laquelle l'écran ne montrait rien — et, passé la limite d'une
+// action serveur, ne montraient jamais rien. On les demande donc un par un, et
+// la liste se remplit à mesure : le premier fonds s'affiche en une seconde, et
+// l'attente devient un compteur au lieu d'un écran blanc.
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 
-import { chargerTitresDetenusAction } from "@/app/gestion-portefeuille/titres-detenus-actions";
+import { chargerTitresDunFondsAction } from "@/app/gestion-portefeuille/titres-detenus-actions";
 import {
   NATURES,
-  type InventaireTitres,
   type NatureTitre,
   type TitreDetenu,
 } from "@/app/gestion-portefeuille/titres-detenus-types";
@@ -78,8 +81,19 @@ const tdNum = "px-3 py-1.5 text-right tabular-nums";
 const etiquette = "text-[9px] uppercase tracking-wider text-slate-500";
 const controle = "text-[11px] border border-slate-300 rounded px-1.5 py-1 bg-white";
 
-export default function SelectionTitres() {
-  const [donnees, setDonnees] = useState<InventaireTitres | null>(null);
+export default function SelectionTitres({
+  fonds,
+}: {
+  /** Les fonds gérés, tels que la page les connaît déjà : les redemander au
+   *  serveur aurait coûté un aller-retour pour une liste qu'on a sous la
+   *  main. */
+  fonds: { id: string; nom: string }[];
+}) {
+  const [titres, setTitres] = useState<TitreDetenu[]>([]);
+  const [arretes, setArretes] = useState<Record<string, string | null>>({});
+  /** Fonds déjà lus : c'est le compteur, et c'est aussi la garde contre un
+   *  second chargement. */
+  const [lus, setLus] = useState(0);
   const [erreur, setErreur] = useState<string | null>(null);
   const [enCours, start] = useTransition();
 
@@ -97,20 +111,64 @@ export default function SelectionTitres() {
   const [caracteristiques, setCaracteristiques] = useState(false);
   const [tri, setTri] = useState<Tri<Colonne>>({ col: "disponible", desc: true });
 
+  /**
+   * UN FONDS, PUIS LE SUIVANT, et la liste grandit entre les deux.
+   *
+   * EN SÉRIE, ET NON TOUT DE FRONT : quinze lectures simultanées d'inventaire
+   * saturent la base et rendent le PREMIER résultat aussi tardif que le
+   * dernier. En série, on en a un tout de suite — et c'est celui qu'on
+   * regarde pendant que les autres arrivent.
+   */
   const charger = () =>
     start(async () => {
-      const r = await chargerTitresDetenusAction();
-      if (r.ok) {
-        setDonnees(r.data);
-        setErreur(null);
-      } else setErreur(r.error);
+      setTitres([]);
+      setArretes({});
+      setLus(0);
+      setErreur(null);
+      for (const f of fonds) {
+        const r = await chargerTitresDunFondsAction(f.id, f.nom);
+        if (!r.ok) {
+          setErreur(r.error);
+          return;
+        }
+        const data = r.data;
+        setTitres((l) => [...l, ...data.titres]);
+        setArretes((a) => ({ ...a, [data.fondsId]: data.dateInventaire }));
+        setLus((n) => n + 1);
+      }
     });
 
+  // AU PREMIER AFFICHAGE SEULEMENT. `fonds` est reconstruit à chaque rendu de
+  // la page parente ; le mettre en dépendance relancerait quinze lectures à
+  // chaque frappe dans un filtre.
   useEffect(() => {
     charger();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const tous = useMemo(() => donnees?.titres ?? [], [donnees]);
+  const tous = titres;
+
+  /** Ce qui manque ou ce qui cloche, dit à mesure que les fonds arrivent. */
+  const avertissements = useMemo(() => {
+    const msg: string[] = [];
+    const sans = fonds.filter((f) => f.id in arretes && arretes[f.id] === null);
+    if (sans.length > 0) {
+      msg.push(
+        `${sans.length} fonds sans inventaire importé : ${sans
+          .map((f) => f.nom)
+          .join(", ")}.`,
+      );
+    }
+    const dates = [...new Set(Object.values(arretes).filter(Boolean))].sort();
+    if (dates.length > 1) {
+      msg.push(
+        `Les inventaires ne sont pas tous arrêtés à la même date (du ${dates[0]} au ${
+          dates[dates.length - 1]
+        }) : les quantités ne se totalisent qu'avec cette réserve.`,
+      );
+    }
+    return msg;
+  }, [fonds, arretes]);
 
   const etats = useMemo(
     () => [...new Set(tous.map((t) => t.etat))].filter(Boolean).sort((a, b) => a.localeCompare(b, "fr")),
@@ -215,14 +273,23 @@ export default function SelectionTitres() {
               ajoutent.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={charger}
-            disabled={enCours}
-            className="px-3 py-1.5 rounded text-[11px] font-medium border border-slate-300 text-slate-700 hover:bg-slate-50 transition disabled:opacity-40"
-          >
-            {enCours ? "Lecture…" : "Recalculer"}
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {/* LE COMPTEUR PENDANT LA LECTURE : une attente qui avance se
+                supporte, une attente muette se prend pour une panne. */}
+            {enCours && (
+              <span className="text-[11px] text-slate-500 tabular-nums">
+                {lus} / {fonds.length} fonds
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={charger}
+              disabled={enCours}
+              className="px-3 py-1.5 rounded text-[11px] font-medium border border-slate-300 text-slate-700 hover:bg-slate-50 transition disabled:opacity-40"
+            >
+              {enCours ? "Lecture…" : "Recalculer"}
+            </button>
+          </div>
         </div>
 
         {erreur && (
@@ -231,9 +298,9 @@ export default function SelectionTitres() {
           </p>
         )}
 
-        {donnees && donnees.avertissements.length > 0 && (
+        {avertissements.length > 0 && (
           <ul className="mt-3 space-y-1">
-            {donnees.avertissements.map((a) => (
+            {avertissements.map((a) => (
               <li
                 key={a}
                 className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-1.5"
@@ -257,7 +324,7 @@ export default function SelectionTitres() {
               className={`${controle} max-w-[14rem]`}
             >
               <option value="">Tous</option>
-              {(donnees?.fonds ?? []).map((f) => (
+              {fonds.map((f) => (
                 <option key={f.id} value={f.id}>
                   {f.nom}
                 </option>
@@ -417,7 +484,7 @@ export default function SelectionTitres() {
                     className="px-3 py-6 text-center text-slate-400"
                   >
                     {enCours
-                      ? "Lecture des inventaires et des carnets…"
+                      ? `Lecture des inventaires et des carnets — ${lus} fonds sur ${fonds.length}…`
                       : tous.length === 0
                         ? "Aucune ligne obligataire dans les inventaires chargés."
                         : "Aucun titre ne répond à ces filtres."}

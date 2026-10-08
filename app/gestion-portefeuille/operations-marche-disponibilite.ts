@@ -294,6 +294,31 @@ export function refusCession(d: Disponibilite, quantite: number): string | null 
 }
 
 /**
+ * La disponibilité de PLUSIEURS titres d'un fonds, en une seule lecture.
+ *
+ * `disponibiliteCession` relit l'inventaire et le carnet à chaque appel. La
+ * mémoïsation de requête les lui rend sans round-trip, mais l'appeler quarante
+ * fois dans une boucle reste quarante promesses à dérouler — et c'est ce qui
+ * rendait l'écran de sélection interminable sur quinze portefeuilles.
+ *
+ * ICI LE CONTEXTE SE LIT UNE FOIS, et le reste est du calcul pur. Même règle,
+ * même résultat : `disponibiliteDans` est la fonction qui porte la règle, et
+ * elle est partagée.
+ */
+export async function disponibilitesDuFonds(
+  fundId: string,
+  titres: { cle: string; code: string; libelle: string }[],
+): Promise<Map<string, Disponibilite>> {
+  const sortie = new Map<string, Disponibilite>();
+  if (titres.length === 0) return sortie;
+  const ctx = await contexteCession(fundId);
+  for (const t of titres) {
+    sortie.set(t.cle, disponibiliteDans(ctx, t.code, t.libelle, null));
+  }
+  return sortie;
+}
+
+/**
  * Titres CESSIBLES du fonds, parmi une liste d'options du référentiel.
  *
  * ON NE PROPOSE PAS À LA VENTE CE QU'ON NE PEUT PAS VENDRE. Jusqu'ici le

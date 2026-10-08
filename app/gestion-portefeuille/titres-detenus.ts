@@ -23,22 +23,28 @@ import "server-only";
 // LE MODULE NE FILTRE RIEN, IL DÉCRIT. Les filtres sont à l'écran, parce que
 // c'est là qu'on cherche, et qu'une liste rendue déjà réduite ne se recompose
 // pas sans un aller-retour au serveur.
+//
+// UN FONDS A LA FOIS, ET C'EST DÉLIBÉRÉ. Lire les quinze portefeuilles dans un
+// seul appel demandait une minute pendant laquelle l'écran ne montrait rien —
+// et, passé la limite d'une action serveur, ne montrait jamais rien. L'écran
+// appelle donc fonds par fonds et remplit sa liste à mesure : le premier
+// portefeuille s'affiche en une seconde, et l'attente devient un compteur au
+// lieu d'un écran blanc.
 
 import { loadBonds, loadListedBonds } from "@/lib/dataLoader";
 import { countryNames, type Bond, type BondCountry } from "@/lib/bondsUEMOA";
 import type { ListedBond } from "@/lib/listedBondsTypes";
 
-import { loadMyFunds } from "./data";
 import { loadCustomSecurities } from "./portfolio-data";
 import {
-  disponibiliteCession,
+  disponibilitesDuFonds,
   positionsDeReference,
 } from "./operations-marche-disponibilite";
 import type { CustomSecurity } from "./portfolio-types";
 import type {
-  InventaireTitres,
   NatureTitre,
   TitreDetenu,
+  TitresDunFonds,
 } from "./titres-detenus-types";
 
 const num = (v: unknown, d = 0): number => {
@@ -54,28 +60,32 @@ const num = (v: unknown, d = 0): number => {
 // besoin, et il est client. Importer une VALEUR d'ici l'aurait fait tirer la
 // base, les CSV et le client Supabase dans le bundle du navigateur.
 export type {
-  InventaireTitres,
   NatureTitre,
   TitreDetenu,
+  TitresDunFonds,
 } from "./titres-detenus-types";
 
 const normId = (s: string | null | undefined): string =>
   (s ?? "").trim().toUpperCase();
 
 /**
- * Tous les titres obligataires détenus, fonds par fonds.
+ * Les titres obligataires détenus par UN fonds, et ce qui en reste cessible.
  *
  * CALCUL À LA DEMANDE, jamais au rendu de la page : il lit l'inventaire ET le
- * carnet d'ordres de TOUS les fonds. Le faire à chaque affichage du module
+ * carnet d'ordres du fonds. Le faire à chaque affichage du module
  * d'importation le ferait payer à qui vient simplement charger un fichier.
  */
-export async function construireTitresDetenus(): Promise<InventaireTitres> {
-  const fonds = await loadMyFunds();
-  const avertissements: string[] = [];
+export async function construireTitresDunFonds(
+  fondsId: string,
+  fondsNom: string,
+): Promise<TitresDunFonds> {
+  const [snapshot, customs] = await Promise.all([
+    positionsDeReference(fondsId),
+    loadCustomSecurities(),
+  ]);
+  if (!snapshot) return { fondsId, fondsNom, dateInventaire: null, titres: [] };
 
-  const customs = await loadCustomSecurities();
   const customParId = new Map(customs.map((c) => [c.id, c]));
-
   const souverainParIsin = new Map<string, Bond>();
   for (const b of loadBonds()) {
     if (b.isin) souverainParIsin.set(normId(b.isin), b);
@@ -87,102 +97,86 @@ export async function construireTitresDetenus(): Promise<InventaireTitres> {
   }
 
   const aujourdhui = new Date().toISOString().slice(0, 10);
-  const titres: TitreDetenu[] = [];
-  const resume: InventaireTitres["fonds"] = [];
 
-  // Fonds par fonds, et non tout de front : chaque fonds enchaîne autant de
-  // calculs de disponibilité qu'il a de lignes, et les lancer tous ensemble
-  // ouvrirait quinze fois le carnet en parallèle sans rien gagner — les
-  // lectures sont déjà mémoïsées par fonds.
-  for (const f of fonds) {
-    const snapshot = await positionsDeReference(f.id);
-    resume.push({ id: f.id, nom: f.nom, dateInventaire: snapshot?.asOfDate ?? null });
-    if (!snapshot) continue;
+  // ── Première passe : décrire les lignes ────────────────────────────────
+  type Brouillon = Omit<
+    TitreDetenu,
+    "pretee" | "remeree" | "engagee" | "mouvements" | "disponible"
+  >;
+  const brouillons: Brouillon[] = [];
 
-    for (const p of snapshot.positions) {
-      if (p.section !== "obligation") continue;
-      const custom = p.customSecurityId ? customParId.get(p.customSecurityId) : undefined;
-      const cle = normId(custom?.isin || custom?.code || p.matchId || p.rawCode || "");
-      if (!cle) continue;
+  for (const p of snapshot.positions) {
+    if (p.section !== "obligation") continue;
+    const custom = p.customSecurityId ? customParId.get(p.customSecurityId) : undefined;
+    const cle = normId(custom?.isin || custom?.code || p.matchId || p.rawCode || "");
+    if (!cle) continue;
 
-      const souverain = souverainParIsin.get(cle);
-      const cote = coteParCle.get(cle);
-      const nature = natureDe(souverain, cote, custom);
+    const souverain = souverainParIsin.get(cle);
+    const cote = coteParCle.get(cle);
+    const libelle =
+      souverain?.nameShort || cote?.name || custom?.name || p.rawLabel || cle;
+    const isin = souverain?.isin || cote?.isin || custom?.isin || cle;
+    const echeance =
+      souverain?.maturityDate || cote?.maturityDate || echeanceDeLaFiche(custom) || "";
+    const quantiteInventaire = num(p.quantity);
+    const valorisation = num(p.valuation);
 
-      const libelle =
-        souverain?.nameShort || cote?.name || custom?.name || p.rawLabel || cle;
-      const isin = souverain?.isin || cote?.isin || custom?.isin || cle;
-      const code = cote?.code || custom?.code || p.rawCode || "";
-      const facial = souverain?.couponRate ?? cote?.couponRate ?? tauxDeLaFiche(custom);
-      const echeance =
-        souverain?.maturityDate || cote?.maturityDate || echeanceDeLaFiche(custom) || "";
-
-      const dispo = await disponibiliteCession(f.id, isin || cle, libelle);
-      const quantiteInventaire = num(p.quantity);
-      const valorisation = num(p.valuation);
-
-      titres.push({
-        cle: `${f.id}|${cle}`,
-        fondsId: f.id,
-        fondsNom: f.nom,
-        isin,
-        code,
-        libelle,
-        nature,
-        emetteur: souverain?.issuer || cote?.issuer || emetteurDeLaFiche(custom) || "—",
-        pays: (souverain?.country ?? "") as BondCountry | "",
-        etat: souverain
-          ? (countryNames[souverain.country] ?? souverain.country)
-          : cote?.country || emetteurDeLaFiche(custom) || "—",
-        facial,
-        echeance,
-        dureeResiduelle: anneesJusqua(aujourdhui, echeance),
-        nominal:
-          num(souverain?.nominalValue) ||
-          num(cote?.nominalOrigine) ||
-          num(cote?.nominalValue) ||
-          num(custom?.attributes?.nominalValue) ||
-          0,
-        emission: souverain?.issueDate || cote?.issueDate || "",
-        frequence: souverain?.frequency ?? cote?.couponFrequency ?? 0,
-        amortissement: profilAmortissement(souverain, cote, custom),
-        secteur: cote?.sector || cote?.issuerType || (souverain ? "Souverain" : "—"),
-        quantiteInventaire,
-        pretee: dispo.pretee,
-        remeree: dispo.remeree,
-        engagee: dispo.engagee,
-        mouvements: dispo.mouvements,
-        disponible: Math.max(0, dispo.disponible),
-        valorisation,
-        prixInventaire: quantiteInventaire > 0 ? valorisation / quantiteInventaire : 0,
-        dateInventaire: snapshot.asOfDate,
-      });
-    }
+    brouillons.push({
+      cle: `${fondsId}|${cle}`,
+      fondsId,
+      fondsNom,
+      isin,
+      code: cote?.code || custom?.code || p.rawCode || "",
+      libelle,
+      nature: natureDe(souverain, cote, custom),
+      emetteur: souverain?.issuer || cote?.issuer || emetteurDeLaFiche(custom) || "—",
+      pays: (souverain?.country ?? "") as BondCountry | "",
+      etat: souverain
+        ? (countryNames[souverain.country] ?? souverain.country)
+        : cote?.country || emetteurDeLaFiche(custom) || "—",
+      facial: souverain?.couponRate ?? cote?.couponRate ?? tauxDeLaFiche(custom),
+      echeance,
+      dureeResiduelle: anneesJusqua(aujourdhui, echeance),
+      nominal:
+        num(souverain?.nominalValue) ||
+        num(cote?.nominalOrigine) ||
+        num(cote?.nominalValue) ||
+        num(custom?.attributes?.nominalValue) ||
+        0,
+      emission: souverain?.issueDate || cote?.issueDate || "",
+      frequence: souverain?.frequency ?? cote?.couponFrequency ?? 0,
+      amortissement: profilAmortissement(souverain, cote, custom),
+      secteur: cote?.sector || cote?.issuerType || (souverain ? "Souverain" : "—"),
+      quantiteInventaire,
+      valorisation,
+      prixInventaire: quantiteInventaire > 0 ? valorisation / quantiteInventaire : 0,
+      dateInventaire: snapshot.asOfDate,
+    });
   }
 
-  const sansInventaire = resume.filter((r) => r.dateInventaire === null);
-  if (sansInventaire.length > 0) {
-    avertissements.push(
-      `${sansInventaire.length} fonds sans inventaire importé : ${sansInventaire
-        .map((r) => r.nom)
-        .join(", ")}.`,
-    );
-  }
-  const dates = new Set(resume.map((r) => r.dateInventaire).filter(Boolean));
-  if (dates.size > 1) {
-    const triees = [...dates].sort();
-    avertissements.push(
-      `Les inventaires ne sont pas tous arrêtés à la même date (du ${triees[0]} au ${
-        triees[triees.length - 1]
-      }) : les quantités ne se totalisent qu'avec cette réserve.`,
-    );
-  }
+  // ── Seconde passe : ce qui reste cessible, en UNE lecture du carnet ────
+  const dispos = await disponibilitesDuFonds(
+    fondsId,
+    brouillons.map((b) => ({ cle: b.cle, code: b.isin, libelle: b.libelle })),
+  );
 
-  // Les plus grosses lignes d'abord, par défaut : c'est ce qu'on cherche quand
-  // on ouvre la liste sans savoir encore ce qu'on y cherche.
+  const titres = brouillons.map((b) => {
+    const d = dispos.get(b.cle);
+    return {
+      ...b,
+      pretee: d?.pretee ?? 0,
+      remeree: d?.remeree ?? 0,
+      engagee: d?.engagee ?? 0,
+      mouvements: d?.mouvements ?? 0,
+      disponible: Math.max(0, d?.disponible ?? b.quantiteInventaire),
+    };
+  });
+
+  // Les plus grosses lignes d'abord : c'est ce qu'on cherche quand on ouvre la
+  // liste sans savoir encore ce qu'on y cherche.
   titres.sort((a, b) => b.valorisation - a.valorisation);
 
-  return { titres, fonds: resume, avertissements };
+  return { fondsId, fondsNom, dateInventaire: snapshot.asOfDate, titres };
 }
 
 /**

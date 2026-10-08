@@ -45,12 +45,15 @@ const ONGLETS: { cle: Onglet; libelle: string; aide: string }[] = [
 export default function ImportationPanel({
   fondsId,
   fondsNom,
+  fonds,
   inventaires,
   vl,
   cours,
 }: {
   fondsId: string;
   fondsNom: string;
+  /** TOUS les fonds gérés : l'onglet « Sélection de titres » les parcourt. */
+  fonds: { id: string; nom: string }[];
   inventaires: PortfolioSnapshot[];
   vl: NavPoint[];
   /** Derniers cours du site — lus au serveur, jamais stockés. */
@@ -138,7 +141,7 @@ export default function ImportationPanel({
           de TOUS les fonds, et qui vient charger un fichier n'a pas a le
           payer. Pas de `key` sur le fonds non plus — son contenu ne depend
           pas de celui qu'on regarde. */}
-      {onglet === "titres" && <SelectionTitres />}
+      {onglet === "titres" && <SelectionTitres fonds={fonds} />}
     </div>
   );
 }
