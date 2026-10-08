@@ -8,6 +8,12 @@
 // question qu'on pose avant de monter un réméré, de servir une adjudication ou
 // de répondre à une contrepartie.
 //
+// DEUX LECTURES, ET C'EST UN INTERRUPTEUR. « Où est ce titre » veut une ligne
+// par fonds ; « combien en ai-je » veut une ligne par titre, quantités
+// additionnées. Le premier sert à monter une opération dans un portefeuille
+// précis, le second à répondre à une contrepartie qui demande ce que la maison
+// peut lui livrer.
+//
 // LA COLONNE QUI COMPTE EST « DISPONIBLE », et ce n'est pas la quantité de
 // l'inventaire : s'en retranchent les titres prêtés, ceux pris en réméré, la
 // part non servie des ventes déjà passées, et s'y ajoutent les mouvements
@@ -40,6 +46,13 @@ const pct = (v: number) =>
   v > 0 ? `${fmt2.format(v * 100)} %` : "—";
 const dateFr = (d: string | null) =>
   d ? new Date(`${d}T00:00:00`).toLocaleDateString("fr-FR") : "—";
+
+/**
+ * UNE LIGNE TELLE QU'ELLE S'AFFICHE : un titre dans un fonds, ou un titre
+ * pour toute la maison. Les deux ont la même forme — seules changent les
+ * quantités, qui s'additionnent, et la colonne Fonds, qui compte.
+ */
+type LigneVue = TitreDetenu & { fondsCount: number; fondsNoms: string[] };
 
 type Colonne =
   | "fonds"
@@ -122,6 +135,8 @@ export default function SelectionTitres({
   // dix-sept colonnes ouvertes d'emblée ne se lisent plus, et la question
   // courante — que reste-t-il, et où — tient dans les onze premières.
   const [caracteristiques, setCaracteristiques] = useState(false);
+  /** Une ligne par titre plutôt qu'une par titre ET par fonds. */
+  const [regroupe, setRegroupe] = useState(false);
   const [tri, setTri] = useState<Tri<Colonne>>({ col: "disponible", desc: true });
 
   /**
@@ -206,10 +221,55 @@ export default function SelectionTitres({
       return true;
     });
 
-    const valeur = (t: TitreDetenu): string | number => {
+    // ── LE REGROUPEMENT, APRÈS LE FILTRE ET AVANT LE TRI ────────────────
+    //
+    // APRÈS LE FILTRE, et c'est tout l'intérêt : « les OAT du Sénégal chez
+    // Aurore Sécurité et Aurore Sécurité II » se totalisent sur ces deux
+    // fonds-là, pas sur les quinze. Regrouper d'abord aurait donné un total
+    // que le filtre n'aurait plus su défaire.
+    const vues: LigneVue[] = regroupe
+      ? [
+          ...retenus
+            .reduce((m, t) => {
+              const k = t.isin || t.code || t.libelle;
+              const deja = m.get(k);
+              if (!deja) {
+                m.set(k, {
+                  ...t,
+                  cle: `titre|${k}`,
+                  fondsCount: 1,
+                  fondsNoms: [t.fondsNom],
+                });
+                return m;
+              }
+              deja.quantiteInventaire += t.quantiteInventaire;
+              deja.pretee += t.pretee;
+              deja.remeree += t.remeree;
+              deja.engagee += t.engagee;
+              deja.mouvements += t.mouvements;
+              deja.disponible += t.disponible;
+              deja.valorisation += t.valorisation;
+              deja.lots += t.lots;
+              deja.resolu = deja.resolu || t.resolu;
+              deja.prixInventaire =
+                deja.quantiteInventaire > 0
+                  ? deja.valorisation / deja.quantiteInventaire
+                  : 0;
+              if (!deja.fondsNoms.includes(t.fondsNom)) {
+                deja.fondsNoms.push(t.fondsNom);
+                deja.fondsCount += 1;
+              }
+              return m;
+            }, new Map<string, LigneVue>())
+            .values(),
+        ]
+      : retenus.map((t) => ({ ...t, fondsCount: 1, fondsNoms: [t.fondsNom] }));
+
+    const valeur = (t: LigneVue): string | number => {
       switch (tri.col) {
         case "fonds":
-          return t.fondsNom;
+          // Regroupé, la colonne compte des fonds : on trie sur le compte.
+          return regroupe ? t.fondsCount : t.fondsNom;
         case "titre":
           return t.libelle || t.isin;
         case "nature":
@@ -245,7 +305,7 @@ export default function SelectionTitres({
       }
     };
     const signe = tri.desc ? -1 : 1;
-    return [...retenus].sort((a, b) => {
+    return vues.sort((a, b) => {
       const va = valeur(a);
       const vb = valeur(b);
       const c =
@@ -257,7 +317,17 @@ export default function SelectionTitres({
       // rendu.
       return c !== 0 ? c * signe : b.valorisation - a.valorisation;
     });
-  }, [tous, fFonds, fNature, fEtat, fTexte, seulementDispo, seulementOrphelins, tri]);
+  }, [
+    tous,
+    fFonds,
+    fNature,
+    fEtat,
+    fTexte,
+    seulementDispo,
+    seulementOrphelins,
+    regroupe,
+    tri,
+  ]);
 
   const trierPar = (col: Colonne) =>
     setTri((p) =>
@@ -399,6 +469,23 @@ export default function SelectionTitres({
             />
           </label>
 
+          {/* L'INTERRUPTEUR DE LECTURE, avant les autres cases : il change ce
+              qu'une ligne REPRÉSENTE, là où les autres ne font que retrancher. */}
+          <label className="flex items-center gap-1.5 pb-1 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={regroupe}
+              onChange={(e) => setRegroupe(e.target.checked)}
+              className="accent-slate-900"
+            />
+            <span className="text-[11px] text-slate-600">
+              Regrouper par titre
+              <span className="block text-[9px] text-slate-400">
+                quantités additionnées, tous fonds retenus
+              </span>
+            </span>
+          </label>
+
           <label className="flex items-center gap-1.5 pb-1 cursor-pointer">
             <input
               type="checkbox"
@@ -461,7 +548,7 @@ export default function SelectionTitres({
           <table className="w-full text-[11px] border-collapse">
             <thead className="bg-slate-100 text-slate-600">
               <tr>
-                <EnTeteTri col="fonds" tri={tri} onTrier={trierPar}>
+                <EnTeteTri col="fonds" tri={tri} onTrier={trierPar} aDroite={regroupe}>
                   Fonds
                 </EnTeteTri>
                 <EnTeteTri col="titre" tri={tri} onTrier={trierPar}>
@@ -534,7 +621,12 @@ export default function SelectionTitres({
                 </tr>
               ) : (
                 lignes.map((t) => (
-                  <Ligne key={t.cle} t={t} caracteristiques={caracteristiques} />
+                  <Ligne
+                    key={t.cle}
+                    t={t}
+                    caracteristiques={caracteristiques}
+                    regroupe={regroupe}
+                  />
                 ))
               )}
             </tbody>
@@ -560,14 +652,24 @@ export default function SelectionTitres({
 function Ligne({
   t,
   caracteristiques,
+  regroupe,
 }: {
-  t: TitreDetenu;
+  t: LigneVue;
   caracteristiques: boolean;
+  regroupe: boolean;
 }) {
   const grevee = t.pretee + t.remeree + t.engagee;
   return (
     <tr className="hover:bg-slate-50">
-      <td className={td}>{t.fondsNom}</td>
+      {/* REGROUPÉ, LA COLONNE COMPTE : le détail tient dans l'info-bulle, et
+          lister quinze noms dans une cellule rendrait la ligne illisible. */}
+      <td className={regroupe ? tdNum : td} title={t.fondsNoms.join(" · ")}>
+        {regroupe
+          ? t.fondsCount === 1
+            ? t.fondsNoms[0]
+            : `${t.fondsCount} fonds`
+          : t.fondsNom}
+      </td>
       <td className={td}>
         <div className="font-medium text-slate-800">{t.libelle}</div>
         <div className="text-[10px] text-slate-400">
