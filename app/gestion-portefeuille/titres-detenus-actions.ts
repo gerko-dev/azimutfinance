@@ -11,7 +11,7 @@ import type { ActionResult } from "@/lib/admin/types";
 
 import { estNiveau1, MSG_NIVEAU1 } from "./guard";
 import { construireTitresDetenus } from "./titres-detenus";
-import type { InventaireTitres } from "./titres-detenus";
+import type { InventaireTitres } from "./titres-detenus-types";
 
 export async function chargerTitresDetenusAction(): Promise<
   ActionResult<InventaireTitres>

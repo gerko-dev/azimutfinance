@@ -35,6 +35,11 @@ import {
   positionsDeReference,
 } from "./operations-marche-disponibilite";
 import type { CustomSecurity } from "./portfolio-types";
+import type {
+  InventaireTitres,
+  NatureTitre,
+  TitreDetenu,
+} from "./titres-detenus-types";
 
 const num = (v: unknown, d = 0): number => {
   if (typeof v === "number") return Number.isFinite(v) ? v : d;
@@ -45,77 +50,14 @@ const num = (v: unknown, d = 0): number => {
   return d;
 };
 
-/**
- * NATURE DU TITRE, et c'est le premier tri qu'on demande à cette liste.
- *
- * Les trois premières viennent du guichet UMOA-Titres et sont celles de son
- * référentiel ; « Cotée » désigne la cote obligataire BRVM ; « Non cotée »,
- * tout ce qui ne se négocie que de gré à gré et n'existe que dans les fiches
- * du gérant.
- */
-export type NatureTitre = "OAT" | "BAT" | "OTAR" | "Cotée" | "Non cotée";
-
-export const NATURES: NatureTitre[] = ["OAT", "BAT", "OTAR", "Cotée", "Non cotée"];
-
-/** Un titre obligataire détenu par un fonds, et ce qui en reste cessible. */
-export type TitreDetenu = {
-  /** Clef de ligne : un même titre peut être détenu par plusieurs fonds. */
-  cle: string;
-  fondsId: string;
-  fondsNom: string;
-  isin: string;
-  code: string;
-  libelle: string;
-  nature: NatureTitre;
-  /** Émetteur tel que le référentiel le nomme. */
-  emetteur: string;
-  /** Code pays de l'État émetteur, vide pour un titre non souverain. */
-  pays: BondCountry | "";
-  /** Le pays en toutes lettres, ou l'émetteur à défaut : c'est la colonne. */
-  etat: string;
-  facial: number;
-  echeance: string;
-  /** Durée résiduelle en années, à la date du jour. */
-  dureeResiduelle: number;
-
-  // ── Les caractéristiques de l'emprunt ───────────────────────────────────
-  //
-  // TOUTES PRÉSENTES, TOUTES TRIABLES. On cherche parfois « les emprunts en
-  // différé », parfois « les coupures autres que 10 000 », parfois « ce qui
-  // paie trimestriellement » — et rien ne permet de deviner d'avance laquelle
-  // de ces questions se posera.
-  /** Valeur nominale par titre — 10 000 F pour un souverain, tout autre
-   *  chose pour un emprunt de gré à gré placé en grosses coupures. */
-  nominal: number;
-  /** Date d'émission, ISO. */
-  emission: string;
-  /** Coupons par an : 1, 2 ou 4. Zéro quand le référentiel ne le dit pas. */
-  frequence: number;
-  /** Profil d'amortissement, en clair. */
-  amortissement: string;
-  /** Secteur ou nature de l'émetteur, tel que le référentiel le classe. */
-  secteur: string;
-
-  // ── Les quantités, et tout ce qui les grève ─────────────────────────────
-  quantiteInventaire: number;
-  pretee: number;
-  remeree: number;
-  engagee: number;
-  mouvements: number;
-  /** CE QUI RESTE RÉELLEMENT CESSIBLE. C'est la colonne qu'on trie. */
-  disponible: number;
-
-  valorisation: number;
-  /** Valorisation d'inventaire par titre. */
-  prixInventaire: number;
-  dateInventaire: string | null;
-};
-
-export type InventaireTitres = {
-  titres: TitreDetenu[];
-  fonds: { id: string; nom: string; dateInventaire: string | null }[];
-  avertissements: string[];
-};
+// LE VOCABULAIRE VIT A PART, dans `titres-detenus-types` : l'ecran en a
+// besoin, et il est client. Importer une VALEUR d'ici l'aurait fait tirer la
+// base, les CSV et le client Supabase dans le bundle du navigateur.
+export type {
+  InventaireTitres,
+  NatureTitre,
+  TitreDetenu,
+} from "./titres-detenus-types";
 
 const normId = (s: string | null | undefined): string =>
   (s ?? "").trim().toUpperCase();

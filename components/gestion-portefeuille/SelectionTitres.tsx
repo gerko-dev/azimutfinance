@@ -25,7 +25,7 @@ import {
   type InventaireTitres,
   type NatureTitre,
   type TitreDetenu,
-} from "@/app/gestion-portefeuille/titres-detenus";
+} from "@/app/gestion-portefeuille/titres-detenus-types";
 import EnTeteTri, { type Tri } from "./EnTeteTri";
 
 const fmt0 = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
