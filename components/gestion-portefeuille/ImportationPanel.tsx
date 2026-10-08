@@ -17,8 +17,9 @@ import type { NavPoint } from "@/app/gestion-portefeuille/nav-types";
 import type { CoursSite } from "@/app/gestion-portefeuille/cours-types";
 import PortfolioPanel from "./PortfolioPanel";
 import NavPanel from "./NavPanel";
+import SelectionTitres from "./SelectionTitres";
 
-type Onglet = "inventaires" | "vl";
+type Onglet = "inventaires" | "vl" | "titres";
 
 const ONGLETS: { cle: Onglet; libelle: string; aide: string }[] = [
   {
@@ -30,6 +31,14 @@ const ONGLETS: { cle: Onglet; libelle: string; aide: string }[] = [
     cle: "vl",
     libelle: "Valeur liquidative",
     aide: "VL, nombre de parts et actif net, par date",
+  },
+  // TROISIEME ONGLET, ET LE SEUL INTERFONDS : il ne charge rien, il lit ce
+  // qui est charge. C'est ici qu'on repond a « que reste-t-il de cessible, et
+  // ou », une fois les inventaires montes.
+  {
+    cle: "titres",
+    libelle: "Sélection de titres",
+    aide: "Toutes les lignes obligataires détenues, tous fonds confondus, et ce qui en reste cessible",
   },
 ];
 
@@ -125,6 +134,11 @@ export default function ImportationPanel({
       <div className={onglet === "vl" ? "" : "hidden"}>
         <NavPanel key={`vl-${fondsId}`} fundId={fondsId} initialHistory={vl} />
       </div>
+      {/* MONTE A L'OUVERTURE, et pas avant : il lit l'inventaire et le carnet
+          de TOUS les fonds, et qui vient charger un fichier n'a pas a le
+          payer. Pas de `key` sur le fonds non plus — son contenu ne depend
+          pas de celui qu'on regarde. */}
+      {onglet === "titres" && <SelectionTitres />}
     </div>
   );
 }
