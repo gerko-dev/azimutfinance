@@ -307,13 +307,24 @@ export function refusCession(d: Disponibilite, quantite: number): string | null 
  */
 export async function disponibilitesDuFonds(
   fundId: string,
-  titres: { cle: string; code: string; libelle: string }[],
+  titres: { cle: string; designations: string[]; libelle: string }[],
 ): Promise<Map<string, Disponibilite>> {
   const sortie = new Map<string, Disponibilite>();
   if (titres.length === 0) return sortie;
   const ctx = await contexteCession(fundId);
   for (const t of titres) {
-    sortie.set(t.cle, disponibiliteDans(ctx, t.code, t.libelle, null));
+    // PLUSIEURS DÉSIGNATIONS, ET LA PREMIÈRE QUI PARLE GAGNE. L'inventaire
+    // indexe chaque position sous son ISIN, son code, son libellé ; une
+    // opération, elle, ne porte qu'une de ces formes. Chercher sous une seule
+    // rendait « rien de détenu » sur des lignes qui l'étaient.
+    const essais = t.designations.length > 0 ? t.designations : [""];
+    let retenue = disponibiliteDans(ctx, essais[0], t.libelle, null);
+    for (const d of essais.slice(1)) {
+      if (retenue.connue) break;
+      const autre = disponibiliteDans(ctx, d, t.libelle, null);
+      if (autre.connue) retenue = autre;
+    }
+    sortie.set(t.cle, retenue);
   }
   return sortie;
 }

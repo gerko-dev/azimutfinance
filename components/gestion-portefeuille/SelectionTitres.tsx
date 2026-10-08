@@ -89,7 +89,11 @@ export default function SelectionTitres({
    *  main. */
   fonds: { id: string; nom: string }[];
 }) {
-  const [titres, setTitres] = useState<TitreDetenu[]>([]);
+  // PAR FONDS, ET NON EN TAS. Une liste à laquelle on ajoute se duplique dès
+  // qu'une lecture repart — un double montage, un clic sur « Recalculer »
+  // pendant que la précédente tourne. Indexée par fonds, la même lecture
+  // écrase la précédente au lieu de s'y ajouter.
+  const [parFonds, setParFonds] = useState<Record<string, TitreDetenu[]>>({});
   const [arretes, setArretes] = useState<Record<string, string | null>>({});
   /** Fonds déjà lus : c'est le compteur, et c'est aussi la garde contre un
    *  second chargement. */
@@ -105,6 +109,9 @@ export default function SelectionTitres({
   // quand on cherche de quoi servir une contrepartie. Décochée, la liste
   // montre aussi ce qui est entièrement prêté ou promis.
   const [seulementDispo, setSeulementDispo] = useState(false);
+  /** Isoler ce que l'import n'a pas su rattacher : c'est la liste des
+   *  corrections à faire, et elle ne se voit pas autrement. */
+  const [seulementOrphelins, setSeulementOrphelins] = useState(false);
   // LES CARACTÉRISTIQUES SONT TOUTES LÀ, ET TOUTES TRIABLES, mais repliées :
   // dix-sept colonnes ouvertes d'emblée ne se lisent plus, et la question
   // courante — que reste-t-il, et où — tient dans les onze premières.
@@ -121,7 +128,7 @@ export default function SelectionTitres({
    */
   const charger = () =>
     start(async () => {
-      setTitres([]);
+      setParFonds({});
       setArretes({});
       setLus(0);
       setErreur(null);
@@ -132,7 +139,7 @@ export default function SelectionTitres({
           return;
         }
         const data = r.data;
-        setTitres((l) => [...l, ...data.titres]);
+        setParFonds((m) => ({ ...m, [data.fondsId]: data.titres }));
         setArretes((a) => ({ ...a, [data.fondsId]: data.dateInventaire }));
         setLus((n) => n + 1);
       }
@@ -146,7 +153,12 @@ export default function SelectionTitres({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const tous = titres;
+  // L'ordre des fonds, et non celui des réponses : une liste qui se réordonne
+  // en cours de chargement se relit entièrement à chaque arrivée.
+  const tous = useMemo(
+    () => fonds.flatMap((f) => parFonds[f.id] ?? []),
+    [fonds, parFonds],
+  );
 
   /** Ce qui manque ou ce qui cloche, dit à mesure que les fonds arrivent. */
   const avertissements = useMemo(() => {
@@ -182,6 +194,7 @@ export default function SelectionTitres({
       if (fNature && t.nature !== fNature) return false;
       if (fEtat && t.etat !== fEtat) return false;
       if (seulementDispo && t.disponible <= 0) return false;
+      if (seulementOrphelins && t.resolu) return false;
       if (texte && !`${t.isin} ${t.code} ${t.libelle}`.toLowerCase().includes(texte))
         return false;
       return true;
@@ -238,21 +251,30 @@ export default function SelectionTitres({
       // rendu.
       return c !== 0 ? c * signe : b.valorisation - a.valorisation;
     });
-  }, [tous, fFonds, fNature, fEtat, fTexte, seulementDispo, tri]);
+  }, [tous, fFonds, fNature, fEtat, fTexte, seulementDispo, seulementOrphelins, tri]);
 
   const trierPar = (col: Colonne) =>
     setTri((p) =>
       p.col === col ? { col, desc: !p.desc } : { col, desc: DESCENDANTES.includes(col) },
     );
 
-  const actifs = !!(fFonds || fNature || fEtat || fTexte.trim() || seulementDispo);
+  const actifs = !!(
+    fFonds ||
+    fNature ||
+    fEtat ||
+    fTexte.trim() ||
+    seulementDispo ||
+    seulementOrphelins
+  );
   const vider = () => {
     setFFonds("");
     setFNature("");
     setFEtat("");
     setFTexte("");
     setSeulementDispo(false);
+    setSeulementOrphelins(false);
   };
+  const orphelins = tous.filter((t) => !t.resolu).length;
 
   const totalDispo = lignes.reduce((s, t) => s + t.disponible, 0);
   const totalValo = lignes.reduce((s, t) => s + t.valorisation, 0);
@@ -383,6 +405,23 @@ export default function SelectionTitres({
             />
             <span className="text-[11px] text-slate-600">Cessibles seulement</span>
           </label>
+
+          {orphelins > 0 && (
+            <label className="flex items-center gap-1.5 pb-1 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={seulementOrphelins}
+                onChange={(e) => setSeulementOrphelins(e.target.checked)}
+                className="accent-amber-600"
+              />
+              <span className="text-[11px] text-amber-700">
+                Non rapprochés
+                <span className="block text-[9px] text-amber-600/80">
+                  {orphelins} ligne(s) sans caractéristiques
+                </span>
+              </span>
+            </label>
+          )}
 
           <label className="flex items-center gap-1.5 pb-1 cursor-pointer">
             <input
@@ -528,7 +567,23 @@ function Ligne({
       <td className={td}>{t.fondsNom}</td>
       <td className={td}>
         <div className="font-medium text-slate-800">{t.libelle}</div>
-        <div className="text-[10px] text-slate-400">{t.isin || t.code}</div>
+        <div className="text-[10px] text-slate-400">
+          {t.isin || t.code}
+          {/* DEUX LOTS DU MÊME EMPRUNT SE SOMMENT, et la somme se dit : sans
+              cela, une quantité qui ne correspond à aucune ligne de
+              l'inventaire passe pour une erreur. */}
+          {t.lots > 1 && (
+            <span className="ml-1 text-slate-500">· {t.lots} lots</span>
+          )}
+        </div>
+        {/* NI FACIAL NI ÉCHÉANCE PARCE QUE LE TITRE N'EST RAPPROCHÉ DE RIEN :
+            c'est l'import qu'il faut corriger, pas le référentiel. Le dire
+            évite de chercher une donnée manquante là où elle ne manque pas. */}
+        {!t.resolu && (
+          <div className="text-[10px] text-amber-700">
+            non rapproché au référentiel
+          </div>
+        )}
       </td>
       <td className={td}>
         <span

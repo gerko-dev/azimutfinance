@@ -64,6 +64,17 @@ export type TitreDetenu = {
   amortissement: string;
   /** Secteur ou nature de l'émetteur, tel que le référentiel le classe. */
   secteur: string;
+  /**
+   * LE TITRE A-T-IL ÉTÉ RETROUVÉ AU RÉFÉRENTIEL ?
+   *
+   * Faux, la ligne n'a ni facial, ni échéance, ni nature : elle n'est
+   * rapprochée de rien. Le dire vaut mieux que d'afficher des tirets qu'on
+   * prend pour des données manquantes au référentiel alors que c'est le
+   * RAPPROCHEMENT qui a échoué — et que la correction est à l'import.
+   */
+  resolu: boolean;
+  /** Nombre de lignes d'inventaire regroupées sous ce titre. */
+  lots: number;
 
   // ── Les quantités, et tout ce qui les grève ─────────────────────────────
   quantiteInventaire: number;

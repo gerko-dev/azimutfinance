@@ -24,6 +24,20 @@ import "server-only";
 // c'est là qu'on cherche, et qu'une liste rendue déjà réduite ne se recompose
 // pas sans un aller-retour au serveur.
 //
+// UNE LIGNE PAR TITRE, ET NON PAR LIGNE D'INVENTAIRE. Un même emprunt se
+// porte souvent en deux ou trois lots — acquis à des dates différentes, à des
+// prix différents. L'inventaire les garde séparés, et c'est sa fonction ; cet
+// écran, lui, répond à « combien en ai-je », et la réponse est une somme. Les
+// afficher séparément donnait des doublons apparents, chacun portant la MÊME
+// quantité disponible — celle du fonds entier.
+//
+// UN TITRE SE RECONNAÎT PAR N'IMPORTE LAQUELLE DE SES DÉSIGNATIONS. Une
+// position porte jusqu'à six identifiants : l'ISIN et le code résolus au
+// rapprochement, ceux de la fiche du gérant, le code brut du dépositaire,
+// l'identifiant de fiche. Chercher sous un seul — et c'était `matchId`, qui
+// est un UUID pour les fiches du gérant — laissait sans caractéristiques des
+// titres parfaitement connus du référentiel.
+//
 // UN FONDS A LA FOIS, ET C'EST DÉLIBÉRÉ. Lire les quinze portefeuilles dans un
 // seul appel demandait une minute pendant laquelle l'écran ne montrait rien —
 // et, passé la limite d'une action serveur, ne montrait jamais rien. L'écran
@@ -98,42 +112,81 @@ export async function construireTitresDunFonds(
 
   const aujourdhui = new Date().toISOString().slice(0, 10);
 
-  // ── Première passe : décrire les lignes ────────────────────────────────
+  // ── Première passe : décrire les lignes, et les regrouper ─────────────
   type Brouillon = Omit<
     TitreDetenu,
     "pretee" | "remeree" | "engagee" | "mouvements" | "disponible"
-  >;
-  const brouillons: Brouillon[] = [];
+  > & { designations: string[] };
+  const parTitre = new Map<string, Brouillon>();
 
   for (const p of snapshot.positions) {
     if (p.section !== "obligation") continue;
     const custom = p.customSecurityId ? customParId.get(p.customSecurityId) : undefined;
-    const cle = normId(custom?.isin || custom?.code || p.matchId || p.rawCode || "");
-    if (!cle) continue;
 
-    const souverain = souverainParIsin.get(cle);
-    const cote = coteParCle.get(cle);
-    const libelle =
-      souverain?.nameShort || cote?.name || custom?.name || p.rawLabel || cle;
-    const isin = souverain?.isin || cote?.isin || custom?.isin || cle;
-    const echeance =
-      souverain?.maturityDate || cote?.maturityDate || echeanceDeLaFiche(custom) || "";
-    const quantiteInventaire = num(p.quantity);
+    // TOUTES LES DÉSIGNATIONS, dans l'ordre où elles méritent confiance :
+    // l'ISIN et le code résolus au rapprochement d'abord — ils viennent du
+    // référentiel —, puis ceux de la fiche, puis le brut du dépositaire.
+    // `matchId` vient en dernier : c'est un UUID pour une fiche du gérant, et
+    // il ne désigne rien au gisement.
+    const designations = [
+      p.matchIsin,
+      p.matchCode,
+      custom?.isin,
+      custom?.code,
+      p.rawCode,
+      p.matchId,
+    ]
+      .map(normId)
+      .filter(Boolean);
+    if (designations.length === 0) continue;
+
+    const souverain = designations.map((d) => souverainParIsin.get(d)).find(Boolean);
+    const cote = designations.map((d) => coteParCle.get(d)).find(Boolean);
+
+    // L'IDENTITÉ DE REGROUPEMENT : l'ISIN du référentiel quand on l'a — c'est
+    // lui qui fait foi et qui est stable —, la première désignation sinon.
+    const identite = normId(
+      souverain?.isin || cote?.isin || cote?.code || custom?.isin || custom?.code ||
+        designations[0],
+    );
+
+    const quantite = num(p.quantity);
     const valorisation = num(p.valuation);
 
-    brouillons.push({
-      cle: `${fondsId}|${cle}`,
+    const deja = parTitre.get(identite);
+    if (deja) {
+      // DEUX LOTS DU MÊME EMPRUNT : on additionne, et l'on garde la trace du
+      // nombre de lignes d'inventaire pour que la somme s'explique.
+      deja.quantiteInventaire += quantite;
+      deja.valorisation += valorisation;
+      deja.lots += 1;
+      deja.prixInventaire =
+        deja.quantiteInventaire > 0 ? deja.valorisation / deja.quantiteInventaire : 0;
+      for (const d of designations) {
+        if (!deja.designations.includes(d)) deja.designations.push(d);
+      }
+      continue;
+    }
+
+    const libelle =
+      souverain?.nameShort || cote?.name || custom?.name || p.matchLabel || p.rawLabel ||
+      identite;
+    const echeance =
+      souverain?.maturityDate || cote?.maturityDate || echeanceDeLaFiche(custom) || "";
+
+    parTitre.set(identite, {
+      cle: `${fondsId}|${identite}`,
       fondsId,
       fondsNom,
-      isin,
-      code: cote?.code || custom?.code || p.rawCode || "",
+      isin: souverain?.isin || cote?.isin || custom?.isin || p.matchIsin || identite,
+      code: cote?.code || custom?.code || p.matchCode || p.rawCode || "",
       libelle,
       nature: natureDe(souverain, cote, custom),
       emetteur: souverain?.issuer || cote?.issuer || emetteurDeLaFiche(custom) || "—",
       pays: (souverain?.country ?? "") as BondCountry | "",
       etat: souverain
         ? (countryNames[souverain.country] ?? souverain.country)
-        : cote?.country || emetteurDeLaFiche(custom) || "—",
+        : paysLisible(cote?.country) || emetteurDeLaFiche(custom) || "—",
       facial: souverain?.couponRate ?? cote?.couponRate ?? tauxDeLaFiche(custom),
       echeance,
       dureeResiduelle: anneesJusqua(aujourdhui, echeance),
@@ -147,20 +200,36 @@ export async function construireTitresDunFonds(
       frequence: souverain?.frequency ?? cote?.couponFrequency ?? 0,
       amortissement: profilAmortissement(souverain, cote, custom),
       secteur: cote?.sector || cote?.issuerType || (souverain ? "Souverain" : "—"),
-      quantiteInventaire,
+      // RÉSOLU veut dire : le gisement OU la fiche du gérant connaît ce titre.
+      // Rien des trois, et la ligne n'a que son code brut.
+      resolu: !!(souverain || cote || custom),
+      lots: 1,
+      quantiteInventaire: quantite,
       valorisation,
-      prixInventaire: quantiteInventaire > 0 ? valorisation / quantiteInventaire : 0,
+      prixInventaire: quantite > 0 ? valorisation / quantite : 0,
       dateInventaire: snapshot.asOfDate,
+      designations,
     });
   }
+
+  const brouillons = [...parTitre.values()];
 
   // ── Seconde passe : ce qui reste cessible, en UNE lecture du carnet ────
   const dispos = await disponibilitesDuFonds(
     fondsId,
-    brouillons.map((b) => ({ cle: b.cle, code: b.isin, libelle: b.libelle })),
+    // LE CONTRÔLE DE CESSION INDEXE L'INVENTAIRE SOUS TOUTES SES DÉSIGNATIONS :
+    // on lui donne les nôtres, et il trouve sous la première qui lui parle.
+    brouillons.map((b) => ({
+      cle: b.cle,
+      designations: b.designations,
+      libelle: b.libelle,
+    })),
   );
 
-  const titres = brouillons.map((b) => {
+  // Les désignations ont servi à chercher : elles ne sortent pas du module.
+  const titres = brouillons.map((brouillon) => {
+    const { designations, ...b } = brouillon;
+    void designations;
     const d = dispos.get(b.cle);
     return {
       ...b,
@@ -226,6 +295,13 @@ function profilAmortissement(
   if (souverain) return "In fine";
   const profil = (custom?.attributes?.amortizationProfile ?? "").trim();
   return profil || "—";
+}
+
+/** La cote nomme son pays tantôt par son code, tantôt en toutes lettres. */
+function paysLisible(pays: string | undefined): string {
+  const p = (pays ?? "").trim();
+  if (p.length !== 2) return p;
+  return countryNames[p.toUpperCase() as BondCountry] ?? p;
 }
 
 function tauxDeLaFiche(c: CustomSecurity | undefined): number {
