@@ -26,7 +26,6 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { chargerTitresDunFondsAction } from "@/app/gestion-portefeuille/titres-detenus-actions";
 import {
   NATURES,
-  type NatureTitre,
   type TitreDetenu,
 } from "@/app/gestion-portefeuille/titres-detenus-types";
 import EnTeteTri, { type Tri } from "./EnTeteTri";
@@ -101,10 +100,17 @@ export default function SelectionTitres({
   const [erreur, setErreur] = useState<string | null>(null);
   const [enCours, start] = useTransition();
 
-  const [fFonds, setFFonds] = useState("");
-  const [fNature, setFNature] = useState<NatureTitre | "">("");
-  const [fEtat, setFEtat] = useState("");
+  // PLUSIEURS À LA FOIS. « Les OAT du Sénégal ET du Mali », « ce que portent
+  // Aurore Sécurité et Aurore Sécurité II » : un choix unique obligeait à
+  // relire la liste autant de fois qu'on avait de cas, et à additionner de
+  // tête. Une liste vide veut dire « tous » — c'est l'absence de filtre, pas
+  // un filtre qui ne retient rien.
+  const [fFonds, setFFonds] = useState<string[]>([]);
+  const [fNature, setFNature] = useState<string[]>([]);
+  const [fEtat, setFEtat] = useState<string[]>([]);
   const [fTexte, setFTexte] = useState("");
+  /** Le menu déroulant ouvert, s'il y en a un : deux ouverts se chevauchent. */
+  const [ouvert, setOuvert] = useState<string | null>(null);
   // CE QU'ON PEUT RÉELLEMENT SORTIR, et rien d'autre : c'est la vue utile
   // quand on cherche de quoi servir une contrepartie. Décochée, la liste
   // montre aussi ce qui est entièrement prêté ou promis.
@@ -190,9 +196,9 @@ export default function SelectionTitres({
   const lignes = useMemo(() => {
     const texte = fTexte.trim().toLowerCase();
     const retenus = tous.filter((t) => {
-      if (fFonds && t.fondsId !== fFonds) return false;
-      if (fNature && t.nature !== fNature) return false;
-      if (fEtat && t.etat !== fEtat) return false;
+      if (fFonds.length > 0 && !fFonds.includes(t.fondsId)) return false;
+      if (fNature.length > 0 && !fNature.includes(t.nature)) return false;
+      if (fEtat.length > 0 && !fEtat.includes(t.etat)) return false;
       if (seulementDispo && t.disponible <= 0) return false;
       if (seulementOrphelins && t.resolu) return false;
       if (texte && !`${t.isin} ${t.code} ${t.libelle}`.toLowerCase().includes(texte))
@@ -259,22 +265,34 @@ export default function SelectionTitres({
     );
 
   const actifs = !!(
-    fFonds ||
-    fNature ||
-    fEtat ||
+    fFonds.length ||
+    fNature.length ||
+    fEtat.length ||
     fTexte.trim() ||
     seulementDispo ||
     seulementOrphelins
   );
   const vider = () => {
-    setFFonds("");
-    setFNature("");
-    setFEtat("");
+    setFFonds([]);
+    setFNature([]);
+    setFEtat([]);
     setFTexte("");
     setSeulementDispo(false);
     setSeulementOrphelins(false);
   };
   const orphelins = tous.filter((t) => !t.resolu).length;
+
+  // UN CLIC AILLEURS FERME LE MENU. Sans cela, il reste ouvert par-dessus le
+  // tableau qu'on vient de filtrer, et il faut revenir le fermer à la main.
+  useEffect(() => {
+    if (!ouvert) return;
+    const fermer = (e: MouseEvent) => {
+      const cible = e.target as HTMLElement | null;
+      if (!cible?.closest("[data-filtre]")) setOuvert(null);
+    };
+    document.addEventListener("mousedown", fermer);
+    return () => document.removeEventListener("mousedown", fermer);
+  }, [ouvert]);
 
   const totalDispo = lignes.reduce((s, t) => s + t.disponible, 0);
   const totalValo = lignes.reduce((s, t) => s + t.valorisation, 0);
@@ -338,53 +356,38 @@ export default function SelectionTitres({
         {/* Les filtres se CUMULENT — chacun retranche, aucun ne remplace — et
             le compteur dit toujours ce qu'on regarde sur ce qu'il y a. */}
         <div className="flex flex-wrap items-end gap-2 px-3 py-2 border-b border-slate-200 bg-slate-50">
-          <label className="flex flex-col gap-0.5">
-            <span className={etiquette}>Fonds</span>
-            <select
-              value={fFonds}
-              onChange={(e) => setFFonds(e.target.value)}
-              className={`${controle} max-w-[14rem]`}
-            >
-              <option value="">Tous</option>
-              {fonds.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.nom}
-                </option>
-              ))}
-            </select>
-          </label>
+          <FiltreMultiple
+            cle="fonds"
+            libelle="Fonds"
+            options={fonds.map((f) => ({ valeur: f.id, libelle: f.nom }))}
+            choisis={fFonds}
+            onChange={setFFonds}
+            ouvert={ouvert === "fonds"}
+            onOuvrir={(o) => setOuvert(o ? "fonds" : null)}
+            largeur="16rem"
+          />
 
-          <label className="flex flex-col gap-0.5">
-            <span className={etiquette}>Type</span>
-            <select
-              value={fNature}
-              onChange={(e) => setFNature(e.target.value as NatureTitre | "")}
-              className={controle}
-            >
-              <option value="">Tous</option>
-              {NATURES.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-          </label>
+          <FiltreMultiple
+            cle="type"
+            libelle="Type"
+            options={NATURES.map((n) => ({ valeur: n, libelle: n }))}
+            choisis={fNature}
+            onChange={setFNature}
+            ouvert={ouvert === "type"}
+            onOuvrir={(o) => setOuvert(o ? "type" : null)}
+            largeur="11rem"
+          />
 
-          <label className="flex flex-col gap-0.5">
-            <span className={etiquette}>État / émetteur</span>
-            <select
-              value={fEtat}
-              onChange={(e) => setFEtat(e.target.value)}
-              className={`${controle} max-w-[14rem]`}
-            >
-              <option value="">Tous</option>
-              {etats.map((e) => (
-                <option key={e} value={e}>
-                  {e}
-                </option>
-              ))}
-            </select>
-          </label>
+          <FiltreMultiple
+            cle="etat"
+            libelle="État / émetteur"
+            options={etats.map((e) => ({ valeur: e, libelle: e }))}
+            choisis={fEtat}
+            onChange={setFEtat}
+            ouvert={ouvert === "etat"}
+            onOuvrir={(o) => setOuvert(o ? "etat" : null)}
+            largeur="18rem"
+          />
 
           <label className="flex flex-col gap-0.5 min-w-[11rem]">
             <span className={etiquette}>Titre</span>
@@ -650,5 +653,105 @@ function Ligne({
         </>
       )}
     </tr>
+  );
+}
+
+/**
+ * UN FILTRE QUI SE COCHE, et qui en accepte plusieurs.
+ *
+ * PAS UN `<select multiple>` : il demande de tenir Ctrl enfoncé pour ajouter
+ * une ligne, et de ne pas le lâcher pour ne pas tout perdre. Une case à cocher
+ * dit ce qu'elle fait.
+ *
+ * LE BOUTON PORTE LE RÉSULTAT — « Tous », le nom quand il n'y en a qu'un, le
+ * compte au-delà : replié, un filtre doit dire ce qu'il retient sans qu'on ait
+ * à le rouvrir.
+ */
+function FiltreMultiple({
+  cle,
+  libelle,
+  options,
+  choisis,
+  onChange,
+  ouvert,
+  onOuvrir,
+  largeur,
+}: {
+  cle: string;
+  libelle: string;
+  options: { valeur: string; libelle: string }[];
+  choisis: string[];
+  onChange: (v: string[]) => void;
+  ouvert: boolean;
+  onOuvrir: (o: boolean) => void;
+  largeur: string;
+}) {
+  const resume =
+    choisis.length === 0
+      ? "Tous"
+      : choisis.length === 1
+        ? (options.find((o) => o.valeur === choisis[0])?.libelle ?? choisis[0])
+        : `${choisis.length} sélectionnés`;
+
+  const basculer = (v: string) =>
+    onChange(choisis.includes(v) ? choisis.filter((x) => x !== v) : [...choisis, v]);
+
+  return (
+    <div className="flex flex-col gap-0.5 relative" data-filtre={cle}>
+      <span className={etiquette}>{libelle}</span>
+      <button
+        type="button"
+        onClick={() => onOuvrir(!ouvert)}
+        className={`${controle} text-left flex items-center gap-2 ${
+          choisis.length > 0 ? "border-blue-400 text-blue-800" : "text-slate-700"
+        }`}
+        style={{ minWidth: "9rem", maxWidth: largeur }}
+      >
+        <span className="truncate">{resume}</span>
+        <span className="ml-auto text-[8px] text-slate-400">▼</span>
+      </button>
+
+      {ouvert && (
+        <div
+          className="absolute z-20 top-full mt-1 bg-white border border-slate-300 rounded shadow-lg max-h-72 overflow-y-auto py-1"
+          style={{ minWidth: largeur }}
+        >
+          <div className="flex gap-2 px-2 pb-1 border-b border-slate-100 mb-1">
+            <button
+              type="button"
+              onClick={() => onChange(options.map((o) => o.valeur))}
+              className="text-[10px] text-blue-700 hover:underline"
+            >
+              tout
+            </button>
+            <button
+              type="button"
+              onClick={() => onChange([])}
+              className="text-[10px] text-slate-500 hover:underline"
+            >
+              aucun
+            </button>
+          </div>
+          {options.length === 0 ? (
+            <p className="px-2 py-1 text-[11px] text-slate-400">Rien à proposer</p>
+          ) : (
+            options.map((o) => (
+              <label
+                key={o.valeur}
+                className="flex items-center gap-2 px-2 py-1 text-[11px] text-slate-700 hover:bg-slate-50 cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  checked={choisis.includes(o.valeur)}
+                  onChange={() => basculer(o.valeur)}
+                  className="accent-slate-900"
+                />
+                <span className="truncate">{o.libelle}</span>
+              </label>
+            ))
+          )}
+        </div>
+      )}
+    </div>
   );
 }
