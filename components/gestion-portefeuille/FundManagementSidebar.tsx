@@ -64,6 +64,10 @@ const ITEMS: Item[] = [
     icone: "⇅",
   },
   { label: "ESV", href: "/gestion-portefeuille/esv", icone: "◈" },
+  // LES OUTILS N'ECRIVENT RIEN. Les autres sections suivent le cycle de
+  // gestion et laissent une trace ; ici on pose des conditions et on lit un
+  // resultat. D'ou leur place a part, apres les modules de gestion.
+  { label: "Outils", href: "/gestion-portefeuille/outils", icone: "⚙" },
   { label: "Ratios", href: "/gestion-portefeuille/ratios", icone: "◔" },
   { label: "Investisseurs", href: "/gestion-portefeuille/investisseurs", icone: "◍", bientot: true },
   { label: "Reporting", href: "/gestion-portefeuille/reporting", icone: "▤" },
