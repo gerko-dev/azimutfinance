@@ -20,6 +20,11 @@
 // postérieurs à l'arrêté. Les quatre termes ont leur colonne — un chiffre
 // qu'on ne peut pas décomposer est un chiffre qu'on soupçonne.
 //
+// ET IL S'EXPORTE. Une liste qu'on ne peut pas sortir de l'écran se recopie à
+// la main — c'est là que naissent les quantités fausses d'une proposition de
+// réméré. L'export rend EXACTEMENT ce qui est affiché : mêmes filtres, même
+// regroupement, même tri.
+//
 // LE CALCUL EST À LA DEMANDE, ET FONDS PAR FONDS. Il lit l'inventaire et le
 // carnet de chaque portefeuille : les quinze dans un seul appel demandaient une
 // minute pendant laquelle l'écran ne montrait rien — et, passé la limite d'une
@@ -364,6 +369,94 @@ export default function SelectionTitres({
     return () => document.removeEventListener("mousedown", fermer);
   }, [ouvert]);
 
+  /**
+   * EXPORT DE CE QUI EST AFFICHÉ.
+   *
+   * CSV À POINT-VIRGULE, avec la marque d'ordre d'octets : c'est ce qu'Excel
+   * français ouvre d'un double clic, sans assistant d'importation et sans
+   * massacrer les accents. Un vrai classeur demanderait une bibliothèque de
+   * plusieurs centaines de kilo-octets dans le navigateur, pour un tableau
+   * qu'on va de toute façon retravailler.
+   *
+   * Les nombres sortent à la FRANÇAISE — virgule décimale, pas de séparateur
+   * de milliers — pour qu'Excel les reconnaisse comme des nombres et non
+   * comme du texte.
+   */
+  const exporter = () => {
+    const nb = (v: number, dec = 0) =>
+      v.toLocaleString("fr-FR", {
+        minimumFractionDigits: dec,
+        maximumFractionDigits: dec,
+        useGrouping: false,
+      });
+    const entetes = [
+      "Fonds",
+      "ISIN",
+      "Code",
+      "Libellé",
+      "Type",
+      "État / émetteur",
+      "Facial %",
+      "Échéance",
+      "Résiduel (ans)",
+      "Inventaire",
+      "Prêtés",
+      "Pris en réméré",
+      "Déjà en vente",
+      "Mouvements",
+      "Disponible",
+      "Valorisation",
+      "Nominal",
+      "Prix unitaire",
+      "Émission",
+      "Coupons / an",
+      "Amortissement",
+      "Secteur",
+      "Rapproché",
+      "Lots",
+    ];
+    const lignesCsv = lignes.map((t) =>
+      [
+        regroupe && t.fondsCount > 1 ? `${t.fondsCount} fonds` : t.fondsNoms[0],
+        t.isin,
+        t.code,
+        t.libelle,
+        t.nature,
+        t.etat,
+        nb(t.facial * 100, 2),
+        t.echeance,
+        nb(t.dureeResiduelle, 2),
+        nb(t.quantiteInventaire),
+        nb(t.pretee),
+        nb(t.remeree),
+        nb(t.engagee),
+        nb(t.mouvements),
+        nb(t.disponible),
+        nb(t.valorisation),
+        nb(t.nominal),
+        nb(t.prixInventaire, 2),
+        t.emission,
+        t.frequence > 0 ? String(t.frequence) : "",
+        t.amortissement,
+        t.secteur,
+        t.resolu ? "oui" : "non",
+        String(t.lots),
+      ]
+        // LE POINT-VIRGULE EST LE SEPARATEUR : un libellé qui en porterait un
+        // couperait la ligne en deux. On le remplace, plutôt que d'ouvrir le
+        // bal des guillemets échappés.
+        .map((c) => String(c ?? "").replace(/;/g, ","))
+        .join(";"),
+    );
+    const csv = "\uFEFF" + [entetes.join(";"), ...lignesCsv].join("\r\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `titres-detenus-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const totalDispo = lignes.reduce((s, t) => s + t.disponible, 0);
   const totalValo = lignes.reduce((s, t) => s + t.valorisation, 0);
 
@@ -532,6 +625,16 @@ export default function SelectionTitres({
             <span className="text-[11px] text-slate-500 tabular-nums">
               {lignes.length} / {tous.length}
             </span>
+            {lignes.length > 0 && (
+              <button
+                type="button"
+                onClick={exporter}
+                className="px-2 py-0.5 rounded text-[11px] font-medium border border-emerald-300 text-emerald-700 hover:bg-emerald-50 transition"
+                title="Les lignes affichées, filtres et regroupement compris, au format tableur"
+              >
+                Exporter (.csv)
+              </button>
+            )}
             {actifs && (
               <button
                 type="button"
