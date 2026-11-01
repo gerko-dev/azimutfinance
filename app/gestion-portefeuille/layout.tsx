@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { requireAdmin } from "@/lib/admin/auth";
 import FundManagementSidebar from "@/components/gestion-portefeuille/FundManagementSidebar";
+import InstallationApplication from "@/components/gestion-portefeuille/InstallationApplication";
 
 // === Gestion de portefeuille — coque pleine page ===
 //
@@ -25,6 +26,19 @@ import FundManagementSidebar from "@/components/gestion-portefeuille/FundManagem
 
 export const metadata = {
   title: "Gestion de portefeuille — AzimutFinance",
+  // LE MODULE A SON PROPRE MANIFESTE, et il remplace celui du portail sur
+  // cette route : installer « AzimutFinance » installerait le site entier,
+  // page d'accueil et actualites comprises. Ici on installe un POSTE DE
+  // TRAVAIL, dont la portee s'arrete a /gestion-portefeuille.
+  manifest: "/gestion-portefeuille/app.webmanifest",
+  // La fenetre de l'application n'a pas de barre d'adresse : c'est la barre de
+  // titre du systeme qui prend cette couleur.
+  themeColor: "#0A2A5E",
+  appleWebApp: {
+    capable: true,
+    title: "Gestion",
+    statusBarStyle: "default" as const,
+  },
 };
 
 export const dynamic = "force-dynamic";
@@ -54,6 +68,10 @@ export default async function GestionPortefeuilleLayout({
             </span>
           </div>
           <div className="flex items-center gap-4 text-xs">
+            {/* Visible seulement quand l'installation est possible : ni dans la
+                fenetre de l'application, ni sur un navigateur qui ne sait pas
+                le faire. */}
+            <InstallationApplication />
             <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
               Accès niveau {level}
             </span>

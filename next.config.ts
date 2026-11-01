@@ -169,6 +169,20 @@ const nextConfig: NextConfig = {
         source: "/:path*",
         headers: SECURITY_HEADERS,
       },
+      // LE SERVICE WORKER DU MODULE DE GESTION est servi depuis la racine —
+      // `public/` ne sait pas faire autrement — mais il ne doit gouverner que
+      // /gestion-portefeuille. Sans cet en-tete, le navigateur refuse une
+      // portee plus large que le dossier du fichier, et l'enregistrement
+      // echoue : plus de service worker, donc plus d'installation possible.
+      {
+        source: "/gestion-portefeuille-sw.js",
+        headers: [
+          { key: "Service-Worker-Allowed", value: "/gestion-portefeuille" },
+          // Un service worker qui se met en cache est un service worker qu'on
+          // ne peut plus corriger.
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+        ],
+      },
     ];
   },
 
