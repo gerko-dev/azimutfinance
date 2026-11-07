@@ -152,6 +152,33 @@ const nextConfig: NextConfig = {
     // production alors qu'il fonctionne en local. Restreint a la route qui le
     // lit, le fichier ne pesant que sur celle-la.
     "/api/gestion-portefeuille/propositions": ["./template_propositions.xlsx"],
+    // LE REFERENTIEL QUE LE PORTAIL PUBLIE POUR LES POSTES AURORE.
+    //
+    // La tache lit ces fichiers au RUNTIME, par un chemin compose depuis
+    // process.cwd() : sans declaration ils resteraient hors du paquet, et la
+    // publication deposerait un referentiel vide — en production seulement.
+    //
+    // CE SOUS-ENSEMBLE ET NON « ./data/**/* » : le dossier entier pese 158 Mo,
+    // dont 97 pour le seul macro.csv ; Aurore n'en lit qu'une quinzaine. Le
+    // fichier macro est tout de meme embarque, la tache n'en extrayant qu'une
+    // feuille — on ne peut pas filtrer ce qu'on n'a pas.
+    //
+    // Les crochets sont echappes : dans une clef de route, picomatch y verrait
+    // une classe de caracteres.
+    "/api/cron/\\[job\\]": [
+      "./data/historique_sika/**/*",
+      "./data/historique_sika_indices/**/*",
+      "./data/fcp/**/*",
+      "./data/calendrier_publications/**/*",
+      "./data/obligations-cotees*.csv",
+      "./data/obligations-cotees-boc-synthese.json",
+      "./data/umoa-*.csv",
+      "./data/titres.csv",
+      "./data/dividendes-boc.csv",
+      "./data/DB_*.csv",
+      "./data/fcp.csv",
+      "./data/macro.csv",
+    ],
     // Toutes les routes qui lancent Chromium, binaire et visuels compris.
     [CLE_ROUTES_CHROMIUM]: ACTIFS_CHROMIUM,
   },

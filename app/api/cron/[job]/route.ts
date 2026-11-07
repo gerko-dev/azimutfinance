@@ -4,6 +4,7 @@ import { evaluerAlertes } from "@/lib/cron/evaluate-alerts";
 import { evaluerOrdresSimulateur } from "@/lib/cron/evaluate-simulator-orders";
 import { relancerAbonnementsExpirants } from "@/lib/cron/premium-expiry-reminder";
 import { snapshotPresence } from "@/lib/cron/presence-snapshot";
+import { publierReferentielAurore } from "@/lib/cron/publier-referentiel-aurore";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -32,6 +33,11 @@ const TACHES: Record<string, (req: Request) => Promise<Response>> = {
   "evaluate-simulator-orders": evaluerOrdresSimulateur,
   "premium-expiry-reminder": relancerAbonnementsExpirants,
   "presence-snapshot": snapshotPresence,
+  // Depose le referentiel de marche la ou les postes Aurore le lisent. Elle
+  // rejoint cet aiguilleur plutot que d'avoir sa route : aucune fonction
+  // serverless de plus, seulement les fichiers de donnees traces sur
+  // celle-ci (cf. outputFileTracingIncludes dans next.config.ts).
+  "publier-referentiel-aurore": publierReferentielAurore,
 };
 
 export async function GET(
