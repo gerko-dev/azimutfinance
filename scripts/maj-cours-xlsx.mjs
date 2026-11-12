@@ -132,6 +132,32 @@ async function principal() {
     console.error(`Classeur introuvable : ${CLASSEUR}`);
     process.exit(1);
   }
+  // LE CLASSEUR DOIT ÊTRE FERMÉ, ET ON LE VÉRIFIE AVANT TOUT LE RESTE.
+  //
+  // Excel garde le fichier ouvert en écriture exclusive. Sans cette garde, le
+  // script extrayait la production, calculait les cours, prenait une
+  // sauvegarde — puis échouait sur l'écriture en laissant une sauvegarde
+  // orpheline et une trace d'erreur illisible. Mieux vaut une phrase.
+  if (!VERIFIER) {
+    try {
+      fs.closeSync(fs.openSync(CLASSEUR, "r+"));
+    } catch (e) {
+      if (e.code === "EBUSY" || e.code === "EPERM" || e.code === "EACCES") {
+        console.error(
+          [
+            `Le classeur est ouvert dans Excel : ${path.basename(CLASSEUR)}`,
+            "",
+            "Fermez-le, puis relancez. Rien n'a été modifié.",
+            "",
+            "Pour voir ce que la mise à jour changerait sans rien écrire :",
+            `    node scripts/maj-cours-xlsx.mjs ${DATE} --verifier`,
+          ].join(String.fromCharCode(10)),
+        );
+        process.exit(1);
+      }
+      throw e;
+    }
+  }
   const prod = await extraireProduction();
   const dossierSika = path.join(prod, "data", "historique_sika");
 
