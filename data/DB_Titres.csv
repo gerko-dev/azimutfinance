@@ -1,5 +1,6 @@
 ticker,raison_sociale,secteur,nb_titres,cours,capitalisation,devise,format_etats
 ABJC,SERVAIR ABIDJAN CI,Consommation discrétionnaire,10912000,3420,37319040000,XOF,SYSCOHADA
+BBGC,BBGC,,0,0,0,XOF,Bancaire
 BICB,BANQUE INTERNATIONALE POUR L'INDUSTRIE ET LE COMMERCE DU BENIN,Services financiers,57759800,5180,299195764000,XOF,Bancaire
 BICC,BICI CI,Services financiers,16666670,23500,391666745000,XOF,Bancaire
 BNBC,BERNABE CI,Consommation discrétionnaire,6624000,1580,10465920000,XOF,SYSCOHADA
